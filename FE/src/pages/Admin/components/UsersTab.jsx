@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { driver } from 'driver.js';
 import { ErrorBlock } from './shared.jsx';
+import Modal from '../../../components/Modal.jsx';
 import useUndoDelete, { UndoToast } from '../../../components/UndoDelete.jsx';
 function UsersSection({ lang, api }) {
   const [users, setUsers] = useState({ content: [], page: 0, totalElements: 0, totalPages: 0 });
@@ -8,7 +9,7 @@ function UsersSection({ lang, api }) {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
   const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete({ onUndo: () => fetch(page) });
-  const [pwMsg, setPwMsg] = useState({});
+  const [detailUser, setDetailUser] = useState(null);
   const [loadingAction, setLoadingAction] = useState({});
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ email: '', firstName: '', lastName: '', studentCode: '', role: 'STUDENT' });
@@ -24,7 +25,7 @@ function UsersSection({ lang, api }) {
   const fetch = useCallback(async (p, signal) => {
     setLoading(true); setError(null);
     try {
-      const params = { page: p, size: 20 };
+      const params = { page: p, size: 5 };
       if (q.trim()) params.q = q.trim();
       if (roleFilter) params.role = roleFilter;
       if (statusFilter) params.status = statusFilter;
@@ -73,19 +74,6 @@ function UsersSection({ lang, api }) {
     }
     catch (e) { setError(e.message); }
     finally { setLoadingAction(p => ({ ...p, [u.id]: false })); }
-  };
-
-  const doResetPw = async (u) => {
-    setLoadingAction(p => ({ ...p, ['pw_' + u.id]: true }));
-    try {
-      await api.post(`/api/admin/users/${u.id}/password-reset`);
-      setPwMsg(p => ({ ...p, [u.id]: { ok: true, msg: lang.resetSent } }));
-    }
-    catch (e) { setPwMsg(p => ({ ...p, [u.id]: { ok: false, msg: e.response?.data?.message || lang.resetFailed } })); }
-    finally {
-      setLoadingAction(p => ({ ...p, ['pw_' + u.id]: false }));
-      setTimeout(() => setPwMsg(p => { const n = { ...p }; delete n[u.id]; return n; }), 3000);
-    }
   };
 
   const doDelete = async (id) => {
@@ -343,24 +331,14 @@ function UsersSection({ lang, api }) {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-4">
-                      {/* Reset Password Icon */}
-                      {pwMsg[u.id] ? (
-                        <span className={`inline-block px-2 py-1 text-[10px] font-bold rounded ${pwMsg[u.id].ok ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50'}`}>{pwMsg[u.id].msg}</span>
-                      ) : (
-                        <button onClick={() => doResetPw(u)} disabled={loadingAction['pw_' + u.id]} title={lang.resetPassword}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 transition disabled:opacity-50 text-[#1e3a8a] shrink-0">
-                          {loadingAction['pw_' + u.id] ? (
-                            <span className="text-[10px]">...</span>
-                          ) : (
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                              <path d="M3 3v5h5" />
-                              <rect x="9" y="12" width="6" height="5" rx="1" />
-                              <path d="M10 12V10a2 2 0 1 1 4 0v2" />
-                            </svg>
-                          )}
-                        </button>
-                      )}
+                      {/* Detail Icon */}
+                      <button onClick={() => setDetailUser(u)} title={lang.details}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 transition text-[#1e3a8a] shrink-0">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </button>
 
                       {/* Ban / Activate Icon */}
                       <button onClick={() => toggleStatus(u)} disabled={loadingAction[u.id]} title={u.accountStatus === 'ACTIVE' ? lang.banUser : lang.activateUser}
@@ -440,6 +418,26 @@ function UsersSection({ lang, api }) {
       </div>
 
       {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
+
+      <Modal open={!!detailUser} onClose={() => setDetailUser(null)} title={lang.details} closeLabel={lang.close}>
+        {detailUser && (
+          <div className="space-y-3 text-xs">
+            {[
+              { label: lang.fullName, value: `${detailUser.firstName || ''} ${detailUser.lastName || ''}`.trim() },
+              { label: lang.email, value: detailUser.email },
+              { label: lang.role, value: detailUser.role },
+              { label: lang.studentCode, value: detailUser.role === 'STUDENT' ? detailUser.studentCode || '—' : '—' },
+              { label: lang.status, value: detailUser.accountStatus },
+              { label: lang.createdAt, value: detailUser.createdAt ? new Date(detailUser.createdAt).toLocaleString() : '—' },
+            ].map(row => (
+              <div key={row.label} className="flex justify-between gap-4 border-b border-gray-100 pb-2">
+                <span className="font-bold text-gray-400">{row.label}</span>
+                <span className="text-right font-semibold text-slate-800 break-words">{row.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

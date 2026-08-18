@@ -353,7 +353,7 @@ class AiEvaluationServiceImplTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"array", "object", "wrapper"})
+    @ValueSource(strings = {"array", "object", "wrapper", "unsubstantiated-without-evidence"})
     void process_sectionSuggestion_acceptsSupportedJsonShapes(String shape) throws Exception {
         UUID jobId = UUID.randomUUID();
         UUID projectId = UUID.randomUUID();
@@ -396,9 +396,11 @@ class AiEvaluationServiceImplTest {
         guide.setSectionType("Introduction");
         guide.setChecklistJson("[\"Is the research question stated?\"]");
         when(reviewGuideRepository.findById("Introduction")).thenReturn(Optional.of(guide));
+        boolean withoutEvidence = "unsubstantiated-without-evidence".equals(shape);
         when(sectionCitationReviewService.retrieveEvidence(
-                projectId, section.getContentTex())).thenReturn(List.of(
-                        new SectionCitationReviewService.RetrievedEvidence(
+                projectId, section.getContentTex())).thenReturn(withoutEvidence
+                        ? List.of()
+                        : List.of(new SectionCitationReviewService.RetrievedEvidence(
                                 sourceId,
                                 chunkId,
                                 "source-key",
@@ -410,14 +412,21 @@ class AiEvaluationServiceImplTest {
         suggestionNode.put("quote", studentText);
         suggestionNode.put("actionable_fix", actionableFix);
         var evidenceNode = suggestionNode.putObject("evidence");
-        evidenceNode.put("chunk_id", chunkId.toString());
-        evidenceNode.put("source_id", sourceId.toString());
-        evidenceNode.put("quote", evidenceQuote);
+        if (withoutEvidence) {
+            evidenceNode.putNull("chunk_id");
+            evidenceNode.putNull("source_id");
+            evidenceNode.putNull("quote");
+        } else {
+            evidenceNode.put("chunk_id", chunkId.toString());
+            evidenceNode.put("source_id", sourceId.toString());
+            evidenceNode.put("quote", evidenceQuote);
+        }
         String suggestion = objectMapper.writeValueAsString(suggestionNode);
         String response = switch (shape) {
             case "array" -> "```json\n[" + suggestion + "]\n```\n trailing";
             case "object" -> suggestion;
             case "wrapper" -> "{\"suggestions\":[" + suggestion + "]}";
+            case "unsubstantiated-without-evidence" -> "{\"suggestions\":[" + suggestion + "]}";
             default -> throw new IllegalArgumentException("Unknown test shape: " + shape);
         };
         when(aiModelClient.generate(anyString(), anyString())).thenReturn(
@@ -436,7 +445,7 @@ class AiEvaluationServiceImplTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"refusal", "unknown-type", "long-issue"})
+    @ValueSource(strings = {"refusal", "unknown-type", "long-issue", "source-discrepancy-without-evidence"})
     void process_sectionSuggestion_invalidOutput_marksFailed(String invalidCase) throws Exception {
         UUID jobId = UUID.randomUUID();
         UUID projectId = UUID.randomUUID();
@@ -474,6 +483,10 @@ class AiEvaluationServiceImplTest {
                     {"type":"CLARITY","issue":"%s","quote":"Some content",
                      "actionable_fix":"Fix it.","evidence":null}
                     """.formatted("x".repeat(301));
+            case "source-discrepancy-without-evidence" -> """
+                    {"type":"SOURCE_DISCREPANCY","issue":"Gap","quote":"Some content",
+                     "actionable_fix":"Fix it.","evidence":null}
+                    """;
             default -> throw new IllegalArgumentException("Unknown invalid case: " + invalidCase);
         };
         when(aiModelClient.generate(anyString(), anyString())).thenReturn(

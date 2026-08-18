@@ -394,8 +394,7 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
             JsonNode item,
             String type,
             List<SectionCitationReviewService.RetrievedEvidence> evidence) {
-        boolean required = "UNSUBSTANTIATED_CLAIM".equals(type)
-                || "SOURCE_DISCREPANCY".equals(type);
+        boolean required = "SOURCE_DISCREPANCY".equals(type);
         JsonNode evidenceNode = item.get("evidence");
         if (evidenceNode == null || evidenceNode.isNull()) {
             if (required) {

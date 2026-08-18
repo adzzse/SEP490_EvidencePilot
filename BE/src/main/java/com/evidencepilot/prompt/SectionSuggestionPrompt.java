@@ -37,7 +37,7 @@ public final class SectionSuggestionPrompt {
                   "quote": "string, exact contiguous text copied from the student text",
                   "actionable_fix": "string (max 300 chars)",
                   "evidence": {
-                    "chunk_id": "string UUID from the retrieved evidence list, or null if type is CLARITY/STRUCTURE/CONVENTION",
+                    "chunk_id": "string UUID from the retrieved evidence list, or null unless type is SOURCE_DISCREPANCY",
                     "source_id": "string UUID from the retrieved evidence list, or null",
                     "quote": "string, verbatim text from that evidence chunk, or null"
                   }
@@ -49,6 +49,7 @@ public final class SectionSuggestionPrompt {
             - Every evidence.chunk_id and evidence.source_id MUST come from the retrieved evidence
               list provided below. Never invent a chunk or source id.
             - evidence.quote MUST be copied verbatim from the text of the named chunk.
+            - SOURCE_DISCREPANCY requires evidence; UNSUBSTANTIATED_CLAIM may use null evidence.
             - If the claim is already supported by the retrieved evidence, do NOT flag it.
             - Return {"suggestions": []} ONLY if every criterion is clearly and fully satisfied.
             - Otherwise "suggestions" must contain 1-3 actionable items ordered by severity.
