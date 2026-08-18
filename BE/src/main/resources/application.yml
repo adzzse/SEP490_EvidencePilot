@@ -143,11 +143,6 @@ openalex:
   user-agent: ${OPENALEX_USER_AGENT:evidence-pilot/1.0 (mailto:team@evidencepilot.com)}
   read-timeout-seconds: ${OPENALEX_READ_TIMEOUT_SECONDS:30}
 
-# ── Ollama model config (passed through to Python worker) ─────────────────
-ollama:
-  embedding:
-    model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
-
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

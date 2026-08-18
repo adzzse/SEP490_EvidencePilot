@@ -6,7 +6,6 @@ import com.evidencepilot.dto.response.DocumentTextResponse;
 import com.evidencepilot.dto.response.PagedResponse;
 import com.evidencepilot.dto.response.SourceLibraryItemResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
-import com.evidencepilot.mapper.DocumentMapper;
 import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.CollectionDocument;
 import com.evidencepilot.model.Document;
@@ -83,7 +82,6 @@ public class DocumentServiceImpl implements DocumentService {
     private final PaperSectionRepository paperSectionRepository;
     private final CurrentUserService currentUserService;
     private final DocumentPersistenceService documentPersistenceService;
-    private final DocumentMapper documentMapper;
     private final MinioClient minioClient;
     private final DocumentObjectStorage documentObjectStorage;
     private final OpenAlexClient openAlexClient;
@@ -518,7 +516,7 @@ public class DocumentServiceImpl implements DocumentService {
         Document doc = findDocument(documentId);
         requireDocumentAccess(currentUser, doc);
         return documentChunkRepository.findByDocumentIdOrderByChunkIndexAsc(documentId).stream()
-                .map(documentMapper::toDocumentChunkResponse)
+                .map(DocumentChunkResponse::from)
                 .toList();
     }
 
@@ -531,7 +529,7 @@ public class DocumentServiceImpl implements DocumentService {
         if (text == null) {
             throw new ResourceNotFoundException("Document text not found for document " + documentId);
         }
-        return documentMapper.toDocumentTextResponse(text);
+        return DocumentTextResponse.from(text);
     }
 
     @Override
@@ -553,7 +551,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
         text.setExtractedText(extractedText);
         documentTextRepository.save(text);
-        return documentMapper.toDocumentTextResponse(text);
+        return DocumentTextResponse.from(text);
     }
 
     @Override

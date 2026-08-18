@@ -13,8 +13,6 @@ public interface InstructorFeedbackRepository extends JpaRepository<InstructorFe
 
     List<InstructorFeedback> findByRequestId(UUID requestId);
 
-    List<InstructorFeedback> findByInstructorId(UUID instructorId);
-
     @EntityGraph(attributePaths = "section")
     List<InstructorFeedback> findByRequestProjectId(UUID projectId);
 }

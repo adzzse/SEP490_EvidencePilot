@@ -3,7 +3,6 @@ package com.evidencepilot.service.impl;
 import com.evidencepilot.dto.request.UserProfileUpdateRequest;
 import com.evidencepilot.dto.response.UserResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
-import com.evidencepilot.mapper.UserMapper;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.UserRepository;
@@ -19,13 +18,12 @@ import java.util.UUID;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
-    private final UserMapper userMapper;
 
     @Override
     public UserResponse findUserById(UUID id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(id, "User"));
-        return userMapper.toUserResponse(user);
+        return UserResponse.from(user);
     }
 
     @Override
@@ -38,20 +36,20 @@ public class UserServiceImpl implements UserService {
         if (request.getLastName() != null) {
             user.setLastName(request.getLastName());
         }
-        return userMapper.toUserResponse(userRepository.save(user));
+        return UserResponse.from(userRepository.save(user));
     }
 
     @Override
     public List<UserResponse> findUsersByRole(UserRole role) {
         return userRepository.findByRole(role).stream()
-                .map(userMapper::toUserResponse)
+                .map(UserResponse::from)
                 .toList();
     }
 
     @Override
     public List<UserResponse> searchUsersByRole(UserRole role, String q) {
         return userRepository.searchByRole(role, q).stream()
-                .map(userMapper::toUserResponse)
+                .map(UserResponse::from)
                 .toList();
     }
 }

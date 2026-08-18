@@ -1,7 +1,6 @@
 package com.evidencepilot.service;
 
 import com.evidencepilot.dto.request.ProjectCreateRequest;
-import com.evidencepilot.mapper.ProjectMapper;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
@@ -46,8 +45,6 @@ class ProjectServiceImplFlowTest {
     @Mock
     private SystemNotificationService systemNotificationService;
 
-    @Mock
-    private ProjectMapper projectMapper;
 
     @Mock
     private AuditService auditService;
@@ -129,9 +126,15 @@ class ProjectServiceImplFlowTest {
         when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
         when(projectMemberRepository.findByProjectId(project.getId())).thenReturn(List.of(member));
 
-        service().getProjectMemberResponses(project.getId());
+        var responses = service().getProjectMemberResponses(project.getId());
 
-        verify(projectMapper).toProjectMemberResponse(member);
+        assertThat(responses).singleElement().satisfies(response -> {
+            assertThat(response.projectId()).isEqualTo(project.getId());
+            assertThat(response.userId()).isEqualTo(instructor.getId());
+            assertThat(response.role()).isEqualTo(ProjectRole.INSTRUCTOR.name());
+            assertThat(response.email()).isEqualTo(instructor.getEmail());
+            assertThat(response.userRole()).isEqualTo(UserRole.INSTRUCTOR.name());
+        });
     }
 
     @Test
@@ -163,7 +166,6 @@ class ProjectServiceImplFlowTest {
                 userRepository,
                 currentUserService,
                 systemNotificationService,
-                projectMapper,
                 auditService);
     }
 

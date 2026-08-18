@@ -1,6 +1,5 @@
 package com.evidencepilot.service.impl;
 
-import com.evidencepilot.mapper.ProjectMapper;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentText;
 import com.evidencepilot.model.PaperSection;
@@ -47,8 +46,6 @@ class PaperProcessingServiceImplTest {
     private UserRepository userRepository;
     @Mock
     private ProjectRepository projectRepository;
-    @Mock
-    private ProjectMapper projectMapper;
     @Mock
     private CurrentUserService currentUserService;
 
@@ -352,7 +349,6 @@ class PaperProcessingServiceImplTest {
                 paperSectionRepository,
                 mock(InstructorFeedbackRepository.class),
                 documentRepository,
-                projectMapper,
                 currentUserService,
                 mock(PaperStandardService.class),
                 userRepository,

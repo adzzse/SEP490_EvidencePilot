@@ -190,9 +190,5 @@ public class FormatScanServiceImpl implements FormatScanService {
         }
     }
 
-    private static String truncate(String s, int max) {
-        return s.length() <= max ? s : s.substring(0, max) + "...";
-    }
-
     private record QuoteSpan(int start, int end, String text) {}
 }

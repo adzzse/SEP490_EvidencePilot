@@ -7,5 +7,4 @@ import java.util.UUID;
 
 public interface ExportJobRepository extends JpaRepository<ExportJob, UUID> {
     List<ExportJob> findByProjectIdAndUserIdOrderByCreatedAtDesc(UUID projectId, UUID userId);
-    List<ExportJob> findByStatusOrderByCreatedAtAsc(com.evidencepilot.model.enums.ExportStatus status);
 }

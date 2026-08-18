@@ -1,6 +1,5 @@
 package com.evidencepilot.service;
 
-import com.evidencepilot.mapper.ProjectMapper;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.ProjectStatus;
@@ -47,8 +46,6 @@ class ProjectServiceImplPagingTest {
     @Mock
     private SystemNotificationService systemNotificationService;
 
-    @Mock
-    private ProjectMapper projectMapper;
 
     @Mock
     private AuditService auditService;
@@ -79,7 +76,6 @@ class ProjectServiceImplPagingTest {
                 userRepository,
                 currentUserService,
                 systemNotificationService,
-                projectMapper,
                 auditService);
 
         var response = service.getAllProjects(

@@ -18,7 +18,6 @@ import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
-import com.evidencepilot.mapper.ProjectMapper;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.PaperProcessingService;
@@ -86,7 +85,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
     private final PaperSectionRepository paperSectionRepository;
     private final InstructorFeedbackRepository instructorFeedbackRepository;
     private final DocumentRepository documentRepository;
-    private final ProjectMapper projectMapper;
     private final CurrentUserService currentUserService;
     private final PaperStandardService paperStandardService;
     private final UserRepository userRepository;
@@ -100,7 +98,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         requireDocumentAccess(documentId);
         return paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId).stream()
                 .filter(PaperSection::isActive)
-                .map(projectMapper::toPaperSectionResponse)
+                .map(PaperSectionResponse::from)
                 .toList();
     }
 
@@ -121,7 +119,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                 .findByDocumentIdOrderBySectionOrderAsc(documentId);
         if (!existing.isEmpty()) {
             return existing.stream()
-                    .map(projectMapper::toPaperSectionResponse)
+                    .map(PaperSectionResponse::from)
                     .toList();
         }
         String text = document.getDocumentText() != null
@@ -131,7 +129,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         }
         List<PaperSection> sections = parseSections(text, document, blocks);
         return paperSectionRepository.saveAll(sections).stream()
-                .map(projectMapper::toPaperSectionResponse)
+                .map(PaperSectionResponse::from)
                 .toList();
     }
 
@@ -345,7 +343,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                 .findByDocumentIdAndAssignedUserIdOrderBySectionOrderAsc(documentId, userId)
                 .stream()
                 .filter(PaperSection::isActive)
-                .map(projectMapper::toPaperSectionResponse)
+                .map(PaperSectionResponse::from)
                 .toList();
     }
 
@@ -353,7 +351,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
     public PaperSectionResponse getSectionHistory(UUID documentId, UUID sectionId) {
         requireDocumentAccess(documentId);
         PaperSection section = requireSectionInDocument(sectionId, documentId);
-        return projectMapper.toPaperSectionResponse(section);
+        return PaperSectionResponse.from(section);
     }
 
     @Override
@@ -446,7 +444,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
             paperSectionRepository.save(target);
             source.setActive(false);
             paperSectionRepository.save(source);
-            return projectMapper.toPaperSectionResponse(target);
+            return PaperSectionResponse.from(target);
         }
 
         PaperSection section = requireSectionInDocument(sectionId, documentId);
@@ -471,7 +469,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
             evidenceTraceService.stampStaleOnContentChanged(
                     saved.getId(), saved.getContentTex(), saved.getVersion());
         }
-        return projectMapper.toPaperSectionResponse(saved);
+        return PaperSectionResponse.from(saved);
     }
 
     @Override
@@ -493,7 +491,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
             section.setAssignedUser(null);
         }
         section.setUpdatedAt(LocalDateTime.now());
-        PaperSectionResponse response = projectMapper.toPaperSectionResponse(paperSectionRepository.save(section));
+        PaperSectionResponse response = PaperSectionResponse.from(paperSectionRepository.save(section));
         if (assignedUserId != null) {
             Project project = document.getProject();
             if (project.getStatus() == ProjectStatus.CREATED) {
@@ -526,7 +524,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         section.setPreviousContentTex(current);
         section.setVersion(section.getVersion() != null ? section.getVersion() - 1 : 0);
         section.setUpdatedAt(LocalDateTime.now());
-        return projectMapper.toPaperSectionResponse(paperSectionRepository.save(section));
+        return PaperSectionResponse.from(paperSectionRepository.save(section));
     }
 
     @Override
@@ -574,7 +572,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                 standard == null ? PaperStandard.CUSTOM : standard,
                 section.getSectionTitle()));
         section.setUpdatedAt(LocalDateTime.now());
-        return projectMapper.toPaperSectionResponse(paperSectionRepository.save(section));
+        return PaperSectionResponse.from(paperSectionRepository.save(section));
     }
 
     @Override
@@ -619,7 +617,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         }
 
         return paperSectionRepository.saveAll(sections).stream()
-                .map(projectMapper::toPaperSectionResponse)
+                .map(PaperSectionResponse::from)
                 .toList();
     }
 

@@ -38,10 +38,6 @@ ai:
     api-key:
     read-timeout-seconds: 30
 
-ollama:
-  embedding:
-    model: test-embedding-model
-
 qdrant:
   url: http://localhost:6333
   api-key:

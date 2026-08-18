@@ -1,5 +1,8 @@
 package com.evidencepilot.dto.response;
 
+import com.evidencepilot.model.PaperSection;
+import com.evidencepilot.model.User;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -15,4 +18,25 @@ public record PaperSectionResponse(
         Integer version,
         String contentMdCache,
         LocalDateTime updatedAt) {
+    public static PaperSectionResponse from(PaperSection section) {
+        User assignedUser = section.getAssignedUser();
+        String first = assignedUser == null || assignedUser.getFirstName() == null
+                ? "" : assignedUser.getFirstName().trim();
+        String last = assignedUser == null || assignedUser.getLastName() == null
+                ? "" : assignedUser.getLastName().trim();
+        String assignedUserName = assignedUser == null || (first + last).isEmpty()
+                ? null : (first + " " + last).trim();
+        return new PaperSectionResponse(
+                section.getId(),
+                section.getDocument() != null ? section.getDocument().getId() : null,
+                assignedUser != null ? assignedUser.getId() : null,
+                assignedUserName,
+                section.getSectionOrder(),
+                section.getSectionTitle(),
+                section.getContentTex(),
+                section.getPreviousContentTex(),
+                section.getVersion(),
+                section.getContentMdCache(),
+                section.getUpdatedAt());
+    }
 }

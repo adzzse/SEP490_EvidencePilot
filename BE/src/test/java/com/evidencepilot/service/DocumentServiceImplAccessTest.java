@@ -1,6 +1,5 @@
 package com.evidencepilot.service;
 
-import com.evidencepilot.mapper.DocumentMapper;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentText;
 import com.evidencepilot.model.CollectionDocument;
@@ -86,8 +85,6 @@ class DocumentServiceImplAccessTest {
     @Mock
     private DocumentPersistenceService documentPersistenceService;
 
-    @Mock
-    private DocumentMapper documentMapper;
 
     @Mock
     private MinioClient minioClient;
@@ -737,8 +734,9 @@ class DocumentServiceImplAccessTest {
         when(documentRepository.findById(document.getId())).thenReturn(Optional.of(document));
         when(documentTextRepository.findByDocumentId(document.getId())).thenReturn(text, null);
 
-        service().getDocumentText(document.getId());
-        verify(documentMapper).toDocumentTextResponse(text);
+        var response = service().getDocumentText(document.getId());
+        assertThat(response.id()).isEqualTo(text.getId());
+        assertThat(response.documentId()).isEqualTo(document.getId());
 
         assertThatThrownBy(() -> service().getDocumentText(document.getId()))
                 .hasMessageContaining("Document text not found");
@@ -786,7 +784,6 @@ class DocumentServiceImplAccessTest {
                 paperSectionRepository,
                 currentUserService,
                 documentPersistenceService,
-                documentMapper,
                 minioClient,
                 documentObjectStorage,
                 openAlexClient,

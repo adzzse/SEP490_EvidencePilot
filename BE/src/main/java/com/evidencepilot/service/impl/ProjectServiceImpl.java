@@ -6,7 +6,6 @@ import com.evidencepilot.dto.response.PagedResponse;
 import com.evidencepilot.dto.response.ProjectMemberResponse;
 import com.evidencepilot.dto.response.ProjectResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
-import com.evidencepilot.mapper.ProjectMapper;
 import com.evidencepilot.model.enums.PaperStandard;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
@@ -49,7 +48,6 @@ public class ProjectServiceImpl implements ProjectService {
     private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final SystemNotificationService systemNotificationService;
-    private final ProjectMapper projectMapper;
     private final AuditService auditService;
 
     @Override
@@ -232,7 +230,7 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     public List<ProjectMemberResponse> getProjectMemberResponses(UUID projectId) {
         return getProjectMembers(projectId).stream()
-                .map(projectMapper::toProjectMemberResponse)
+                .map(ProjectMemberResponse::from)
                 .toList();
     }
 

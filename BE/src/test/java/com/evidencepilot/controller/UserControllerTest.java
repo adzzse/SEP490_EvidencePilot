@@ -1,7 +1,6 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.request.UserProfileUpdateRequest;
-import com.evidencepilot.mapper.UserMapper;
 import com.evidencepilot.model.User;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.UserService;
@@ -23,12 +22,11 @@ class UserControllerTest {
 
     private final UserService userService = mock(UserService.class);
     private final CurrentUserService currentUserService = mock(CurrentUserService.class);
-    private final UserMapper userMapper = mock(UserMapper.class);
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = standaloneSetup(new UserController(userService, currentUserService, userMapper)).build();
+        mockMvc = standaloneSetup(new UserController(userService, currentUserService)).build();
     }
 
     @Test
@@ -49,7 +47,7 @@ class UserControllerTest {
         mockMvc.perform(get("/api/users/profile"))
                 .andExpect(status().isOk());
 
-        verify(userMapper).toUserResponse(user);
+        verify(currentUserService).requireCurrentUser();
     }
 
     @Test

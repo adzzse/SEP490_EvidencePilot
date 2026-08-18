@@ -13,6 +13,4 @@ public interface DocumentReferenceRepository extends JpaRepository<DocumentRefer
 
     List<DocumentReference> findByDocumentIdAndEdgeTypeOrderByReferenceIndexAsc(
             UUID documentId, EdgeType edgeType);
-
-    List<DocumentReference> findByDoi(String doi);
 }

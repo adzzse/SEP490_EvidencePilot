@@ -2,7 +2,6 @@ package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.request.UserProfileUpdateRequest;
 import com.evidencepilot.dto.response.UserResponse;
-import com.evidencepilot.mapper.UserMapper;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.UserService;
@@ -33,7 +32,6 @@ public class UserController {
 
     private final UserService userService;
     private final CurrentUserService currentUserService;
-    private final UserMapper userMapper;
 
     @Operation(summary = "Get user by ID", description = "Returns a user's profile by UUID. Requires authentication.")
     @ApiResponses({
@@ -69,7 +67,7 @@ public class UserController {
     @GetMapping("/profile")
     public ResponseEntity<UserResponse> profile() {
         return ResponseEntity.ok(
-                userMapper.toUserResponse(currentUserService.requireCurrentUser()));
+                UserResponse.from(currentUserService.requireCurrentUser()));
     }
 
     @Operation(summary = "Update current user profile",

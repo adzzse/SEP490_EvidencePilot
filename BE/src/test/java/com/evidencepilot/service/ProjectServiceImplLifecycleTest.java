@@ -1,7 +1,6 @@
 package com.evidencepilot.service;
 
 import com.evidencepilot.dto.request.ProjectUpdateRequest;
-import com.evidencepilot.mapper.ProjectMapper;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
@@ -50,8 +49,6 @@ class ProjectServiceImplLifecycleTest {
     @Mock
     private SystemNotificationService systemNotificationService;
 
-    @Mock
-    private ProjectMapper projectMapper;
 
     @Mock
     private AuditService auditService;
@@ -388,7 +385,6 @@ class ProjectServiceImplLifecycleTest {
                 userRepository,
                 currentUserService,
                 systemNotificationService,
-                projectMapper,
                 auditService);
     }
 

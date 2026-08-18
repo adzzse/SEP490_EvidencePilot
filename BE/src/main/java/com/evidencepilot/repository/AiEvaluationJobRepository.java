@@ -16,9 +16,6 @@ import java.util.UUID;
 public interface AiEvaluationJobRepository extends JpaRepository<AiEvaluationJob, UUID> {
     List<AiEvaluationJob> findByStatus(String status);
 
-    List<AiEvaluationJob> findTop10ByProjectIdAndKindAndStatusOrderByCompletedAtDesc(
-            UUID projectId, String kind, String status);
-
     List<AiEvaluationJob> findByProjectIdAndKindAndStatusInOrderByCreatedAtDesc(
             UUID projectId, String kind, Collection<String> statuses);
 
