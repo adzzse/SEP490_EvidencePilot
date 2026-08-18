@@ -465,6 +465,7 @@ public class AdminService {
                     m.put("name", c.getTitle());
                     m.put("description", c.getDescription());
                     m.put("instructorEmail", c.getInstructor() != null ? c.getInstructor().getEmail() : null);
+                    m.put("categoryName", c.getCategory() != null ? c.getCategory().getName() : null);
                     m.put("createdAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : null);
                     m.put("active", c.isActive());
                     m.put("documentCount", documents.countByCollectionId(c.getId()));

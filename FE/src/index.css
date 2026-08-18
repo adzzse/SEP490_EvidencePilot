@@ -64,6 +64,14 @@ body {
   outline-offset: 2px;
 }
 
+@layer base {
+  :where(a, button, input, select, textarea) {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform, fill, stroke;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
 @layer utilities {
   .duration-600 {
     transition-duration: 600ms;

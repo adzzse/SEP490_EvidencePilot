@@ -13,7 +13,7 @@ import {
   isSourceSharedWithProject,
 } from './sourceShareSelection';
 import { getStudentSuggestions, studentDisplayName } from './studentSearch';
-import { useDangerConfirm } from '../../components/DangerConfirm';
+import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
 
 const STANDARDS = ['IEEE', 'ACM', 'SPRINGER_LNCS', 'APA', 'MLA', 'CUSTOM'];
 
@@ -23,7 +23,15 @@ export default function ProjectDetail() {
   const { language } = useLanguage();
   const ct = commonText[language];
   const t = instructorText[language];
-  const confirmDanger = useDangerConfirm();
+  const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
+  const undoStrings = {
+    header: t.undoHeader,
+    bodyTemplate: t.undoBodyTemplate,
+    caution: t.undoCaution,
+    undoLabel: t.undoLabel,
+    undoRemaining: t.undoRemaining,
+    dismissLabel: t.dismissLabel,
+  };
   const [activeTab, setActiveTab] = useState('setup');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -424,26 +432,42 @@ export default function ProjectDetail() {
   };
 
   const handleDeleteSection = async (sectionId) => {
-    if (!selectedPaper || !(await confirmDanger(t.deleteSectionConfirm))) return;
-    setSectionStructureSaving(true);
-    try {
-      await api.delete(`/api/papers/${selectedPaper.id}/sections/${sectionId}`);
+    if (!selectedPaper) return;
+    const section = sections.find(s => String(s.id) === String(sectionId));
+    setSections(prev => prev.filter(s => String(s.id) !== String(sectionId)));
+    startDelete({
+      ...undoStrings,
+      entityName: section?.title || section?.type || sectionId,
+      entityDetails: sectionId,
+    }, async () => {
+      try {
+        await api.delete(`/api/papers/${selectedPaper.id}/sections/${sectionId}`);
+      } catch (err) {
+        alert(err?.response?.data?.message || t.deleteSectionFailed);
+      }
       await loadSections(selectedPaper.id);
-    } catch (err) {
-      alert(err?.response?.data?.message || t.deleteSectionFailed);
-    } finally {
-      setSectionStructureSaving(false);
-    }
+    }, async () => {
+      await loadSections(selectedPaper.id);
+    });
   };
 
   const handleRemoveSource = async (sourceId) => {
-    if (!(await confirmDanger(t.removeSourceConfirm, 5))) return;
-    try {
-      await api.delete(`/api/sources/projects/${id}/sources/${sourceId}`);
+    const src = sources.find(s => String(s.id) === String(sourceId));
+    setSources(prev => prev.filter(s => String(s.id) !== String(sourceId)));
+    startDelete({
+      ...undoStrings,
+      entityName: src?.title || src?.originalFilename || sourceId,
+      entityDetails: sourceId,
+    }, async () => {
+      try {
+        await api.delete(`/api/sources/projects/${id}/sources/${sourceId}`);
+      } catch (err) {
+        alert(err?.response?.data?.message || t.removeSourceFailed);
+      }
       await loadSources();
-    } catch (err) {
-      alert(err?.response?.data?.message || t.removeSourceFailed);
-    }
+    }, async () => {
+      await loadSources();
+    });
   };
 
   const handleAssignSection = async (sectionId, userId) => {
@@ -1443,6 +1467,8 @@ export default function ProjectDetail() {
           </Marker>
         </Modal>
       )}
+
+      {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
     </div>
   );
 }

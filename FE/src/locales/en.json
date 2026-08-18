@@ -119,6 +119,16 @@
   "deleteFailed": "Delete failed.",
   "deleteConfirm": "Delete this source?",
   "deleteMediaConfirm": "Delete this media?",
+
+  "undoHeader": "Item permanently deleted",
+  "undoHeaderUser": "User account permanently deleted",
+  "undoCaution": "Caution: This action will become permanent once the countdown expires.",
+  "undoBodyTemplate": "The item {entityName}{entityDetails} was deleted{actorPart} at {timestamp}.",
+  "undoBodyTemplateUser": "The account for user {entityName}{entityDetails} was deleted{actorPart} at {timestamp}.",
+  "undoLabel": "Undo",
+  "undoRemaining": "({seconds}s remaining)",
+  "dismissLabel": "Dismiss",
+
   "downloadedTex": "Downloaded .tex",
 
   "export": "Export",
@@ -126,6 +136,7 @@
   "exportTraceability": "Traceability Report (JSON)",
   "exportTraceabilityCsv": "Traceability Report (CSV)",
   "exportFailed": "Export failed.",
+  "exportLocked": "Export is available once the project is Approved or Archived",
 
   "tour": {
     "projectName": "Project Name",

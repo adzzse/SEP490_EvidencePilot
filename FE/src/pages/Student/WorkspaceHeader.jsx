@@ -11,6 +11,7 @@ export default function WorkspaceHeader({ project, notifications, unreadCount, s
   const { theme, toggleTheme } = useTheme();
   const { t } = useTranslation();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const canExport = project?.status === 'APPROVED' || project?.status === 'ARCHIVED';
   const iconButton = 'p-2 hover:bg-(--surface-secondary) rounded-lg text-(--text-secondary) transition-colors disabled:opacity-30';
 
   const runMobileAction = (action) => {
@@ -20,9 +21,9 @@ export default function WorkspaceHeader({ project, notifications, unreadCount, s
 
   const exportMenu = (
     <div className="py-1">
-      <button onClick={() => { handleExportTexArchive(); setShowExportMenu(false); setShowMoreMenu(false); }} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) transition-colors">{t('exportTex')}</button>
-      <button onClick={() => { handleExportTraceabilityJson(); setShowExportMenu(false); setShowMoreMenu(false); }} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) transition-colors">{t('exportTraceability')}</button>
-      <button onClick={() => { handleExportTraceabilityCsv(); setShowExportMenu(false); setShowMoreMenu(false); }} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) transition-colors">{t('exportTraceabilityCsv')}</button>
+      <button onClick={() => { handleExportTexArchive(); setShowExportMenu(false); setShowMoreMenu(false); }} disabled={!canExport} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-40 disabled:cursor-not-allowed">{t('exportTex')}</button>
+      <button onClick={() => { handleExportTraceabilityJson(); setShowExportMenu(false); setShowMoreMenu(false); }} disabled={!canExport} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-40 disabled:cursor-not-allowed">{t('exportTraceability')}</button>
+      <button onClick={() => { handleExportTraceabilityCsv(); setShowExportMenu(false); setShowMoreMenu(false); }} disabled={!canExport} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-40 disabled:cursor-not-allowed">{t('exportTraceabilityCsv')}</button>
     </div>
   );
 
@@ -76,7 +77,7 @@ export default function WorkspaceHeader({ project, notifications, unreadCount, s
             <span className="hidden lg:inline">{loadingAiReview ? t('loading') : t('aiReview')}</span>
           </button>
           <div className="relative">
-            <button data-tour="header-export" onClick={() => setShowExportMenu(!showExportMenu)} className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 lg:px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors" title={t('export')}>
+            <button data-tour="header-export" onClick={() => { if (canExport) setShowExportMenu(!showExportMenu); }} disabled={!canExport} className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 lg:px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed" title={canExport ? t('export') : t('exportLocked')}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
               <span className="hidden lg:inline">{t('export')}</span>
             </button>
@@ -98,7 +99,7 @@ export default function WorkspaceHeader({ project, notifications, unreadCount, s
               <button onClick={() => runMobileAction(toggleTheme)} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{theme === 'light' ? t('darkMode') : t('lightMode')}</button>
               <button onClick={() => runMobileAction(toggleLanguage)} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{t('language')}: {language === 'en' ? 'VI' : 'EN'}</button>
               <button onClick={() => runMobileAction(handleRunAiReview)} disabled={!selectedPaper || isLocked || loadingAiReview} className="w-full text-left px-4 py-3 text-xs font-bold text-(--brand) hover:bg-(--brand-soft) disabled:opacity-40">{loadingAiReview ? t('loading') : t('aiReview')}</button>
-              <div className="border-t border-(--border)"><p className="px-4 pt-3 text-[10px] font-bold uppercase tracking-wider text-emerald-700">{t('export')}</p>{exportMenu}</div>
+              {canExport && <div className="border-t border-(--border)"><p className="px-4 pt-3 text-[10px] font-bold uppercase tracking-wider text-emerald-700">{t('export')}</p>{exportMenu}</div>}
             </div>
           )}
         </div>

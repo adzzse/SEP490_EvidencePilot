@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { driver } from 'driver.js';
-import { ErrorBlock } from './shared.jsx';
+import Modal from '../../../components/Modal.jsx';
+import { ErrorBlock, JsonTree } from './shared.jsx';
 function AuditLogsSection({ lang, api }) {
   const [logs, setLogs] = useState({ content: [], page: 0, totalElements: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
+  const [detailLog, setDetailLog] = useState(null);
 
   const [q, setQ] = useState('');
   const [actionFilter, setActionFilter] = useState('');
@@ -14,7 +16,7 @@ function AuditLogsSection({ lang, api }) {
   const fetch = useCallback(async (p, actorId, signal) => {
     setLoading(true); setError(null);
     try {
-      const params = { page: p, size: 20 };
+      const params = { page: p, size: 5 };
       if (actorId) params.actorId = actorId;
       const r = await api.get('/api/admin/audit-logs', { params, signal });
       setLogs(r.data);
@@ -82,6 +84,11 @@ function AuditLogsSection({ lang, api }) {
   };
 
   const displayLogs = logs;
+
+  const parseMaybe = (s) => {
+    if (s == null || s === '') return s;
+    try { return JSON.parse(s); } catch { return s; }
+  };
 
   const filteredLogs = displayLogs.content.filter(log => {
     const matchesQ = q.trim() === '' || 
@@ -253,11 +260,12 @@ function AuditLogsSection({ lang, api }) {
                       {(log.entityType ?? '—')}#{log.entityId ?? ''}
                     </td>
 
-                    {/* Previous and next values */}
-                    <td className="px-6 py-4 font-mono font-medium whitespace-nowrap">
-                      <span className="text-slate-500">{log.oldValue ?? '—'}</span>
-                      <span className="mx-2 text-slate-300" aria-hidden="true">→</span>
-                      <span className="text-slate-800">{log.newValue ?? '—'}</span>
+                    {/* Details */}
+                    <td className="px-6 py-4 text-right">
+                      <button onClick={() => setDetailLog(log)} title={lang.details}
+                        className="px-3 py-1.5 text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition shadow-sm cursor-pointer">
+                        {lang.details}
+                      </button>
                     </td>
                   </tr>
                 );
@@ -284,6 +292,45 @@ function AuditLogsSection({ lang, api }) {
           )}
         </div>
       </div>
+
+      <Modal open={!!detailLog} onClose={() => setDetailLog(null)} title={lang.details} closeLabel={lang.close}>
+        {detailLog && (
+          <div className="space-y-4 text-xs">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{lang.actor}</span>
+                <span className="font-bold text-slate-800">{detailLog.actorEmail || 'System'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{lang.action}</span>
+                <span className="font-bold text-slate-800">{detailLog.action}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{lang.entity}</span>
+                <span className="font-bold text-slate-800 font-mono">{(detailLog.entityType ?? '—')}#{detailLog.entityId ?? ''}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{lang.timestamp}</span>
+                <span className="font-bold text-slate-800">{new Date(detailLog.occurredAt).toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="bg-slate-50 border border-gray-200 rounded-xl p-4 min-w-0">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">Previous value</span>
+                <div className="text-xs font-mono text-slate-700 whitespace-pre-wrap break-words max-h-60 overflow-y-auto pr-1">
+                  <JsonTree data={parseMaybe(detailLog.oldValue)} />
+                </div>
+              </div>
+              <div className="bg-slate-50 border border-gray-200 rounded-xl p-4 min-w-0">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">New value</span>
+                <div className="text-xs font-mono text-slate-700 whitespace-pre-wrap break-words max-h-60 overflow-y-auto pr-1">
+                  <JsonTree data={parseMaybe(detailLog.newValue)} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

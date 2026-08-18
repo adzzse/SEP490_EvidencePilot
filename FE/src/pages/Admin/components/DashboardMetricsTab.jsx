@@ -4,18 +4,24 @@ import { PageSkeleton, ErrorBlock, StatCard } from './shared.jsx';
 function DashboardSection({ lang, api }) {
   const [data, setData] = useState(null);
   const [recentLogs, setRecentLogs] = useState([]);
+  const [health, setHealth] = useState(null);
+  const [queue, setQueue] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const fetch = useCallback(async (signal) => {
     setLoading(true); setError(null);
     try {
-      const [dashboard, logs] = await Promise.all([
+      const [dashboard, logs, h, q] = await Promise.all([
         api.get('/api/admin/dashboard', { signal }),
         api.get('/api/admin/audit-logs', { params: { page: 0, size: 5 }, signal }).catch(() => null),
+        api.get('/api/health', { signal, validateStatus: () => true }).catch(() => null),
+        api.get('/api/admin/documents/extraction-queue', { signal }).catch(() => null),
       ]);
       setData(dashboard.data);
       setRecentLogs(logs ? (logs.data?.content ?? []) : null);
+      setHealth(h ? h.data : null);
+      setQueue(q ? q.data : null);
     } catch (e) {
       if (signal && signal.aborted) return;
       setError(e.message || lang.loadFailed);
@@ -33,6 +39,18 @@ function DashboardSection({ lang, api }) {
   const sPct = userTotal > 0 ? Math.round((sCount / userTotal) * 100) : 0;
   const sIRatio = iCount > 0 ? (sCount / iCount).toFixed(1) : '—';
   const donutOffset = userTotal > 0 ? Math.round(251.3 * (1 - sPct / 100)) : 0;
+
+  const ir = health?.components || {};
+  const irServices = Object.entries(ir)
+    .filter(([k]) => k !== 'message')
+    .map(([name, v]) => ({
+      name,
+      status: (typeof v === 'object' && v !== null) ? (v.status ?? v.ready) : v,
+    }));
+  const upCount = irServices.filter(s => s.status === 'UP' || s.status === true || s.status === 'Online').length;
+  const allUp = irServices.length > 0 && upCount === irServices.length;
+  const queueCounts = queue?.counts || {};
+  const queueTotal = ['QUEUED', 'PROCESSING', 'FAILED'].reduce((a, k) => a + (typeof queueCounts[k] === 'number' ? queueCounts[k] : 0), 0);
 
   const startProcessGuide = () => {
     setTimeout(() => {
@@ -157,6 +175,36 @@ function DashboardSection({ lang, api }) {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* System Health strip */}
+          <div className="mt-4 border-t border-gray-100 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">System Health</span>
+                {irServices.length > 0 ? (
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider ${allUp ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                    {allUp ? 'OPERATIONAL' : 'DEGRADED'}
+                  </span>
+                ) : null}
+              </div>
+              <span className="text-xs font-extrabold text-slate-800">{irServices.length > 0 ? `${upCount} / ${irServices.length} services online` : 'No health data'}</span>
+              <span className="text-xs font-extrabold text-slate-800">{queueTotal} in queue</span>
+            </div>
+            {irServices.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {irServices.map(s => {
+                  const isUp = s.status === 'UP' || s.status === true || s.status === 'Online';
+                  return (
+                    <span key={s.name} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-600">
+                      <span className={`w-2 h-2 rounded-full ${isUp ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                      <span className="capitalize">{s.name}</span>
+                      <span className={isUp ? 'text-emerald-600' : 'text-rose-600'}>{isUp ? 'UP' : 'DOWN'}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

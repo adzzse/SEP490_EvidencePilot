@@ -119,6 +119,16 @@
   "deleteFailed": "Xóa thất bại.",
   "deleteConfirm": "Xóa nguồn này?",
   "deleteMediaConfirm": "Xóa phương tiện này?",
+
+  "undoHeader": "Mục đã bị xóa vĩnh viễn",
+  "undoHeaderUser": "Tài khoản người dùng đã bị xóa vĩnh viễn",
+  "undoCaution": "Cảnh báo: Hành động này sẽ trở nên vĩnh viễn khi hết thời gian đếm ngược.",
+  "undoBodyTemplate": "Mục {entityName}{entityDetails} đã bị xóa{actorPart} lúc {timestamp}.",
+  "undoBodyTemplateUser": "Tài khoản của người dùng {entityName}{entityDetails} đã bị xóa{actorPart} lúc {timestamp}.",
+  "undoLabel": "Hoàn tác",
+  "undoRemaining": "(còn {seconds} giây)",
+  "dismissLabel": "Bỏ qua",
+
   "downloadedTex": "Đã tải .tex",
 
   "export": "Xuất",
@@ -126,6 +136,7 @@
   "exportTraceability": "Báo cáo Traceability (JSON)",
   "exportTraceabilityCsv": "Báo cáo Traceability (CSV)",
   "exportFailed": "Xuất tệp thất bại.",
+  "exportLocked": "Xuất chỉ khả dụng khi dự án ở trạng thái Đã duyệt hoặc Đã lưu trữ",
 
   "tour": {
     "projectName": "Tên dự án",

@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { driver } from 'driver.js';
 import { ErrorBlock } from './shared.jsx';
+import useUndoDelete, { UndoToast } from '../../../components/UndoDelete.jsx';
 function UsersSection({ lang, api }) {
   const [users, setUsers] = useState({ content: [], page: 0, totalElements: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
+  const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete({ onUndo: () => fetch(page) });
   const [pwMsg, setPwMsg] = useState({});
   const [loadingAction, setLoadingAction] = useState({});
   const [showCreate, setShowCreate] = useState(false);
@@ -87,14 +89,25 @@ function UsersSection({ lang, api }) {
   };
 
   const doDelete = async (id) => {
-    if (!confirm(lang.confirmDelete)) return;
-    setLoadingAction(p => ({ ...p, ['del_' + id]: true }));
     try {
       await api.delete(`/api/admin/users/${id}`);
       setUsers(prev => ({ ...prev, content: prev.content.filter(x => x.id !== id) }));
     }
     catch (e) { setError(e.message); }
-    finally { setLoadingAction(p => ({ ...p, ['del_' + id]: false })); }
+  };
+
+  const handleDelete = (u) => {
+    setUsers(prev => ({ ...prev, content: prev.content.filter(x => x.id !== u.id) }));
+    startDelete({
+      entityName: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+      entityDetails: u.email,
+      header: lang.undoHeaderUser,
+      bodyTemplate: lang.undoBodyTemplateUser,
+      caution: lang.undoCaution,
+      undoLabel: lang.undoLabel,
+      undoRemaining: lang.undoRemaining,
+      dismissLabel: lang.dismissLabel,
+    }, () => doDelete(u.id));
   };
 
   const doCreate = async (e) => {
@@ -368,7 +381,7 @@ function UsersSection({ lang, api }) {
                       </button>
 
                       {/* Delete Icon */}
-                      <button onClick={() => doDelete(u.id)} disabled={loadingAction['del_' + u.id]} title={lang.deleteUser}
+                      <button onClick={() => handleDelete(u)} disabled={loadingAction['del_' + u.id]} title={lang.deleteUser}
                         className="p-1.5 rounded-lg hover:bg-slate-100 transition disabled:opacity-50 text-rose-600 shrink-0">
                         {loadingAction['del_' + u.id] ? (
                           <span className="text-[10px]">...</span>
@@ -425,6 +438,8 @@ function UsersSection({ lang, api }) {
           )}
         </div>
       </div>
+
+      {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
     </div>
   );
 }

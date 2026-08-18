@@ -1,14 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
-import Modal from '../../../components/Modal.jsx';
 import { PageSkeleton } from './shared.jsx';
+import useUndoDelete, { UndoToast } from '../../../components/UndoDelete.jsx';
 function CollectionsSection({ lang, api }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [page, setPage] = useState(0);
   const [detailCol, setDetailCol] = useState(null);
   const [toast, setToast] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete({ onUndo: () => fetch(new AbortController().signal) });
+
+  useEffect(() => {
+    setPage(0);
+  }, [searchQuery, categoryFilter]);
 
   const fetch = useCallback(async (signal) => {
     setLoading(true);
@@ -23,6 +29,14 @@ function CollectionsSection({ lang, api }) {
 
   useEffect(() => {
     const ac = new AbortController();
+    api.get('/api/admin/collection-categories?active=true', { signal: ac.signal })
+      .then(r => setCategories(Array.isArray(r.data) ? r.data : []))
+      .catch(() => { });
+    return () => ac.abort();
+  }, [api]);
+
+  useEffect(() => {
+    const ac = new AbortController();
     fetch(ac.signal);
     return () => ac.abort();
   }, [fetch]);
@@ -32,19 +46,28 @@ function CollectionsSection({ lang, api }) {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleDelete = async () => {
-    if (!deletingId || deleting) return;
-    setDeleting(true);
+  const doDelete = async (id) => {
     try {
-      await api.delete(`/api/collections/${deletingId}`);
-      setDeletingId(null);
+      await api.delete(`/api/collections/${id}`);
       showToast(lang.collectionDeleted, 'success');
       await fetch(new AbortController().signal);
     } catch (e) {
       showToast(e.response?.data?.message || lang.collectionDeleteFailed, 'error');
-    } finally {
-      setDeleting(false);
     }
+  };
+
+  const handleDelete = (c) => {
+    setData(prev => prev.filter(x => x.id !== c.id));
+    startDelete({
+      entityName: c.name,
+      entityDetails: c.id,
+      header: lang.undoHeader,
+      bodyTemplate: lang.undoBodyTemplate,
+      caution: lang.undoCaution,
+      undoLabel: lang.undoLabel,
+      undoRemaining: lang.undoRemaining,
+      dismissLabel: lang.dismissLabel,
+    }, () => doDelete(c.id));
   };
 
   if (loading) return <PageSkeleton />;
@@ -54,15 +77,21 @@ function CollectionsSection({ lang, api }) {
     name: c.name || lang.unnamedCollection,
     description: c.description || '',
     instructorEmail: c.instructorEmail || '—',
+    categoryName: c.categoryName || '',
     createdAt: c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—',
     active: c.active !== undefined ? c.active : true,
     documentCount: c.documentCount ?? 0
   }));
 
   const filteredCollections = displayCollections.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.instructorEmail.toLowerCase().includes(searchQuery.toLowerCase())
+    (c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.instructorEmail.toLowerCase().includes(searchQuery.toLowerCase())) &&
+    (categoryFilter === '' || c.categoryName === categoryFilter)
   );
+
+  const PAGE_SIZE = 2;
+  const totalPages = Math.max(1, Math.ceil(filteredCollections.length / PAGE_SIZE));
+  const pagedCollections = filteredCollections.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
   const totalCollections = displayCollections.length;
   const activeInstructors = new Set(displayCollections.map(c => c.instructorEmail).filter(e => e !== '—')).size;
@@ -175,11 +204,16 @@ function CollectionsSection({ lang, api }) {
                 className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-gray-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" 
               />
             </div>
-            <button className="p-2 bg-slate-50 border border-gray-200 rounded-xl text-slate-500 hover:bg-slate-100 transition">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-              </svg>
-            </button>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="w-full sm:w-48 px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            >
+              <option value="">All Categories</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -203,7 +237,7 @@ function CollectionsSection({ lang, api }) {
                     No collections found
                   </td>
                 </tr>
-              ) : filteredCollections.map((c, index) => {
+              ) : pagedCollections.map((c, index) => {
                 const initial = (c.instructorEmail || '—').slice(0, 1).toUpperCase();
                 const colors = ['bg-blue-500', 'bg-indigo-500', 'bg-emerald-500', 'bg-purple-500', 'bg-rose-500'];
                 const avatarColor = colors[index % colors.length];
@@ -270,9 +304,9 @@ function CollectionsSection({ lang, api }) {
                           </svg>
                         </button>
                         <button 
-                          onClick={() => setDeletingId(c.id)}
+                          onClick={() => handleDelete(c)}
                           title="Delete Collection"
-                          className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 flex items-center justify-center transition shadow-sm cursor-pointer ml-auto"
+                          className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 flex items-center justify-center transition shadow-sm cursor-pointer"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
@@ -289,45 +323,26 @@ function CollectionsSection({ lang, api }) {
 
         {/* Footer / Pagination */}
         <div className="flex items-center justify-between px-6 py-3.5 border-t border-gray-100 bg-gray-50/50 text-xs font-semibold text-gray-500">
-          <span>Showing 1 to {filteredCollections.length} of {displayCollections.length} collections</span>
-          <div className="flex items-center gap-1.5">
-            <button className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-slate-50 transition">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <button className="w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold bg-[#0c162e] text-white shadow-sm">
-              1
-            </button>
-            <button className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-slate-50 transition">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
+          <span>Showing {Math.min(filteredCollections.length, (page + 1) * PAGE_SIZE)} of {filteredCollections.length} collections</span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <span>{lang.page} {page + 1} / {totalPages}</span>
+              <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+                className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       </div>
-
-      <Modal
-        open={!!deletingId}
-        onClose={() => { if (!deleting) setDeletingId(null); }}
-        title={lang.delete}
-        closeLabel={lang.close}
-      >
-        <div className="space-y-4 text-xs">
-          <p className="text-(--text-secondary)">{lang.confirmDeleteCollection}</p>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setDeletingId(null)} disabled={deleting}
-              className="flex-1 py-3 bg-(--surface-secondary) hover:bg-(--surface-tertiary) text-(--text-secondary) rounded-xl transition-colors border border-(--border) disabled:opacity-50">
-              {lang.cancel}
-            </button>
-            <button type="button" onClick={handleDelete} disabled={deleting}
-              className="flex-1 py-3 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-50">
-              {deleting ? lang.saving : lang.delete}
-            </button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Collection Detail Modal Overlay */}
       {detailCol && (
@@ -419,6 +434,8 @@ function CollectionsSection({ lang, api }) {
           <span className="text-xs font-bold text-slate-800">{toast.message}</span>
         </div>
       )}
+
+      {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
     </div>
   );
 }

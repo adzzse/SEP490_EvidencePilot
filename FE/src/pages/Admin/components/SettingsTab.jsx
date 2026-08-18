@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useDangerConfirm } from '../../../components/DangerConfirm';
+import useUndoDelete, { UndoToast } from '../../../components/UndoDelete.jsx';
 function SettingsSection({ lang, api }) {
-  const confirmDanger = useDangerConfirm();
   const [cats, setCats] = useState([]);
   const [catsLoading, setCatsLoading] = useState(true);
   const [showCatForm, setShowCatForm] = useState(false);
@@ -10,6 +9,7 @@ function SettingsSection({ lang, api }) {
   const [config, setConfig] = useState(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete({ onUndo: () => fetchCats(new AbortController().signal) });
 
   const fetchCats = useCallback(async (signal) => {
     setCatsLoading(true);
@@ -66,7 +66,6 @@ function SettingsSection({ lang, api }) {
   };
 
   const doCatDelete = async (id) => {
-    if (!(await confirmDanger(lang.confirmDeleteCategory))) return;
     try {
       await api.delete(`/api/admin/collection-categories/${id}`);
       showToast(lang.categoryDeletedOk, 'success');
@@ -74,6 +73,20 @@ function SettingsSection({ lang, api }) {
     } catch (e) {
       showToast(lang.categoryDeleteFailed, 'error');
     }
+  };
+
+  const handleCatDelete = (c) => {
+    setCats(prev => prev.filter(x => x.id !== c.id));
+    startDelete({
+      entityName: c.name,
+      entityDetails: c.id,
+      header: lang.undoHeader,
+      bodyTemplate: lang.undoBodyTemplate,
+      caution: lang.undoCaution,
+      undoLabel: lang.undoLabel,
+      undoRemaining: lang.undoRemaining,
+      dismissLabel: lang.dismissLabel,
+    }, () => doCatDelete(c.id));
   };
 
   const exportEnvFile = () => {
@@ -108,10 +121,10 @@ function SettingsSection({ lang, api }) {
         </div>
       </div>
 
-      {/* Grid: Collection Categories, Source Categories, System Status, Platform limits */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Grid: Collection Categories (40%) + System Configuration (60%) */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Card 1: Collection Categories */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between h-72">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between h-72 lg:col-span-2">
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div className="flex items-center gap-2">
@@ -148,7 +161,7 @@ function SettingsSection({ lang, api }) {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button onClick={() => { setCatForm({ id: c.id, name: c.name, description: c.description || '' }); setShowCatForm(true); }} className="px-2 py-1 text-[10px] font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 hover:text-slate-800 transition cursor-pointer">Edit</button>
-                      <button onClick={() => doCatDelete(c.id)} className="px-2 py-1 text-[10px] font-bold text-rose-500 bg-rose-50/30 border border-rose-105 rounded-lg hover:bg-rose-50 hover:text-rose-655 transition cursor-pointer">Delete</button>
+                      <button onClick={() => handleCatDelete(c)} className="px-2 py-1 text-[10px] font-bold text-rose-500 bg-rose-50/30 border border-rose-105 rounded-lg hover:bg-rose-50 hover:text-rose-655 transition cursor-pointer">Delete</button>
                     </div>
                   </div>
                 ))}
@@ -156,10 +169,9 @@ function SettingsSection({ lang, api }) {
             )}
           </div>
         </div>
-      </div>
 
       {/* System Configuration Table Card */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden" data-guide="settings-config">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden lg:col-span-3 flex flex-col" data-guide="settings-config">
         {/* Table Header and Export */}
         <div className="px-6 py-4.5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -183,7 +195,7 @@ function SettingsSection({ lang, api }) {
         </div>
 
         {/* Table Content */}
-        <div className="overflow-x-auto">
+        <div className="flex-1 overflow-auto">
           {configLoading ? (
             <div className="animate-pulse space-y-2 p-6">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-6 bg-gray-200 rounded w-full" />)}</div>
           ) : !config ? (
@@ -225,6 +237,7 @@ function SettingsSection({ lang, api }) {
             </table>
           )}
         </div>
+      </div>
       </div>
 
       {/* Collection Category Modal Overlay */}
@@ -281,6 +294,8 @@ function SettingsSection({ lang, api }) {
           <span className="text-xs font-bold text-slate-800">{toast.message}</span>
         </div>
       )}
+
+      {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
     </div>
   );
 }

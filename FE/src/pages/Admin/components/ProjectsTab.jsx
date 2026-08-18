@@ -2,11 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { driver } from 'driver.js';
 import Modal from '../../../components/Modal.jsx';
 import { ErrorBlock } from './shared.jsx';
+import useUndoDelete, { UndoToast } from '../../../components/UndoDelete.jsx';
 function ProjectsSection({ lang, api }) {
   const [projects, setProjects] = useState({ content: [], page: 0, totalElements: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
+  const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete({ onUndo: () => fetch(page) });
 
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -16,8 +18,6 @@ function ProjectsSection({ lang, api }) {
   const [activeProject, setActiveProject] = useState(null);
   const [projectErr, setProjectErr] = useState('');
   const [toast, setToast] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
-  const [deleting, setDeleting] = useState(false);
 
   // Detail modal state
   const [detailProject, setDetailProject] = useState(null);
@@ -75,17 +75,27 @@ function ProjectsSection({ lang, api }) {
     }
   };
 
-  const doDelete = async () => {
-    if (!deletingId || deleting) return;
-    setDeleting(true);
+  const doDelete = async (id) => {
     try {
-      await api.delete(`/api/projects/${deletingId}`);
-      setDeletingId(null);
+      await api.delete(`/api/projects/${id}`);
       showToast(lang.projectDeletedSuccess, "success");
       await fetch(page);
     }
     catch (e) { setError(e.message); }
-    finally { setDeleting(false); }
+  };
+
+  const handleDelete = (p) => {
+    setProjects(prev => ({ ...prev, content: prev.content.filter(x => x.id !== p.id) }));
+    startDelete({
+      entityName: p.title,
+      entityDetails: p.id,
+      header: lang.undoHeader,
+      bodyTemplate: lang.undoBodyTemplate,
+      caution: lang.undoCaution,
+      undoLabel: lang.undoLabel,
+      undoRemaining: lang.undoRemaining,
+      dismissLabel: lang.dismissLabel,
+    }, () => doDelete(p.id));
   };
 
   const openDetail = async (p) => {
@@ -414,7 +424,7 @@ function ProjectsSection({ lang, api }) {
                         )}
 
                         {/* Delete Icon */}
-                        <button onClick={() => setDeletingId(p.id)} title="Delete Project" className="p-1.5 rounded-lg hover:bg-slate-100 text-rose-600 hover:text-rose-800 transition cursor-pointer">
+                        <button onClick={() => handleDelete(p)} title="Delete Project" className="p-1.5 rounded-lg hover:bg-slate-100 text-rose-600 hover:text-rose-800 transition cursor-pointer">
                           <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                             <path d="M3 6h18" />
                             <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
@@ -472,27 +482,6 @@ function ProjectsSection({ lang, api }) {
           )}
         </div>
       </div>
-
-      <Modal
-        open={!!deletingId}
-        onClose={() => { if (!deleting) setDeletingId(null); }}
-        title={lang.delete}
-        closeLabel={lang.close}
-      >
-        <div className="space-y-4 text-xs">
-          <p className="text-(--text-secondary)">{lang.confirmDeleteProject}</p>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setDeletingId(null)} disabled={deleting}
-              className="flex-1 py-3 bg-(--surface-secondary) hover:bg-(--surface-tertiary) text-(--text-secondary) rounded-xl transition-colors border border-(--border) disabled:opacity-50">
-              {lang.cancel}
-            </button>
-            <button type="button" onClick={doDelete} disabled={deleting}
-              className="flex-1 py-3 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-50">
-              {deleting ? lang.saving : lang.delete}
-            </button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Project Detail Modal Overlay */}
       {detailProject && (
@@ -797,6 +786,8 @@ function ProjectsSection({ lang, api }) {
           <span className="text-xs font-bold text-slate-800">{toast.message}</span>
         </div>
       )}
+
+      {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
     </div>
   );
 }

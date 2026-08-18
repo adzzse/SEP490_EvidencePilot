@@ -12,7 +12,7 @@ import EditorPanel from './EditorPanel.jsx';
 import ContextPanel from './ContextPanel.jsx';
 import FullPaperPreview from './FullPaperPreview.jsx';
 import { hasActiveExtraction } from './extractionPolling.js';
-import { useDangerConfirm } from '../../components/DangerConfirm';
+import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
 
 async function loadAllProjectSources(projectId) {
   const sources = [];
@@ -82,7 +82,15 @@ export default function WorkspaceLayout() {
   const navigate = useNavigate();
   const { logout, user, role } = useAuth();
   const { t, i18n } = useTranslation();
-  const confirmDanger = useDangerConfirm();
+  const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
+  const undoStrings = {
+    header: t('undoHeader'),
+    bodyTemplate: t('undoBodyTemplate'),
+    caution: t('undoCaution'),
+    undoLabel: t('undoLabel'),
+    undoRemaining: t('undoRemaining'),
+    dismissLabel: t('dismissLabel'),
+  };
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem('student_workspace_active_tab') || 'Source';
     return stored === 'Graph' || stored === 'Claims' ? 'AI Review' : stored;
@@ -682,18 +690,29 @@ export default function WorkspaceLayout() {
   };
 
   const handleDeletePaper = async (paperId) => {
-    if (!(await confirmDanger(t('deletePaperConfirm')))) return;
-    try {
-      await api.delete(`/api/papers/${paperId}`);
-      showToast(t('paperDeleted'));
+    setPapers(prev => prev.filter(p => String(p.id) !== String(paperId)));
+    if (selectedPaper && String(selectedPaper.id) === String(paperId)) setSelectedPaper(null);
+    const paper = papers.find(p => String(p.id) === String(paperId));
+    startDelete({
+      ...undoStrings,
+      entityName: paper?.title || paper?.originalFilename || paperId,
+      entityDetails: paperId,
+    }, async () => {
+      try {
+        await api.delete(`/api/papers/${paperId}`);
+        showToast(t('paperDeleted'));
+      } catch { showToast(t('deleteFailed')); }
       const r = await api.get(`/api/projects/${project.id}/papers`);
       const list = r.data || [];
       setPapers(list);
-      if (selectedPaper && selectedPaper.id === paperId) {
+      if (selectedPaper && String(selectedPaper.id) === String(paperId)) {
         if (list.length > 0) { setSelectedPaper(list[0]); loadCode(''); }
         else { setSelectedPaper(null); loadCode(''); }
       }
-    } catch { showToast(t('deleteFailed')); }
+    }, async () => {
+      const r = await api.get(`/api/projects/${project.id}/papers`);
+      setPapers(r.data || []);
+    });
   };
 
   const handleUploadSource = async (file) => {
@@ -710,14 +729,23 @@ export default function WorkspaceLayout() {
   };
 
   const handleDeleteSource = async (sourceId) => {
-    if (!(await confirmDanger(t('deleteConfirm')))) return;
-    try {
-      await api.delete(`/api/documents/${sourceId}`);
-      showToast(t('sourceDeleted'));
+    setSources(prev => prev.filter(s => String(s.id) !== String(sourceId)));
+    const src = sources.find(s => String(s.id) === String(sourceId));
+    startDelete({
+      ...undoStrings,
+      entityName: src?.title || src?.originalFilename || sourceId,
+      entityDetails: sourceId,
+    }, async () => {
+      try {
+        await api.delete(`/api/documents/${sourceId}`);
+        showToast(t('sourceDeleted'));
+      } catch (err) {
+        showToast(err?.response?.data?.message || t('deleteFailed'));
+      }
       setSources(await loadAllProjectSources(project.id));
-    } catch (err) {
-      showToast(err?.response?.data?.message || t('deleteFailed'));
-    }
+    }, async () => {
+      setSources(await loadAllProjectSources(project.id));
+    });
   };
 
   const handleUploadMedia = async (file) => {
@@ -735,13 +763,23 @@ export default function WorkspaceLayout() {
   };
 
   const handleDeleteMedia = async (mediaId) => {
-    if (!(await confirmDanger(t('deleteMediaConfirm')))) return;
-    try {
-      await api.delete(`/api/media/${mediaId}`);
-      showToast(t('mediaDeleted'));
+    setMediaAssets(prev => prev.filter(m => String(m.id) !== String(mediaId)));
+    const media = mediaAssets.find(m => String(m.id) === String(mediaId));
+    startDelete({
+      ...undoStrings,
+      entityName: media?.originalFilename || mediaId,
+      entityDetails: mediaId,
+    }, async () => {
+      try {
+        await api.delete(`/api/media/${mediaId}`);
+        showToast(t('mediaDeleted'));
+      } catch { showToast(t('deleteFailed')); }
       const r = await api.get(`/api/media/projects/${project.id}`);
       setMediaAssets(r.data || []);
-    } catch { showToast(t('deleteFailed')); }
+    }, async () => {
+      const r = await api.get(`/api/media/projects/${project.id}`);
+      setMediaAssets(r.data || []);
+    });
   };
 
   const handleInsertMedia = (texFilename) => {
@@ -764,7 +802,6 @@ export default function WorkspaceLayout() {
 
   const handleRollbackSection = async (sectionId) => {
     if (!selectedPaper) return;
-    if (!(await confirmDanger(t('restoreConfirm')))) return;
     setRollingBack(true);
     try {
       const res = await api.post(`/api/papers/${selectedPaper.id}/sections/${sectionId}/rollback`);
@@ -1587,6 +1624,8 @@ export default function WorkspaceLayout() {
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
 
       <TourLauncher steps={tourSteps} tourKey="student-workspace" />
 

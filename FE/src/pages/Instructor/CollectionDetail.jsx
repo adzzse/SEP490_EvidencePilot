@@ -8,7 +8,7 @@ import { useCollectionSources } from '../../hooks/useCollections';
 import api from '../../api';
 import { Network } from 'vis-network';
 import { DataSet } from 'vis-data';
-import { useDangerConfirm } from '../../components/DangerConfirm';
+import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
 
 const TABS = ['documents', 'connectedMap', 'visualizeMap', 'analyzeCollection'];
 const TAB_IDS = ['documents-tab', 'connected-map-tab', 'visualize-map-tab', 'analyze-tab'];
@@ -31,7 +31,15 @@ export default function CollectionDetail() {
   const { language } = useLanguage();
   const t = instructorText[language];
   const ct = commonText[language];
-  const confirmDanger = useDangerConfirm();
+  const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
+  const undoStrings = {
+    header: t.undoHeader,
+    bodyTemplate: t.undoBodyTemplate,
+    caution: t.undoCaution,
+    undoLabel: t.undoLabel,
+    undoRemaining: t.undoRemaining,
+    dismissLabel: t.dismissLabel,
+  };
 
   const TOUR_STEPS = useMemo(() => [
     { element: '#documents-tab', popover: { title: t.documents, description: t.tourDocumentsDesc, side: 'bottom', align: 'start' } },
@@ -43,7 +51,9 @@ export default function CollectionDetail() {
   ], [t]);
 
   const [activeTab, setActiveTab] = useState(0);
-  const { content: sources, loading: srcLoading, error: srcError, refetch: refetchSources } = useCollectionSources(id);
+  const { content: sourcesRaw, loading: srcLoading, error: srcError, refetch: refetchSources } = useCollectionSources(id);
+  const [removedIds, setRemovedIds] = useState(() => new Set());
+  const sources = useMemo(() => sourcesRaw.filter(s => !removedIds.has(String(s.id))), [sourcesRaw, removedIds]);
   const [selectedSource, setSelectedSource] = useState(null);
 
   const [collection, setCollection] = useState(null);
@@ -53,6 +63,7 @@ export default function CollectionDetail() {
   const [addDocOption, setAddDocOption] = useState(null);
 
   const [categories, setCategories] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [editModal, setEditModal] = useState({ open: false, name: '', description: '', categoryId: '', submitting: false });
   const [graphData, setGraphData] = useState(null);
   const [graphLoading, setGraphLoading] = useState(false);
@@ -62,6 +73,10 @@ export default function CollectionDetail() {
 
   useEffect(() => {
     api.get('/api/collection-categories').then(r => setCategories(r.data)).catch(() => { });
+  }, []);
+
+  useEffect(() => {
+    api.get('/api/projects?page=0&size=100').then(r => setProjects(r.data?.content || [])).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -81,13 +96,27 @@ export default function CollectionDetail() {
   };
 
   const handleRemoveSource = async (sourceId) => {
-    if (!(await confirmDanger(t.removeSourceFromCollectionConfirm))) return;
-    try {
-      await api.delete(`/api/collections/${id}/sources/${sourceId}`);
-      refetchSources();
+    const sid = String(sourceId);
+    const src = sources.find(s => String(s.id) === sid);
+    setRemovedIds(prev => new Set(prev).add(sid));
+    startDelete({
+      ...undoStrings,
+      entityName: src?.title || src?.originalFilename || sourceId,
+      entityDetails: sourceId,
+    }, async () => {
+      try {
+        await api.delete(`/api/collections/${id}/sources/${sourceId}`);
+        refetchSources();
+      }
+      catch {
+        alert(t.deleteFailed);
+        setRemovedIds(prev => { const n = new Set(prev); n.delete(sid); return n; });
+      }
       if (selectedSource?.id === sourceId) setSelectedSource(null);
-    }
-    catch { alert(t.deleteFailed); }
+    }, () => {
+      setRemovedIds(prev => { const n = new Set(prev); n.delete(sid); return n; });
+      refetchSources();
+    });
   };
 
   const handleDownloadSource = async (source) => {
@@ -106,9 +135,16 @@ export default function CollectionDetail() {
 
   const handleDeleteCollection = async () => {
     const shared = sources.filter(s => (s.projectIds || []).length > 0);
-    if (shared.length > 0 && !(await confirmDanger(t.sharedDocsWarning))) return;
-    if (!(await confirmDanger(t.deleteConfirm))) return;
-    api.delete(`/api/collections/${id}`).then(() => { window.location.href = '/instructor/collections'; }).catch(() => alert(t.deleteFailed));
+    const msg = shared.length > 0 ? `${t.sharedDocsWarning} ${t.deleteConfirm}` : t.deleteConfirm;
+    startDelete({
+      ...undoStrings,
+      bodyTemplate: undefined,
+      message: msg,
+      entityName: collection?.name || collection?.title || id,
+      entityDetails: id,
+    }, () => {
+      api.delete(`/api/collections/${id}`).then(() => { window.location.href = '/instructor/collections'; }).catch(() => alert(t.deleteFailed));
+    });
   };
 
   const handleEditOpen = () => {
@@ -746,7 +782,7 @@ export default function CollectionDetail() {
           </div>
         </div>
 
-        <div className="flex gap-1 mb-6 border-b border-(--border) overflow-x-auto">
+        <div className="flex flex-wrap gap-1 mb-6 border-b border-(--border)">
           {TABS.map((tab, i) => (
             <button key={tab} id={TAB_IDS[i]} onClick={() => setActiveTab(i)}
               className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-colors whitespace-nowrap ${activeTab === i ? 'bg-(--surface) text-(--brand-foreground) border border-b-(--surface) border-(--border) -mb-px' : 'text-(--text-tertiary) hover:text-(--text-primary)'
@@ -810,6 +846,7 @@ export default function CollectionDetail() {
         </form>
       </Modal>
 
+      {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
     </div>
   );
 }

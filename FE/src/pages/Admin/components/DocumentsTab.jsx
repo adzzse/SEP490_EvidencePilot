@@ -5,6 +5,7 @@ function PapersSection({ lang, api }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [documents, setDocuments] = useState({ content: [], totalElements: 0, totalPages: 0 });
+  const [allDocs, setAllDocs] = useState({ content: [] });
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [diag, setDiag] = useState(null);
   const [diagLoading, setDiagLoading] = useState(false);
@@ -19,15 +20,21 @@ function PapersSection({ lang, api }) {
   const fetch = useCallback(async (signal) => {
     setLoading(true);
     try {
-      const [dash, docs] = await Promise.all([
+      const [dash, docs, all] = await Promise.all([
         api.get('/api/admin/dashboard', { signal }),
         api.get('/api/admin/documents', {
           params: { page, size: 5, q: q || undefined, projectId: projectId || undefined, collectionId: collectionId || undefined },
           signal,
         }),
+        // ponytail: 1000-row ceiling; add a BE count endpoint if docs ever exceed that
+        api.get('/api/admin/documents', {
+          params: { page: 0, size: 1000, q: q || undefined, projectId: projectId || undefined, collectionId: collectionId || undefined },
+          signal,
+        }),
       ]);
       setData(dash.data);
       setDocuments(docs.data);
+      setAllDocs(all.data);
     }
     catch (e) {
       if (signal && signal.aborted) return;
@@ -76,15 +83,15 @@ function PapersSection({ lang, api }) {
 
   const display = data;
 
-  const pageProcessed = documents.content.filter(d => ['COMPLETED', 'READY'].includes(d.processingStatus)).length;
-  const pageFailed = documents.content.filter(d => ['FAILED', 'PARTIAL'].includes(d.processingStatus)).length;
+  const pageProcessed = allDocs.content.filter(d => ['COMPLETED', 'READY'].includes(d.processingStatus)).length;
+  const pageFailed = allDocs.content.filter(d => ['FAILED', 'PARTIAL'].includes(d.processingStatus)).length;
 
   const stats = [
     { label: 'TOTAL DOCUMENTS', value: documents.totalElements ?? 0, subtext: 'all documents', barColor: 'bg-gray-400' },
     { label: 'PAPERS', value: display?.activePaperDocuments ?? 0, subtext: 'active papers', barColor: 'bg-blue-500' },
     { label: 'SOURCES', value: display?.activeSourceDocuments ?? 0, subtext: 'active sources', barColor: 'bg-emerald-500' },
-    { label: 'PROCESSED', value: pageProcessed, subtext: 'on this page', barColor: 'bg-amber-500' },
-    { label: 'FAILED / PARTIAL', value: pageFailed, subtext: 'on this page', barColor: 'bg-rose-500' }
+    { label: 'PROCESSED', value: pageProcessed, subtext: 'processed', barColor: 'bg-amber-500' },
+    { label: 'FAILED / PARTIAL', value: pageFailed, subtext: 'failed', barColor: 'bg-rose-500' }
   ];
 
   const statusBadge = (s) => {

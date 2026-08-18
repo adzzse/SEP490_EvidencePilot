@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import { AppHeader, LoadingSkeleton } from '../components';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -8,7 +8,6 @@ import { commonText } from '../locales';
 
 export default function Profile() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { user: authUser, logout, verifySession } = useAuth();
   const { language } = useLanguage();
   const t = commonText[language];
@@ -17,16 +16,9 @@ export default function Profile() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
-  const [showPasswordNotice] = useState(Boolean(location.state?.passwordChangeNotice));
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (location.state?.passwordChangeNotice) {
-      navigate(location.pathname, { replace: true, state: null });
-    }
-  }, [location.pathname, location.state, navigate]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -168,11 +160,6 @@ export default function Profile() {
           <section id="change-password" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm sm:p-6 md:col-span-3">
             <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t.changePassword}</h2>
             <p className="mt-1 text-xs text-[var(--text-secondary)]">{t.passwordRequirements}</p>
-            {showPasswordNotice && (
-              <div role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
-                {t.temporaryPasswordNotice}
-              </div>
-            )}
             {passwordMessage && (
               <div role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-800">
                 {passwordMessage}
@@ -181,7 +168,7 @@ export default function Profile() {
             <form onSubmit={handleUpdatePassword} className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="space-y-1.5 text-xs font-bold text-[var(--text-secondary)] sm:col-span-2">
                 <span>{t.currentPassword}</span>
-                <input autoFocus={showPasswordNotice} autoComplete="current-password" type="password" value={passwordForm.currentPassword} onChange={(event) => setPasswordForm(value => ({ ...value, currentPassword: event.target.value }))} required className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[var(--brand)]" />
+                <input autoComplete="current-password" type="password" value={passwordForm.currentPassword} onChange={(event) => setPasswordForm(value => ({ ...value, currentPassword: event.target.value }))} required className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[var(--brand)]" />
               </label>
               <label className="space-y-1.5 text-xs font-bold text-[var(--text-secondary)]">
                 <span>{t.newPassword}</span>
