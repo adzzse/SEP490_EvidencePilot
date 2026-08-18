@@ -17,6 +17,7 @@ test('instructor source library previews stored PDFs through the authenticated v
   const sourceLibrary = await readFile(new URL('../src/pages/Instructor/SourceLibraryPanel.jsx', import.meta.url), 'utf8');
 
   assert.match(sourceLibrary, /import FileViewerModal from '\.\.\/\.\.\/components\/FileViewerModal'/);
+  assert.match(sourceLibrary, /import useUndoDelete, \{ UndoToast \} from '\.\.\/\.\.\/components\/UndoDelete\.jsx'/);
   assert.match(sourceLibrary, /Number\(source\.fileSizeBytes\) > 0/);
   assert.match(sourceLibrary, /fileUrl: `\/api\/documents\/\$\{source\.id\}\/download`/);
   assert.match(sourceLibrary, /<FileViewerModal/);

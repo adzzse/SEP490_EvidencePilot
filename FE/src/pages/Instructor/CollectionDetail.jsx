@@ -283,9 +283,11 @@ export default function CollectionDetail() {
             </p>
           )}
 
-          {libraryLoading ? <LoadingSkeleton count={3} height="h-14" /> : filteredSources.length === 0 ? (
+          {libraryLoading ? <LoadingSkeleton count={3} height="h-14" /> : libraryError ? null : filteredSources.length === 0 ? (
             <div className="rounded-xl border border-dashed border-(--border) bg-(--surface-secondary) px-4 py-8 text-center text-xs text-(--text-tertiary)">
-              {librarySources.length === 0 ? t.noLibrarySources : t.noLibraryMatches}
+              {librarySources.length === 0
+                ? (sources.length > 0 ? t.allLibrarySourcesAdded : t.noLibrarySources)
+                : t.noLibraryMatches}
             </div>
           ) : (
             <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
