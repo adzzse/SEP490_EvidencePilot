@@ -14,6 +14,7 @@ import {
 } from './sourceShareSelection';
 import { getStudentSuggestions, studentDisplayName } from './studentSearch';
 import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
+import DeleteConfirm from '../../components/DeleteConfirm.jsx';
 
 const STANDARDS = ['IEEE', 'ACM', 'SPRINGER_LNCS', 'APA', 'MLA', 'CUSTOM'];
 
@@ -700,10 +701,16 @@ export default function ProjectDetail() {
                         <span className="min-w-0 truncate font-medium">{s.title || s.originalFilename || s.id}</span>
                         <StatusBadge status={s.processingStatus || 'READY'} />
                       </button>
-                      <button onClick={() => handleRemoveSource(s.id)} title={t.removeSource}
-                        className="shrink-0 rounded-lg p-1.5 text-[var(--text-tertiary)] transition hover:bg-rose-100 hover:text-rose-600">
+                      <DeleteConfirm
+                        message={t.removeSourceConfirm}
+                        onConfirm={() => handleRemoveSource(s.id)}
+                        triggerLabel={t.removeSource}
+                        confirmLabel={t.removeSource}
+                        cancelLabel={ct.cancel}
+                        className="shrink-0 rounded-lg p-1.5 text-[var(--text-tertiary)] transition hover:bg-rose-100 hover:text-rose-600"
+                      >
                         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M10 11v6M14 11v6" /></svg>
-                      </button>
+                      </DeleteConfirm>
                     </div>
                   ))}
                 </div>
@@ -934,7 +941,7 @@ export default function ProjectDetail() {
                                     <button onClick={() => handleStartSectionRename(s)} disabled={sectionStructureSaving} className="rounded p-1 text-[var(--text-tertiary)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-foreground)] disabled:opacity-50" title={t.rename} aria-label={t.rename}><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z" /><path d="m13 7 4 4" /></svg></button>
                                   )}
                                   {!sectionStructureLocked && (
-                                    <button onClick={() => handleDeleteSection(s.id)} disabled={sectionStructureSaving} className="rounded p-1 text-[var(--text-tertiary)] hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50" title={ct.delete} aria-label={ct.delete}><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 10v6M14 10v6" /></svg></button>
+                                    <DeleteConfirm message={t.deleteSectionConfirm} onConfirm={() => handleDeleteSection(s.id)} triggerLabel={ct.delete} confirmLabel={ct.delete} cancelLabel={ct.cancel} disabled={sectionStructureSaving} className="rounded p-1 text-[var(--text-tertiary)] hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 10v6M14 10v6" /></svg></DeleteConfirm>
                                   )}
                                   <select
                                     value={s.assignedUserId || ''}
@@ -1242,7 +1249,7 @@ export default function ProjectDetail() {
                           </select>
                         )}
                         {m.role !== 'INSTRUCTOR' && (
-                          <button onClick={() => handleRemoveMember(m.userId)} className="font-bold text-rose-600 transition-colors hover:text-rose-800">{t.remove}</button>
+                          <DeleteConfirm message={t.removeMemberConfirm} onConfirm={() => handleRemoveMember(m.userId)} triggerLabel={t.remove} confirmLabel={t.remove} cancelLabel={ct.cancel} className="font-bold text-rose-600 transition-colors hover:text-rose-800">{t.remove}</DeleteConfirm>
                         )}
                       </div>
                     </div>
@@ -1458,9 +1465,9 @@ export default function ProjectDetail() {
           {selectedCollectionId && linkedCollections.some(c => String(c.id) === String(selectedCollectionId)) && (
             <div className="space-y-3 rounded-lg bg-[var(--surface-secondary)] px-3 py-3 text-[var(--text-secondary)]">
               <p>{t.collectionLinked}</p>
-              <button onClick={handleStopCollectionSync} disabled={projectReadOnly || shareLoadingId !== null} className="w-full rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:cursor-not-allowed disabled:opacity-50">
+              <DeleteConfirm message={t.stopCollectionSyncConfirm} onConfirm={handleStopCollectionSync} triggerLabel={t.stopCollectionSync} confirmLabel={t.stopCollectionSync} cancelLabel={ct.cancel} disabled={projectReadOnly || shareLoadingId !== null} className="w-full rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:cursor-not-allowed disabled:opacity-50">
                 {shareLoadingId === selectedCollectionId ? ct.saving : t.stopCollectionSync}
-              </button>
+              </DeleteConfirm>
             </div>
           )}
           {selectedCollectionId && projectReadOnly && (

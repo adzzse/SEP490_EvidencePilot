@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import useUndoDelete, { UndoToast } from '../../../components/UndoDelete.jsx';
+import DeleteConfirm from '../../../components/DeleteConfirm.jsx';
 function SettingsSection({ lang, api }) {
   const [cats, setCats] = useState([]);
   const [catsLoading, setCatsLoading] = useState(true);
@@ -161,7 +162,16 @@ function SettingsSection({ lang, api }) {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button onClick={() => { setCatForm({ id: c.id, name: c.name, description: c.description || '' }); setShowCatForm(true); }} className="px-2 py-1 text-[10px] font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 hover:text-slate-800 transition cursor-pointer">Edit</button>
-                      <button onClick={() => handleCatDelete(c)} className="px-2 py-1 text-[10px] font-bold text-rose-500 bg-rose-50/30 border border-rose-105 rounded-lg hover:bg-rose-50 hover:text-rose-655 transition cursor-pointer">Delete</button>
+                      <DeleteConfirm
+                        message={lang.confirmDeleteCategory}
+                        onConfirm={() => handleCatDelete(c)}
+                        triggerLabel={lang.delete}
+                        confirmLabel={lang.delete}
+                        cancelLabel={lang.cancel}
+                        className="px-2 py-1 text-[10px] font-bold text-rose-500 bg-rose-50/30 border border-rose-105 rounded-lg hover:bg-rose-50 hover:text-rose-655 transition cursor-pointer"
+                      >
+                        {lang.delete}
+                      </DeleteConfirm>
                     </div>
                   </div>
                 ))}

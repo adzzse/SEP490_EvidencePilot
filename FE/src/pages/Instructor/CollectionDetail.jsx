@@ -9,6 +9,7 @@ import api from '../../api';
 import { Network } from 'vis-network';
 import { DataSet } from 'vis-data';
 import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
+import DeleteConfirm from '../../components/DeleteConfirm.jsx';
 
 const TABS = ['documents', 'connectedMap', 'visualizeMap', 'analyzeCollection'];
 const TAB_IDS = ['documents-tab', 'connected-map-tab', 'visualize-map-tab', 'analyze-tab'];
@@ -377,8 +378,16 @@ export default function CollectionDetail() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button onClick={() => handleRemoveSource(selectedSource.id)}
-                  className="cursor-pointer rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 transition-colors hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-(--focus)">{t.removeFromCollection}</button>
+                <DeleteConfirm
+                  message={t.removeSourceFromCollectionConfirm}
+                  onConfirm={() => handleRemoveSource(selectedSource.id)}
+                  triggerLabel={t.removeFromCollection}
+                  confirmLabel={t.removeFromCollection}
+                  cancelLabel={ct.cancel}
+                  className="cursor-pointer rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 transition-colors hover:bg-amber-100"
+                >
+                  {t.removeFromCollection}
+                </DeleteConfirm>
               </div>
             </div>
 
@@ -775,8 +784,16 @@ export default function CollectionDetail() {
               <>
                 <button onClick={handleEditOpen}
                   className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg text-xs font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{ct.edit}</button>
-                <button onClick={handleDeleteCollection}
-                  className="px-3 py-1.5 bg-(--surface) border border-rose-200 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors">{ct.delete}</button>
+                <DeleteConfirm
+                  message={sources.some(s => (s.projectIds || []).length > 0) ? `${t.sharedDocsWarning} ${t.deleteConfirm}` : t.deleteConfirm}
+                  onConfirm={handleDeleteCollection}
+                  triggerLabel={ct.delete}
+                  confirmLabel={ct.delete}
+                  cancelLabel={ct.cancel}
+                  className="px-3 py-1.5 bg-(--surface) border border-rose-200 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors"
+                >
+                  {ct.delete}
+                </DeleteConfirm>
               </>
             )}
             <TourLauncher steps={TOUR_STEPS} tourKey="instructor-collection-detail"

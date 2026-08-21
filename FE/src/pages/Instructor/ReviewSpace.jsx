@@ -8,6 +8,7 @@ import { commonText, instructorText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
 import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
 import FileViewerModal from '../../components/FileViewerModal';
+import DeleteConfirm from '../../components/DeleteConfirm.jsx';
 
 function wrapLatexLines(latex) {
   if (!latex) return '';
@@ -634,7 +635,7 @@ export default function ReviewSpace() {
                                   {!fb.answered && !requestLocked && (
                                     <>
                                       <button onClick={() => handleEditFeedback(fb)} className="text-(--text-tertiary) hover:text-(--brand) p-1" title={ct.edit} aria-label={ct.edit}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 13H9v-2.828l6.586-6.586z" /></svg></button>
-                                      <button onClick={() => handleDeleteFeedback(fb.id)} className="text-(--text-tertiary) hover:text-rose-600 p-1" title={ct.delete} aria-label={ct.delete}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M4 7h16" /></svg></button>
+                                      <DeleteConfirm message={t.deleteFeedbackConfirm} onConfirm={() => handleDeleteFeedback(fb.id)} triggerLabel={ct.delete} confirmLabel={ct.delete} cancelLabel={ct.cancel} className="text-(--text-tertiary) hover:text-rose-600 p-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M4 7h16" /></svg></DeleteConfirm>
                                     </>
                                   )}
                                 </div>

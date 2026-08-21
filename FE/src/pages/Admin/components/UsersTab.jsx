@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { driver } from 'driver.js';
 import { ErrorBlock } from './shared.jsx';
 import Modal from '../../../components/Modal.jsx';
+import DeleteConfirm from '../../../components/DeleteConfirm.jsx';
 import useUndoDelete, { UndoToast } from '../../../components/UndoDelete.jsx';
 function UsersSection({ lang, api }) {
   const [users, setUsers] = useState({ content: [], page: 0, totalElements: 0, totalPages: 0 });
@@ -359,8 +360,15 @@ function UsersSection({ lang, api }) {
                       </button>
 
                       {/* Delete Icon */}
-                      <button onClick={() => handleDelete(u)} disabled={loadingAction['del_' + u.id]} title={lang.deleteUser}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 transition disabled:opacity-50 text-rose-600 shrink-0">
+                      <DeleteConfirm
+                        message={lang.confirmDelete}
+                        onConfirm={() => handleDelete(u)}
+                        triggerLabel={lang.deleteUser}
+                        confirmLabel={lang.delete}
+                        cancelLabel={lang.cancel}
+                        disabled={loadingAction['del_' + u.id]}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 transition disabled:opacity-50 text-rose-600 shrink-0"
+                      >
                         {loadingAction['del_' + u.id] ? (
                           <span className="text-[10px]">...</span>
                         ) : (
@@ -372,7 +380,7 @@ function UsersSection({ lang, api }) {
                             <line x1="14" x2="14" y1="11" y2="17" />
                           </svg>
                         )}
-                      </button>
+                      </DeleteConfirm>
                     </div>
                   </td>
                 </tr>

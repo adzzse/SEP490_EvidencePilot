@@ -1,6 +1,7 @@
 import StatusBadge from './StatusBadge';
+import DeleteConfirm from './DeleteConfirm.jsx';
 
-export default function EntityCard({ title, subtitle, status, onClick, onEdit, onDelete, editLabel = 'Edit', deleteLabel = 'Delete', children }) {
+export default function EntityCard({ title, subtitle, status, onClick, onEdit, onDelete, editLabel = 'Edit', deleteLabel = 'Delete', deleteConfirmMessage, deleteCancelLabel = 'Cancel', deleteDisabled, children }) {
   return (
     <div
       onClick={onClick}
@@ -33,12 +34,17 @@ export default function EntityCard({ title, subtitle, status, onClick, onEdit, o
           </button>
         )}
         {onDelete && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          <DeleteConfirm
+            message={deleteConfirmMessage}
+            onConfirm={onDelete}
+            triggerLabel={deleteLabel}
+            confirmLabel={deleteLabel}
+            cancelLabel={deleteCancelLabel}
+            disabled={deleteDisabled}
             className="text-xs text-rose-600 hover:underline font-semibold"
           >
             {deleteLabel}
-          </button>
+          </DeleteConfirm>
         )}
       </div>
     </div>

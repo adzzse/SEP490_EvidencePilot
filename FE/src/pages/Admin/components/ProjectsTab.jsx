@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { driver } from 'driver.js';
 import Modal from '../../../components/Modal.jsx';
 import { ErrorBlock } from './shared.jsx';
+import DeleteConfirm from '../../../components/DeleteConfirm.jsx';
 import useUndoDelete, { UndoToast } from '../../../components/UndoDelete.jsx';
 function ProjectsSection({ lang, api }) {
   const [projects, setProjects] = useState({ content: [], page: 0, totalElements: 0, totalPages: 0 });
@@ -160,7 +161,6 @@ function ProjectsSection({ lang, api }) {
   };
 
   const doRemoveMember = async (userId) => {
-    if (!confirm(lang.confirmRemoveMember)) return;
     setMemberErr('');
     try {
       await api.delete(`/api/projects/${activeProject.id}/members/${userId}`);
@@ -424,13 +424,20 @@ function ProjectsSection({ lang, api }) {
                         )}
 
                         {/* Delete Icon */}
-                        <button onClick={() => handleDelete(p)} title="Delete Project" className="p-1.5 rounded-lg hover:bg-slate-100 text-rose-600 hover:text-rose-800 transition cursor-pointer">
+                        <DeleteConfirm
+                          message={lang.confirmDeleteProject}
+                          onConfirm={() => handleDelete(p)}
+                          triggerLabel={lang.delete}
+                          confirmLabel={lang.delete}
+                          cancelLabel={lang.cancel}
+                          className="p-1.5 rounded-lg hover:bg-slate-100 text-rose-600 hover:text-rose-800 transition cursor-pointer"
+                        >
                           <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                             <path d="M3 6h18" />
                             <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
                             <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
                           </svg>
-                        </button>
+                        </DeleteConfirm>
                       </div>
                     </td>
                   </tr>
@@ -737,14 +744,18 @@ function ProjectsSection({ lang, api }) {
                             </select>
                           )}
                           {m.role !== 'INSTRUCTOR' && (
-                            <button
-                              onClick={() => doRemoveMember(m.userId)}
+                            <DeleteConfirm
+                              message={lang.confirmRemoveMember}
+                              onConfirm={() => doRemoveMember(m.userId)}
+                              triggerLabel={lang.delete}
+                              confirmLabel={lang.delete}
+                              cancelLabel={lang.cancel}
                               className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition cursor-pointer"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                               </svg>
-                            </button>
+                            </DeleteConfirm>
                           )}
                         </div>
                       </div>

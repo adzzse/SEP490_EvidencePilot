@@ -29,7 +29,6 @@ export default function CollectionList() {
   const [categoryId, setCategoryId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-  const [deleting, setDeleting] = useState(false);
   const activeView = searchParams.get('tab') === 'sources' ? 'sources' : 'collections';
 
   const selectView = (view) => {
@@ -52,15 +51,14 @@ export default function CollectionList() {
     setModalOpen(true);
   };
 
-  const handleDelete = async () => {
-    if (!deletingId || deleting) return;
-    setDeleting(true);
+  const handleDelete = async (id) => {
+    if (!id || deletingId) return;
+    setDeletingId(id);
     try {
-      await api.delete(`/api/collections/${deletingId}`);
+      await api.delete(`/api/collections/${id}`);
       await refetch();
-      setDeletingId(null);
     } catch { alert(t.deleteCollectionFailed); }
-    finally { setDeleting(false); }
+    finally { setDeletingId(null); }
   };
 
   const resetForm = () => { setName(''); setDescription(''); setCategoryId(''); setEditing(null); };
@@ -150,9 +148,12 @@ export default function CollectionList() {
                       subtitle={col.description || '\u2014'}
                       onClick={() => navigate(`/instructor/collections/${col.id}`)}
                       onEdit={() => handleEdit(col)}
-                      onDelete={() => setDeletingId(col.id)}
+                      onDelete={() => handleDelete(col.id)}
                       editLabel={ct.edit}
-                      deleteLabel={ct.delete}>
+                      deleteLabel={deletingId === col.id ? ct.saving : ct.delete}
+                      deleteConfirmMessage={t.deleteConfirm}
+                      deleteCancelLabel={ct.cancel}
+                      deleteDisabled={deletingId !== null}>
                       <div className="flex items-center gap-3 text-[10px] text-(--text-tertiary) font-mono">
                         {col.categoryName && <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-200">{col.categoryName}</span>}
                         <span>{t.created}: {new Date(col.createdAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US')}</span>
@@ -201,18 +202,6 @@ export default function CollectionList() {
             </button>
           </div>
         </form>
-      </Modal>
-
-      <Modal open={!!deletingId} onClose={() => { if (!deleting) setDeletingId(null); }} title={ct.delete} closeLabel={ct.close}>
-        <div className="space-y-4 text-xs">
-          <p className="text-(--text-secondary)">{t.deleteConfirm}</p>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setDeletingId(null)} disabled={deleting}
-              className="flex-1 py-3 bg-(--surface-secondary) hover:bg-(--surface-tertiary) text-(--text-secondary) rounded-xl transition-colors border border-(--border) disabled:opacity-50">{ct.cancel}</button>
-            <button type="button" onClick={handleDelete} disabled={deleting}
-              className="flex-1 py-3 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-50">{deleting ? ct.saving : ct.confirm}</button>
-          </div>
-        </div>
       </Modal>
 
       {activeView === 'collections' && <TourLauncher steps={tourSteps} tourKey="instructor-collections" />}

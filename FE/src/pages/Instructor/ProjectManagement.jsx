@@ -5,7 +5,7 @@ import api from '../../api.js';
 import { commonText, instructorText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
 import StatusBadge from '../../components/StatusBadge.jsx';
-import Modal from '../../components/Modal.jsx';
+import DeleteConfirm from '../../components/DeleteConfirm.jsx';
 
 export default function ProjectManagement() {
   const navigate = useNavigate();
@@ -24,7 +24,6 @@ export default function ProjectManagement() {
   const [newDescription, setNewDescription] = useState('');
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-  const [deleting, setDeleting] = useState(false);
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -48,15 +47,14 @@ export default function ProjectManagement() {
     catch { alert(t.updateProjectFailed); }
   };
 
-  const handleDelete = async () => {
-    if (!deletingId || deleting) return;
-    setDeleting(true);
+  const handleDelete = async (id) => {
+    if (!id || deletingId) return;
+    setDeletingId(id);
     try {
-      await api.delete(`/api/projects/${deletingId}`);
+      await api.delete(`/api/projects/${id}`);
       await fetchProjects();
-      setDeletingId(null);
     } catch { alert(t.deleteProjectFailed); }
-    finally { setDeleting(false); }
+    finally { setDeletingId(null); }
   };
 
   const handlePatch = async (id, action) => {
@@ -106,7 +104,17 @@ export default function ProjectManagement() {
                     {p.status === 'ACTIVE' && <button onClick={() => handlePatch(p.id, 'archive')} className="text-xs text-amber-600 hover:text-amber-800 font-bold px-2 py-1.5">{t.archive}</button>}
                     {p.status === 'ARCHIVED' && <button onClick={() => handlePatch(p.id, 'unarchive')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t.unarchive}</button>}
                     {p.status === 'ACTIVE' && <button onClick={() => handlePatch(p.id, 'complete')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t.complete}</button>}
-                    <button onClick={() => setDeletingId(p.id)} className="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1.5">{ct.delete}</button>
+                    <DeleteConfirm
+                      message={t.deleteProjectConfirm}
+                      onConfirm={() => handleDelete(p.id)}
+                      triggerLabel={ct.delete}
+                      confirmLabel={ct.delete}
+                      cancelLabel={ct.cancel}
+                      disabled={deletingId !== null}
+                      className="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1.5"
+                    >
+                      {deletingId === p.id ? ct.saving : ct.delete}
+                    </DeleteConfirm>
                   </div>
                 </div>
               ))}
@@ -140,17 +148,6 @@ export default function ProjectManagement() {
         </div>
       )}
 
-      <Modal open={!!deletingId} onClose={() => { if (!deleting) setDeletingId(null); }} title={ct.delete} closeLabel={ct.close}>
-        <div className="space-y-4 text-xs">
-          <p className="text-(--text-secondary)">{t.deleteProjectConfirm}</p>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setDeletingId(null)} disabled={deleting}
-              className="flex-1 py-3 bg-(--surface-secondary) hover:bg-(--surface-tertiary) text-(--text-secondary) rounded-xl transition-colors border border-(--border) disabled:opacity-50">{ct.cancel}</button>
-            <button type="button" onClick={handleDelete} disabled={deleting}
-              className="flex-1 py-3 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition-colors disabled:opacity-50">{deleting ? ct.saving : ct.confirm}</button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

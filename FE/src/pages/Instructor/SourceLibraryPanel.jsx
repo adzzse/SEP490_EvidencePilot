@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EmptyState, LoadingSkeleton, Modal } from '../../components';
 import FileViewerModal from '../../components/FileViewerModal';
 import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
+import DeleteConfirm from '../../components/DeleteConfirm.jsx';
 import { useLanguage } from '../../context/LanguageContext';
 import { commonText, instructorText } from '../../locales';
 import api from '../../api';
@@ -277,7 +278,7 @@ export default function SourceLibraryPanel() {
     }
   };
 
-  const deleteSource = async (source) => {
+  const getDeleteSourceMessage = (source) => {
     const usageNames = [
       ...(source.collections || []).map(item => item.name),
       ...(source.projects || []).map(item => item.name),
@@ -286,6 +287,11 @@ export default function SourceLibraryPanel() {
     if (usageNames.length > 0) {
       message += `\n\n${t.deleteSourceUsageWarning.replace('{{locations}}', usageNames.join(', '))}`;
     }
+    return message;
+  };
+
+  const deleteSource = async (source) => {
+    const message = getDeleteSourceMessage(source);
     const sid = String(source.id);
     setSources(prev => prev.filter(s => String(s.id) !== sid));
     startDelete({
@@ -430,10 +436,10 @@ export default function SourceLibraryPanel() {
                         className="cursor-pointer rounded-lg border border-(--border) bg-(--surface-secondary) px-3 py-2 text-[11px] font-bold text-(--text-secondary) transition-colors hover:bg-(--surface-tertiary) focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50">
                         {ct.edit}
                       </button>
-                      <button type="button" onClick={() => deleteSource(source)} disabled={deletingId === source.id || recovering}
+                      <DeleteConfirm message={getDeleteSourceMessage(source)} onConfirm={() => deleteSource(source)} triggerLabel={t.deleteEverywhere} confirmLabel={t.deleteEverywhere} cancelLabel={ct.cancel} disabled={deletingId === source.id || recovering}
                         className="cursor-pointer rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700 transition-colors hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50">
                         {deletingId === source.id ? t.deletingSource : t.deleteEverywhere}
-                      </button>
+                      </DeleteConfirm>
                     </div>
                   </div>
 
