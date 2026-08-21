@@ -24,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -369,6 +370,17 @@ class AdminServiceTest {
         assertThat(result.usersByStatus()).containsOnlyKeys(AccountStatus.values());
         assertThat(result.activeProjectsByStatus()).containsOnlyKeys(ProjectStatus.values());
         assertThat(result.usersByRole().get(UserRole.ADMIN)).isZero();
+    }
+
+    @Test
+    void documentCountsUseFilteredDatabaseCounts() {
+        when(documents.count(any(Specification.class))).thenReturn(1201L, 1100L, 12L);
+
+        var result = service.getDocumentCounts("query", UUID.randomUUID(), UUID.randomUUID());
+
+        assertThat(result).containsEntry("total", 1201L)
+                .containsEntry("processed", 1100L)
+                .containsEntry("failed", 12L);
     }
 
     @Test

@@ -5,7 +5,7 @@ function PapersSection({ lang, api }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [documents, setDocuments] = useState({ content: [], totalElements: 0, totalPages: 0 });
-  const [allDocs, setAllDocs] = useState({ content: [] });
+  const [documentCounts, setDocumentCounts] = useState({ processed: 0, failed: 0 });
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [diag, setDiag] = useState(null);
   const [diagLoading, setDiagLoading] = useState(false);
@@ -20,21 +20,20 @@ function PapersSection({ lang, api }) {
   const fetch = useCallback(async (signal) => {
     setLoading(true);
     try {
-      const [dash, docs, all] = await Promise.all([
+      const [dash, docs, counts] = await Promise.all([
         api.get('/api/admin/dashboard', { signal }),
         api.get('/api/admin/documents', {
           params: { page, size: 5, q: q || undefined, projectId: projectId || undefined, collectionId: collectionId || undefined },
           signal,
         }),
-        // ponytail: 1000-row ceiling; add a BE count endpoint if docs ever exceed that
-        api.get('/api/admin/documents', {
-          params: { page: 0, size: 1000, q: q || undefined, projectId: projectId || undefined, collectionId: collectionId || undefined },
+        api.get('/api/admin/documents/counts', {
+          params: { q: q || undefined, projectId: projectId || undefined, collectionId: collectionId || undefined },
           signal,
         }),
       ]);
       setData(dash.data);
       setDocuments(docs.data);
-      setAllDocs(all.data);
+      setDocumentCounts(counts.data || { processed: 0, failed: 0 });
     }
     catch (e) {
       if (signal && signal.aborted) return;
@@ -83,8 +82,8 @@ function PapersSection({ lang, api }) {
 
   const display = data;
 
-  const pageProcessed = allDocs.content.filter(d => ['COMPLETED', 'READY'].includes(d.processingStatus)).length;
-  const pageFailed = allDocs.content.filter(d => ['FAILED', 'PARTIAL'].includes(d.processingStatus)).length;
+  const pageProcessed = documentCounts.processed ?? 0;
+  const pageFailed = documentCounts.failed ?? 0;
 
   const stats = [
     { label: 'TOTAL DOCUMENTS', value: documents.totalElements ?? 0, subtext: 'all documents', barColor: 'bg-gray-400' },

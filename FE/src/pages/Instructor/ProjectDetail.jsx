@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { AppHeader, LoadingSkeleton, StatusBadge, Modal, TourLauncher, Spinner } from '../../components';
@@ -17,6 +17,7 @@ import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
 import DeleteConfirm from '../../components/DeleteConfirm.jsx';
 
 const STANDARDS = ['IEEE', 'ACM', 'SPRINGER_LNCS', 'APA', 'MLA', 'CUSTOM'];
+const MODAL_PAGE_SIZE = 20;
 
 export default function ProjectDetail() {
   const { id } = useParams();
@@ -66,11 +67,16 @@ export default function ProjectDetail() {
   const [pendingSourceFile, setPendingSourceFile] = useState(null);
   const [showShareCollection, setShowShareCollection] = useState(false);
   const [collections, setCollections] = useState([]);
+  const [collectionPage, setCollectionPage] = useState(0);
+  const [collectionTotalPages, setCollectionTotalPages] = useState(0);
   const [linkedCollections, setLinkedCollections] = useState([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState('');
-  const [collectionSources, setCollectionSources] = useState([]);
+  const [collectionSourcePages, setCollectionSourcePages] = useState({});
+  const [collectionSourcePage, setCollectionSourcePage] = useState(0);
+  const [collectionSourceTotalPages, setCollectionSourceTotalPages] = useState(0);
   const [selectedSourceIds, setSelectedSourceIds] = useState([]);
   const [collectionSourcesLoading, setCollectionSourcesLoading] = useState(false);
+  const sourceSelectionTouched = useRef(new Set());
   const [showSetUpPaper, setShowSetUpPaper] = useState(false);
   const [setupMode, setSetupMode] = useState('standard');
   const [editingPaperId, setEditingPaperId] = useState(null);
@@ -86,6 +92,12 @@ export default function ProjectDetail() {
   const [addSourceLoading, setAddSourceLoading] = useState(false);
   const [shareLoadingId, setShareLoadingId] = useState(null);
   const [pendingAssign, setPendingAssign] = useState(null); // { sectionId, userId, userName }
+
+  const collectionSources = useMemo(
+    () => Object.values(collectionSourcePages).flat(),
+    [collectionSourcePages],
+  );
+  const visibleCollectionSources = collectionSourcePages[collectionSourcePage] || [];
 
   const loadProject = useCallback(async () => {
     try {
@@ -151,14 +163,17 @@ export default function ProjectDetail() {
     } catch { }
   }, [id]);
 
-  const loadCollections = useCallback(async () => {
+  const loadCollections = useCallback(async (page = 0) => {
     try {
-      // ponytail: backend caps collection pages at 100; add modal pagination when an instructor exceeds that.
       const [collectionRes, linkedRes] = await Promise.all([
-        api.get('/api/collections', { params: { size: 100 } }),
+        api.get('/api/collections', { params: { page, size: MODAL_PAGE_SIZE } }),
         api.get(`/api/projects/${id}/collections`),
       ]);
-      setCollections(collectionRes.data?.content || collectionRes.data || []);
+      const collectionData = collectionRes.data;
+      const content = collectionData?.content || collectionData || [];
+      setCollections(content);
+      setCollectionPage(collectionData?.page ?? page);
+      setCollectionTotalPages(collectionData?.totalPages ?? (Array.isArray(content) && content.length > 0 ? 1 : 0));
       setLinkedCollections(linkedRes.data || []);
     } catch { }
   }, [id]);
@@ -277,28 +292,48 @@ export default function ProjectDetail() {
   };
 
   const resetSourceSharing = () => {
+    sourceSelectionTouched.current.clear();
     setSelectedCollectionId('');
-    setCollectionSources([]);
+    setCollectionSourcePages({});
+    setCollectionSourcePage(0);
+    setCollectionSourceTotalPages(0);
     setSelectedSourceIds([]);
   };
 
-  const loadCollectionSources = async (collectionId) => {
+  const loadCollectionSources = async (collectionId, page = 0) => {
     if (!collectionId) {
-      setCollectionSources([]);
+      setCollectionSourcePages({});
+      setCollectionSourcePage(0);
+      setCollectionSourceTotalPages(0);
       setSelectedSourceIds([]);
       return;
     }
     setCollectionSourcesLoading(true);
     try {
-      // ponytail: backend caps source pages at 100; add modal pagination when a collection exceeds that.
-      const res = await api.get(`/api/collections/${collectionId}/sources`, { params: { size: 100 } });
-      const loaded = res.data?.content || res.data || [];
-      setCollectionSources(loaded);
-      setSelectedSourceIds(loaded
-        .filter(source => (source.projectIds || []).some(projectId => String(projectId) === String(id)))
-        .map(source => source.id));
+      const res = await api.get(`/api/collections/${collectionId}/sources`, {
+        params: { page, size: MODAL_PAGE_SIZE },
+      });
+      const pageData = res.data;
+      const loaded = pageData?.content || pageData || [];
+      setCollectionSourcePages(current => ({ ...current, [page]: loaded }));
+      setCollectionSourcePage(pageData?.page ?? page);
+      setCollectionSourceTotalPages(pageData?.totalPages ?? (Array.isArray(loaded) && loaded.length > 0 ? 1 : 0));
+
+      const pageIds = new Set(loaded.map(source => String(source.id)));
+      setSelectedSourceIds(current => {
+        const touched = sourceSelectionTouched.current;
+        const next = current.filter(sourceId => !pageIds.has(String(sourceId)));
+        const serverSelected = loaded
+          .filter(source => touched.has(String(source.id))
+            ? current.some(sourceId => String(sourceId) === String(source.id))
+            : isSourceSharedWithProject(source, id))
+          .map(source => String(source.id));
+        return [...new Set([...next.map(String), ...serverSelected])];
+      });
     } catch {
-      setCollectionSources([]);
+      setCollectionSourcePages({});
+      setCollectionSourcePage(0);
+      setCollectionSourceTotalPages(0);
       setSelectedSourceIds([]);
       alert(t.operationFailed);
     } finally {
@@ -307,14 +342,21 @@ export default function ProjectDetail() {
   };
 
   const handleCollectionSelection = async (collectionId) => {
+    sourceSelectionTouched.current.clear();
     setSelectedCollectionId(collectionId);
-    await loadCollectionSources(collectionId);
+    setCollectionSourcePages({});
+    setCollectionSourcePage(0);
+    setCollectionSourceTotalPages(0);
+    setSelectedSourceIds([]);
+    await loadCollectionSources(collectionId, 0);
   };
 
   const toggleSourceSelection = (sourceId) => {
-    setSelectedSourceIds(current => current.includes(sourceId)
-      ? current.filter(id => id !== sourceId)
-      : [...current, sourceId]);
+    const normalizedId = String(sourceId);
+    sourceSelectionTouched.current.add(normalizedId);
+    setSelectedSourceIds(current => current.includes(normalizedId)
+      ? current.filter(id => id !== normalizedId)
+      : [...current, normalizedId]);
   };
 
   const handleShareSources = async () => {
@@ -1454,13 +1496,32 @@ export default function ProjectDetail() {
           {collections.length === 0 ? (
             <p className="italic text-[var(--text-tertiary)]">{t.noCollectionsFound}</p>
           ) : (
-            <select value={selectedCollectionId} onChange={e => handleCollectionSelection(e.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none">
-              <option value="">{t.selectCollection}</option>
-              {collections.map(c => {
-                const linked = linkedCollections.some(item => String(item.id) === String(c.id));
-                return <option key={c.id} value={c.id}>{c.name || c.title || c.id}{linked ? ` — ${t.collectionLinked}` : ''}</option>;
-              })}
-            </select>
+            <>
+              <select value={selectedCollectionId} onChange={e => handleCollectionSelection(e.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none">
+                <option value="">{t.selectCollection}</option>
+                {collections.map(c => {
+                  const linked = linkedCollections.some(item => String(item.id) === String(c.id));
+                  return <option key={c.id} value={c.id}>{c.name || c.title || c.id}{linked ? ` — ${t.collectionLinked}` : ''}</option>;
+                })}
+              </select>
+              {collectionTotalPages > 1 && (
+                <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-tertiary)]">
+                  <button
+                    type="button"
+                    disabled={collectionPage === 0}
+                    onClick={() => { resetSourceSharing(); loadCollections(collectionPage - 1); }}
+                    className="rounded border border-[var(--border)] px-2 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                  >{t.prev}</button>
+                  <span>{t.page} {collectionPage + 1} / {collectionTotalPages}</span>
+                  <button
+                    type="button"
+                    disabled={collectionPage + 1 >= collectionTotalPages}
+                    onClick={() => { resetSourceSharing(); loadCollections(collectionPage + 1); }}
+                    className="rounded border border-[var(--border)] px-2 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                  >{t.next}</button>
+                </div>
+              )}
+            </>
           )}
           {selectedCollectionId && linkedCollections.some(c => String(c.id) === String(selectedCollectionId)) && (
             <div className="space-y-3 rounded-lg bg-[var(--surface-secondary)] px-3 py-3 text-[var(--text-secondary)]">
@@ -1478,19 +1539,19 @@ export default function ProjectDetail() {
           )}
           {selectedCollectionId && !collectionSourcesLoading
             && !linkedCollections.some(c => String(c.id) === String(selectedCollectionId))
-            && collectionSources.length === 0 && (
+            && visibleCollectionSources.length === 0 && (
             <p className="italic text-[var(--text-tertiary)]">{t.noCollectionSources}</p>
           )}
           {!collectionSourcesLoading
             && !linkedCollections.some(c => String(c.id) === String(selectedCollectionId))
-            && collectionSources.length > 0 && (
+            && visibleCollectionSources.length > 0 && (
             <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-[var(--border-light)] p-1">
-              {collectionSources.map(source => {
+              {visibleCollectionSources.map(source => {
                 const shareable = isSourceShareable(source);
                 const canToggle = shareable || isSourceSharedWithProject(source, id);
                 return (
                   <label key={source.id} className={`flex items-center gap-2 rounded-lg bg-[var(--surface-secondary)] px-3 py-2 ${canToggle ? 'cursor-pointer hover:bg-[var(--surface-tertiary)]' : 'cursor-not-allowed opacity-60'}`}>
-                    <input type="checkbox" checked={selectedSourceIds.includes(source.id)} onChange={() => toggleSourceSelection(source.id)} disabled={projectReadOnly || shareLoadingId !== null || !canToggle} className="accent-indigo-600" />
+                    <input type="checkbox" checked={selectedSourceIds.includes(String(source.id))} onChange={() => toggleSourceSelection(source.id)} disabled={projectReadOnly || shareLoadingId !== null || !canToggle} className="accent-indigo-600" />
                     <span className="flex-1 text-xs font-medium">{source.title || source.originalFilename || source.id}</span>
                     {!shareable && <span className="text-[10px] font-semibold text-amber-600">{t.sourceNotReady}</span>}
                   </label>
@@ -1500,7 +1561,26 @@ export default function ProjectDetail() {
           )}
           {!collectionSourcesLoading
             && !linkedCollections.some(c => String(c.id) === String(selectedCollectionId))
-            && collectionSources.length > 0 && (
+            && collectionSourceTotalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-tertiary)]">
+              <button
+                type="button"
+                disabled={collectionSourcePage === 0 || shareLoadingId !== null}
+                onClick={() => loadCollectionSources(selectedCollectionId, collectionSourcePage - 1)}
+                className="rounded border border-[var(--border)] px-2 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+              >{t.prev}</button>
+              <span>{t.page} {collectionSourcePage + 1} / {collectionSourceTotalPages}</span>
+              <button
+                type="button"
+                disabled={collectionSourcePage + 1 >= collectionSourceTotalPages || shareLoadingId !== null}
+                onClick={() => loadCollectionSources(selectedCollectionId, collectionSourcePage + 1)}
+                className="rounded border border-[var(--border)] px-2 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+              >{t.next}</button>
+            </div>
+          )}
+          {!collectionSourcesLoading
+            && !linkedCollections.some(c => String(c.id) === String(selectedCollectionId))
+            && visibleCollectionSources.length > 0 && (
             <button onClick={handleShareSources} disabled={projectReadOnly || shareLoadingId !== null} className="w-full rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:cursor-not-allowed disabled:opacity-50">
               {shareLoadingId === selectedCollectionId ? ct.saving : t.applyChanges}
             </button>

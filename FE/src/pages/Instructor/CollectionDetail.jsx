@@ -4,6 +4,7 @@ import { AppHeader, LoadingSkeleton, EmptyState, Modal, UploadZone } from '../..
 import TourLauncher from '../../components/TourLauncher';
 import { instructorText, commonText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
+import { useTheme } from '../../context/ThemeContext';
 import { useCollectionSources } from '../../hooks/useCollections';
 import api from '../../api';
 import { Network } from 'vis-network';
@@ -13,6 +14,17 @@ import DeleteConfirm from '../../components/DeleteConfirm.jsx';
 
 const TABS = ['documents', 'connectedMap', 'visualizeMap', 'analyzeCollection'];
 const TAB_IDS = ['documents-tab', 'connected-map-tab', 'visualize-map-tab', 'analyze-tab'];
+const DEFAULT_GRAPH_SETTINGS = {
+  arrows: true,
+  showUnresolved: true,
+  textFade: 1.1,
+  nodeSize: 1,
+  linkThickness: 1,
+  centerForce: 0.01,
+  repelForce: 70,
+  linkForce: 0.06,
+  linkDistance: 160,
+};
 
 function statusColor(s) {
   if (s === 'READY' || s === 'COMPLETED') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
@@ -30,6 +42,8 @@ function FileIcon({ name, className = 'w-5 h-5' }) {
 export default function CollectionDetail() {
   const { id } = useParams();
   const { language } = useLanguage();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const t = instructorText[language];
   const ct = commonText[language];
   const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
@@ -69,8 +83,14 @@ export default function CollectionDetail() {
   const [graphData, setGraphData] = useState(null);
   const [graphLoading, setGraphLoading] = useState(false);
   const [selectedGraphNode, setSelectedGraphNode] = useState(null);
+  const [graphSettingsOpen, setGraphSettingsOpen] = useState(false);
+  const [graphSettings, setGraphSettings] = useState(() => ({ ...DEFAULT_GRAPH_SETTINGS }));
+  const [graphSearch, setGraphSearch] = useState('');
   const graphRef = useRef(null);
   const networkRef = useRef(null);
+  const graphRuntimeRef = useRef(null);
+  const graphSettingsRef = useRef(DEFAULT_GRAPH_SETTINGS);
+  const graphSearchRef = useRef('');
 
   useEffect(() => {
     api.get('/api/collection-categories').then(r => setCategories(r.data)).catch(() => { });
@@ -481,6 +501,82 @@ export default function CollectionDetail() {
     finally { setGraphLoading(false); }
   }, [id]);
 
+  const applyGraphFilters = useCallback((query, settings = graphSettingsRef.current) => {
+    const runtime = graphRuntimeRef.current;
+    if (!runtime) return;
+    runtime.resetFocus?.();
+
+    const normalizedQuery = query.trim().toLowerCase();
+    const visibleIds = new Set();
+    runtime.baseNodes.forEach(node => {
+      const visible = (settings.showUnresolved || !node.unresolved)
+        && (!normalizedQuery || node.searchText.includes(normalizedQuery));
+      if (visible) visibleIds.add(node.id);
+    });
+
+    runtime.visibleIds = visibleIds;
+    runtime.nodes.update(runtime.baseNodes.map(node => ({ id: node.id, hidden: !visibleIds.has(node.id) })));
+    runtime.edges.update(runtime.baseEdges.map(edge => ({
+      id: edge.id,
+      hidden: !visibleIds.has(edge.from) || !visibleIds.has(edge.to),
+    })));
+    runtime.labelMode = null;
+    runtime.refreshLabels(runtime.network.getScale());
+  }, []);
+
+  const applyGraphSettings = useCallback((settings) => {
+    const runtime = graphRuntimeRef.current;
+    if (!runtime) return;
+
+    runtime.network.setOptions({
+      edges: { arrows: { to: { enabled: settings.arrows, scaleFactor: 0.32 } } },
+      physics: {
+        forceAtlas2Based: {
+          gravitationalConstant: -settings.repelForce,
+          centralGravity: settings.centerForce,
+          springLength: settings.linkDistance,
+          springConstant: settings.linkForce,
+        },
+      },
+    });
+    runtime.nodes.update(runtime.baseNodes.map(node => ({
+      id: node.id,
+      size: node.baseSize * settings.nodeSize,
+    })));
+    runtime.edges.update(runtime.baseEdges.map(edge => ({
+      id: edge.id,
+      width: 0.7 * settings.linkThickness,
+    })));
+    runtime.labelMode = null;
+    applyGraphFilters(graphSearchRef.current, settings);
+  }, [applyGraphFilters]);
+
+  const updateGraphSetting = (key, value) => {
+    const next = { ...graphSettingsRef.current, [key]: value };
+    graphSettingsRef.current = next;
+    setGraphSettings(next);
+    applyGraphSettings(next);
+  };
+
+  const updateGraphSearch = (value) => {
+    graphSearchRef.current = value;
+    setGraphSearch(value);
+    applyGraphFilters(value);
+  };
+
+  const resetGraphSettings = () => {
+    const defaults = { ...DEFAULT_GRAPH_SETTINGS };
+    graphSettingsRef.current = defaults;
+    setGraphSettings(defaults);
+    applyGraphSettings(defaults);
+  };
+
+  const fitGraph = () => {
+    graphRuntimeRef.current?.network.fit({
+      animation: { duration: 300, easingFunction: 'easeInOutQuad' },
+    });
+  };
+
   useEffect(() => {
     if (activeTab === 2) fetchGraph();
   }, [activeTab, fetchGraph]);
@@ -490,11 +586,8 @@ export default function CollectionDetail() {
 
     if (networkRef.current) networkRef.current.destroy();
 
-    const CANVAS_WIDTH = 3000;
-    const CANVAS_HEIGHT = 1500;
-
     function nodeLabel(n) {
-      if (!n.title && !n.doi) return '!';
+      if (!n.title && !n.doi) return '';
       let authorName = null;
       if (n.authors) {
         try {
@@ -524,201 +617,400 @@ export default function CollectionDetail() {
       return parts.join(' · ');
     }
 
-    const years = graphData.nodes.map(n => n.publicationYear).filter(y => y != null);
-    const minYear = Math.min(...years);
-    const maxYear = Math.max(...years);
-    const yearDelta = maxYear - minYear || 1;
+    const normalizedEdges = graphData.edges.map((edge, index) => {
+      const citedBy = edge.type === 'CITED_BY';
+      return {
+        id: `citation-edge-${index}`,
+        from: String(citedBy ? edge.targetId : edge.sourceId),
+        to: String(citedBy ? edge.sourceId : edge.targetId),
+      };
+    });
+    const incomingCounts = new Map();
+    const neighborMap = new Map();
+    normalizedEdges.forEach(edge => {
+      incomingCounts.set(edge.to, (incomingCounts.get(edge.to) || 0) + 1);
+      if (!neighborMap.has(edge.from)) neighborMap.set(edge.from, new Set());
+      if (!neighborMap.has(edge.to)) neighborMap.set(edge.to, new Set());
+      neighborMap.get(edge.from).add(edge.to);
+      neighborMap.get(edge.to).add(edge.from);
+    });
 
-    const logVals = graphData.nodes.map(n => n.citedByCount != null ? Math.log10(n.citedByCount + 1) : null).filter(v => v != null);
-    const minLog = logVals.length ? Math.min(...logVals) : 0;
-    const maxLog = logVals.length ? Math.max(...logVals) : 1;
-    const logDelta = maxLog - minLog || 1;
+    const palette = isDark ? {
+      source: ['#8b5cf6', '#c4b5fd', '#a78bfa', '#ddd6fe'],
+      external: ['#52525b', '#a1a1aa', '#71717a', '#d4d4d8'],
+      unresolved: ['#854d0e', '#fbbf24', '#a16207', '#fde68a'],
+    } : {
+      source: ['#7c3aed', '#5b21b6', '#8b5cf6', '#4c1d95'],
+      external: ['#cbd5e1', '#64748b', '#94a3b8', '#475569'],
+      unresolved: ['#fef3c7', '#d97706', '#fcd34d', '#b45309'],
+    };
 
-    const positioned = graphData.nodes.map(n => {
+    const baseNodes = graphData.nodes.map(n => {
+      const id = String(n.id);
       const unresolved = !n.title && !n.doi;
-      const isNoDoi = !n.hasDoi;
-      const baseX = n.publicationYear != null
-        ? ((n.publicationYear - minYear) / yearDelta) * CANVAS_WIDTH - (CANVAS_WIDTH / 2)
-        : 0;
-      const logCit = n.citedByCount != null ? Math.log10(n.citedByCount + 1) : minLog;
-      const baseY = -(((logCit - minLog) / logDelta) * CANVAS_HEIGHT) + (CANVAS_HEIGHT / 2);
-
-      let bg, border, fontColor, shape;
-      if (unresolved) {
-        bg = '#fffbeb'; border = '#f59e0b'; fontColor = '#92400e'; shape = 'diamond';
-      } else if (isNoDoi) {
-        bg = '#f1f5f9'; border = '#cbd5e1'; fontColor = '#64748b'; shape = 'dot';
-      } else if (n.inCollection) {
-        bg = '#eef2ff'; border = '#6366f1'; fontColor = '#4338ca'; shape = 'dot';
-      } else {
-        bg = '#f8fafc'; border = '#94a3b8'; fontColor = '#475569'; shape = 'dot';
-      }
+      const inboundCount = incomingCounts.get(id) || 0;
+      const tone = palette[unresolved ? 'unresolved' : n.inCollection ? 'source' : 'external'];
+      const baseSize = Math.max(n.inCollection ? 12 : 7, Math.min(24, 7 + Math.log2(inboundCount + 1) * 4.5));
 
       return {
-        id: n.id, baseX, baseY,
+        id,
+        nodeData: n,
+        unresolved,
+        inboundCount,
+        baseSize,
         label: nodeLabel(n),
-        title: nodeTooltip(n),
-        color: { background: bg, border },
-        font: { color: '#333333', size: 16, background: 'rgba(255, 255, 255, 0.8)', vadjust: 10 },
-        shape,
-        value: Number(n.citedByCount != null ? n.citedByCount : 0) + 1,
-        borderWidth: (unresolved || isNoDoi) ? 2 : 1,
-        borderWidthSelected: 2.5,
-        x: baseX, y: baseY,
+        searchText: `${n.title || ''} ${n.doi || ''} ${n.authors || ''} ${n.publicationYear || ''}`.toLowerCase(),
+        tone,
       };
     });
 
-    const collideRadius = 80;
-    for (let i = 0; i < positioned.length; i++) {
-      let attempts = 0;
-      while (attempts < 200) {
-        let collided = false;
-        for (let j = 0; j < i; j++) {
-          const dx = positioned[i].x - positioned[j].x;
-          const dy = positioned[i].y - positioned[j].y;
-          if (Math.hypot(dx, dy) < collideRadius) { collided = true; break; }
-        }
-        if (!collided) break;
-        const angle = attempts * 0.5;
-        const r = 60 + attempts * 12;
-        positioned[i].x = positioned[i].baseX + r * Math.cos(angle);
-        positioned[i].y = positioned[i].baseY + r * Math.sin(angle);
-        attempts++;
-      }
-      // ponytail: O(n²) spiral placement caps at 200 attempts; use a layout engine if graphs approach 200 nodes.
-    }
+    const settings = graphSettingsRef.current;
+    const nodes = new DataSet(baseNodes.map(node => ({
+        id: node.id,
+        label: !node.unresolved && (node.nodeData.inCollection || node.inboundCount >= 3) ? node.label : '',
+        title: nodeTooltip(node.nodeData),
+        color: {
+          background: node.tone[0],
+          border: node.tone[1],
+          highlight: { background: node.tone[2], border: node.tone[3] },
+          hover: { background: node.tone[2], border: node.tone[3] },
+        },
+        font: {
+          color: isDark ? '#e4e4e7' : '#334155',
+          size: 12,
+          face: 'Inter, system-ui, sans-serif',
+          strokeWidth: 3,
+          strokeColor: isDark ? '#18181b' : '#f8fafc',
+          vadjust: 14,
+        },
+        shape: 'dot',
+        size: node.baseSize * settings.nodeSize,
+        borderWidth: node.nodeData.inCollection ? 2 : 1,
+        borderWidthSelected: 3,
+        opacity: 1,
+      })));
 
-    const nodes = new DataSet(positioned.map(p => {
-      const { baseX, baseY, ...node } = p;
-      return node;
-    }));
-
-    const edges = new DataSet(graphData.edges.map(e => {
-      const isCitedBy = e.type === 'CITED_BY';
-      return {
-        from: isCitedBy ? e.targetId : e.sourceId,
-        to: isCitedBy ? e.sourceId : e.targetId,
-        color: { color: isCitedBy ? '#10b981' : '#3b82f6', opacity: 0.5 },
-        width: 1,
-        dashes: isCitedBy,
-      };
-    }));
+    const baseEdgeColor = isDark ? '#71717a' : '#94a3b8';
+    const activeEdgeColor = isDark ? '#c4b5fd' : '#7c3aed';
+    const baseEdgeOpacity = isDark ? 0.24 : 0.2;
+    const baseEdges = normalizedEdges.map(edge => ({ ...edge, color: baseEdgeColor, activeColor: activeEdgeColor }));
+    const edges = new DataSet(baseEdges.map(edge => ({
+        id: edge.id,
+        from: edge.from,
+        to: edge.to,
+        color: {
+          color: edge.color,
+          highlight: edge.activeColor,
+          hover: edge.activeColor,
+          opacity: baseEdgeOpacity,
+        },
+        width: 0.7 * settings.linkThickness,
+      })));
 
     const options = {
-      physics: false,
+      layout: { improvedLayout: true, randomSeed: 42 },
+      physics: {
+        enabled: true,
+        solver: 'forceAtlas2Based',
+        stabilization: { enabled: false },
+        forceAtlas2Based: {
+          gravitationalConstant: -settings.repelForce,
+          centralGravity: settings.centerForce,
+          springLength: settings.linkDistance,
+          springConstant: settings.linkForce,
+          damping: 0.72,
+          avoidOverlap: 0.8,
+        },
+      },
       nodes: {
-        scaling: { min: 20, max: 60 },
         font: { face: 'Inter, system-ui, sans-serif' },
       },
       edges: {
-        smooth: { type: 'cubicBezier', forceDirection: 'horizontal', roundness: 0.35 },
+        smooth: { enabled: true, type: 'continuous', roundness: 0.1 },
         color: { inherit: false },
-        arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+        arrows: { to: { enabled: settings.arrows, scaleFactor: 0.32 } },
+        hoverWidth: 1.5,
+        selectionWidth: 2,
       },
-      interaction: { dragNodes: false, hover: true, tooltipDelay: 200 },
+      interaction: {
+        dragNodes: true,
+        dragView: true,
+        zoomView: true,
+        hover: true,
+        hoverConnectedEdges: true,
+        tooltipDelay: 220,
+        keyboard: { enabled: true, bindToWindow: false },
+      },
     };
 
     const network = new Network(graphRef.current, { nodes, edges }, options);
     networkRef.current = network;
+    const nodeById = new Map(baseNodes.map(node => [node.id, node]));
+    let runtime;
+    const refreshLabels = (scale, focusIds = null) => {
+      const mode = focusIds ? 'focus' : scale >= graphSettingsRef.current.textFade ? 'all' : 'overview';
+      if (!focusIds && runtime.labelMode === mode) return;
+      runtime.labelMode = focusIds ? null : mode;
+      nodes.update(baseNodes.map(node => {
+        const show = runtime.visibleIds.has(node.id) && !node.unresolved && (focusIds
+          ? focusIds.has(node.id)
+          : mode === 'all' || node.nodeData.inCollection || node.inboundCount >= 3);
+        return { id: node.id, label: show ? node.label : '' };
+      }));
+    };
+    const resetFocus = () => {
+      nodes.update(baseNodes.map(node => ({ id: node.id, opacity: 1 })));
+      edges.update(baseEdges.map(edge => ({
+        id: edge.id,
+        color: {
+          color: edge.color,
+          highlight: edge.activeColor,
+          hover: edge.activeColor,
+          opacity: baseEdgeOpacity,
+        },
+      })));
+    };
 
-    network.on('zoom', () => {
-      if (network.getScale() < 0.2) network.moveTo({ scale: 0.2, duration: 0 });
+    runtime = {
+      network,
+      nodes,
+      edges,
+      baseNodes,
+      baseEdges,
+      visibleIds: new Set(baseNodes.map(node => node.id)),
+      labelMode: null,
+      refreshLabels,
+      resetFocus,
+    };
+    graphRuntimeRef.current = runtime;
+    applyGraphFilters(graphSearchRef.current, settings);
+    network.once('stabilized', () => {
+      if (graphRuntimeRef.current?.network === network) {
+        network.fit({ animation: { duration: 250, easingFunction: 'easeInOutQuad' } });
+      }
     });
 
-    requestAnimationFrame(() => network.fit({ animation: true }));
+    network.on('dragEnd', ({ nodes: draggedNodes }) => {
+      if (draggedNodes.length === 0) return;
+      resetFocus();
+      runtime.labelMode = null;
+      refreshLabels(network.getScale());
+    });
+
+    network.on('hoverNode', ({ node }) => {
+      const nodeId = String(node);
+      const focusIds = new Set([nodeId, ...(neighborMap.get(nodeId) || [])]);
+      nodes.update(baseNodes.map(item => ({ id: item.id, opacity: focusIds.has(item.id) ? 1 : 0.12 })));
+      edges.update(baseEdges.map(edge => {
+        const active = edge.from === nodeId || edge.to === nodeId;
+        return {
+          id: edge.id,
+          color: {
+            color: active ? edge.activeColor : edge.color,
+            highlight: edge.activeColor,
+            hover: edge.activeColor,
+            opacity: active ? 0.82 : 0.025,
+          },
+        };
+      }));
+      refreshLabels(network.getScale(), focusIds);
+    });
+
+    network.on('blurNode', () => {
+      resetFocus();
+      runtime.labelMode = null;
+      refreshLabels(network.getScale());
+    });
+
+    network.on('zoom', () => {
+      if (network.getScale() < 0.18) network.moveTo({ scale: 0.18, duration: 0 });
+      refreshLabels(network.getScale());
+    });
 
     network.on('click', (params) => {
       if (params.nodes.length > 0) {
-        const nodeId = params.nodes[0];
-        const nodeData = graphData.nodes.find(n => n.id === nodeId);
-        setSelectedGraphNode(nodeData || null);
+        const nodeData = nodeById.get(String(params.nodes[0]));
+        setSelectedGraphNode(nodeData?.nodeData || null);
       } else {
         setSelectedGraphNode(null);
       }
     });
 
-    return () => { if (networkRef.current) networkRef.current.destroy(); };
-  }, [graphData, t]);
+    return () => {
+      network.destroy();
+      if (networkRef.current === network) networkRef.current = null;
+      if (graphRuntimeRef.current?.network === network) graphRuntimeRef.current = null;
+    };
+  }, [graphData, t, isDark, applyGraphFilters]);
 
   const renderVisualizeMap = () => (
-    <div className="flex w-full h-[calc(100vh-3.5rem)] overflow-hidden bg-white">
+    <div className="flex w-full h-[calc(100vh-3.5rem)] overflow-hidden bg-(--surface)">
       {graphLoading ? (
         <div className="flex-1 flex items-center justify-center p-6">
           <LoadingSkeleton count={6} height="h-12" />
         </div>
       ) : !graphData || graphData.nodes.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-slate-400">
+        <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-(--text-tertiary)">
           <svg className="w-10 h-10 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10 13a5 5 0 007.54.54l2-2a5 5 0 00-7.07-7.07l-1.15 1.15m2.68 5.38a5 5 0 00-7.54-.54l-2 2a5 5 0 007.07 7.07l1.15-1.15" /></svg>
           <p className="text-xs font-semibold">{t.citationGraphEmpty}</p>
           <p className="text-[10px] mt-1">{t.visualizeDesc}</p>
         </div>
       ) : (
-        <div className="flex-1 relative overflow-hidden">
-          <div ref={graphRef} id="visual-map-container" className="absolute inset-0 w-full h-full z-0" />
+        <div className="flex-1 relative overflow-hidden bg-(--surface-secondary)">
+          <div
+            ref={graphRef}
+            id="visual-map-container"
+            role="region"
+            tabIndex={0}
+            aria-label={t.visualizeDesc}
+            aria-describedby="visual-map-help"
+            className="absolute inset-0 z-0 h-full w-full cursor-grab active:cursor-grabbing"
+            style={{ backgroundColor: isDark ? '#18181b' : '#f8fafc' }}
+          />
 
-          <div className="absolute inset-y-0 left-4 z-20 flex flex-col justify-start pt-4 text-sm font-bold text-gray-500 select-none pointer-events-none">
-            <span className="flex items-center gap-1">{t.citationsAxis} <span className="text-sm font-bold text-gray-400">↑</span></span>
-            <span className="text-[10px] font-normal text-gray-400">{t.higherMoreCited}</span>
+          <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
+            <button type="button" onClick={fitGraph} title={t.graphFit} aria-label={t.graphFit}
+              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-(--border) bg-(--surface)/90 text-(--text-secondary) shadow-sm backdrop-blur-sm transition-colors hover:bg-(--surface-secondary) hover:text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" /></svg>
+            </button>
+            <button type="button" onClick={() => setGraphSettingsOpen(open => !open)}
+              title={t.graphSettings} aria-label={t.graphSettings} aria-expanded={graphSettingsOpen} aria-controls="citation-graph-settings"
+              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-(--border) bg-(--surface)/90 text-(--text-secondary) shadow-sm backdrop-blur-sm transition-colors hover:bg-(--surface-secondary) hover:text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.12.38.33.72.6 1 .3.28.67.42 1.1.4H21v4h-.09c-.42-.02-.8.12-1.1.4-.28.28-.49.62-.61 1Z" /></svg>
+            </button>
           </div>
-          <div className="absolute inset-x-0 bottom-4 z-20 flex justify-start pl-4 text-sm font-bold text-gray-500 select-none pointer-events-none">
-            <span className="flex items-center gap-2">{t.publicationYear} <span className="text-sm font-bold text-gray-400">→</span></span>
+
+          {graphSettingsOpen && (
+            <aside id="citation-graph-settings" aria-label={t.graphSettings}
+              className="absolute right-4 top-16 z-30 max-h-[calc(100%-5rem)] w-[min(18rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-(--border) bg-(--surface)/95 text-(--text-primary) shadow-xl backdrop-blur-md">
+              <div className="sticky top-0 flex items-center justify-between border-b border-(--border-light) bg-(--surface)/95 px-4 py-3 backdrop-blur-md">
+                <h3 className="text-xs font-black">{t.graphSettings}</h3>
+                <button type="button" onClick={() => setGraphSettingsOpen(false)} aria-label={t.graphCloseSettings}
+                  className="cursor-pointer rounded p-1 text-(--text-tertiary) hover:bg-(--surface-secondary) hover:text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18 18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              <div className="space-y-5 p-4">
+                <section className="space-y-3">
+                  <h4 className="text-[10px] font-black uppercase tracking-wider text-(--text-tertiary)">{t.graphFilters}</h4>
+                  <label className="block">
+                    <span className="sr-only">{t.graphSearch}</span>
+                    <input type="search" value={graphSearch} onChange={event => updateGraphSearch(event.target.value)}
+                      placeholder={t.graphSearchPlaceholder} aria-label={t.graphSearch}
+                      className="w-full rounded-lg border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs text-(--text-primary) outline-none transition focus:border-(--brand) focus:ring-2 focus:ring-(--focus)" />
+                  </label>
+                  <label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-(--text-secondary)">
+                    <span>{t.graphShowUnresolved}</span>
+                    <input type="checkbox" checked={graphSettings.showUnresolved} onChange={event => updateGraphSetting('showUnresolved', event.target.checked)}
+                      className="h-4 w-4 cursor-pointer accent-violet-600" />
+                  </label>
+                </section>
+
+                <section className="space-y-3 border-t border-(--border-light) pt-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-wider text-(--text-tertiary)">{t.graphDisplay}</h4>
+                  <label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-(--text-secondary)">
+                    <span>{t.graphArrows}</span>
+                    <input type="checkbox" checked={graphSettings.arrows} onChange={event => updateGraphSetting('arrows', event.target.checked)}
+                      className="h-4 w-4 cursor-pointer accent-violet-600" />
+                  </label>
+                  {[
+                    { key: 'textFade', label: t.graphTextFade, min: 0.25, max: 1.5, step: 0.05, value: graphSettings.textFade.toFixed(2) },
+                    { key: 'nodeSize', label: t.graphNodeSize, min: 0.7, max: 1.6, step: 0.1, value: `${graphSettings.nodeSize.toFixed(1)}×` },
+                    { key: 'linkThickness', label: t.graphLinkThickness, min: 0.5, max: 2.5, step: 0.1, value: `${graphSettings.linkThickness.toFixed(1)}×` },
+                  ].map(control => (
+                    <label key={control.key} className="block space-y-1.5">
+                      <span className="flex items-center justify-between text-[11px] font-semibold text-(--text-secondary)"><span>{control.label}</span><output>{control.value}</output></span>
+                      <input type="range" min={control.min} max={control.max} step={control.step} value={graphSettings[control.key]}
+                        onChange={event => updateGraphSetting(control.key, Number(event.target.value))}
+                        className="h-1 w-full cursor-pointer appearance-none rounded-lg bg-(--border) accent-violet-600" />
+                    </label>
+                  ))}
+                </section>
+
+                <section className="space-y-3 border-t border-(--border-light) pt-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-wider text-(--text-tertiary)">{t.graphForces}</h4>
+                  {[
+                    { key: 'centerForce', label: t.graphCenterForce, min: 0, max: 0.05, step: 0.005, value: graphSettings.centerForce.toFixed(3) },
+                    { key: 'repelForce', label: t.graphRepelForce, min: 20, max: 140, step: 5, value: graphSettings.repelForce },
+                    { key: 'linkForce', label: t.graphLinkForce, min: 0.01, max: 0.15, step: 0.01, value: graphSettings.linkForce.toFixed(2) },
+                    { key: 'linkDistance', label: t.graphLinkDistance, min: 80, max: 260, step: 10, value: graphSettings.linkDistance },
+                  ].map(control => (
+                    <label key={control.key} className="block space-y-1.5">
+                      <span className="flex items-center justify-between text-[11px] font-semibold text-(--text-secondary)"><span>{control.label}</span><output>{control.value}</output></span>
+                      <input type="range" min={control.min} max={control.max} step={control.step} value={graphSettings[control.key]}
+                        onChange={event => updateGraphSetting(control.key, Number(event.target.value))}
+                        className="h-1 w-full cursor-pointer appearance-none rounded-lg bg-(--border) accent-violet-600" />
+                    </label>
+                  ))}
+                </section>
+
+                <button type="button" onClick={resetGraphSettings}
+                  className="w-full cursor-pointer rounded-lg border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-bold text-(--text-secondary) transition-colors hover:text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)">
+                  {t.graphReset}
+                </button>
+              </div>
+            </aside>
+          )}
+
+          <div className="pointer-events-none absolute bottom-4 left-4 z-10 flex flex-wrap items-center gap-3 rounded-lg border border-(--border) bg-(--surface)/85 px-3 py-2 text-[10px] font-semibold text-(--text-secondary) shadow-sm backdrop-blur-sm">
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full border-2" style={{ background: isDark ? '#8b5cf6' : '#7c3aed', borderColor: isDark ? '#c4b5fd' : '#5b21b6' }} /> {t.sourceLegend}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full border" style={{ background: isDark ? '#52525b' : '#cbd5e1', borderColor: isDark ? '#a1a1aa' : '#64748b' }} /> {t.externalLegend}</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full border" style={{ background: isDark ? '#854d0e' : '#fef3c7', borderColor: isDark ? '#fbbf24' : '#d97706' }} /> {t.unresolvedLegend}</span>
           </div>
-          <div className="absolute bottom-4 right-4 z-10 text-[8px] text-gray-400 font-medium select-none pointer-events-none text-right leading-relaxed">
-            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: '#eef2ff', border: '1px solid #6366f1' }} /> {t.sourceLegend}</span>
-            <br />
-            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: '#f8fafc', border: '1px solid #94a3b8' }} /> {t.externalLegend}</span>
-            <br />
-            <span className="inline-flex items-center gap-1"><span className="w-2 h-2" style={{ background: '#fffbeb', border: '1px solid #f59e0b', transform: 'rotate(45deg)', display: 'inline-block' }} /> {t.unresolvedLegend}</span>
-          </div>
+
+          <p id="visual-map-help" className="pointer-events-none absolute bottom-4 right-4 z-10 hidden rounded-lg border border-(--border) bg-(--surface)/80 px-3 py-2 text-[10px] font-medium text-(--text-tertiary) backdrop-blur-sm sm:block">
+            {t.graphDragHint}
+          </p>
         </div>
       )}
       {selectedGraphNode && (
-        <div className="w-80 max-w-[80vw] shrink-0 border-l border-slate-200 bg-white p-5 space-y-3 overflow-y-auto">
+        <div className="w-80 max-w-[80vw] shrink-0 border-l border-(--border) bg-(--surface) p-5 space-y-3 overflow-y-auto">
           <div className="flex items-start justify-between">
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{ct.name}</span>
-            <button onClick={() => setSelectedGraphNode(null)} className="text-gray-400 hover:text-gray-600 p-1" aria-label={ct.close}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+            <span className="text-[10px] font-black text-(--text-tertiary) uppercase tracking-wider">{ct.name}</span>
+            <button onClick={() => setSelectedGraphNode(null)} className="text-(--text-tertiary) hover:text-(--text-primary) p-1" aria-label={ct.close}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
           </div>
-          <p className="text-sm font-semibold text-gray-900 break-words">{selectedGraphNode.title || (selectedGraphNode.inCollection ? t.unnamed : t.unresolvedReference)}</p>
+          <p className="text-sm font-semibold text-(--text-primary) break-words">{selectedGraphNode.title || (selectedGraphNode.inCollection ? t.unnamed : t.unresolvedReference)}</p>
           {selectedGraphNode.doi && (
             <div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">DOI</p>
-              <p className="text-xs font-mono text-blue-600 break-all">{selectedGraphNode.doi}</p>
+              <p className="text-[10px] font-black text-(--text-tertiary) uppercase tracking-wider">DOI</p>
+              <p className="text-xs font-mono text-(--brand) break-all">{selectedGraphNode.doi}</p>
             </div>
           )}
           {selectedGraphNode.authors && (
             <div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{t.authors}</p>
-              <p className="text-xs text-gray-700">{selectedGraphNode.authors}</p>
+              <p className="text-[10px] font-black text-(--text-tertiary) uppercase tracking-wider">{t.authors}</p>
+              <p className="text-xs text-(--text-secondary)">{selectedGraphNode.authors}</p>
             </div>
           )}
           {selectedGraphNode.publicationYear && (
             <div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{t.publicationYear}</p>
-              <p className="text-xs text-gray-700">{selectedGraphNode.publicationYear}</p>
+              <p className="text-[10px] font-black text-(--text-tertiary) uppercase tracking-wider">{t.publicationYear}</p>
+              <p className="text-xs text-(--text-secondary)">{selectedGraphNode.publicationYear}</p>
             </div>
           )}
           {selectedGraphNode.hasDoi && selectedGraphNode.citedByCount != null ? (
             <div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{t.sourceCitations}</p>
-              <p className="text-xs text-gray-700">{t.citedTimes.replace('{{count}}', selectedGraphNode.citedByCount)}</p>
+              <p className="text-[10px] font-black text-(--text-tertiary) uppercase tracking-wider">{t.sourceCitations}</p>
+              <p className="text-xs text-(--text-secondary)">{t.citedTimes.replace('{{count}}', selectedGraphNode.citedByCount)}</p>
             </div>
           ) : !selectedGraphNode.hasDoi && (selectedGraphNode.title || !selectedGraphNode.inCollection) ? (
             <div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{t.citationData}</p>
-              <p className="text-xs text-gray-400 italic">{t.noCitationData}</p>
+              <p className="text-[10px] font-black text-(--text-tertiary) uppercase tracking-wider">{t.citationData}</p>
+              <p className="text-xs text-(--text-tertiary) italic">{t.noCitationData}</p>
             </div>
           ) : null}
-          <div className="pt-2 border-t border-gray-100">
+          <div className="pt-2 border-t border-(--border-light)">
             {selectedGraphNode.inCollection ? (
               <p className="text-[10px] font-semibold text-indigo-600">{t.inCollection}</p>
             ) : selectedGraphNode.title || selectedGraphNode.doi ? (
-              <p className="text-[10px] font-semibold text-gray-400">{t.citationGraphExternal}</p>
+              <p className="text-[10px] font-semibold text-(--text-tertiary)">{t.citationGraphExternal}</p>
             ) : (
               <p className="text-[10px] font-semibold text-rose-500">{t.unresolvedMetadata}</p>
             )}
             {selectedGraphNode.doi && (
               <a href={`https://doi.org/${selectedGraphNode.doi}`} target="_blank" rel="noopener noreferrer"
-                className="inline-block mt-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors">
+                className="inline-block mt-2 px-3 py-1.5 bg-(--surface-secondary) border border-(--border) rounded-lg text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) transition-colors">
                 {t.openDoi} ↗
               </a>
             )}

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Client } from '@stomp/stompjs';
-import api, { baseURL } from '../api.js';
+import api from '../api.js';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { subscribeToNotifications } from '../notificationSocket.js';
 
 const URGENT_ACTION = 'ADMIN_BROADCAST_URGENT';
 
@@ -23,25 +23,13 @@ export default function UrgentNotificationBanner() {
       }
     }).catch(() => {});
 
-    // ponytail: banner, bell, and student workspace keep separate inbox sockets; share one if notification traffic grows.
-    const client = new Client({
-      brokerURL: baseURL.replace(/^http/, 'ws') + '/ws',
-      connectHeaders: { Authorization: `Bearer ${token}` },
-      onConnect: () => {
-        client.subscribe('/user/queue/notifications', message => {
-          try {
-            const incoming = JSON.parse(message.body);
-            if (!cancelled && incoming.actionType === URGENT_ACTION) setNotification(incoming);
-          } catch { /* ignore malformed notification */ }
-        });
-      },
-      reconnectDelay: 5000,
+    const unsubscribe = subscribeToNotifications(token, incoming => {
+      if (!cancelled && incoming.actionType === URGENT_ACTION) setNotification(incoming);
     });
-    client.activate();
 
     return () => {
       cancelled = true;
-      client.deactivate();
+      unsubscribe();
     };
   }, [token]);
 

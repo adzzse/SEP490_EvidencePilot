@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Client } from '@stomp/stompjs';
 import { useTranslation } from 'react-i18next';
-import api, { baseURL } from '../api.js';
+import api from '../api.js';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { subscribeToNotifications } from '../notificationSocket.js';
 
 export default function NotificationBell({ onOpen }) {
   const { token } = useAuth();
@@ -27,29 +27,16 @@ export default function NotificationBell({ onOpen }) {
       .then(({ data }) => { if (!cancelled) setUnreadCount(data?.count || 0); })
       .catch(() => console.warn('Failed to load unread count'));
 
-    const client = new Client({
-      brokerURL: baseURL.replace(/^http/, 'ws') + '/ws',
-      connectHeaders: { Authorization: `Bearer ${token}` },
-      onConnect: () => {
-        client.subscribe('/user/queue/notifications', message => {
-          try {
-            const incoming = JSON.parse(message.body);
-            if (!cancelled) {
-              setNotifications(current => [incoming, ...current]);
-              setUnreadCount(current => current + 1);
-            }
-          } catch (error) {
-            console.warn('Bad notification payload:', error);
-          }
-        });
-      },
-      reconnectDelay: 5000,
+    const unsubscribe = subscribeToNotifications(token, incoming => {
+      if (!cancelled) {
+        setNotifications(current => [incoming, ...current]);
+        setUnreadCount(current => current + 1);
+      }
     });
-    client.activate();
 
     return () => {
       cancelled = true;
-      client.deactivate();
+      unsubscribe();
     };
   }, [token]);
 

@@ -173,6 +173,14 @@ public class AdminController {
         return adminService.getDocuments(page, size, q, projectId, collectionId);
     }
 
+    @GetMapping("/documents/counts")
+    public Map<String, Long> documentCounts(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) UUID projectId,
+            @RequestParam(required = false) UUID collectionId) {
+        return adminService.getDocumentCounts(q, projectId, collectionId);
+    }
+
     @GetMapping("/projects")
     public PagedResponse<AdminProjectResponse> projects(
             @RequestParam(defaultValue = "0") int page,

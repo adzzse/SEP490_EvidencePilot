@@ -16,6 +16,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -133,5 +134,23 @@ class AdminControllerTest {
                         .content("{\"message\":\"Maintenance soon\",\"role\":\"STUDENT\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recipientCount").value(2));
+    }
+
+    @Test
+    void documentCountsBindsFiltersAndReturnsCounts() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID collectionId = UUID.randomUUID();
+        when(service.getDocumentCounts("query", projectId, collectionId))
+                .thenReturn(Map.of("total", 1201L, "processed", 1100L, "failed", 12L));
+
+        mockMvc.perform(get("/api/admin/documents/counts")
+                        .param("q", "query")
+                        .param("projectId", projectId.toString())
+                        .param("collectionId", collectionId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1201))
+                .andExpect(jsonPath("$.processed").value(1100))
+                .andExpect(jsonPath("$.failed").value(12));
+        verify(service).getDocumentCounts("query", projectId, collectionId);
     }
 }

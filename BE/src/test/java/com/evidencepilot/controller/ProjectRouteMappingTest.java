@@ -161,6 +161,7 @@ class ProjectRouteMappingTest {
                 "GET /api/admin/notifications/broadcast-history",
                 "GET /api/admin/documents/extraction-queue",
                 "GET /api/admin/documents",
+                "GET /api/admin/documents/counts",
                 "GET /api/admin/projects",
                 "GET /api/admin/config",
                 "DELETE /api/papers/{documentId}/sections/{sectionId}",
@@ -175,7 +176,7 @@ class ProjectRouteMappingTest {
                 "GET /api/projects/{projectId}/evidence-traces",
                 "GET /api/projects/{projectId}/telemetry",
                 "PATCH /api/projects/{projectId}/evidence-traces/{traceId}/review"));
-        assertThat(routes).hasSize(125);
+        assertThat(routes).hasSize(126);
     }
 
     @Test

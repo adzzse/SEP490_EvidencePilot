@@ -4,8 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import TourLauncher from '../../components/TourLauncher';
 import FileViewerModal from '../../components/FileViewerModal';
-import api, { baseURL } from '../../api.js';
-import { Client } from '@stomp/stompjs';
+import api from '../../api.js';
+import { subscribeToNotifications } from '../../notificationSocket.js';
 import WorkspaceHeader from './WorkspaceHeader.jsx';
 import FilePanel from './FilePanel.jsx';
 import EditorPanel from './EditorPanel.jsx';
@@ -178,7 +178,6 @@ export default function WorkspaceLayout() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
-  const stompRef = useRef(null);
   const editorRef = useRef(null);
   const loadRequestRef = useRef(0);
   const projectRef = useRef(null);
@@ -621,44 +620,17 @@ export default function WorkspaceLayout() {
   }, [selectedPaper, user]);
 
   useEffect(() => {
-    let client = null;
-    const connect = () => {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const c = new Client({
-        brokerURL: baseURL.replace(/^http/, 'ws') + '/ws',
-        connectHeaders: { Authorization: 'Bearer ' + token },
-        onConnect: () => {
-          c.subscribe('/user/queue/notifications', msg => {
-            try {
-              const n = JSON.parse(msg.body);
-              setNotifications(prev => [n, ...prev]);
-              setUnreadCount(c => c + 1);
-              if (n.actionType === 'EXPORT_READY') {
-                showToast(t('exportReady'));
-                if (project) fetchExports();
-              } else {
-                showToast(n.message || t('newNotification'));
-              }
-            } catch (e) { console.warn('Bad notification payload:', e); }
-          });
-        },
-        reconnectDelay: 5000,
-      });
-      c.activate();
-      client = c;
-      stompRef.current = c;
-    };
-    const onRefreshed = () => {
-      if (client) { client.deactivate(); client = null; }
-      connect();
-    };
-    connect();
-    window.addEventListener('auth:refreshed', onRefreshed);
-    return () => {
-      window.removeEventListener('auth:refreshed', onRefreshed);
-      if (client) client.deactivate();
-    };
+    const unsubscribe = subscribeToNotifications(localStorage.getItem('token'), n => {
+      setNotifications(prev => [n, ...prev]);
+      setUnreadCount(c => c + 1);
+      if (n.actionType === 'EXPORT_READY') {
+        showToast(t('exportReady'));
+        if (project) fetchExports();
+      } else {
+        showToast(n.message || t('newNotification'));
+      }
+    });
+    return unsubscribe;
   }, []);
 
   useEffect(() => {

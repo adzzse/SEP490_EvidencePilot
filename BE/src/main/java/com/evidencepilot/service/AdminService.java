@@ -385,7 +385,23 @@ public class AdminService {
     public PagedResponse<Map<String, Object>> getDocuments(int page, int size, String q, UUID projectId, UUID collectionId) {
         Pageable pageable = PagingRequest.pageable(page, size, "createdAt,desc",
                 Set.of("createdAt", "title", "doi", "processingStatus"), "createdAt,desc");
-        Specification<Document> spec = (root, query, cb) -> {
+        return PagedResponse.from(documents.findAll(documentFilters(q, projectId, collectionId), pageable).map(this::documentRow));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Long> getDocumentCounts(String q, UUID projectId, UUID collectionId) {
+        Specification<Document> filters = documentFilters(q, projectId, collectionId);
+        return Map.of(
+                "total", documents.count(filters),
+                "processed", documents.count(filters.and((root, query, cb) -> root.get("processingStatus")
+                        .in(ProcessingStatus.COMPLETED, ProcessingStatus.READY))),
+                "failed", documents.count(filters.and((root, query, cb) -> root.get("processingStatus")
+                        .in(ProcessingStatus.FAILED, ProcessingStatus.PARTIAL)))
+        );
+    }
+
+    private Specification<Document> documentFilters(String q, UUID projectId, UUID collectionId) {
+        return (root, query, cb) -> {
             List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
             if (projectId != null) {
                 predicates.add(cb.equal(root.get("project").get("id"), projectId));
@@ -401,7 +417,6 @@ public class AdminService {
             }
             return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
         };
-        return PagedResponse.from(documents.findAll(spec, pageable).map(this::documentRow));
     }
 
     @Transactional(readOnly = true)
