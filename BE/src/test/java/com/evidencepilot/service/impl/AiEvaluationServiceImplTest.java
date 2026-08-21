@@ -114,6 +114,8 @@ class AiEvaluationServiceImplTest {
                 projectId, UUID.randomUUID(), UUID.randomUUID(), "fingerprint", UUID.randomUUID());
 
         assertThat(response.jobId()).isNotNull();
+        verify(jobRepository).save(argThat(job ->
+                job.getPayloadJson().contains("\"reviewInputFingerprint\":\"fingerprint\"")));
         verify(rabbitTemplate).convertAndSend(
                 eq(com.evidencepilot.config.infrastructure.RabbitMQConfig.AI_EVALUATION_QUEUE),
                 any(Map.class));
@@ -180,6 +182,7 @@ class AiEvaluationServiceImplTest {
                             sectionId,
                             1,
                             "fingerprint",
+                            "content-fingerprint",
                             LocalDateTime.now(),
                             "provider",
                             "model",
@@ -270,6 +273,7 @@ class AiEvaluationServiceImplTest {
                         sectionId,
                         1,
                         "fingerprint",
+                        "content-fingerprint",
                         LocalDateTime.now(),
                         "provider",
                         "model",

@@ -48,7 +48,10 @@ public class CitationReviewRound {
     private User requestedBy;
 
     @Column(name = "content_fingerprint", nullable = false, length = 64)
-    private String contentFingerprint;
+    private String reviewInputFingerprint;
+
+    @Column(name = "section_content_fingerprint", length = 64)
+    private String sectionContentFingerprint;
 
     @Column(name = "style", nullable = false)
     private String style;

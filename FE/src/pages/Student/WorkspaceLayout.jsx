@@ -66,12 +66,14 @@ function removeWorkspaceDraft(projectId, sectionId) {
 
 function withSavedContent(section, sectionId, content, update) {
   if (String(section.id) !== String(sectionId)) return section;
+  const contentChanged = section.contentTex !== content;
   return {
     ...section,
-    previousContentTex: section.contentTex,
+    previousContentTex: contentChanged ? section.contentTex : section.previousContentTex,
     contentTex: content,
     contentMdCache: null,
     version: update?.version ?? section.version,
+    revision: update?.revision ?? section.revision,
     updatedAt: update?.updatedAt ?? section.updatedAt,
   };
 }
@@ -184,6 +186,8 @@ export default function WorkspaceLayout() {
   const codeContentRef = useRef('');
   const dirtySectionsRef = useRef(new Set());
   const saveInFlightRef = useRef(new Map());
+  const saveStatusTimerRef = useRef(null);
+  const sectionRevisionRef = useRef(new Map());
   const submittingReviewRef = useRef(false);
   const aiReviewJobRef = useRef(null);
   const aiReviewRequestRef = useRef(0);
@@ -220,18 +224,26 @@ export default function WorkspaceLayout() {
     setSelectedSectionId(id);
   };
 
-  const putSectionContent = useCallback((sectionId, content) => {
-    if (!selectedPaper) return Promise.reject(new Error('No paper selected'));
-    const prev = saveInFlightRef.current.get(sectionId) || Promise.resolve();
-    const next = prev.catch(() => undefined).then(() =>
-      api.put(`/api/papers/${selectedPaper.id}/sections/${sectionId}`, { content })
-        .then(response => response.data));
-    const tracked = next.finally(() => {
-      if (saveInFlightRef.current.get(sectionId) === tracked) saveInFlightRef.current.delete(sectionId);
+  const putSectionContent = useCallback((paperId, sectionId, content, fallbackRevision) => {
+    if (!paperId) return Promise.reject(new Error('No paper selected'));
+    const key = String(sectionId);
+    const prev = saveInFlightRef.current.get(key) || Promise.resolve();
+    const next = prev.catch(() => undefined).then(async () => {
+      const expectedRevision = sectionRevisionRef.current.get(key) ?? fallbackRevision;
+      if (expectedRevision == null) throw new Error('Section revision is unavailable');
+      const response = await api.put(
+        `/api/papers/${paperId}/sections/${sectionId}`,
+        { content, expectedRevision },
+      );
+      sectionRevisionRef.current.set(key, response.data.revision);
+      return response.data;
     });
-    saveInFlightRef.current.set(sectionId, tracked);
+    const tracked = next.finally(() => {
+      if (saveInFlightRef.current.get(key) === tracked) saveInFlightRef.current.delete(key);
+    });
+    saveInFlightRef.current.set(key, tracked);
     return tracked;
-  }, [selectedPaper]);
+  }, []);
 
   const handleSelectSection = async (sec) => {
     const current = selectedSectionIdRef.current;
@@ -240,7 +252,9 @@ export default function WorkspaceLayout() {
       dirtySectionsRef.current.delete(current);
     }
     selectSection(sec.id);
-    loadCode(sec.contentTex || '');
+    const draft = readWorkspaceDraft(projectRef.current?.id, sec.id);
+    loadCode(draft ?? sec.contentTex ?? '');
+    if (draft !== null) dirtySectionsRef.current.add(sec.id);
     return true;
   };
 
@@ -495,6 +509,7 @@ export default function WorkspaceLayout() {
 
   useEffect(() => {
     return () => {
+      window.clearTimeout(saveStatusTimerRef.current);
       const sid = selectedSectionIdRef.current;
       if (sid && dirtySectionsRef.current.has(sid)) {
         storeWorkspaceDraft(projectRef.current?.id, sid, codeContentRef.current);
@@ -556,6 +571,13 @@ export default function WorkspaceLayout() {
   };
   const currentSection = sections.find(section =>
     String(section.id) === String(selectedSectionId));
+  useEffect(() => {
+    sections.forEach(section => {
+      if (section.revision != null) {
+        sectionRevisionRef.current.set(String(section.id), section.revision);
+      }
+    });
+  }, [sections]);
   const canEditCurrentSection = canEditSection(currentSection);
   const aiReviewStale = Boolean(aiReviewResult && aiReviewedContent !== codeContent);
   const requireEditableCurrentSection = () => {
@@ -802,36 +824,67 @@ export default function WorkspaceLayout() {
 
   const handleRollbackSection = async (sectionId) => {
     if (!selectedPaper) return;
+    const section = sections.find(item => String(item.id) === String(sectionId));
+    if (section?.revision == null) { showToast(t('restoreFailed')); return; }
+    if (!window.confirm(t('restoreConfirm'))) return;
+    const paperId = selectedPaper.id;
     setRollingBack(true);
     try {
-      const res = await api.post(`/api/papers/${selectedPaper.id}/sections/${sectionId}/rollback`);
+      const res = await api.post(
+        `/api/papers/${paperId}/sections/${sectionId}/rollback`,
+        null,
+        { params: { expectedRevision: section.revision } },
+      );
       const updated = res.data;
+      sectionRevisionRef.current.set(String(updated.id), updated.revision);
       setSections(prev => prev.map(s => String(s.id) === String(updated.id) ? updated : s));
-      if (String(updated.id) === String(selectedSectionId)) {
+      if (String(updated.id) === String(selectedSectionIdRef.current)) {
         dirtySectionsRef.current.delete(updated.id);
+        removeWorkspaceDraft(projectRef.current?.id, updated.id);
         loadCode(updated.contentTex || '');
       }
       showToast(t('versionRestored'));
       setTimeout(() => { setShowHistoryModal(false); setRollingBack(false); }, 300);
-    } catch { showToast(t('restoreFailed')); setRollingBack(false); }
+    } catch (error) {
+      showToast(error?.response?.status === 409 ? t('saveConflict') : t('restoreFailed'));
+      setRollingBack(false);
+    }
   };
 
   const handleSaveDraft = async () => {
     if (!requireEditableCurrentSection()) return false;
     if (!selectedPaper) { showToast(t('noPaperSelected')); return false; }
     if (!selectedSectionId) { showToast(t('noSectionSelected')); return false; }
+    if (saveInFlightRef.current.has(String(selectedSectionIdRef.current))) return false;
+    window.clearTimeout(saveStatusTimerRef.current);
     setSaveStatus('saving');
-    const sectionId = selectedSectionId;
+    const paperId = selectedPaper.id;
+    const projectId = projectRef.current?.id;
+    const sectionId = selectedSectionIdRef.current;
     const content = codeContentRef.current;
+    const revision = sections.find(section =>
+      String(section.id) === String(sectionId))?.revision;
     try {
-      const updated = await putSectionContent(sectionId, content);
+      const updated = await putSectionContent(
+        paperId, sectionId, content, revision);
       setSections(previous => previous.map(section =>
         withSavedContent(section, sectionId, content, updated)));
-      removeWorkspaceDraft(projectRef.current?.id, sectionId);
-      setSaveStatus('saved'); setLastSaved(new Date());
+      setLastSaved(new Date());
+      const stillCurrent = String(selectedSectionIdRef.current) === String(sectionId);
+      if (!stillCurrent || codeContentRef.current !== content) {
+        if (stillCurrent) {
+          dirtySectionsRef.current.add(sectionId);
+          storeWorkspaceDraft(projectId, sectionId, codeContentRef.current);
+          showToast(t('unsavedChanges'));
+        }
+        setSaveStatus('');
+        return false;
+      }
+      removeWorkspaceDraft(projectId, sectionId);
+      setSaveStatus('saved');
       dirtySectionsRef.current.delete(sectionId);
-      setTimeout(() => setSaveStatus(''), 3000);
-      return true;
+      saveStatusTimerRef.current = window.setTimeout(() => setSaveStatus(''), 3000);
+      return { paperId, sectionId, content };
     } catch (error) {
       setSaveStatus('error');
       const status = error?.response?.status;
@@ -1011,8 +1064,8 @@ export default function WorkspaceLayout() {
       const saved = await handleSaveDraft();
       if (!saved) return;
 
-      const reviewedContent = codeContentRef.current;
-      const sectionId = selectedSectionId;
+      const reviewedContent = saved.content;
+      const sectionId = saved.sectionId;
       requestId = ++aiReviewRequestRef.current;
       aiReviewJobRef.current = 'submitting';
       setAiReviewError(null);
@@ -1022,7 +1075,7 @@ export default function WorkspaceLayout() {
       setUpdatingTraceIds([]);
       setTraceError('');
       const { data: submit } = await api.post(
-        `/api/papers/${selectedPaper.id}/sections/${sectionId}/review`);
+        `/api/papers/${saved.paperId}/sections/${sectionId}/review`);
       if (aiReviewRequestRef.current !== requestId) return;
       aiReviewJobRef.current = submit.jobId;
       const job = await pollAiJob(
@@ -1087,27 +1140,8 @@ export default function WorkspaceLayout() {
     }
     const punctuation = /[.,;:!?]/.test(current.charAt(range.end - 1));
     const insertionOffset = punctuation ? range.end - 1 : range.end;
-    const next = current.slice(0, insertionOffset) + ` ${citation}` + current.slice(insertionOffset);
-    setSaveStatus('saving');
-    try {
-      const updated = await putSectionContent(selectedSectionId, next);
-      editorRef.current?.insertAtOffset(insertionOffset, ` ${citation}`);
-      setSections(previous => previous.map(section =>
-        withSavedContent(section, selectedSectionId, next, updated)));
-      dirtySectionsRef.current.delete(selectedSectionId);
-      removeWorkspaceDraft(projectRef.current?.id, selectedSectionId);
-      setSaveStatus('saved');
-      setLastSaved(new Date());
-      showToast(t('citationInserted'));
-    } catch (error) {
-      setSaveStatus('error');
-      const status = error?.response?.status;
-      if (status === 409) showToast(t('saveConflict'));
-      else if (status === 403) showToast(t('saveReadOnly'));
-      else if (status === 404) showToast(t('saveSectionRemoved'));
-      else if (status === 400) showToast(t('saveContentInvalid'));
-      else showToast(t('saveFailed'));
-    }
+    if (editorRef.current?.insertAtOffset(insertionOffset, ` ${citation}`) == null) return;
+    if (await handleSaveDraft()) showToast(t('citationInserted'));
   };
 
   useEffect(() => {
@@ -1369,7 +1403,7 @@ export default function WorkspaceLayout() {
           canReviewSection={canEditCurrentSection} />
       </div>
 
-      {/* Version History Modal */}
+      {/* Restore Previous Save Modal */}
       {showHistoryModal && (
         <div data-tour="history-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-(--surface) rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
@@ -1389,12 +1423,11 @@ export default function WorkspaceLayout() {
                 const sec = sections.find(s => String(s.id) === String(selectedSectionId)) || assignedSections[0];
                 return sec ? (
                   <>
-                    {sec.previousContentTex && (
+                    {sec.previousContentTex != null && sec.previousContentTex !== sec.contentTex && (
                       <div className="border border-(--border) rounded-xl p-4 bg-(--surface-secondary)/50 hover:border-amber-300 transition-colors">
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full border border-amber-200">{t('versionLabel', { version: sec.version })}</span>
-                            <p className="text-[10px] text-(--text-tertiary) mt-1.5">{t('updatedAtLabel', { date: sec.updatedAt ? new Date(sec.updatedAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : t('unknown') })}</p>
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded-full border border-amber-200">{t('previousSave')}</span>
                           </div>
                         </div>
                         <p className="text-[11px] text-(--text-secondary) leading-relaxed font-mono bg-(--surface) rounded-lg p-2.5 border border-(--border-light)">{(sec.previousContentTex || '').substring(0, 140)}{(sec.previousContentTex || '').length > 140 ? '...' : ''}</p>
@@ -1407,10 +1440,13 @@ export default function WorkspaceLayout() {
                         </button>
                       </div>
                     )}
+                    {(sec.previousContentTex == null || sec.previousContentTex === sec.contentTex) && (
+                      <div className="text-xs text-(--text-tertiary) italic text-center py-4">{t('noPreviousSave')}</div>
+                    )}
                     <div className="border border-indigo-200 dark:border-indigo-800 rounded-xl p-4 bg-indigo-50/30 dark:bg-indigo-900/10">
                       <div className="flex items-start justify-between mb-2">
                         <div>
-                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">{t('currentVersionLabel', { version: sec.version + 1 })}</span>
+                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">{t('currentVersionLabel', { version: sec.version || 1 })}</span>
                           <p className="text-[10px] text-(--text-tertiary) mt-1.5">{t('updatedAtLabel', { date: sec.updatedAt ? new Date(sec.updatedAt).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : t('unknown') })}</p>
                         </div>
                       </div>

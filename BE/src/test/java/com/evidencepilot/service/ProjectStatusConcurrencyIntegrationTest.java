@@ -187,17 +187,20 @@ class ProjectStatusConcurrencyIntegrationTest {
 
         AtomicInteger successes = new AtomicInteger();
         AtomicInteger conflicts = new AtomicInteger();
+        long expectedRevision = savedSection.getOptVersion();
         runTogether(
                 () -> updateSectionContent(student, paper.getId(), savedSection.getId(),
-                        "version-A", successes, conflicts),
+                        "version-A", expectedRevision, successes, conflicts),
                 () -> updateSectionContent(student, paper.getId(), savedSection.getId(),
-                        "version-B", successes, conflicts));
+                        "version-B", expectedRevision, successes, conflicts));
 
         assertThat(successes).hasValue(1);
         assertThat(conflicts).hasValue(1);
         PaperSection stored = sections.findById(savedSection.getId()).orElseThrow();
         assertThat(stored.getContentTex()).isIn("version-A", "version-B");
         assertThat(stored.getPreviousContentTex()).isEqualTo("original");
+        assertThat(stored.getVersion()).isEqualTo(2);
+        assertThat(stored.getOptVersion()).isEqualTo(expectedRevision + 1);
     }
 
     private void submitForReview(User student, UUID projectId,
@@ -235,10 +238,12 @@ class ProjectStatusConcurrencyIntegrationTest {
     }
 
     private void updateSectionContent(User student, UUID paperId, UUID sectionId, String content,
+            Long expectedRevision,
             AtomicInteger successes, AtomicInteger conflicts) {
         authenticate(student);
         try {
-            paperProcessingService.updateSection(paperId, sectionId, null, null, null, content);
+            paperProcessingService.updateSection(
+                    paperId, sectionId, null, null, null, content, expectedRevision);
             successes.incrementAndGet();
         } catch (ObjectOptimisticLockingFailureException e) {
             conflicts.incrementAndGet();

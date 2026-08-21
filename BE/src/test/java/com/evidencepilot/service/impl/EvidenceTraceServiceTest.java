@@ -85,7 +85,8 @@ class EvidenceTraceServiceTest {
         fixture.section.setVersion(4);
         when(traceRepository.findById(fixture.trace.getId()))
                 .thenReturn(Optional.of(fixture.trace));
-        when(reviewService.fingerprint(fixture.section)).thenReturn("after-fingerprint");
+        when(reviewService.sectionContentFingerprint(fixture.section))
+                .thenReturn("after-fingerprint");
 
         var response = service.decide(
                 fixture.document.getId(),
@@ -107,7 +108,8 @@ class EvidenceTraceServiceTest {
         Fixture fixture = fixture();
         when(traceRepository.findById(fixture.trace.getId()))
                 .thenReturn(Optional.of(fixture.trace));
-        when(reviewService.fingerprint(fixture.section)).thenReturn("before-fingerprint");
+        when(reviewService.sectionContentFingerprint(fixture.section))
+                .thenReturn("before-content-fingerprint");
 
         assertThatThrownBy(() -> service.decide(
                 fixture.document.getId(),
@@ -125,7 +127,8 @@ class EvidenceTraceServiceTest {
         Fixture fixture = fixture();
         when(traceRepository.findById(fixture.trace.getId()))
                 .thenReturn(Optional.of(fixture.trace));
-        when(reviewService.fingerprint(fixture.section)).thenReturn("before-fingerprint");
+        when(reviewService.sectionContentFingerprint(fixture.section))
+                .thenReturn("before-content-fingerprint");
 
         var response = service.decide(
                 fixture.document.getId(),
@@ -151,6 +154,24 @@ class EvidenceTraceServiceTest {
                 decision(StudentAction.REMOVE, "Removed the unsupported claim.")))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("TRACE_ALREADY_JUDGED");
+    }
+
+    @Test
+    void stampStaleStoresTheNewContentFingerprint() {
+        Fixture fixture = fixture();
+        when(traceRepository.findBySectionIdOrderByCreatedAtDesc(fixture.section.getId()))
+                .thenReturn(List.of(fixture.trace));
+        when(reviewService.sectionContentFingerprint("Updated claim."))
+                .thenReturn("updated-content-fingerprint");
+
+        service.stampStaleOnContentChanged(
+                fixture.section.getId(), "Updated claim.", 4);
+
+        assertThat(fixture.trace.getOutcome()).isEqualTo(TraceOutcome.STALE);
+        assertThat(fixture.trace.getAfterFingerprint())
+                .isEqualTo("updated-content-fingerprint");
+        assertThat(fixture.trace.getAfterSectionVersion()).isEqualTo(4);
+        verify(traceRepository).saveAll(List.of(fixture.trace));
     }
 
     @ParameterizedTest
@@ -184,6 +205,10 @@ class EvidenceTraceServiceTest {
         requester.setId(UUID.randomUUID());
         when(paperSectionRepository.findByIdWithDocument(fixture.section.getId()))
                 .thenReturn(Optional.of(fixture.section));
+        when(reviewService.reviewInputFingerprint(fixture.section))
+                .thenReturn("before-review-input-fingerprint");
+        when(reviewService.sectionContentFingerprint(fixture.section))
+                .thenReturn("before-content-fingerprint");
         when(roundRepository.findFirstBySectionIdOrderByCreatedAtDesc(fixture.section.getId()))
                 .thenReturn(Optional.of(fixture.round));
         when(userRepository.findById(requester.getId())).thenReturn(Optional.of(requester));
@@ -206,6 +231,28 @@ class EvidenceTraceServiceTest {
         assertThat(result.previousRoundId()).isEqualTo(fixture.round.getId());
         assertThat(result.recheckRequired()).isTrue();
         verify(traceRepository).saveAll(any());
+    }
+
+    @Test
+    void materializeRejectsReviewWhenInputChangedDuringGeneration() {
+        Fixture fixture = fixture();
+        when(paperSectionRepository.findByIdWithDocument(fixture.section.getId()))
+                .thenReturn(Optional.of(fixture.section));
+        when(reviewService.reviewInputFingerprint(fixture.section))
+                .thenReturn("new-review-input-fingerprint");
+        when(reviewService.sectionContentFingerprint(fixture.section))
+                .thenReturn("before-content-fingerprint");
+
+        assertThatThrownBy(() -> service.materialize(
+                fixture.document.getId(),
+                fixture.section.getId(),
+                UUID.randomUUID(),
+                reviewResponse(fixture.section)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("SECTION_REVIEW_INPUT_CHANGED");
+
+        verify(roundRepository, never()).save(any(CitationReviewRound.class));
+        verify(traceRepository, never()).saveAll(any());
     }
 
     @Test
@@ -288,7 +335,8 @@ class EvidenceTraceServiceTest {
                 "citation-rules-v1",
                 section.getId(),
                 section.getVersion(),
-                "before-fingerprint",
+                "before-review-input-fingerprint",
+                "before-content-fingerprint",
                 LocalDateTime.now(),
                 "provider",
                 "model",
@@ -331,7 +379,8 @@ class EvidenceTraceServiceTest {
         round.setId(UUID.randomUUID());
         round.setProject(project);
         round.setSection(section);
-        round.setContentFingerprint("before-fingerprint");
+        round.setReviewInputFingerprint("before-review-input-fingerprint");
+        round.setSectionContentFingerprint("before-content-fingerprint");
         round.setCreatedAt(LocalDateTime.now().minusMinutes(2));
         EvidenceRevisionTrace trace = new EvidenceRevisionTrace();
         trace.setId(UUID.randomUUID());

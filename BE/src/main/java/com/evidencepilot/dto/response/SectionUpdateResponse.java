@@ -6,9 +6,11 @@ import java.util.UUID;
 public record SectionUpdateResponse(
         UUID id,
         Integer version,
+        Long revision,
         LocalDateTime updatedAt) {
 
     public static SectionUpdateResponse from(PaperSectionResponse section) {
-        return new SectionUpdateResponse(section.id(), section.version(), section.updatedAt());
+        return new SectionUpdateResponse(
+                section.id(), section.version(), section.revision(), section.updatedAt());
     }
 }

@@ -5,6 +5,7 @@ import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentChunk;
 import com.evidencepilot.model.ProjectDocument;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.ProjectDocumentRepository;
@@ -40,7 +41,7 @@ public class SourceMatchingService {
 
     @Transactional(readOnly = true)
     public List<List<SourceMatch>> search(UUID projectId, List<String> excerpts, int topK) {
-        List<Document> sources = activeSources(projectId);
+        List<Document> sources = retrievableSources(projectId);
         if (excerpts.isEmpty() || sources.isEmpty()) {
             return excerpts.stream().map(ignored -> List.<SourceMatch>of()).toList();
         }
@@ -84,6 +85,14 @@ public class SourceMatchingService {
                 .filter(document -> document.getDocType() == DocumentType.SOURCE)
                 .forEach(document -> documents.put(document.getId(), document));
         return List.copyOf(documents.values());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Document> retrievableSources(UUID projectId) {
+        return activeSources(projectId).stream()
+                .filter(document -> document.getProcessingStatus() == ProcessingStatus.READY
+                        || document.getProcessingStatus() == ProcessingStatus.COMPLETED)
+                .toList();
     }
 
     public static String citationKey(UUID documentId) {

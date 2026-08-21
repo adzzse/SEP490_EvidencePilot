@@ -1,17 +1,20 @@
 package com.evidencepilot.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record SectionCitationReviewResponse(
         String reviewVersion,
         String ruleCatalogVersion,
         UUID sectionId,
         Integer sectionVersion,
-        String contentFingerprint,
+        @JsonAlias("contentFingerprint") String reviewInputFingerprint,
+        String sectionContentFingerprint,
         LocalDateTime reviewedAt,
         String provider,
         String model,

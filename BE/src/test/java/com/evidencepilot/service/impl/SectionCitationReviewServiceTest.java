@@ -12,7 +12,6 @@ import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.PaperStandard;
 import com.evidencepilot.prompt.SectionCitationReviewPrompt;
-import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ReviewSnapshotRepository;
 import com.evidencepilot.repository.UserRepository;
@@ -54,7 +53,6 @@ class SectionCitationReviewServiceTest {
     private final ReviewSnapshotRepository snapshotRepository = mock(ReviewSnapshotRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final SourceMatchingService sourceMatchingService = mock(SourceMatchingService.class);
-    private final DocumentChunkRepository documentChunkRepository = mock(DocumentChunkRepository.class);
     private final AuditService auditService = mock(AuditService.class);
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
@@ -93,7 +91,7 @@ class SectionCitationReviewServiceTest {
                         """, sectionId, excerpt, sourceId, chunkId)));
 
         SectionCitationReviewResponse result = service().run(
-                documentId, projectId, sectionId, service().fingerprint(section), actorId);
+                documentId, projectId, sectionId, service().reviewInputFingerprint(section), actorId);
 
         assertThat(result.complete()).isTrue();
         assertThat(result.summary()).contains("1 source discrepanc");
@@ -148,7 +146,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), actorId);
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), actorId);
 
         assertThat(result.complete()).isTrue();
         assertThat(result.summary()).contains("1 unsubstantiated claim");
@@ -192,7 +190,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), actorId);
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), actorId);
 
         assertThat(result.findings()).singleElement().satisfies(finding ->
                 assertThat(finding.rationale()).hasSize(1_000));
@@ -233,7 +231,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), actorId);
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), actorId);
 
         assertThat(result.complete()).isTrue();
         assertThat(result.findings()).singleElement().satisfies(finding ->
@@ -277,7 +275,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), actorId);
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), actorId);
 
         assertThat(result.findings()).singleElement().satisfies(finding ->
                 assertThat(finding.evidence()).singleElement().satisfies(evidence -> {
@@ -318,7 +316,7 @@ class SectionCitationReviewServiceTest {
                         """, sectionId, excerpt, sourceId, chunkId)));
 
         assertThatThrownBy(() -> service().run(
-                documentId, projectId, sectionId, service().fingerprint(section), UUID.randomUUID()))
+                documentId, projectId, sectionId, service().reviewInputFingerprint(section), UUID.randomUUID()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(exception -> assertThat(
                         ((ResponseStatusException) exception).getStatusCode())
@@ -349,7 +347,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), UUID.randomUUID()))
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), UUID.randomUUID()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(exception -> assertThat(
                         ((ResponseStatusException) exception).getStatusCode())
@@ -388,7 +386,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), UUID.randomUUID()))
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), UUID.randomUUID()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(exception -> assertThat(
                         ((ResponseStatusException) exception).getStatusCode())
@@ -427,7 +425,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), UUID.randomUUID()))
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), UUID.randomUUID()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(exception -> assertThat(
                         ((ResponseStatusException) exception).getStatusCode())
@@ -457,7 +455,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), UUID.randomUUID()))
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), UUID.randomUUID()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(exception -> assertThat(
                         ((ResponseStatusException) exception).getStatusCode())
@@ -492,7 +490,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), UUID.randomUUID()))
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), UUID.randomUUID()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(exception -> assertThat(
                         ((ResponseStatusException) exception).getStatusCode())
@@ -536,7 +534,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), UUID.randomUUID()))
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), UUID.randomUUID()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(exception -> assertThat(
                         ((ResponseStatusException) exception).getStatusCode())
@@ -566,7 +564,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), actorId);
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), actorId);
 
         assertThat(result.complete()).isTrue();
         assertThat(result.provider()).isEqualTo("retry-provider");
@@ -602,7 +600,7 @@ class SectionCitationReviewServiceTest {
                         """, sectionId, excerpt)));
 
         assertThatThrownBy(() -> service().run(
-                documentId, projectId, sectionId, service().fingerprint(section), UUID.randomUUID()))
+                documentId, projectId, sectionId, service().reviewInputFingerprint(section), UUID.randomUUID()))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(exception -> assertThat(
                         ((ResponseStatusException) exception).getStatusCode())
@@ -638,7 +636,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), actorId);
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), actorId);
 
         assertThat(result.complete()).isTrue();
         assertThat(result.findings()).isEmpty();
@@ -653,13 +651,14 @@ class SectionCitationReviewServiceTest {
         PaperSection section = section(
                 projectId, documentId, sectionId, "Introduction", "Saved content for cache lookup.");
         SectionCitationReviewService service = service();
-        String fingerprint = service.fingerprint(section);
+        String fingerprint = service.reviewInputFingerprint(section);
         SectionCitationReviewResponse cached = new SectionCitationReviewResponse(
                 "section-critique-v3",
                 "critique-rules-v2",
                 sectionId,
                 section.getVersion(),
                 fingerprint,
+                service.sectionContentFingerprint(section),
                 LocalDateTime.of(2026, 8, 11, 10, 30),
                 "cached-provider",
                 "cached-model",
@@ -681,6 +680,16 @@ class SectionCitationReviewServiceTest {
         verify(sourceMatchingService, never()).search(any(), any(), anyInt());
         verify(snapshotRepository, never()).save(any(ReviewSnapshot.class));
         verifyNoInteractions(auditService);
+    }
+
+    @Test
+    void responseReadsLegacyContentFingerprintAsReviewInputFingerprint() throws Exception {
+        SectionCitationReviewResponse response = objectMapper.readValue(
+                "{\"contentFingerprint\":\"legacy-input\",\"findings\":[],\"limitations\":[]}",
+                SectionCitationReviewResponse.class);
+
+        assertThat(response.reviewInputFingerprint()).isEqualTo("legacy-input");
+        assertThat(response.sectionContentFingerprint()).isNull();
     }
 
     @Test
@@ -710,7 +719,7 @@ class SectionCitationReviewServiceTest {
                 documentId,
                 projectId,
                 sectionId,
-                service.fingerprint(section),
+                service.reviewInputFingerprint(section),
                 actorId,
                 (current, total) -> progress.add(current + "/" + total));
 
@@ -754,7 +763,7 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
-                documentId, projectId, sectionId, service.fingerprint(section), actorId);
+                documentId, projectId, sectionId, service.reviewInputFingerprint(section), actorId);
 
         assertThat(result.complete()).isTrue();
         assertThat(result.findings()).singleElement().satisfies(finding -> {
@@ -845,7 +854,8 @@ class SectionCitationReviewServiceTest {
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
 
         SectionCitationReviewResponse result = service().run(
-                documentId, projectId, sectionId, service().fingerprint(section), actorId);
+                documentId, projectId, sectionId,
+                service().reviewInputFingerprint(section), actorId);
 
         assertThat(result.complete()).isTrue();
         assertThat(result.findings()).isEmpty();
@@ -856,7 +866,7 @@ class SectionCitationReviewServiceTest {
     }
 
     @Test
-    void runRejectsStaleSectionFingerprintBeforeCallingAi() {
+    void runRejectsStaleReviewInputFingerprintBeforeCallingAi() {
         UUID projectId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
@@ -878,11 +888,15 @@ class SectionCitationReviewServiceTest {
         PaperSection section = section(
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 "Introduction", "The same saved content");
-        String introductionFingerprint = service().fingerprint(section);
+        SectionCitationReviewService service = service();
+        String introductionFingerprint = service.reviewInputFingerprint(section);
+        String contentFingerprint = service.sectionContentFingerprint(section);
 
         section.setSectionTitle("Results");
 
-        assertThat(service().fingerprint(section)).isNotEqualTo(introductionFingerprint);
+        assertThat(service.reviewInputFingerprint(section))
+                .isNotEqualTo(introductionFingerprint);
+        assertThat(service.sectionContentFingerprint(section)).isEqualTo(contentFingerprint);
     }
 
     @Test
@@ -892,16 +906,21 @@ class SectionCitationReviewServiceTest {
         PaperSection section = section(
                 projectId, UUID.randomUUID(), UUID.randomUUID(),
                 "Introduction", "The same saved content");
-        String emptyCorpusFingerprint = service().fingerprint(section);
-
         Document source = new Document();
         source.setId(sourceId);
-        DocumentChunk corpusChunk = sourceChunk(sourceId, UUID.randomUUID(), "chunk text");
-        when(sourceMatchingService.activeSources(projectId)).thenReturn(List.of(source));
-        when(documentChunkRepository.findByDocumentId(sourceId))
-                .thenReturn(List.of(corpusChunk));
+        source.setFileHashSha256("source-hash");
+        source.setChunkCount(1);
+        source.setProcessedAt(LocalDateTime.of(2026, 8, 21, 10, 0));
+        when(sourceMatchingService.retrievableSources(projectId)).thenReturn(List.of(source));
+        SectionCitationReviewService service = service();
+        String originalCorpusFingerprint = service.reviewInputFingerprint(section);
+        String contentFingerprint = service.sectionContentFingerprint(section);
 
-        assertThat(service().fingerprint(section)).isNotEqualTo(emptyCorpusFingerprint);
+        source.setProcessedAt(LocalDateTime.of(2026, 8, 21, 10, 1));
+
+        assertThat(service.reviewInputFingerprint(section))
+                .isNotEqualTo(originalCorpusFingerprint);
+        assertThat(service.sectionContentFingerprint(section)).isEqualTo(contentFingerprint);
     }
 
     private SectionCitationReviewService service() {
@@ -912,7 +931,6 @@ class SectionCitationReviewServiceTest {
                 userRepository,
                 new PaperStandardService(),
                 sourceMatchingService,
-                documentChunkRepository,
                 auditService,
                 objectMapper);
     }

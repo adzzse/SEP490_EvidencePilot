@@ -140,7 +140,8 @@ class PaperControllerTest {
     void updateSection_bindsStructureParameters() throws Exception {
         UUID paperId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
-        when(paperService.updateSection(paperId, sectionId, "Methods", 2, null, null))
+        when(paperService.updateSection(
+                paperId, sectionId, "Methods", 2, null, null, null))
                 .thenReturn(sectionResponse(paperId, sectionId, null));
 
         mockMvc.perform(put("/api/papers/{paperId}/sections/{sectionId}", paperId, sectionId)
@@ -149,7 +150,7 @@ class PaperControllerTest {
                 .andExpect(status().isOk());
 
         verify(paperService).updateSection(
-                paperId, sectionId, "Methods", 2, null, null);
+                paperId, sectionId, "Methods", 2, null, null, null);
     }
 
     @Test
@@ -157,20 +158,24 @@ class PaperControllerTest {
         UUID paperId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
         String content = "Section body text.";
-        when(paperService.updateSection(paperId, sectionId, null, null, null, content))
+        when(paperService.updateSection(
+                paperId, sectionId, null, null, null, content, 7L))
                 .thenReturn(sectionResponse(paperId, sectionId, content));
 
         mockMvc.perform(put("/api/papers/{paperId}/sections/{sectionId}", paperId, sectionId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"content\":\"" + content + "\"}"))
+                        .content("{\"content\":\"" + content
+                                + "\",\"expectedRevision\":7}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(sectionId.toString()))
                 .andExpect(jsonPath("$.version").value(2))
+                .andExpect(jsonPath("$.revision").value(8))
                 .andExpect(jsonPath("$.updatedAt").exists())
                 .andExpect(jsonPath("$.contentTex").doesNotExist())
                 .andExpect(jsonPath("$.previousContentTex").doesNotExist());
 
-        verify(paperService).updateSection(paperId, sectionId, null, null, null, content);
+        verify(paperService).updateSection(
+                paperId, sectionId, null, null, null, content, 7L);
     }
 
     @Test
@@ -178,15 +183,18 @@ class PaperControllerTest {
         UUID paperId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
         String content = "x".repeat(100_000);
-        when(paperService.updateSection(paperId, sectionId, null, null, null, content))
+        when(paperService.updateSection(
+                paperId, sectionId, null, null, null, content, 7L))
                 .thenReturn(sectionResponse(paperId, sectionId, content));
 
         mockMvc.perform(put("/api/papers/{paperId}/sections/{sectionId}", paperId, sectionId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"content\":\"" + content + "\"}"))
+                        .content("{\"content\":\"" + content
+                                + "\",\"expectedRevision\":7}"))
                 .andExpect(status().isOk());
 
-        verify(paperService).updateSection(paperId, sectionId, null, null, null, content);
+        verify(paperService).updateSection(
+                paperId, sectionId, null, null, null, content, 7L);
     }
 
     @Test
@@ -197,10 +205,40 @@ class PaperControllerTest {
 
         mockMvc.perform(put("/api/papers/{paperId}/sections/{sectionId}", paperId, sectionId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"content\":\"" + content + "\"}"))
+                        .content("{\"content\":\"" + content
+                                + "\",\"expectedRevision\":7}"))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(paperService);
+    }
+
+    @Test
+    void updateSection_requiresExpectedRevisionForContent() throws Exception {
+        UUID paperId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+
+        mockMvc.perform(put("/api/papers/{paperId}/sections/{sectionId}", paperId, sectionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Section body text.\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(paperService);
+    }
+
+    @Test
+    void rollbackSection_bindsExpectedRevision() throws Exception {
+        UUID paperId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        when(paperService.rollbackSection(paperId, sectionId, 7L))
+                .thenReturn(sectionResponse(paperId, sectionId, "restored"));
+
+        mockMvc.perform(post("/api/papers/{paperId}/sections/{sectionId}/rollback",
+                        paperId, sectionId)
+                        .param("expectedRevision", "7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.revision").value(8));
+
+        verify(paperService).rollbackSection(paperId, sectionId, 7L);
     }
 
     @Test
@@ -257,7 +295,8 @@ class PaperControllerTest {
         user.setId(userId);
         when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(paperSectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
-        when(sectionCitationReviewService.fingerprint(section)).thenReturn("fingerprint");
+        when(sectionCitationReviewService.reviewInputFingerprint(section))
+                .thenReturn("fingerprint");
         when(aiEvaluationService.submitSectionCitationReview(
                 projectId, documentId, sectionId, "fingerprint", userId))
                 .thenReturn(new JobSubmitResponse(jobId));
@@ -431,6 +470,7 @@ class PaperControllerTest {
                 content,
                 null,
                 2,
+                8L,
                 null,
                 LocalDateTime.of(2026, 8, 17, 10, 0));
     }

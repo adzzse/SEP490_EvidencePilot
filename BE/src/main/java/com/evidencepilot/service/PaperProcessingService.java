@@ -34,7 +34,8 @@ public interface PaperProcessingService {
 
     PaperStandardSuggestionResponse suggestStandard(UUID documentId);
 
-    PaperSectionResponse updateSection(UUID documentId, UUID sectionId, String title, Integer order, UUID mergeIntoId, String content);
+    PaperSectionResponse updateSection(UUID documentId, UUID sectionId, String title, Integer order,
+            UUID mergeIntoId, String content, Long expectedRevision);
 
     PaperSectionResponse createSection(UUID documentId, String title, UUID parentSectionId);
 
@@ -49,7 +50,7 @@ public interface PaperProcessingService {
 
     PaperSectionResponse assignSection(UUID documentId, UUID sectionId, UUID assignedUserId);
 
-    PaperSectionResponse rollbackSection(UUID documentId, UUID sectionId);
+    PaperSectionResponse rollbackSection(UUID documentId, UUID sectionId, Long expectedRevision);
 
     void deleteSection(UUID documentId, UUID sectionId);
 

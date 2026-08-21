@@ -12,7 +12,6 @@ import com.evidencepilot.model.ReviewSnapshot;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.prompt.SectionCitationReviewPrompt;
-import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ReviewSnapshotRepository;
 import com.evidencepilot.repository.UserRepository;
@@ -74,17 +73,17 @@ public class SectionCitationReviewService {
     private final UserRepository userRepository;
     private final PaperStandardService paperStandardService;
     private final SourceMatchingService sourceMatchingService;
-    private final DocumentChunkRepository documentChunkRepository;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
     public Optional<SectionCitationReviewResponse> cached(UUID documentId, UUID sectionId) {
         PaperSection section = requireSection(documentId, sectionId, false);
-        String fingerprint = fingerprint(section);
+        String reviewInputFingerprint = reviewInputFingerprint(section);
         return reviewSnapshotRepository
                 .findByProjectIdAndStyleAndInputFingerprint(
-                        section.getDocument().getProject().getId(), SNAPSHOT_STYLE, fingerprint)
+                        section.getDocument().getProject().getId(), SNAPSHOT_STYLE,
+                        reviewInputFingerprint)
                 .flatMap(this::readSnapshot);
     }
 
@@ -93,13 +92,13 @@ public class SectionCitationReviewService {
             UUID documentId,
             UUID projectId,
             UUID sectionId,
-            String expectedFingerprint,
+            String expectedReviewInputFingerprint,
             UUID requestedByUserId) {
         return run(
                 documentId,
                 projectId,
                 sectionId,
-                expectedFingerprint,
+                expectedReviewInputFingerprint,
                 requestedByUserId,
                 (current, total) -> {});
     }
@@ -109,7 +108,7 @@ public class SectionCitationReviewService {
             UUID documentId,
             UUID projectId,
             UUID sectionId,
-            String expectedFingerprint,
+            String expectedReviewInputFingerprint,
             UUID requestedByUserId,
             BiConsumer<Integer, Integer> onProgress) {
         PaperSection section = requireSection(documentId, sectionId, true);
@@ -117,14 +116,15 @@ public class SectionCitationReviewService {
         if (!projectId.equals(project.getId())) {
             throw new IllegalArgumentException("Section review project does not match its job");
         }
-        String fingerprint = fingerprint(section);
-        if (!fingerprint.equals(expectedFingerprint)) {
+        String reviewInputFingerprint = reviewInputFingerprint(section);
+        if (!reviewInputFingerprint.equals(expectedReviewInputFingerprint)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "SECTION_CONTENT_CHANGED: save the section and run Citation Review again");
+                    "SECTION_REVIEW_INPUT_CHANGED: save the section and run Citation Review again");
         }
         Optional<SectionCitationReviewResponse> cached = reviewSnapshotRepository
-                .findByProjectIdAndStyleAndInputFingerprint(projectId, SNAPSHOT_STYLE, fingerprint)
+                .findByProjectIdAndStyleAndInputFingerprint(
+                        projectId, SNAPSHOT_STYLE, reviewInputFingerprint)
                 .flatMap(this::readSnapshot);
         if (cached.isPresent()) {
             return cached.get();
@@ -132,9 +132,10 @@ public class SectionCitationReviewService {
 
         String normalizedTitle = paperStandardService.normalizeSectionTitle(section.getSectionTitle());
         SectionCitationReviewResponse review = isPolicyExempt(normalizedTitle)
-                ? notApplicable(section, fingerprint, exemptionSummary(normalizedTitle))
-                : generate(section, fingerprint, normalizedTitle, onProgress);
-        saveSnapshot(project, fingerprint, review);
+                ? notApplicable(
+                        section, reviewInputFingerprint, exemptionSummary(normalizedTitle))
+                : generate(section, reviewInputFingerprint, normalizedTitle, onProgress);
+        saveSnapshot(project, reviewInputFingerprint, review);
 
         User actor = userRepository.findById(requestedByUserId)
                 .orElseThrow(() -> new ResourceNotFoundException(requestedByUserId, "User"));
@@ -195,13 +196,25 @@ public class SectionCitationReviewService {
         return new SectionReviewSourceMatchesResponse(response);
     }
 
-    public String fingerprint(PaperSection section) {
+    public String reviewInputFingerprint(PaperSection section) {
         Project project = section.getDocument().getProject();
         String standard = project.getTargetStandard() == null
                 ? "CUSTOM" : project.getTargetStandard().name();
         String input = REVIEW_VERSION + '\0' + RULE_CATALOG_VERSION + '\0' + SectionCitationReviewPrompt.SYSTEM
                 + '\0' + standard + '\0' + section.getId() + '\0' + section.getSectionTitle()
-                + '\0' + section.getContentTex() + '\0' + corpusStamp(project.getId());
+                + '\0' + sectionContentFingerprint(section) + '\0' + corpusRevision(project.getId());
+        return sha256(input);
+    }
+
+    public String sectionContentFingerprint(PaperSection section) {
+        return sectionContentFingerprint(section.getContentTex());
+    }
+
+    public String sectionContentFingerprint(String content) {
+        return sha256(content == null ? "" : content);
+    }
+
+    private String sha256(String input) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(input.getBytes(StandardCharsets.UTF_8));
@@ -211,24 +224,20 @@ public class SectionCitationReviewService {
         }
     }
 
-    /**
-     * Stamps the review fingerprint with every active-source chunk id so cached critiques are
-     * invalidated whenever the retrieval corpus changes, not only when the section text changes.
-     */
-    private String corpusStamp(UUID projectId) {
-        List<String> chunkIds = new ArrayList<>();
-        for (Document source : sourceMatchingService.activeSources(projectId)) {
-            for (DocumentChunk chunk : documentChunkRepository.findByDocumentId(source.getId())) {
-                chunkIds.add(chunk.getId().toString());
-            }
-        }
-        chunkIds.sort(Comparator.naturalOrder());
-        return String.join(",", chunkIds);
+    private String corpusRevision(UUID projectId) {
+        return sourceMatchingService.retrievableSources(projectId).stream()
+                .map(source -> String.join("\0",
+                        source.getId().toString(),
+                        source.getFileHashSha256() == null ? "" : source.getFileHashSha256(),
+                        source.getProcessedAt() == null ? "" : source.getProcessedAt().toString(),
+                        source.getChunkCount() == null ? "" : source.getChunkCount().toString()))
+                .sorted()
+                .collect(java.util.stream.Collectors.joining("\1"));
     }
 
     private SectionCitationReviewResponse generate(
             PaperSection section,
-            String fingerprint,
+            String reviewInputFingerprint,
             String normalizedTitle,
             BiConsumer<Integer, Integer> onProgress) {
         UUID projectId = section.getDocument().getProject().getId();
@@ -306,7 +315,8 @@ public class SectionCitationReviewService {
                 RULE_CATALOG_VERSION,
                 section.getId(),
                 section.getVersion(),
-                fingerprint,
+                reviewInputFingerprint,
+                sectionContentFingerprint(section),
                 LocalDateTime.now(),
                 provider,
                 model,
@@ -585,13 +595,14 @@ public class SectionCitationReviewService {
     }
 
     private SectionCitationReviewResponse notApplicable(
-            PaperSection section, String fingerprint, String summary) {
+            PaperSection section, String reviewInputFingerprint, String summary) {
         return new SectionCitationReviewResponse(
                 REVIEW_VERSION,
                 RULE_CATALOG_VERSION,
                 section.getId(),
                 section.getVersion(),
-                fingerprint,
+                reviewInputFingerprint,
+                sectionContentFingerprint(section),
                 LocalDateTime.now(),
                 null,
                 null,

@@ -40,6 +40,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -70,6 +71,20 @@ public class EvidenceTraceService {
                 .filter(found -> documentId.equals(found.getDocument().getId()))
                 .filter(PaperSection::isActive)
                 .orElseThrow(() -> new ResourceNotFoundException(sectionId, "PaperSection"));
+        String currentReviewInputFingerprint =
+                sectionCitationReviewService.reviewInputFingerprint(section);
+        String currentSectionContentFingerprint =
+                sectionCitationReviewService.sectionContentFingerprint(section);
+        if (!Objects.equals(
+                        currentReviewInputFingerprint, review.reviewInputFingerprint())
+                || (review.sectionContentFingerprint() != null
+                        && !Objects.equals(
+                                currentSectionContentFingerprint,
+                                review.sectionContentFingerprint()))) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "SECTION_REVIEW_INPUT_CHANGED: run Citation Review again");
+        }
         CitationReviewRound previousRound = roundRepository
                 .findFirstBySectionIdOrderByCreatedAtDesc(sectionId)
                 .orElse(null);
@@ -78,9 +93,10 @@ public class EvidenceTraceService {
         CitationReviewRound round = new CitationReviewRound();
         round.setProject(section.getDocument().getProject());
         round.setSection(section);
-        round.setSectionVersion(review.sectionVersion());
+        round.setSectionVersion(section.getVersion());
         round.setRequestedBy(requestedBy);
-        round.setContentFingerprint(review.contentFingerprint());
+        round.setReviewInputFingerprint(currentReviewInputFingerprint);
+        round.setSectionContentFingerprint(currentSectionContentFingerprint);
         round.setStyle(review.reviewVersion());
         round.setGenerationMeta(generationMeta(review));
         round.setSummary(review.summary());
@@ -119,8 +135,13 @@ public class EvidenceTraceService {
                     "TRACE_ALREADY_JUDGED: the instructor judgment locks this trace");
         }
         PaperSection section = trace.getSection();
-        String currentFingerprint = sectionCitationReviewService.fingerprint(section);
-        boolean sectionChanged = !currentFingerprint.equals(trace.getRound().getContentFingerprint());
+        String currentFingerprint =
+                sectionCitationReviewService.sectionContentFingerprint(section);
+        String reviewedContentFingerprint = trace.getRound().getSectionContentFingerprint();
+        boolean sectionChanged = reviewedContentFingerprint == null
+                ? !sectionCitationReviewService.reviewInputFingerprint(section)
+                        .equals(trace.getRound().getReviewInputFingerprint())
+                : !currentFingerprint.equals(reviewedContentFingerprint);
         if (request.studentAction() != StudentAction.DISMISS_WITH_REASON
                 && !sectionChanged) {
             throw new ResponseStatusException(
@@ -154,6 +175,8 @@ public class EvidenceTraceService {
 
     @Transactional
     public void stampStaleOnContentChanged(UUID sectionId, String content, Integer version) {
+        String contentFingerprint =
+                sectionCitationReviewService.sectionContentFingerprint(content);
         List<EvidenceRevisionTrace> open = traceRepository
                 .findBySectionIdOrderByCreatedAtDesc(sectionId).stream()
                 .filter(trace -> trace.getOutcome() == null || trace.getOutcome() == TraceOutcome.UNRESOLVED)
@@ -162,6 +185,7 @@ public class EvidenceTraceService {
         for (EvidenceRevisionTrace trace : open) {
             trace.setOutcome(TraceOutcome.STALE);
             trace.setAfterPassage(passageAround(content, trace.getExcerptStart(), trace.getExcerptEnd()));
+            trace.setAfterFingerprint(contentFingerprint);
             trace.setAfterSectionVersion(version);
         }
         traceRepository.saveAll(open);

@@ -76,14 +76,15 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
             UUID projectId,
             UUID documentId,
             UUID sectionId,
-            String contentFingerprint,
+            String reviewInputFingerprint,
             UUID requestedByUserId) {
         for (AiEvaluationJob job : jobRepository
                 .findByProjectIdAndKindAndStatusInOrderByCreatedAtDesc(
                         projectId,
                         AiEvaluationJob.KIND_SECTION_CITATION_REVIEW,
                         List.of(AiEvaluationJob.STATUS_PENDING, AiEvaluationJob.STATUS_PROCESSING))) {
-            if (sameSectionCitationReview(job, documentId, sectionId, contentFingerprint)) {
+            if (sameSectionCitationReview(
+                    job, documentId, sectionId, reviewInputFingerprint)) {
                 return new JobSubmitResponse(job.getId());
             }
         }
@@ -92,7 +93,7 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
                     "documentId", documentId,
                     "projectId", projectId,
                     "sectionId", sectionId,
-                    "contentFingerprint", contentFingerprint,
+                    "reviewInputFingerprint", reviewInputFingerprint,
                     "requestedByUserId", requestedByUserId));
             return submit(projectId, AiEvaluationJob.KIND_SECTION_CITATION_REVIEW, payload);
         } catch (Exception exception) {
@@ -220,7 +221,7 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
                         documentId,
                         projectId,
                         sectionId,
-                        payload.path("contentFingerprint").asText(),
+                        reviewInputFingerprint(payload),
                         requestedByUserId,
                         (current, total) -> updateProgress(job, current, total));
                 EvidenceTraceService.RoundMaterialization materialization =
@@ -494,16 +495,23 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
             AiEvaluationJob job,
             UUID documentId,
             UUID sectionId,
-            String contentFingerprint) {
+            String reviewInputFingerprint) {
         try {
             JsonNode payload = objectMapper.readTree(job.getPayloadJson());
             return documentId.toString().equals(payload.path("documentId").asText())
                     && sectionId.toString().equals(payload.path("sectionId").asText())
-                    && contentFingerprint.equals(payload.path("contentFingerprint").asText());
+                    && reviewInputFingerprint.equals(reviewInputFingerprint(payload));
         } catch (Exception exception) {
             log.warn("Section review job {} has an invalid payload; not reusing it", job.getId());
             return false;
         }
+    }
+
+    private static String reviewInputFingerprint(JsonNode payload) {
+        String fingerprint = payload.path("reviewInputFingerprint").asText();
+        return fingerprint.isBlank()
+                ? payload.path("contentFingerprint").asText()
+                : fingerprint;
     }
 
     private void publish(AiEvaluationJob job) {

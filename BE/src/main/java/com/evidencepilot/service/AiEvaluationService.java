@@ -14,7 +14,7 @@ public interface AiEvaluationService {
             UUID projectId,
             UUID documentId,
             UUID sectionId,
-            String contentFingerprint,
+            String reviewInputFingerprint,
             UUID requestedByUserId);
 
     JobSubmitResponse submitSectionSuggestion(

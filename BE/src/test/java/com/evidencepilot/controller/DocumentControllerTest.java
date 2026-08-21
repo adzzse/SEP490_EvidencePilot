@@ -14,6 +14,7 @@ import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
+import com.evidencepilot.service.QdrantClient;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import org.junit.jupiter.api.AfterEach;
@@ -73,6 +74,9 @@ class DocumentControllerTest {
 
     @MockBean(name = "minioClient")
     private MinioClient minioClient;
+
+    @MockBean
+    private QdrantClient qdrantClient;
 
     private String bearerToken;
     private UUID projectId;

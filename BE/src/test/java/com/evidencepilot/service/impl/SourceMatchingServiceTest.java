@@ -5,6 +5,7 @@ import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentChunk;
 import com.evidencepilot.model.ProjectDocument;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.ProjectDocumentRepository;
@@ -51,6 +52,22 @@ class SourceMatchingServiceTest {
         List<Document> result = service().activeSources(projectId);
 
         assertThat(result).containsExactly(direct, linked);
+    }
+
+    @Test
+    void retrievableSourcesExcludesSourcesThatAreNotReady() {
+        UUID projectId = UUID.randomUUID();
+        Document ready = document(DocumentType.SOURCE, true);
+        Document completed = document(DocumentType.SOURCE, true);
+        completed.setProcessingStatus(ProcessingStatus.COMPLETED);
+        Document processing = document(DocumentType.SOURCE, true);
+        processing.setProcessingStatus(ProcessingStatus.PROCESSING);
+        when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(
+                projectId, DocumentType.SOURCE))
+                .thenReturn(List.of(ready, completed, processing));
+        when(projectDocumentRepository.findByProjectId(projectId)).thenReturn(List.of());
+
+        assertThat(service().retrievableSources(projectId)).containsExactly(ready, completed);
     }
 
     @Test
@@ -110,6 +127,7 @@ class SourceMatchingServiceTest {
         document.setId(UUID.randomUUID());
         document.setDocType(type);
         document.setActive(active);
+        document.setProcessingStatus(ProcessingStatus.READY);
         return document;
     }
 

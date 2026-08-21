@@ -154,10 +154,10 @@ public class PaperController {
         return paperProcessingService.getPaperSections(id);
     }
 
-    @Operation(summary = "Get section version history",
-            description = "Returns a single section with its version and previousContentTex for history display.")
+    @Operation(summary = "Get the previous saved section content",
+            description = "Returns the current section and its single previousContentTex undo slot.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Section history returned"),
+            @ApiResponse(responseCode = "200", description = "Current and previous save returned"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
             @ApiResponse(responseCode = "403", description = "Access denied"),
             @ApiResponse(responseCode = "404", description = "Section not found")
@@ -232,7 +232,8 @@ public class PaperController {
             @ApiResponse(responseCode = "400", description = "Invalid or oversized section content"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
             @ApiResponse(responseCode = "403", description = "Access denied"),
-            @ApiResponse(responseCode = "404", description = "Section not found")
+            @ApiResponse(responseCode = "404", description = "Section not found"),
+            @ApiResponse(responseCode = "409", description = "Section revision conflict")
     })
     @PutMapping("/papers/{documentId}/sections/{sectionId}")
     public SectionUpdateResponse updateSection(
@@ -243,8 +244,9 @@ public class PaperController {
             @RequestParam(required = false) Integer order,
             @RequestParam(required = false) UUID mergeIntoId) {
         String content = body != null ? body.content() : null;
+        Long expectedRevision = body != null ? body.expectedRevision() : null;
         PaperSectionResponse updated = paperProcessingService.updateSection(
-                documentId, sectionId, title, order, mergeIntoId, content);
+                documentId, sectionId, title, order, mergeIntoId, content, expectedRevision);
         return SectionUpdateResponse.from(updated);
     }
 
@@ -264,21 +266,23 @@ public class PaperController {
         return paperProcessingService.assignSection(documentId, sectionId, assignedUserId);
     }
 
-    @Operation(summary = "Rollback a paper section to its previous version",
-            description = "Swaps the current content with the previous version. "
-                    + "Only the assigned student can rollback.")
+    @Operation(summary = "Restore the previous saved section content",
+            description = "Restores the immediately previous save as a new revision. "
+                    + "Only the assigned student can restore it.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Section rolled back"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
             @ApiResponse(responseCode = "403", description = "Access denied"),
             @ApiResponse(responseCode = "404", description = "Section not found"),
-            @ApiResponse(responseCode = "409", description = "No previous version to rollback to")
+            @ApiResponse(responseCode = "409", description = "No previous save or section revision conflict")
     })
     @PostMapping("/papers/{documentId}/sections/{sectionId}/rollback")
     public PaperSectionResponse rollbackSection(
             @Parameter(description = "Paper document UUID") @PathVariable UUID documentId,
-            @Parameter(description = "Section UUID") @PathVariable UUID sectionId) {
-        return paperProcessingService.rollbackSection(documentId, sectionId);
+            @Parameter(description = "Section UUID") @PathVariable UUID sectionId,
+            @Parameter(description = "Current optimistic-lock revision")
+            @RequestParam Long expectedRevision) {
+        return paperProcessingService.rollbackSection(documentId, sectionId, expectedRevision);
     }
 
     @Operation(summary = "Soft-delete a paper section",
@@ -338,12 +342,13 @@ public class PaperController {
         User currentUser = currentUserService.requireCurrentUser();
         PaperSection section = requireReviewSection(documentId, sectionId);
         currentUserService.requireSectionContentWriteAccess(currentUser, section);
-        String fingerprint = sectionCitationReviewService.fingerprint(section);
+        String reviewInputFingerprint =
+                sectionCitationReviewService.reviewInputFingerprint(section);
         return ResponseEntity.accepted().body(aiEvaluationService.submitSectionCitationReview(
                 section.getDocument().getProject().getId(),
                 documentId,
                 sectionId,
-                fingerprint,
+                reviewInputFingerprint,
                 currentUser.getId()));
     }
 

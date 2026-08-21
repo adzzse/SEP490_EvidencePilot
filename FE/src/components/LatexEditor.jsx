@@ -146,6 +146,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
     const updateListener = EditorView.updateListener.of((update) => {
       if (update.docChanged && onChange) {
         const text = update.state.doc.toString();
+        if (text === lastEmittedRef.current) return;
         lastEmittedRef.current = text;
         onChange(text);
       }
@@ -189,6 +190,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
     if (viewRef.current && content !== undefined && content !== lastEmittedRef.current) {
       const current = viewRef.current.state.doc.toString();
       if (current !== content) {
+        lastEmittedRef.current = content || '';
         viewRef.current.dispatch({
           changes: { from: 0, to: current.length, insert: content || '' },
         });

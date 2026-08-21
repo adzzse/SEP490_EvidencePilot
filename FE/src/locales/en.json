@@ -105,8 +105,10 @@
 
   "notifications": "Notifications",
   "noNotifications": "No notifications yet.",
-  "versionHistory": "Version History",
-  "noAssignedHistory": "No section is assigned to you.",
+  "versionHistory": "Undo previous save",
+  "noAssignedHistory": "No section is available to restore.",
+  "noPreviousSave": "There is no previous save to restore yet.",
+  "previousSave": "Previous save",
   "currentVersion": "(current)",
 
   "darkMode": "Dark Mode",
@@ -141,8 +143,8 @@
   "tour": {
     "projectName": "Project Name",
     "projectNameDesc": "You are currently working on this project.",
-    "versionHistory": "Version History",
-    "versionHistoryDesc": "View and restore previous versions of your assigned section.",
+    "versionHistory": "Undo previous save",
+    "versionHistoryDesc": "Preview and restore only the immediately previous save.",
     "aiReview": "Citation Review",
     "aiReviewDesc": "Find statements in the selected section that may need citations.",
     "sidebarLeft": "Workspace Navigation",
@@ -216,10 +218,10 @@
   "answerFailed": "Could not save your answer. Try again.",
   "sectionCoverage": "Section coverage",
   "someAreasFailed": "Some areas failed to load: {{areas}}. Retry them from the file or context panel.",
-  "restoreVersion": "Restore this version",
+  "restoreVersion": "Undo previous save",
   "restoring": "Restoring...",
   "currentEditedVersion": "This is the current version being edited.",
-  "selectSectionHistory": "Select a section to see version history.",
+  "selectSectionHistory": "Select a section to restore its previous save.",
   "autoRevise": "Auto revise",
   "autoReviseDescription": "Select sections for AI revision based on instructor feedback.",
   "noSectionsAvailable": "No sections available.",
@@ -290,8 +292,8 @@
   ,"projectLocked": "Project is locked."
   ,"sourceDeleted": "Source deleted."
   ,"selectSectionFirst": "Select a section first."
-  ,"restoreConfirm": "Restore this previous version?"
-  ,"versionRestored": "Version restored."
+  ,"restoreConfirm": "Replace the current content with the previous save? Unsaved edits will be lost, and a new revision will be created."
+  ,"versionRestored": "Previous save restored as a new revision."
   ,"restoreFailed": "Restore failed."
   ,"noSectionSelected": "No section selected."
   ,"traceabilityDownloaded": "Downloaded traceability report."
@@ -330,7 +332,7 @@
   ,"noCitationFindings": "No statements requiring citations were found in this section."
   ,"retrySourceSearch": "Retry source search"
   ,"sourceSearchFailed": "The citation review succeeded, but related-source search failed."
-  ,"reviewSectionChanged": "The saved section changed while Citation Review was queued. Save and run it again."
+  ,"reviewSectionChanged": "The saved section or source corpus changed while Citation Review was running. Save and run it again."
   ,"reviewExcerptChanged": "This excerpt changed or is ambiguous. Run Citation Review again."
   ,"citationAlreadyInserted": "This source citation is already next to the excerpt."
   ,"cachedReviewFailed": "Could not load the cached review for this section."

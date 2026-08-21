@@ -105,8 +105,10 @@
 
   "notifications": "Thông báo",
   "noNotifications": "Chưa có thông báo.",
-  "versionHistory": "Lịch sử phiên bản",
-  "noAssignedHistory": "Bạn chưa được giao phần nào.",
+  "versionHistory": "Khôi phục lần lưu trước",
+  "noAssignedHistory": "Không có phần nào để khôi phục.",
+  "noPreviousSave": "Chưa có lần lưu trước để khôi phục.",
+  "previousSave": "Lần lưu trước",
   "currentVersion": "(hiện tại)",
 
   "darkMode": "Chế độ tối",
@@ -141,8 +143,8 @@
   "tour": {
     "projectName": "Tên dự án",
     "projectNameDesc": "Bạn đang làm việc trên dự án này.",
-    "versionHistory": "Lịch sử phiên bản",
-    "versionHistoryDesc": "Xem và khôi phục các phiên bản trước của phần được giao.",
+    "versionHistory": "Khôi phục lần lưu trước",
+    "versionHistoryDesc": "Xem trước và chỉ khôi phục đúng lần lưu ngay trước.",
     "aiReview": "Citation Review",
     "aiReviewDesc": "Tìm các phát biểu trong phần đang chọn có thể cần trích dẫn.",
     "sidebarLeft": "Điều hướng",
@@ -216,10 +218,10 @@
   "answerFailed": "Không lưu được câu trả lời. Vui lòng thử lại.",
   "sectionCoverage": "Mức độ bao phủ theo phần",
   "someAreasFailed": "Một số khu vực tải thất bại: {{areas}}. Hãy thử lại từ bảng tệp hoặc bảng ngữ cảnh.",
-  "restoreVersion": "Khôi phục phiên bản này",
+  "restoreVersion": "Khôi phục lần lưu trước",
   "restoring": "Đang khôi phục...",
   "currentEditedVersion": "Đây là phiên bản hiện đang được chỉnh sửa.",
-  "selectSectionHistory": "Chọn một phần để xem lịch sử phiên bản.",
+  "selectSectionHistory": "Chọn một phần để khôi phục lần lưu trước.",
   "autoRevise": "Tự động chỉnh sửa",
   "autoReviseDescription": "Chọn các phần để AI chỉnh sửa theo phản hồi của giảng viên.",
   "noSectionsAvailable": "Không có phần nào.",
@@ -290,8 +292,8 @@
   ,"projectLocked": "Dự án đang bị khóa."
   ,"sourceDeleted": "Đã xóa nguồn."
   ,"selectSectionFirst": "Hãy chọn một phần trước."
-  ,"restoreConfirm": "Khôi phục phiên bản trước này?"
-  ,"versionRestored": "Đã khôi phục phiên bản."
+  ,"restoreConfirm": "Thay nội dung hiện tại bằng lần lưu trước? Mọi chỉnh sửa chưa lưu sẽ bị mất và một revision mới sẽ được tạo."
+  ,"versionRestored": "Đã khôi phục lần lưu trước thành một revision mới."
   ,"restoreFailed": "Khôi phục thất bại."
   ,"noSectionSelected": "Chưa chọn phần nào."
   ,"traceabilityDownloaded": "Đã tải báo cáo truy vết xuống."
@@ -328,7 +330,7 @@
   ,"noCitationFindings": "Không phát hiện nội dung cần bổ sung trích dẫn trong phần này."
   ,"retrySourceSearch": "Tìm nguồn lại"
   ,"sourceSearchFailed": "Citation Review đã hoàn tất nhưng bước tìm nguồn liên quan thất bại."
-  ,"reviewSectionChanged": "Phần đã lưu thay đổi trong lúc Citation Review chờ xử lý. Hãy lưu và chạy lại."
+  ,"reviewSectionChanged": "Phần đã lưu hoặc tập nguồn thay đổi trong lúc Citation Review xử lý. Hãy lưu và chạy lại."
   ,"reviewExcerptChanged": "Đoạn văn đã thay đổi hoặc xuất hiện nhiều lần. Hãy chạy Citation Review lại."
   ,"citationAlreadyInserted": "Trích dẫn nguồn này đã nằm cạnh đoạn văn."
   ,"cachedReviewFailed": "Không thể tải kết quả Citation Review đã lưu của phần này."

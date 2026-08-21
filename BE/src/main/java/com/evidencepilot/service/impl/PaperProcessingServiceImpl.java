@@ -422,7 +422,8 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
     @Override
     @Transactional
     public PaperSectionResponse updateSection(UUID documentId, UUID sectionId,
-            String title, Integer order, UUID mergeIntoId, String content) {
+            String title, Integer order, UUID mergeIntoId, String content,
+            Long expectedRevision) {
         boolean structureChange = title != null || order != null || mergeIntoId != null;
         if (structureChange && content != null) {
             throw new ResponseStatusException(
@@ -445,42 +446,37 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                         HttpStatus.CONFLICT,
                         "Cannot merge: the section has feedback. Unassign and clear feedback first.");
             }
-            target.setContentTex(
+            String mergedContent =
                     (target.getContentTex() != null ? target.getContentTex() : "")
-                    + "\n\n" + (source.getContentTex() != null ? source.getContentTex() : ""));
-            target.setContentMdCache(null);
-            target.setUpdatedAt(LocalDateTime.now());
-            paperSectionRepository.save(target);
+                    + "\n\n" + (source.getContentTex() != null ? source.getContentTex() : "");
+            PaperSection saved = persistContentRevision(target, mergedContent, currentUser);
             source.setActive(false);
             paperSectionRepository.save(source);
-            return PaperSectionResponse.from(target);
+            return PaperSectionResponse.from(saved);
         }
 
         PaperSection section = requireSectionInDocument(sectionId, documentId);
-        String previousContent = section.getContentTex();
+        if (content != null) {
+            currentUserService.requireSectionContentWriteAccess(currentUser, section);
+            requireExpectedRevision(section, expectedRevision);
+            if (Objects.equals(section.getContentTex(), content)) {
+                return PaperSectionResponse.from(section);
+            }
+            return PaperSectionResponse.from(
+                    persistContentRevision(section, content, currentUser));
+        }
+        if (!structureChange) {
+            return PaperSectionResponse.from(section);
+        }
         if (title != null && !title.isBlank()) {
             section.setSectionTitle(title);
         }
         if (order != null) {
             section.setSectionOrder(order);
         }
-        if (content != null) {
-            currentUserService.requireSectionContentWriteAccess(currentUser, section);
-            section.setPreviousContentTex(previousContent);
-            section.setContentTex(content);
-            // cap at version 2 per requirement, no further increment
-            int next = section.getVersion() != null ? section.getVersion() + 1 : 1;
-            section.setVersion(Math.min(next, 2));
-        }
         section.setUpdatedAt(LocalDateTime.now());
         PaperSection saved = paperSectionRepository.save(section);
-        if (content != null) {
-            advanceProjectStatusOnStudentContent(section.getDocument().getProject(), section, currentUser);
-            evidenceTraceService.stampStaleOnContentChanged(
-                    saved.getId(), saved.getContentTex(), saved.getVersion());
-            recordContentEdit(section.getDocument().getProject(), saved, currentUser,
-                    previousContent, saved.getContentTex());
-        }
+        paperSectionRepository.flush();
         return PaperSectionResponse.from(saved);
     }
 
@@ -523,23 +519,20 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
 
     @Override
     @Transactional
-    public PaperSectionResponse rollbackSection(UUID documentId, UUID sectionId) {
+    public PaperSectionResponse rollbackSection(
+            UUID documentId, UUID sectionId, Long expectedRevision) {
         requireDocumentWriteAccess(documentId);
         User currentUser = currentUserService.requireCurrentUser();
         PaperSection section = requireSectionInDocument(sectionId, documentId);
         currentUserService.requireSectionContentWriteAccess(currentUser, section);
-        if (section.getPreviousContentTex() == null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "No previous version to rollback to.");
+        requireExpectedRevision(section, expectedRevision);
+        if (section.getPreviousContentTex() == null
+                || Objects.equals(section.getContentTex(), section.getPreviousContentTex())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "No different previous save to restore.");
         }
-        String current = section.getContentTex();
-        section.setContentTex(section.getPreviousContentTex());
-        section.setPreviousContentTex(current);
-        section.setVersion(section.getVersion() != null ? section.getVersion() - 1 : 0);
-        section.setUpdatedAt(LocalDateTime.now());
-        PaperSection saved = paperSectionRepository.save(section);
-        recordContentEdit(section.getDocument().getProject(), saved, currentUser,
-                current, saved.getContentTex());
-        return PaperSectionResponse.from(saved);
+        return PaperSectionResponse.from(
+                persistContentRevision(section, section.getPreviousContentTex(), currentUser));
     }
 
     @Override
@@ -731,6 +724,39 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         project.setStatus(ProjectStatus.IN_PROGRESS);
         project.setUpdatedAt(LocalDateTime.now());
         projectRepository.save(project);
+    }
+
+    private PaperSection persistContentRevision(
+            PaperSection section, String content, User editor) {
+        String previousContent = section.getContentTex();
+        section.setPreviousContentTex(previousContent);
+        section.setContentTex(content);
+        section.setContentMdCache(null);
+        section.setVersion(section.getVersion() == null ? 1 : section.getVersion() + 1);
+        section.setUpdatedAt(LocalDateTime.now());
+        PaperSection saved = paperSectionRepository.save(section);
+        paperSectionRepository.flush();
+        advanceProjectStatusOnStudentContent(
+                section.getDocument().getProject(), section, editor);
+        evidenceTraceService.stampStaleOnContentChanged(
+                saved.getId(), saved.getContentTex(), saved.getVersion());
+        recordContentEdit(
+                section.getDocument().getProject(), saved, editor,
+                previousContent, saved.getContentTex());
+        return saved;
+    }
+
+    private void requireExpectedRevision(PaperSection section, Long expectedRevision) {
+        if (expectedRevision == null || expectedRevision < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "SECTION_REVISION_REQUIRED: expectedRevision must be zero or greater");
+        }
+        if (!Objects.equals(section.getOptVersion(), expectedRevision)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "SECTION_REVISION_CONFLICT: the section changed after it was loaded");
+        }
     }
 
     private static int wordCount(String content) {

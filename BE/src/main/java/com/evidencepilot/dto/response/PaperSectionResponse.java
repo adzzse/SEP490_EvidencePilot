@@ -16,6 +16,7 @@ public record PaperSectionResponse(
         String contentTex,
         String previousContentTex,
         Integer version,
+        Long revision,
         String contentMdCache,
         LocalDateTime updatedAt) {
     public static PaperSectionResponse from(PaperSection section) {
@@ -36,6 +37,7 @@ public record PaperSectionResponse(
                 section.getContentTex(),
                 section.getPreviousContentTex(),
                 section.getVersion(),
+                section.getOptVersion(),
                 section.getContentMdCache(),
                 section.getUpdatedAt());
     }
