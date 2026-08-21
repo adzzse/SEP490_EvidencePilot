@@ -73,8 +73,6 @@ class ExportServiceImplTest {
         project.setId(job.getProjectId());
         project.setTitle("Streaming export");
         when(projects.findById(job.getProjectId())).thenReturn(Optional.of(project));
-        when(storage.presignedGetUrl("exports/" + job.getId() + ".zip", 60))
-                .thenReturn("https://example.test/export.zip");
         doAnswer(invocation -> {
             Path destination = invocation.getArgument(1);
             try (ZipOutputStream archive = new ZipOutputStream(
@@ -104,6 +102,7 @@ class ExportServiceImplTest {
         service.processExport(job);
 
         assertThat(job.getStatus()).isEqualTo(ExportStatus.READY);
+        assertThat(job.getDownloadUrl()).isEqualTo("/api/exports/" + job.getId() + "/download");
         assertThat(uploadedSize.get()).isEqualTo(uploaded.size());
         try (var zip = new ZipInputStream(
                 new ByteArrayInputStream(uploaded.toByteArray()),
@@ -120,6 +119,7 @@ class ExportServiceImplTest {
                 longThat(size -> size > 0),
                 eq("application/zip"));
         verify(storage, never()).write(anyString(), any(byte[].class), anyString());
+        verify(storage, never()).presignedGetUrl(anyString(), any(Integer.class));
     }
 
     @Test
@@ -140,6 +140,23 @@ class ExportServiceImplTest {
         assertThat(result.getInputStream().readAllBytes()).containsExactly(archive);
         verify(storage).getStream("exports/" + job.getId() + ".zip");
         verify(storage, never()).read(anyString());
+    }
+
+    @Test
+    void getJobReplacesExpiredLegacyUrlWithAuthenticatedDownloadEndpoint() {
+        ExportJob job = job(ExportStatus.READY);
+        job.setDownloadUrl("http://minio.example/expired-signature");
+        User currentUser = new User();
+        Project project = new Project();
+        project.setId(job.getProjectId());
+        when(currentUsers.requireCurrentUser()).thenReturn(currentUser);
+        when(exportJobs.findById(job.getId())).thenReturn(Optional.of(job));
+        when(projects.findById(job.getProjectId())).thenReturn(Optional.of(project));
+
+        ExportJob result = service.getJob(job.getId());
+
+        assertThat(result.getDownloadUrl()).isEqualTo(
+                "/api/exports/" + job.getId() + "/download");
     }
 
     @Test

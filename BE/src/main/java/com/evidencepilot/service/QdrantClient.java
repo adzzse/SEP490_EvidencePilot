@@ -14,6 +14,8 @@ public interface QdrantClient {
             SparseVector sparseVector,
             Map<String, Object> payload);
 
+    void deleteByDocumentId(String documentId);
+
     List<QdrantSearchResult> findClosestChunks(
             List<Float> queryVector,
             List<String> documentIds,

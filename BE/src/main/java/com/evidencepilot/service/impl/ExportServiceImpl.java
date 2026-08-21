@@ -91,7 +91,7 @@ public class ExportServiceImpl implements ExportService {
         Project project = projectRepository.findById(job.getProjectId())
                 .orElseThrow(() -> new ResourceNotFoundException(job.getProjectId(), "Project"));
         currentUserService.requireProjectAccess(currentUser, project);
-        return job;
+        return exposeDownloadEndpoint(job);
     }
 
     @Override
@@ -106,7 +106,10 @@ public class ExportServiceImpl implements ExportService {
     @Override
     public List<ExportJob> getUserExports(UUID projectId) {
         User currentUser = currentUserService.requireCurrentUser();
-        return exportJobRepository.findByProjectIdAndUserIdOrderByCreatedAtDesc(projectId, currentUser.getId());
+        List<ExportJob> jobs = exportJobRepository.findByProjectIdAndUserIdOrderByCreatedAtDesc(
+                projectId, currentUser.getId());
+        jobs.forEach(this::exposeDownloadEndpoint);
+        return jobs;
     }
 
     public void processExport(ExportJob job) {
@@ -115,18 +118,19 @@ public class ExportServiceImpl implements ExportService {
         exportJobRepository.save(job);
 
         Path archivePath = null;
+        String objectKey = EXPORT_MINIO_PREFIX + job.getId() + ".zip";
+        boolean stored = false;
         try {
             archivePath = Files.createTempFile("evidencepilot-export-", ".zip");
             texArchiveBuilder.write(job.getProjectId(), archivePath);
-            String objectKey = EXPORT_MINIO_PREFIX + job.getId() + ".zip";
             try (InputStream content = Files.newInputStream(archivePath)) {
                 documentObjectStorage.write(
                         objectKey, content, Files.size(archivePath), "application/zip");
             }
-            String downloadUrl = documentObjectStorage.presignedGetUrl(objectKey, 60);
+            stored = true;
 
             job.setStatus(ExportStatus.READY);
-            job.setDownloadUrl(downloadUrl);
+            exposeDownloadEndpoint(job);
             job.setUpdatedAt(LocalDateTime.now());
             exportJobRepository.save(job);
 
@@ -136,6 +140,13 @@ public class ExportServiceImpl implements ExportService {
                     "Export is ready for download.");
         } catch (Exception e) {
             log.error("Export failed for job {}", job.getId(), e);
+            if (stored) {
+                try {
+                    documentObjectStorage.delete(objectKey);
+                } catch (RuntimeException cleanupFailure) {
+                    e.addSuppressed(cleanupFailure);
+                }
+            }
             job.setStatus(ExportStatus.FAILED);
             job.setErrorMessage(e.getMessage());
             job.setUpdatedAt(LocalDateTime.now());
@@ -151,4 +162,10 @@ public class ExportServiceImpl implements ExportService {
         }
     }
 
+    private ExportJob exposeDownloadEndpoint(ExportJob job) {
+        if (job.getStatus() == ExportStatus.READY) {
+            job.setDownloadUrl("/api/exports/" + job.getId() + "/download");
+        }
+        return job;
+    }
 }

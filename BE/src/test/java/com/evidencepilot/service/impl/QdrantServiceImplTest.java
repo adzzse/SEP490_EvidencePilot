@@ -28,6 +28,7 @@ class QdrantServiceImplTest {
         new QdrantServiceImpl(client)
                 .upsertVectors(new ExtractionResultPayload(documentId, List.of(chunk)));
 
+        verify(client).deleteByDocumentId(documentId.toString());
         verify(client).upsertVector(
                 eq(chunkId.toString()),
                 eq(List.of(0.2f)),

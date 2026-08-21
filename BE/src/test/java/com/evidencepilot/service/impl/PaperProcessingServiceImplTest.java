@@ -13,6 +13,7 @@ import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
+import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.PaperStandardService;
@@ -25,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -48,6 +50,8 @@ class PaperProcessingServiceImplTest {
     private ProjectRepository projectRepository;
     @Mock
     private CurrentUserService currentUserService;
+    @Mock
+    private AuditService auditService;
 
     @Test
     void detectsLatexSections() {
@@ -310,6 +314,73 @@ class PaperProcessingServiceImplTest {
     }
 
     @Test
+    void contentSaveRecordsWordDeltaAsEvidence() {
+        User student = user(UserRole.STUDENT);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paper = paper(project);
+        PaperSection section = section(paper);
+        section.setAssignedUser(student);
+        section.setContentTex("old words");
+        when(currentUserService.requireCurrentUser()).thenReturn(student);
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+        when(paperSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
+        when(paperSectionRepository.save(section)).thenReturn(section);
+
+        service().updateSection(
+                paper.getId(), section.getId(), null, null, null, "new words plus one");
+
+        verify(auditService).record(
+                "SECTION_CONTENT_UPDATED",
+                "PROJECT",
+                project.getId(),
+                student,
+                null,
+                Map.of(
+                        "sectionId", section.getId(),
+                        "sectionTitle", "Intro",
+                        "beforeWordCount", 2,
+                        "afterWordCount", 4,
+                        "wordDelta", 2,
+                        "wordsAdded", 3,
+                        "wordsRemoved", 1,
+                        "contentFingerprint", "ecddccec1117cff2670a3d2cc239b00adec76558d46ee8f5cb78ae82c6f81c57"));
+    }
+
+    @Test
+    void rollbackRecordsWordDeltaAsEvidence() {
+        User student = user(UserRole.STUDENT);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paper = paper(project);
+        PaperSection section = section(paper);
+        section.setAssignedUser(student);
+        section.setContentTex("current words");
+        section.setPreviousContentTex("previous");
+        section.setVersion(2);
+        when(currentUserService.requireCurrentUser()).thenReturn(student);
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+        when(paperSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
+        when(paperSectionRepository.save(section)).thenReturn(section);
+
+        service().rollbackSection(paper.getId(), section.getId());
+
+        verify(auditService).record(
+                "SECTION_CONTENT_UPDATED",
+                "PROJECT",
+                project.getId(),
+                student,
+                null,
+                Map.of(
+                        "sectionId", section.getId(),
+                        "sectionTitle", "Intro",
+                        "beforeWordCount", 2,
+                        "afterWordCount", 1,
+                        "wordDelta", -1,
+                        "wordsAdded", 1,
+                        "wordsRemoved", 2,
+                        "contentFingerprint", "6da0633528deaa0144e7b058315f0b753ec0b945163a72bf96a0d18180f9de0d"));
+    }
+
+    @Test
     void emptyUpdateDoesNotMoveAssignedProjectToInProgress() {
         User student = user(UserRole.STUDENT);
         Project project = project(ProjectStatus.ASSIGNED);
@@ -355,7 +426,8 @@ class PaperProcessingServiceImplTest {
                 projectRepository,
                 mock(SystemNotificationService.class),
                 mock(TexArchiveBuilder.class),
-                mock(EvidenceTraceService.class));
+                mock(EvidenceTraceService.class),
+                auditService);
     }
 
     private User user(UserRole role) {

@@ -68,43 +68,12 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
             return;
         }
 
-        String checkpointKey = "documents/processed/" + document.getId() + "/extraction.json";
+        String checkpointKey = DocumentObjectStorage.extractionCheckpointKey(
+                document.getId(), document.getFileHashSha256());
         AiModelClient.ExtractedDocument extracted = readCheckpoint(checkpointKey);
         if (extracted == null) {
-            String downloadUrl = baseUrl + "/api/documents/" + document.getId()
-                    + "/download?token=" + document.getDownloadToken();
-            try (ExtractionBundle bundle = aiModelClient.extractDocument(
-                    document.getOriginalFilename(), downloadUrl)) {
-                extracted = bundle.document();
-                if (!extracted.valid()) {
-                    throw new DocumentExtractionException("Extraction returned an invalid document");
-                }
-                if (document.getProject() != null
-                        && document.getOriginalFilename() != null
-                        && document.getOriginalFilename().toLowerCase(Locale.ROOT).endsWith(".pdf")) {
-                    for (String image : extracted.images()) {
-                        try (InputStream content = bundle.openImage(image)) {
-                            mediaAssetService.importExtractedImage(
-                                    document,
-                                    image,
-                                    content,
-                                    bundle.imageSize(image),
-                                    bundle.imageMediaType(image));
-                        } catch (IOException e) {
-                            throw new DocumentExtractionException(
-                                    "Failed to read extracted image " + image + ": " + e.getMessage());
-                        }
-                    }
-                    if (!extracted.images().isEmpty()) {
-                        String md = extracted.markdown();
-                        for (String image : extracted.images()) {
-                            md = md.replace("![](" + image + ")", "\\includegraphics{" + image + "}");
-                        }
-                        extracted = new AiModelClient.ExtractedDocument(md, extracted.blocks(), extracted.images());
-                    }
-                }
-                writeCheckpoint(checkpointKey, extracted);
-            }
+            extracted = extract(document);
+            writeCheckpoint(checkpointKey, extracted);
         }
 
         List<String> chunks = DocumentChunker.chunk(extracted.blocks());
@@ -141,6 +110,98 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
         }
         documentPersistenceService.markReady(document.getId(), payloadChunks.size());
         log.info("Completed extraction for document {} with {} chunks", document.getId(), payloadChunks.size());
+    }
+
+    private AiModelClient.ExtractedDocument extract(Document document) {
+        String cacheKey = extractionCacheKey(document);
+        if (cacheKey != null && documentObjectStorage.exists(cacheKey)) {
+            try (InputStream content = documentObjectStorage.getStream(cacheKey);
+                    ExtractionBundle bundle = ExtractionBundle.open(content)) {
+                log.info("Reusing extraction cache {} for document {}", cacheKey, document.getId());
+                return materialize(document, bundle);
+            } catch (IOException e) {
+                log.warn("Ignoring invalid extraction cache {}", cacheKey, e);
+            }
+        }
+
+        String downloadUrl = baseUrl + "/api/documents/" + document.getId()
+                + "/download?token=" + document.getDownloadToken();
+        try (ExtractionBundle bundle = aiModelClient.extractDocument(
+                document.getOriginalFilename(), downloadUrl)) {
+            AiModelClient.ExtractedDocument extracted = requireValid(bundle.document());
+            if (cacheKey != null) {
+                writeExtractionCache(cacheKey, bundle);
+            }
+            return materialize(document, bundle, extracted);
+        }
+    }
+
+    private AiModelClient.ExtractedDocument materialize(Document document, ExtractionBundle bundle) {
+        return materialize(document, bundle, requireValid(bundle.document()));
+    }
+
+    private AiModelClient.ExtractedDocument materialize(
+            Document document,
+            ExtractionBundle bundle,
+            AiModelClient.ExtractedDocument extracted) {
+        if (document.getProject() == null || !isPdf(document.getOriginalFilename())) {
+            return extracted;
+        }
+        for (String image : extracted.images()) {
+            try (InputStream content = bundle.openImage(image)) {
+                mediaAssetService.importExtractedImage(
+                        document,
+                        image,
+                        content,
+                        bundle.imageSize(image),
+                        bundle.imageMediaType(image));
+            } catch (IOException e) {
+                throw new DocumentExtractionException(
+                        "Failed to read extracted image " + image + ": " + e.getMessage());
+            }
+        }
+        if (extracted.images().isEmpty()) {
+            return extracted;
+        }
+        String markdown = extracted.markdown();
+        for (String image : extracted.images()) {
+            markdown = markdown.replace("![](" + image + ")", "\\includegraphics{" + image + "}");
+        }
+        return new AiModelClient.ExtractedDocument(markdown, extracted.blocks(), extracted.images());
+    }
+
+    private void writeExtractionCache(String cacheKey, ExtractionBundle bundle) {
+        try (InputStream content = bundle.openArchive()) {
+            documentObjectStorage.write(cacheKey, content, bundle.archiveSize(), "application/zip");
+        } catch (IOException e) {
+            throw new DocumentExtractionException(
+                    "Failed to cache extraction bundle: " + e.getMessage());
+        }
+    }
+
+    private static AiModelClient.ExtractedDocument requireValid(
+            AiModelClient.ExtractedDocument extracted) {
+        if (extracted == null || !extracted.valid()) {
+            throw new DocumentExtractionException("Extraction returned an invalid document");
+        }
+        return extracted;
+    }
+
+    private static String extractionCacheKey(Document document) {
+        String hash = document.getFileHashSha256();
+        if (!isPdf(document.getOriginalFilename())
+                || hash == null
+                || hash.length() != 64
+                || !hash.chars().allMatch(character ->
+                        character >= '0' && character <= '9'
+                                || character >= 'a' && character <= 'f')) {
+            return null;
+        }
+        return DocumentObjectStorage.extractionCacheKey(hash);
+    }
+
+    private static boolean isPdf(String filename) {
+        return filename != null && filename.toLowerCase(Locale.ROOT).endsWith(".pdf");
     }
 
     private void processLatexPaper(Document document) {

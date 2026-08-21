@@ -44,6 +44,7 @@ export default function ProjectDetail() {
   const [progressReport, setProgressReport] = useState(null);
   const [checkpointDiff, setCheckpointDiff] = useState(null);
   const [reportSectionId, setReportSectionId] = useState(null);
+  const [reportMemberId, setReportMemberId] = useState('ALL');
   const [users, setUsers] = useState([]);
   const [showAddMember, setShowAddMember] = useState(false);
   const [newMemberId, setNewMemberId] = useState('');
@@ -125,13 +126,15 @@ export default function ProjectDetail() {
   const loadProgressReport = useCallback(async () => {
     try {
       const [progRes, diffRes] = await Promise.all([
-        api.get(`/api/projects/${id}/progress-report`).catch(() => null),
+        api.get(`/api/projects/${id}/progress-report`, {
+          params: { memberFilter: reportMemberId },
+        }).catch(() => null),
         api.get(`/api/projects/${id}/checkpoints/diff`).catch(() => null),
       ]);
       setProgressReport(progRes?.data || null);
       setCheckpointDiff(diffRes?.data || null);
     } catch { }
-  }, [id]);
+  }, [id, reportMemberId]);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -174,6 +177,10 @@ export default function ProjectDetail() {
   const studentSuggestions = useMemo(
     () => getStudentSuggestions(users, members, memberQuery),
     [users, members, memberQuery],
+  );
+  const studentMembers = useMemo(
+    () => members.filter(member => member.userRole === 'STUDENT'),
+    [members],
   );
 
   useEffect(() => {
@@ -1016,6 +1023,91 @@ export default function ProjectDetail() {
               </div>
             )}
 
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-3">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t.contributionEvidence}</h2>
+                <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
+                  {t.studentFilter}
+                  <select
+                    value={reportMemberId}
+                    onChange={event => {
+                      setProgressReport(null);
+                      setReportMemberId(event.target.value);
+                      setReportSectionId(null);
+                    }}
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                  >
+                    <option value="ALL">{t.allStudents}</option>
+                    {studentMembers.map(member => (
+                      <option key={member.userId} value={member.userId}>{displayName(member)}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="mb-4 text-xs text-[var(--text-tertiary)]">{t.contributionEvidenceNote}</p>
+              {!progressReport ? (
+                <p className="text-xs italic text-[var(--text-tertiary)]">{ct.loading}</p>
+              ) : (progressReport.contributions || []).length === 0 ? (
+                <p className="text-xs italic text-[var(--text-tertiary)]">{t.noContributionData}</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {(progressReport.contributions || []).map(contribution => (
+                    <div key={contribution.userId} className="rounded-xl bg-[var(--surface-secondary)] p-4 text-xs">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="font-bold text-[var(--text-primary)]">{contribution.userName}</p>
+                        <span className="text-[10px] text-[var(--text-tertiary)]">
+                          {t.lastRecordedEdit}: {contribution.lastEditedAt
+                            ? new Date(contribution.lastEditedAt).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US')
+                            : '—'}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {[
+                          { label: t.assignedSections, value: contribution.assignedSectionCount },
+                          { label: t.currentWords, value: contribution.currentWordCount },
+                          { label: t.recordedSaves, value: contribution.saveCount },
+                          { label: t.wordsAdded, value: contribution.wordsAdded ?? Math.max(contribution.wordDelta, 0) },
+                          { label: t.wordsRemoved, value: contribution.wordsRemoved ?? Math.max(-contribution.wordDelta, 0) },
+                          { label: t.netWordChange, value: contribution.wordDelta > 0 ? `+${contribution.wordDelta}` : contribution.wordDelta },
+                        ].map(stat => (
+                          <div key={stat.label} className="rounded-lg bg-[var(--surface)] p-2 text-center">
+                            <p className="text-base font-black text-[var(--brand-foreground)]">{stat.value}</p>
+                            <p className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{stat.label}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-3 text-[10px] text-[var(--text-tertiary)]">
+                        {t.feedbackSummary
+                          .replace('{{answered}}', contribution.feedbackAnswered)
+                          .replace('{{total}}', contribution.feedbackAnswered + contribution.feedbackUnanswered)}
+                      </p>
+                      {contribution.editedSections?.length > 0 && (
+                        <p className="mt-2 text-[10px] text-[var(--text-tertiary)]">
+                          <span className="font-bold">{t.editedSections}:</span> {contribution.editedSections.join(' · ')}
+                        </p>
+                      )}
+                      {contribution.dailyWordDeltas?.length > 0 ? (
+                        <div className="mt-3 max-h-32 space-y-1 overflow-y-auto pr-1">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{t.dailyEditHistory}</p>
+                          {contribution.dailyWordDeltas.map(day => (
+                            <div key={day.date} className="flex items-center justify-between rounded bg-[var(--surface)] px-2 py-1 text-[10px]">
+                              <span>{new Date(`${day.date}T00:00:00`).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US')}</span>
+                              <span className="text-[var(--text-secondary)]">
+                                {day.saveCount} {t.savesShort} · +{day.wordsAdded ?? Math.max(day.wordDelta, 0)}/-{day.wordsRemoved ?? Math.max(-day.wordDelta, 0)} {t.wordsShort} · {day.wordDelta > 0 ? `+${day.wordDelta}` : day.wordDelta} {t.netWordChange.toLowerCase()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-[10px] italic text-[var(--text-tertiary)]">{t.noRecordedEdits}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {reportMemberId === 'ALL' && (
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-2">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-sm font-bold text-[var(--brand-foreground)]">
@@ -1061,8 +1153,9 @@ export default function ProjectDetail() {
                 </div>
               )}
             </div>
+            )}
 
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6">
+            <div className={`rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 ${reportMemberId === 'ALL' ? '' : 'lg:col-span-3'}`}>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t.projectSections}</h2>
                 {reportSectionId && (
@@ -1077,6 +1170,7 @@ export default function ProjectDetail() {
                     <button
                       key={section.sectionId}
                       onClick={() => setReportSectionId(String(reportSectionId) === String(section.sectionId) ? null : section.sectionId)}
+                      disabled={reportMemberId !== 'ALL'}
                       className={`w-full rounded-xl bg-[var(--surface-secondary)] p-3 text-left text-xs transition ${String(reportSectionId) === String(section.sectionId) ? 'bg-[var(--brand-soft)] ring-2 ring-indigo-500/40' : 'hover:bg-[var(--brand-soft)]'}`}
                     >
                       <div className="flex items-start justify-between gap-2">

@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
+
 import java.util.Map;
 
 import static java.util.Map.entry;
@@ -20,11 +22,18 @@ public class QdrantServiceImpl implements QdrantService {
 
     @Override
     public void upsertVectors(ExtractionResultPayload payload) {
-        int upserted = 0;
+        if (payload.chunks().isEmpty()) {
+            return;
+        }
         for (ExtractionResultPayload.ChunkPayload chunk : payload.chunks()) {
             if (chunk.denseEmbedding() == null || chunk.denseEmbedding().isEmpty()) {
                 throw new IllegalStateException("Chunk " + chunk.chunkId() + " has empty dense embedding");
             }
+        }
+
+        qdrantClient.deleteByDocumentId(payload.documentId().toString());
+        int upserted = 0;
+        for (ExtractionResultPayload.ChunkPayload chunk : payload.chunks()) {
             qdrantClient.upsertVector(
                     chunk.chunkId().toString(),
                     chunk.denseEmbedding(),
@@ -39,5 +48,10 @@ public class QdrantServiceImpl implements QdrantService {
             upserted++;
         }
         log.info("Upserted {} vectors to Qdrant for document {}", upserted, payload.documentId());
+    }
+
+    @Override
+    public void deleteVectors(UUID documentId) {
+        qdrantClient.deleteByDocumentId(documentId.toString());
     }
 }

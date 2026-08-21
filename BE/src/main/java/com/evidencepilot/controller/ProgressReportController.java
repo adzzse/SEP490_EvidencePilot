@@ -23,12 +23,12 @@ public class ProgressReportController {
     private final ProgressReportService progressReportService;
 
     @Operation(summary = "Get project progress report",
-            description = "Returns section completeness panels and a deterministic readiness score. "
-                    + "Filter sections by assigned member via memberFilter.")
+            description = "Returns project readiness, current section assignment, and recorded edit evidence. "
+                    + "Filter current sections and contribution evidence by memberFilter.")
     @GetMapping("/{projectId}/progress-report")
     public ProgressReportResponse getProgressReport(
             @Parameter(description = "Project UUID") @PathVariable UUID projectId,
-            @Parameter(description = "ALL or a user UUID to filter sections by assigned member")
+            @Parameter(description = "ALL or a Student UUID to filter contribution evidence")
             @RequestParam(value = "memberFilter", required = false) String memberFilter) {
         return progressReportService.getProgressReport(projectId, memberFilter);
     }

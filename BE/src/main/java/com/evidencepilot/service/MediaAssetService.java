@@ -8,8 +8,11 @@ import com.evidencepilot.model.User;
 import com.evidencepilot.repository.ProjectMediaRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
@@ -26,6 +29,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MediaAssetService {
 
     private final ProjectMediaRepository projectMediaRepository;
@@ -51,8 +55,12 @@ public class MediaAssetService {
         try (var in = file.getInputStream()) {
             objectStorage.write(storageKey, in, file.getSize(), file.getContentType());
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to upload to storage", e);
+            ResponseStatusException failure = new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR, "Failed to upload to storage", e);
+            deleteAfterFailedWrite(storageKey, failure);
+            throw failure;
         }
+        deleteAfterRollback(storageKey);
 
         ProjectMedia media = new ProjectMedia();
         media.setProject(project);
@@ -61,7 +69,12 @@ public class MediaAssetService {
         media.setTexFilename(texFilename);
         media.setMimeType(file.getContentType());
         media.setUploadedAt(LocalDateTime.now());
-        media = projectMediaRepository.save(media);
+        try {
+            media = projectMediaRepository.saveAndFlush(media);
+        } catch (RuntimeException e) {
+            deleteAfterFailedWrite(storageKey, e);
+            throw e;
+        }
 
         return toResponse(media);
     }
@@ -98,7 +111,12 @@ public class MediaAssetService {
             return;
         }
 
-        objectStorage.write(storageKey, content, size, mimeType);
+        try {
+            objectStorage.write(storageKey, content, size, mimeType);
+        } catch (RuntimeException e) {
+            deleteIfUnreferencedAfterFailedWrite(project.getId(), storageKey, e);
+            throw e;
+        }
 
         ProjectMedia media = new ProjectMedia();
         media.setProject(project);
@@ -107,7 +125,12 @@ public class MediaAssetService {
         media.setTexFilename(texFilename);
         media.setMimeType(mimeType);
         media.setUploadedAt(LocalDateTime.now());
-        projectMediaRepository.save(media);
+        try {
+            projectMediaRepository.saveAndFlush(media);
+        } catch (RuntimeException e) {
+            deleteIfUnreferencedAfterFailedWrite(project.getId(), storageKey, e);
+            throw e;
+        }
     }
 
     public String getSignedUrl(UUID id) {
@@ -147,6 +170,24 @@ public class MediaAssetService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found"));
         currentUserService.requireProjectWriteAccess(user, media.getProject());
         projectMediaRepository.delete(media);
+        projectMediaRepository.flush();
+        deleteAfterCommit(media.getStorageKey());
+    }
+
+    @Transactional
+    public void deleteExtractedForDocument(Document source) {
+        if (source.getProject() == null) {
+            return;
+        }
+        String prefix = "media/" + source.getProject().getId()
+                + "/extracted/" + source.getId() + "/";
+        List<ProjectMedia> media = projectMediaRepository.findByStorageKeyStartingWith(prefix);
+        if (media.isEmpty()) {
+            return;
+        }
+        projectMediaRepository.deleteAll(media);
+        projectMediaRepository.flush();
+        media.forEach(item -> deleteAfterCommit(item.getStorageKey()));
     }
 
     private ProjectMediaResponse toResponse(ProjectMedia m) {
@@ -159,5 +200,63 @@ public class MediaAssetService {
                 m.getMimeType(),
                 m.getUploadedAt()
         );
+    }
+
+    private void deleteAfterFailedWrite(String storageKey, RuntimeException failure) {
+        try {
+            objectStorage.delete(storageKey);
+        } catch (RuntimeException cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
+        }
+    }
+
+    private void deleteIfUnreferencedAfterFailedWrite(
+            UUID projectId, String storageKey, RuntimeException failure) {
+        try {
+            if (!projectMediaRepository.existsByProjectIdAndStorageKey(projectId, storageKey)) {
+                deleteAfterFailedWrite(storageKey, failure);
+            }
+        } catch (RuntimeException referenceCheckFailure) {
+            failure.addSuppressed(referenceCheckFailure);
+        }
+    }
+
+    private void deleteAfterRollback(String storageKey) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_COMMITTED) {
+                    return;
+                }
+                try {
+                    objectStorage.delete(storageKey);
+                } catch (RuntimeException e) {
+                    log.warn("Failed to delete rolled-back media object {}", storageKey, e);
+                }
+            }
+        });
+    }
+
+    private void deleteAfterCommit(String storageKey) {
+        Runnable cleanup = () -> {
+            try {
+                objectStorage.delete(storageKey);
+            } catch (RuntimeException e) {
+                log.warn("Failed to delete unreferenced media object {}", storageKey, e);
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    cleanup.run();
+                }
+            });
+        } else {
+            cleanup.run();
+        }
     }
 }

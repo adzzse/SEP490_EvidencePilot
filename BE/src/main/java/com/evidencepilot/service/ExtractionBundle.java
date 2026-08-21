@@ -18,6 +18,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 public final class ExtractionBundle implements AutoCloseable {
+    static final long MAX_ARCHIVE_BYTES = 100L * 1024 * 1024;
     static final long MAX_TEXT_ENTRY_BYTES = 20L * 1024 * 1024;
     static final long MAX_UNCOMPRESSED_BYTES = 200L * 1024 * 1024;
     static final int MAX_IMAGE_COUNT = 1_000;
@@ -40,6 +41,26 @@ public final class ExtractionBundle implements AutoCloseable {
 
     public static ExtractionBundle open(Path archivePath) throws IOException {
         return open(archivePath, new ObjectMapper());
+    }
+
+    public static ExtractionBundle open(InputStream content) throws IOException {
+        Path archivePath = Files.createTempFile("extraction-bundle-", ".zip");
+        try (var output = Files.newOutputStream(archivePath)) {
+            byte[] buffer = new byte[64 * 1024];
+            long copied = 0;
+            int read;
+            while ((read = content.read(buffer)) >= 0) {
+                copied += read;
+                if (copied > MAX_ARCHIVE_BYTES) {
+                    throw new IOException("Extraction bundle exceeds the 100 MiB archive limit");
+                }
+                output.write(buffer, 0, read);
+            }
+        } catch (IOException | RuntimeException e) {
+            delete(archivePath);
+            throw e;
+        }
+        return open(archivePath);
     }
 
     static ExtractionBundle open(Path archivePath, ObjectMapper objectMapper) throws IOException {
@@ -168,6 +189,14 @@ public final class ExtractionBundle implements AutoCloseable {
 
     public AiModelClient.ExtractedDocument document() {
         return document;
+    }
+
+    public InputStream openArchive() throws IOException {
+        return Files.newInputStream(archivePath);
+    }
+
+    public long archiveSize() throws IOException {
+        return Files.size(archivePath);
     }
 
     public InputStream openImage(String path) throws IOException {

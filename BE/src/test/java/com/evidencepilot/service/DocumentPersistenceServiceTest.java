@@ -56,17 +56,18 @@ class DocumentPersistenceServiceTest {
         when(documents.findById(id)).thenReturn(Optional.of(document));
         when(documents.save(document)).thenReturn(document);
 
-        Document saved = service.markDocumentAsUploaded(id, "sources/raw/file.pdf");
+        Document saved = service.markDocumentAsUploaded(id, "sources/raw/file.pdf", "abc123");
 
         assertThat(saved.getProcessingStatus()).isEqualTo(ProcessingStatus.UPLOADED);
         assertThat(saved.getFileUrl()).isEqualTo("sources/raw/file.pdf");
+        assertThat(saved.getFileHashSha256()).isEqualTo("abc123");
         verify(events).publishEvent(new DocumentUploadedEvent(id));
     }
 
     @Test
     void markDocumentAsUploaded_rejectsMissingDocument() {
         UUID id = UUID.randomUUID();
-        assertThatThrownBy(() -> service.markDocumentAsUploaded(id, "key"))
+        assertThatThrownBy(() -> service.markDocumentAsUploaded(id, "key", "hash"))
                 .hasMessageContaining(id.toString());
         verifyNoInteractions(events);
     }

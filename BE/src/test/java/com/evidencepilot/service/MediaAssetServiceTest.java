@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.ByteArrayInputStream;
@@ -64,7 +65,7 @@ class MediaAssetServiceTest {
                 any(InputStream.class),
                 eq(3L),
                 eq("image/jpeg"));
-        verify(projectMediaRepository).save(argThat(media ->
+        verify(projectMediaRepository).saveAndFlush(argThat(media ->
                 media.getProject() == source.getProject()
                         && media.getUploadedBy() == source.getUploadedBy()
                         && media.getStorageKey().equals(storageKey)
@@ -88,7 +89,74 @@ class MediaAssetServiceTest {
                 "image/jpeg");
 
         verify(objectStorage, never()).write(any(), any(InputStream.class), any(Long.class), any());
-        verify(projectMediaRepository, never()).save(any());
+        verify(projectMediaRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void importFailureKeepsObjectWhenAnotherRowNowReferencesIt() {
+        Document source = sourceDocument();
+        String texFilename = "images/figure.jpg";
+        String storageKey = "media/" + source.getProject().getId()
+                + "/extracted/" + source.getId() + "/" + texFilename;
+        when(projectMediaRepository.existsByProjectIdAndStorageKey(
+                source.getProject().getId(), storageKey)).thenReturn(false, true);
+        when(projectMediaRepository.saveAndFlush(any())).thenThrow(new RuntimeException("duplicate"));
+
+        assertThrows(RuntimeException.class, () -> service().importExtractedImage(
+                source,
+                texFilename,
+                new ByteArrayInputStream(new byte[] {1, 2, 3}),
+                3,
+                "image/jpeg"));
+
+        verify(objectStorage, never()).delete(storageKey);
+    }
+
+    @Test
+    void uploadDeletesObjectWhenDatabaseWriteFails() {
+        Project project = project(UUID.randomUUID());
+        when(currentUserService.requireCurrentUser()).thenReturn(new User());
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(projectMediaRepository.saveAndFlush(any())).thenThrow(new RuntimeException("db offline"));
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "figure.png", "image/png", new byte[] {1, 2, 3});
+
+        assertThrows(RuntimeException.class, () -> service().upload(file, project.getId()));
+
+        verify(objectStorage).delete(argThat(key -> key.startsWith("media/" + project.getId() + "/")));
+    }
+
+    @Test
+    void deleteRemovesDatabaseRowAndStoredObject() {
+        UUID mediaId = UUID.randomUUID();
+        User user = new User();
+        ProjectMedia media = new ProjectMedia();
+        media.setId(mediaId);
+        media.setProject(project(UUID.randomUUID()));
+        media.setStorageKey("media/file.png");
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(projectMediaRepository.findById(mediaId)).thenReturn(Optional.of(media));
+
+        service().delete(mediaId);
+
+        verify(projectMediaRepository).delete(media);
+        verify(projectMediaRepository).flush();
+        verify(objectStorage).delete("media/file.png");
+    }
+
+    @Test
+    void deleteExtractedForDocumentRemovesOnlyItsDerivedMedia() {
+        Document source = sourceDocument();
+        ProjectMedia media = new ProjectMedia();
+        media.setStorageKey("media/" + source.getProject().getId()
+                + "/extracted/" + source.getId() + "/figure.png");
+        when(projectMediaRepository.findByStorageKeyStartingWith(any())).thenReturn(List.of(media));
+
+        service().deleteExtractedForDocument(source);
+
+        verify(projectMediaRepository).deleteAll(List.of(media));
+        verify(projectMediaRepository).flush();
+        verify(objectStorage).delete(media.getStorageKey());
     }
 
     @Test

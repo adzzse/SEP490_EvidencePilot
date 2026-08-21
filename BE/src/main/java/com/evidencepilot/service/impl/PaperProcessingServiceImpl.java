@@ -19,6 +19,7 @@ import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiModelClient;
+import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.PaperProcessingService;
 import com.evidencepilot.service.PaperStandardService;
@@ -31,12 +32,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HexFormat;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -92,6 +100,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
     private final SystemNotificationService systemNotificationService;
     private final TexArchiveBuilder texArchiveBuilder;
     private final EvidenceTraceService evidenceTraceService;
+    private final AuditService auditService;
 
     @Override
     public List<PaperSectionResponse> getPaperSections(UUID documentId) {
@@ -448,6 +457,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         }
 
         PaperSection section = requireSectionInDocument(sectionId, documentId);
+        String previousContent = section.getContentTex();
         if (title != null && !title.isBlank()) {
             section.setSectionTitle(title);
         }
@@ -456,7 +466,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         }
         if (content != null) {
             currentUserService.requireSectionContentWriteAccess(currentUser, section);
-            section.setPreviousContentTex(section.getContentTex());
+            section.setPreviousContentTex(previousContent);
             section.setContentTex(content);
             // cap at version 2 per requirement, no further increment
             int next = section.getVersion() != null ? section.getVersion() + 1 : 1;
@@ -468,6 +478,8 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
             advanceProjectStatusOnStudentContent(section.getDocument().getProject(), section, currentUser);
             evidenceTraceService.stampStaleOnContentChanged(
                     saved.getId(), saved.getContentTex(), saved.getVersion());
+            recordContentEdit(section.getDocument().getProject(), saved, currentUser,
+                    previousContent, saved.getContentTex());
         }
         return PaperSectionResponse.from(saved);
     }
@@ -524,7 +536,10 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         section.setPreviousContentTex(current);
         section.setVersion(section.getVersion() != null ? section.getVersion() - 1 : 0);
         section.setUpdatedAt(LocalDateTime.now());
-        return PaperSectionResponse.from(paperSectionRepository.save(section));
+        PaperSection saved = paperSectionRepository.save(section);
+        recordContentEdit(section.getDocument().getProject(), saved, currentUser,
+                current, saved.getContentTex());
+        return PaperSectionResponse.from(saved);
     }
 
     @Override
@@ -716,6 +731,68 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         project.setStatus(ProjectStatus.IN_PROGRESS);
         project.setUpdatedAt(LocalDateTime.now());
         projectRepository.save(project);
+    }
+
+    private static int wordCount(String content) {
+        return words(content).length;
+    }
+
+    private void recordContentEdit(Project project, PaperSection section, User editor,
+            String beforeContent, String afterContent) {
+        if (project == null || Objects.equals(beforeContent, afterContent)) return;
+        ContentWordDelta delta = contentWordDelta(beforeContent, afterContent);
+        auditService.record(
+                "SECTION_CONTENT_UPDATED",
+                "PROJECT",
+                project.getId(),
+                editor,
+                null,
+                Map.of(
+                        "sectionId", section.getId(),
+                        "sectionTitle", section.getSectionTitle(),
+                        "beforeWordCount", delta.beforeCount(),
+                        "afterWordCount", delta.afterCount(),
+                        "wordDelta", delta.afterCount() - delta.beforeCount(),
+                        "wordsAdded", delta.added(),
+                        "wordsRemoved", delta.removed(),
+                        "contentFingerprint", contentFingerprint(afterContent)));
+    }
+
+    private static ContentWordDelta contentWordDelta(String beforeContent, String afterContent) {
+        String[] beforeWords = words(beforeContent);
+        String[] afterWords = words(afterContent);
+        Map<String, Integer> beforeCounts = tokenCounts(beforeWords);
+        Map<String, Integer> afterCounts = tokenCounts(afterWords);
+        int added = 0;
+        int removed = 0;
+        for (Map.Entry<String, Integer> entry : afterCounts.entrySet()) {
+            added += Math.max(entry.getValue() - beforeCounts.getOrDefault(entry.getKey(), 0), 0);
+        }
+        for (Map.Entry<String, Integer> entry : beforeCounts.entrySet()) {
+            removed += Math.max(entry.getValue() - afterCounts.getOrDefault(entry.getKey(), 0), 0);
+        }
+        return new ContentWordDelta(beforeWords.length, afterWords.length, added, removed);
+    }
+
+    private static String[] words(String content) {
+        return content == null || content.isBlank() ? new String[0] : content.trim().split("\\s+");
+    }
+
+    private static Map<String, Integer> tokenCounts(String[] words) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (String word : words) counts.merge(word, 1, Integer::sum);
+        return counts;
+    }
+
+    private record ContentWordDelta(int beforeCount, int afterCount, int added, int removed) {}
+
+    private static String contentFingerprint(String content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest((content == null ? "" : content).getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
     }
 
     private PaperSection requireSectionInDocument(UUID sectionId, UUID documentId) {

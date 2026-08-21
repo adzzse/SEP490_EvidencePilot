@@ -31,18 +31,16 @@ import com.evidencepilot.dto.openalex.OpenAlexWorkResponse;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.DocumentObjectStorage;
 import com.evidencepilot.service.DocumentService;
+import com.evidencepilot.service.MediaAssetService;
+import com.evidencepilot.service.QdrantService;
 import com.evidencepilot.dto.request.PagingRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.minio.BucketExistsArgs;
-import io.minio.MakeBucketArgs;
-import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
-import jakarta.annotation.PostConstruct;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Subquery;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.domain.Sort;
@@ -69,9 +67,6 @@ public class DocumentServiceImpl implements DocumentService {
 
     private static final int MAX_EXTRACTED_TEXT_LENGTH = 5_000_000;
 
-    @Value("${minio.bucket-name}")
-    private String bucketName;
-
     private final DocumentRepository documentRepository;
     private final DocumentChunkRepository documentChunkRepository;
     private final DocumentTextRepository documentTextRepository;
@@ -82,26 +77,12 @@ public class DocumentServiceImpl implements DocumentService {
     private final PaperSectionRepository paperSectionRepository;
     private final CurrentUserService currentUserService;
     private final DocumentPersistenceService documentPersistenceService;
-    private final MinioClient minioClient;
     private final DocumentObjectStorage documentObjectStorage;
+    private final MediaAssetService mediaAssetService;
+    private final QdrantService qdrantService;
     private final OpenAlexClient openAlexClient;
     private final ObjectMapper objectMapper;
     private final ProjectCollectionService projectCollectionService;
-
-    @PostConstruct
-    void ensureBucketExists() {
-        try {
-            boolean found = minioClient.bucketExists(
-                    BucketExistsArgs.builder().bucket(bucketName).build());
-            if (!found) {
-                minioClient.makeBucket(
-                        MakeBucketArgs.builder().bucket(bucketName).build());
-                log.info("Created MinIO bucket: {}", bucketName);
-            }
-        } catch (Exception e) {
-            log.warn("Could not verify/create MinIO bucket '{}': {}", bucketName, e.getMessage());
-        }
-    }
 
     @Override
     public DocumentResponse getDocumentById(UUID id) {
@@ -377,19 +358,29 @@ public class DocumentServiceImpl implements DocumentService {
         // Step B: Upload to MinIO (non-transactional — holds no DB connection)
         String objectKey = "sources/raw/" + document.getId().toString() + fileExtension(originalName);
 
+        String fileHashSha256;
         try (var in = file.getInputStream()) {
-            minioClient.putObject(PutObjectArgs.builder()
-                    .bucket(bucketName)
-                    .object(objectKey)
-                    .stream(in, file.getSize(), -1)
-                    .contentType(file.getContentType())
-                    .build());
+            fileHashSha256 = documentObjectStorage.writeWithSha256(
+                    objectKey, in, file.getSize(), file.getContentType());
         } catch (Exception e) {
-            throw new RuntimeException("Failed to upload file to MinIO", e);
+            RuntimeException failure = new RuntimeException("Failed to upload file to MinIO", e);
+            deleteObjectAfterFailure(objectKey, failure);
+            try {
+                documentPersistenceService.markFailed(document.getId(), "File upload to storage failed");
+            } catch (RuntimeException statusFailure) {
+                failure.addSuppressed(statusFailure);
+            }
+            throw failure;
         }
 
         // Step C: Mark document as uploaded (transactional, publishes event after commit)
-        document = documentPersistenceService.markDocumentAsUploaded(document.getId(), objectKey);
+        try {
+            document = documentPersistenceService.markDocumentAsUploaded(
+                    document.getId(), objectKey, fileHashSha256);
+        } catch (RuntimeException e) {
+            deleteAfterFailedMetadataUpdate(objectKey, document.getId(), e);
+            throw e;
+        }
 
         if (project != null || collection != null) {
             projectCollectionService.syncSource(document);
@@ -504,7 +495,10 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     public Document getDocumentForDownload(UUID id, String token) {
         Document doc = findDocument(id);
-        if (!token.equals(doc.getDownloadToken())) {
+        if (!doc.isActive()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found");
+        }
+        if (token == null || !token.equals(doc.getDownloadToken())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid download token");
         }
         return doc;
@@ -555,7 +549,6 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
-    @Transactional
     public DocumentResponse reExtract(UUID documentId) {
         var currentUser = currentUserService.requireCurrentUser();
         Document doc = findDocument(documentId);
@@ -571,8 +564,13 @@ public class DocumentServiceImpl implements DocumentService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Document is currently " + status + " and cannot be re-extracted");
         }
+        documentObjectStorage.deleteExtractionCheckpoint(
+                documentId, doc.getFileHashSha256());
+        mediaAssetService.deleteExtractedForDocument(doc);
+        qdrantService.deleteVectors(documentId);
         return DocumentResponse.from(
-                documentPersistenceService.markDocumentAsUploaded(documentId, doc.getFileUrl()));
+                documentPersistenceService.markDocumentAsUploaded(
+                        documentId, doc.getFileUrl(), doc.getFileHashSha256()));
     }
 
     @Override
@@ -592,21 +590,27 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         String objectKey = "sources/raw/" + doc.getId().toString() + fileExtension(file.getOriginalFilename());
+        String fileHashSha256;
         try (var in = file.getInputStream()) {
-            minioClient.putObject(PutObjectArgs.builder()
-                    .bucket(bucketName)
-                    .object(objectKey)
-                    .stream(in, file.getSize(), -1)
-                    .contentType(file.getContentType())
-                    .build());
+            fileHashSha256 = documentObjectStorage.writeWithSha256(
+                    objectKey, in, file.getSize(), file.getContentType());
         } catch (Exception e) {
-            throw new RuntimeException("Failed to upload file to MinIO", e);
+            RuntimeException failure = new RuntimeException("Failed to upload file to MinIO", e);
+            deleteObjectAfterFailure(objectKey, failure);
+            throw failure;
         }
+        deleteObjectOnRollback(objectKey);
 
         doc.setContentType(file.getContentType());
         doc.setOriginalFilename(file.getOriginalFilename());
         doc.setFileSizeBytes(file.getSize());
-        doc = documentPersistenceService.markDocumentAsUploaded(doc.getId(), objectKey);
+        try {
+            doc = documentPersistenceService.markDocumentAsUploaded(
+                    doc.getId(), objectKey, fileHashSha256);
+        } catch (RuntimeException e) {
+            deleteAfterFailedMetadataUpdate(objectKey, doc.getId(), e);
+            throw e;
+        }
 
         return DocumentResponse.from(doc);
     }
@@ -618,8 +622,72 @@ public class DocumentServiceImpl implements DocumentService {
         Document doc = findDocument(id);
         requireDocumentWriteAccess(currentUser, doc);
         projectCollectionService.removeSource(doc);
+        mediaAssetService.deleteExtractedForDocument(doc);
         doc.setActive(false);
+        doc.setDownloadToken(UUID.randomUUID().toString());
         documentRepository.save(doc);
+        deleteDerivedDataAfterCommit(doc.getId(), doc.getFileHashSha256());
+    }
+
+    private void deleteAfterFailedMetadataUpdate(String objectKey, UUID documentId, RuntimeException failure) {
+        deleteObjectAfterFailure(objectKey, failure);
+        try {
+            documentPersistenceService.markFailed(documentId, "File metadata update failed");
+        } catch (RuntimeException statusFailure) {
+            failure.addSuppressed(statusFailure);
+        }
+    }
+
+    private void deleteObjectAfterFailure(String objectKey, RuntimeException failure) {
+        try {
+            documentObjectStorage.delete(objectKey);
+        } catch (RuntimeException cleanupFailure) {
+            failure.addSuppressed(cleanupFailure);
+        }
+    }
+
+    private void deleteObjectOnRollback(String objectKey) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_COMMITTED) {
+                    return;
+                }
+                try {
+                    documentObjectStorage.delete(objectKey);
+                } catch (RuntimeException e) {
+                    log.warn("Failed to delete rolled-back object {}", objectKey, e);
+                }
+            }
+        });
+    }
+
+    private void deleteDerivedDataAfterCommit(UUID documentId, String fileHashSha256) {
+        Runnable cleanup = () -> {
+            try {
+                documentObjectStorage.deleteExtractionCheckpoint(documentId, fileHashSha256);
+            } catch (RuntimeException e) {
+                log.warn("Failed to delete extraction checkpoint for document {}", documentId, e);
+            }
+            try {
+                qdrantService.deleteVectors(documentId);
+            } catch (RuntimeException e) {
+                log.warn("Failed to delete Qdrant vectors for document {}", documentId, e);
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    cleanup.run();
+                }
+            });
+        } else {
+            cleanup.run();
+        }
     }
 
     private Document findDocument(UUID id) {
@@ -945,7 +1013,8 @@ public class DocumentServiceImpl implements DocumentService {
             }
         }
 
-        String checkpointKey = "documents/processed/" + doc.getId() + "/extraction.json";
+        String checkpointKey = DocumentObjectStorage.extractionCheckpointKey(
+                doc.getId(), doc.getFileHashSha256());
         if (documentObjectStorage.exists(checkpointKey)) {
             try {
                 result.put("extractionAvailable", true);

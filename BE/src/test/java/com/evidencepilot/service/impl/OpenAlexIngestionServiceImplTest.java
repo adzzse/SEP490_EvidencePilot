@@ -168,7 +168,9 @@ class OpenAlexIngestionServiceImplTest {
             if (doc.getId() == null) doc.setId(UUID.randomUUID());
             return doc;
         });
-        when(documentPersistenceService.markDocumentAsUploaded(any(), anyString()))
+        when(documentObjectStorage.writeWithSha256(anyString(), any(byte[].class), eq("application/pdf")))
+                .thenReturn("pdf-hash");
+        when(documentPersistenceService.markDocumentAsUploaded(any(), anyString(), eq("pdf-hash")))
                 .thenAnswer(invocation -> {
                     var id = (UUID) invocation.getArgument(0);
                     var fileUrl = (String) invocation.getArgument(1);
@@ -193,7 +195,7 @@ class OpenAlexIngestionServiceImplTest {
 
         assertThat(result.processingStatus()).isEqualTo(ProcessingStatus.UPLOADED);
         assertThat(result.originalFilename()).contains("Test Paper");
-        verify(documentObjectStorage).write(anyString(), eq(pdfBytes), eq("application/pdf"));
+        verify(documentObjectStorage).writeWithSha256(anyString(), eq(pdfBytes), eq("application/pdf"));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<DocumentReference>> references = ArgumentCaptor.forClass(List.class);
@@ -229,8 +231,8 @@ class OpenAlexIngestionServiceImplTest {
                 .contains("not a valid PDF")
                 .contains("HTML bot-block page");
         assertThat(result.fileSizeBytes()).isZero();
-        verify(documentObjectStorage, never()).write(anyString(), any(byte[].class), anyString());
-        verify(documentPersistenceService, never()).markDocumentAsUploaded(any(), anyString());
+        verify(documentObjectStorage, never()).writeWithSha256(anyString(), any(byte[].class), anyString());
+        verify(documentPersistenceService, never()).markDocumentAsUploaded(any(), anyString(), any());
         verify(projectCollectionService).syncSource(any(Document.class));
     }
 

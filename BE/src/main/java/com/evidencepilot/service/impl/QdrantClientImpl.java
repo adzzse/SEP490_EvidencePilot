@@ -91,6 +91,37 @@ public class QdrantClientImpl implements QdrantClient {
         }
     }
 
+    @Override
+    public void deleteByDocumentId(String documentId) {
+        Map<String, Object> condition = Map.of(
+                "key", "document_id",
+                "match", Map.of("value", documentId));
+        Map<String, Object> body = Map.of(
+                "filter", Map.of("must", List.of(condition)));
+        String url = baseUrl + "/collections/" + COLLECTION + "/points/delete?wait=true";
+
+        try {
+            restClient.post()
+                    .uri(url)
+                    .body(body)
+                    .retrieve()
+                    .onStatus(status -> status.value() == 404, (req, res) -> {
+                        throw new CollectionNotFoundException();
+                    })
+                    .onStatus(HttpStatusCode::isError, (req, res) -> {
+                        throw new QdrantException("POST delete points", res.getStatusCode().value());
+                    })
+                    .toBodilessEntity();
+            log.debug("Deleted Qdrant points for document {}", documentId);
+        } catch (CollectionNotFoundException e) {
+            log.debug("Qdrant collection '{}' does not exist; nothing to delete", COLLECTION);
+        } catch (QdrantException e) {
+            throw e;
+        } catch (RestClientException e) {
+            throw new QdrantException("Failed to delete document vectors from Qdrant", e);
+        }
+    }
+
     // ── Read ───────────────────────────────────────────────────────────────────
 
     @Override

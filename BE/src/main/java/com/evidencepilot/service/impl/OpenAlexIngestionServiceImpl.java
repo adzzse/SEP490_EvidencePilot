@@ -31,6 +31,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -49,6 +51,7 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
 
     private static final byte[] PDF_SIGNATURE = {'%', 'P', 'D', 'F', '-'};
     private static final int PDF_HEADER_SCAN_LIMIT = 1024;
+    private static final int MAX_PDF_BYTES = 50 * 1024 * 1024;
 
     private final OpenAlexClient openAlexClient;
     private final DocumentRepository documentRepository;
@@ -147,15 +150,26 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
 
         String objectKey = "sources/raw/" + document.getId() + ".pdf";
         try (var pdfStream = openAlexClient.downloadPdf(oaUrl)) {
-            byte[] pdfBytes = pdfStream.readAllBytes();
+            byte[] pdfBytes = pdfStream.readNBytes(MAX_PDF_BYTES + 1);
+            if (pdfBytes.length > MAX_PDF_BYTES) {
+                throw new IllegalArgumentException("Downloaded PDF exceeds the 50 MB limit");
+            }
             if (!hasPdfSignature(pdfBytes)) {
                 throw new IllegalArgumentException(
                         "Downloaded content is not a valid PDF; the publisher may have returned an HTML bot-block page");
             }
-            documentObjectStorage.write(objectKey, pdfBytes, "application/pdf");
+            String fileHashSha256 = documentObjectStorage.writeWithSha256(
+                    objectKey, pdfBytes, "application/pdf");
+            deleteObjectOnRollback(objectKey);
             document.setFileSizeBytes((long) pdfBytes.length);
-            document = documentPersistenceService.markDocumentAsUploaded(document.getId(), objectKey);
+            document = documentPersistenceService.markDocumentAsUploaded(
+                    document.getId(), objectKey, fileHashSha256);
         } catch (Exception e) {
+            try {
+                documentObjectStorage.delete(objectKey);
+            } catch (RuntimeException cleanupFailure) {
+                e.addSuppressed(cleanupFailure);
+            }
             log.warn("Failed to download PDF from {} for document {}: {}. Metadata saved, user can attach file later.",
                     oaUrl, document.getId(), e.getMessage());
             document.setProcessingStatus(ProcessingStatus.METADATA_FETCHED);
@@ -168,6 +182,25 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
         projectCollectionService.syncSource(document);
 
         return DocumentResponse.from(document);
+    }
+
+    private void deleteObjectOnRollback(String objectKey) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_COMMITTED) {
+                    return;
+                }
+                try {
+                    documentObjectStorage.delete(objectKey);
+                } catch (RuntimeException e) {
+                    log.warn("Failed to delete rolled-back OpenAlex object {}", objectKey, e);
+                }
+            }
+        });
     }
 
     private static boolean hasPdfSignature(byte[] content) {

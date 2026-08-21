@@ -20,8 +20,6 @@ import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.service.impl.DocumentPersistenceService;
 import com.evidencepilot.service.impl.DocumentServiceImpl;
 import com.evidencepilot.service.impl.ProjectCollectionService;
-import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -30,7 +28,6 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -87,10 +84,13 @@ class DocumentServiceImplAccessTest {
 
 
     @Mock
-    private MinioClient minioClient;
+    private DocumentObjectStorage documentObjectStorage;
 
     @Mock
-    private DocumentObjectStorage documentObjectStorage;
+    private MediaAssetService mediaAssetService;
+
+    @Mock
+    private QdrantService qdrantService;
 
     @Mock
     private com.evidencepilot.client.openalex.OpenAlexClient openAlexClient;
@@ -174,9 +174,10 @@ class DocumentServiceImplAccessTest {
                 eq("paper.pdf"), eq("application/pdf"), eq(7L)))
                 .thenReturn(persisted);
         when(documentPersistenceService.markDocumentAsUploaded(
-                eq(persisted.getId()), anyString()))
+                eq(persisted.getId()), anyString(), eq("file-hash")))
                 .thenReturn(persisted);
-        when(minioClient.putObject(any(PutObjectArgs.class))).thenReturn(null);
+        when(documentObjectStorage.writeWithSha256(anyString(), any(), eq(7L), eq("application/pdf")))
+                .thenReturn("file-hash");
 
         service().uploadDocument(project.getId(), file, DocumentType.PAPER);
 
@@ -199,9 +200,11 @@ class DocumentServiceImplAccessTest {
                 any(), eq(collection), eq(user), eq(DocumentType.SOURCE),
                 eq("source.pdf"), eq("application/pdf"), eq(7L)))
                 .thenReturn(persisted);
-        when(documentPersistenceService.markDocumentAsUploaded(eq(persisted.getId()), anyString()))
+        when(documentPersistenceService.markDocumentAsUploaded(
+                eq(persisted.getId()), anyString(), eq("file-hash")))
                 .thenReturn(persisted);
-        when(minioClient.putObject(any(PutObjectArgs.class))).thenReturn(null);
+        when(documentObjectStorage.writeWithSha256(anyString(), any(), eq(7L), eq("application/pdf")))
+                .thenReturn("file-hash");
 
         service().uploadDocument(null, collection.getId(), file, DocumentType.SOURCE);
 
@@ -277,9 +280,10 @@ class DocumentServiceImplAccessTest {
                 eq("paper.pdf"), eq("application/pdf"), eq(7L)))
                 .thenReturn(persisted);
         when(documentPersistenceService.markDocumentAsUploaded(
-                eq(persisted.getId()), anyString()))
+                eq(persisted.getId()), anyString(), eq("file-hash")))
                 .thenReturn(persisted);
-        when(minioClient.putObject(any(PutObjectArgs.class))).thenReturn(null);
+        when(documentObjectStorage.writeWithSha256(anyString(), any(), eq(7L), eq("application/pdf")))
+                .thenReturn("file-hash");
         service().uploadDocument(project.getId(), file, DocumentType.PAPER);
 
         verify(projectCollectionService).syncSource(persisted);
@@ -294,15 +298,77 @@ class DocumentServiceImplAccessTest {
         project.setStatus(ProjectStatus.IN_PROGRESS);
         Document source = document(project);
         source.setDocType(DocumentType.SOURCE);
+        source.setFileHashSha256("file-hash");
 
         when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
         service().deleteDocument(source.getId());
 
         verify(projectCollectionService).removeSource(source);
+        verify(mediaAssetService).deleteExtractedForDocument(source);
+        verify(documentObjectStorage).deleteExtractionCheckpoint(source.getId(), "file-hash");
+        verify(qdrantService).deleteVectors(source.getId());
         assertThat(source.isActive()).isFalse();
+        assertThat(source.getDownloadToken()).isNotBlank();
         assertThat(project.getStatus()).isEqualTo(ProjectStatus.IN_PROGRESS);
         verify(projectRepository, never()).save(project);
+    }
+
+    @Test
+    void reExtractInvalidatesDerivedDataBeforeQueueing() {
+        User user = user();
+        Document source = document(project());
+        source.setProcessingStatus(ProcessingStatus.READY);
+        source.setFileHashSha256("file-hash");
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+        when(documentPersistenceService.markDocumentAsUploaded(
+                source.getId(), source.getFileUrl(), "file-hash")).thenReturn(source);
+
+        service().reExtract(source.getId());
+
+        verify(documentObjectStorage).deleteExtractionCheckpoint(source.getId(), "file-hash");
+        verify(mediaAssetService).deleteExtractedForDocument(source);
+        verify(qdrantService).deleteVectors(source.getId());
+        verify(documentPersistenceService).markDocumentAsUploaded(
+                source.getId(), source.getFileUrl(), "file-hash");
+    }
+
+    @Test
+    void downloadTokenCannotReadSoftDeletedDocument() {
+        Document source = document(project());
+        source.setActive(false);
+        source.setDownloadToken("token");
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+
+        assertThatThrownBy(() -> service().getDocumentForDownload(source.getId(), "token"))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404");
+    }
+
+    @Test
+    void uploadDeletesObjectWhenMetadataUpdateFails() throws Exception {
+        User user = user();
+        Project project = project();
+        Document pending = document(project);
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "paper.pdf", "application/pdf", "content".getBytes());
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(documentPersistenceService.savePendingDocument(
+                eq(project), any(), eq(user), eq(DocumentType.PAPER),
+                eq("paper.pdf"), eq("application/pdf"), eq(7L))).thenReturn(pending);
+        when(documentObjectStorage.writeWithSha256(anyString(), any(), eq(7L), eq("application/pdf")))
+                .thenReturn("file-hash");
+        when(documentPersistenceService.markDocumentAsUploaded(
+                pending.getId(), "sources/raw/" + pending.getId() + ".pdf", "file-hash"))
+                .thenThrow(new RuntimeException("db offline"));
+
+        assertThatThrownBy(() -> service().uploadDocument(project.getId(), file, DocumentType.PAPER))
+                .hasMessageContaining("db offline");
+
+        verify(documentObjectStorage).delete("sources/raw/" + pending.getId() + ".pdf");
+        verify(documentPersistenceService).markFailed(pending.getId(), "File metadata update failed");
     }
 
     @Test
@@ -442,7 +508,7 @@ class DocumentServiceImplAccessTest {
 
         assertThatThrownBy(() -> service().attachFileToDocument(document.getId(), file))
                 .hasMessageContaining("Project is read-only.");
-        verify(documentPersistenceService, never()).markDocumentAsUploaded(any(), anyString());
+        verify(documentPersistenceService, never()).markDocumentAsUploaded(any(), anyString(), any());
     }
 
     @Test
@@ -751,6 +817,7 @@ class DocumentServiceImplAccessTest {
         document.setProcessingStatus(ProcessingStatus.FAILED);
         document.setProcessingError("boom");
         document.setChunkCount(3);
+        document.setFileHashSha256("file-hash");
         document.setProcessedAt(java.time.LocalDateTime.of(2026, 1, 1, 12, 0));
 
         when(documentRepository.findById(document.getId())).thenReturn(Optional.of(document));
@@ -770,6 +837,8 @@ class DocumentServiceImplAccessTest {
         assertThat(diag.get("openAlexError")).isEqualTo("rate limited");
         assertThat(diag.get("extractionAvailable")).isEqualTo(true);
         assertThat(diag.get("extractionJson")).isEqualTo(Map.of("key", "value"));
+        verify(documentObjectStorage).exists(
+                "documents/processed/" + document.getId() + "/file-hash/extraction.json");
     }
 
     private DocumentServiceImpl service() {
@@ -784,12 +853,12 @@ class DocumentServiceImplAccessTest {
                 paperSectionRepository,
                 currentUserService,
                 documentPersistenceService,
-                minioClient,
                 documentObjectStorage,
+                mediaAssetService,
+                qdrantService,
                 openAlexClient,
                 new com.fasterxml.jackson.databind.ObjectMapper(),
                 projectCollectionService);
-        ReflectionTestUtils.setField(service, "bucketName", "test-bucket");
         return service;
     }
 

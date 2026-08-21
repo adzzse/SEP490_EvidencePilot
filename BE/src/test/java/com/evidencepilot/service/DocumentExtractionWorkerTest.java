@@ -22,7 +22,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,17 +32,21 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -128,8 +134,9 @@ class DocumentExtractionWorkerTest {
     void processExtractsChunksEmbedsAndMarksReadyAfterQdrant() {
         UUID documentId = UUID.randomUUID();
         Document document = document(documentId);
+        document.setFileHashSha256("file-hash");
         String markdown = "First paragraph.\n\nSecond paragraph.";
-        String checkpointKey = "documents/processed/" + documentId + "/extraction.json";
+        String checkpointKey = "documents/processed/" + documentId + "/file-hash/extraction.json";
         List<Float> vector = Collections.nCopies(768, 0.1f);
         DocumentChunk chunk = chunk(document, markdown);
         ExtractionBundle extractedBundle = bundle(markdown);
@@ -180,6 +187,66 @@ class DocumentExtractionWorkerTest {
         verify(mediaAssetService, never()).importExtractedImage(
                 any(), anyString(), any(), any(Long.class), anyString());
         verify(persistence).markReady(documentId, 1);
+    }
+
+    @Test
+    void processReusesExtractionBundleAcrossDocumentsWithTheSamePdfHash() throws Exception {
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        Document first = projectSourceDocument(firstId);
+        Document second = projectSourceDocument(secondId);
+        String hash = "a".repeat(64);
+        first.setFileHashSha256(hash);
+        second.setFileHashSha256(hash);
+        String firstCheckpoint = DocumentObjectStorage.extractionCheckpointKey(firstId, hash);
+        String secondCheckpoint = DocumentObjectStorage.extractionCheckpointKey(secondId, hash);
+        String cacheKey = DocumentObjectStorage.extractionCacheKey(hash);
+        String markdown = "Extracted source.";
+        TestBundle archive = bundleWithImage(markdown);
+        AtomicReference<byte[]> cachedBundle = new AtomicReference<>();
+
+        when(documentRepository.findById(firstId)).thenReturn(Optional.of(first));
+        when(documentRepository.findById(secondId)).thenReturn(Optional.of(second));
+        when(documentObjectStorage.exists(firstCheckpoint)).thenReturn(false);
+        when(documentObjectStorage.exists(secondCheckpoint)).thenReturn(false);
+        when(documentObjectStorage.exists(cacheKey)).thenReturn(false, true);
+        when(aiModelClient.extractDocument(eq("source.pdf"), anyString()))
+                .thenReturn(archive.bundle());
+        doAnswer(invocation -> {
+            try (InputStream content = invocation.getArgument(1)) {
+                cachedBundle.set(content.readAllBytes());
+            }
+            return null;
+        }).when(documentObjectStorage).write(
+                eq(cacheKey), any(InputStream.class), anyLong(), eq("application/zip"));
+        when(documentObjectStorage.getStream(cacheKey))
+                .thenAnswer(invocation -> new ByteArrayInputStream(cachedBundle.get()));
+        when(aiModelClient.generateEmbeddings(List.of(markdown)))
+                .thenReturn(List.of(Collections.nCopies(768, 0.1f)));
+        when(sparseVectorGenerator.generate(markdown))
+                .thenReturn(new SparseVector(List.of(), List.of()));
+        when(persistence.saveExtraction(firstId, "mineru", markdown, List.of(markdown)))
+                .thenReturn(List.of(chunk(first, markdown)));
+        when(persistence.saveExtraction(secondId, "mineru", markdown, List.of(markdown)))
+                .thenReturn(List.of(chunk(second, markdown)));
+
+        DocumentExtractionWorkerImpl worker = worker();
+        worker.process(firstId);
+        worker.process(secondId);
+
+        verify(aiModelClient, times(1)).extractDocument(eq("source.pdf"), anyString());
+        verify(documentObjectStorage, times(1)).write(
+                eq(cacheKey), any(InputStream.class), anyLong(), eq("application/zip"));
+        verify(documentObjectStorage).getStream(cacheKey);
+        verify(documentObjectStorage).write(
+                eq(firstCheckpoint), any(byte[].class), eq("application/json"));
+        verify(documentObjectStorage).write(
+                eq(secondCheckpoint), any(byte[].class), eq("application/json"));
+        verify(mediaAssetService, times(2)).importExtractedImage(
+                any(Document.class), eq("images/figure.jpg"), any(InputStream.class),
+                eq(3L), eq("image/jpeg"));
+        assertThat(cachedBundle.get()).isNotEmpty();
+        assertThat(Files.exists(archive.path())).isFalse();
     }
 
     @Test
