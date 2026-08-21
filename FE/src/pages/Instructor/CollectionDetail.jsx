@@ -585,7 +585,7 @@ export default function CollectionDetail() {
         positioned[i].y = positioned[i].baseY + r * Math.sin(angle);
         attempts++;
       }
-      // spiral offset up to 200 attempts per node, sufficient for < 200 nodes
+      // ponytail: O(n²) spiral placement caps at 200 attempts; use a layout engine if graphs approach 200 nodes.
     }
 
     const nodes = new DataSet(positioned.map(p => {

@@ -159,14 +159,14 @@ public class DocumentServiceImpl implements DocumentService {
                 page, size, sort, DOCUMENT_SORT_FIELDS, "createdAt,desc");
         var results = documentRepository.findAll(
                 collectionSourceSpec(collectionId, q), pageable);
-        // ponytail: per-doc query for shared project links — fine at collection scale,
-        // batch via findByDocumentIdIn if collections ever grow large
+        Map<UUID, List<UUID>> projectIdsByDocument = new LinkedHashMap<>();
+        projectDocumentRepository.findByDocumentIdIn(
+                        results.getContent().stream().map(Document::getId).toList())
+                .forEach(link -> projectIdsByDocument
+                        .computeIfAbsent(link.getDocument().getId(), ignored -> new ArrayList<>())
+                        .add(link.getProject().getId()));
         var pageContent = results.map(doc -> DocumentResponse.from(
-                doc,
-                projectDocumentRepository.findByDocumentId(doc.getId()).stream()
-                        .map(ProjectDocument::getProject)
-                        .map(Project::getId)
-                        .toList()));
+                doc, projectIdsByDocument.getOrDefault(doc.getId(), List.of())));
         return PagedResponse.from(pageContent);
     }
 

@@ -40,6 +40,10 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
       if (!v) return '';
       return v.state.sliceDoc(v.state.selection.main.from, v.state.selection.main.to);
     },
+    getSelectionRange: () => {
+      const selection = viewRef.current?.state.selection.main;
+      return selection ? { from: selection.from, to: selection.to } : null;
+    },
     insertAtCursor: (text, cursorOffset) => {
       const v = viewRef.current;
       if (!v) return null;

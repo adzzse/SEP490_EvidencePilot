@@ -643,25 +643,35 @@ class DocumentServiceImplAccessTest {
         Document source = document(null);
         source.setDocType(DocumentType.SOURCE);
         source.setOriginalFilename("evidence.pdf");
+        Document secondSource = document(null);
+        secondSource.setDocType(DocumentType.SOURCE);
+        secondSource.setOriginalFilename("second-evidence.pdf");
         Project targetProject = project();
         targetProject.setTitle("Capstone A");
         ProjectDocument projectDocument = new ProjectDocument();
         projectDocument.setProject(targetProject);
         projectDocument.setDocument(source);
+        ProjectDocument secondProjectDocument = new ProjectDocument();
+        secondProjectDocument.setProject(targetProject);
+        secondProjectDocument.setDocument(secondSource);
 
         when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(collectionRepository.findById(collection.getId())).thenReturn(Optional.of(collection));
         when(documentRepository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(source)));
-        when(projectDocumentRepository.findByDocumentId(source.getId()))
-                .thenReturn(List.of(projectDocument));
+                .thenReturn(new PageImpl<>(List.of(source, secondSource)));
+        when(projectDocumentRepository.findByDocumentIdIn(
+                List.of(source.getId(), secondSource.getId())))
+                .thenReturn(List.of(projectDocument, secondProjectDocument));
 
         var page = service().getSourcesByCollection(
                 collection.getId(), 0, 10, "createdAt,desc", null);
 
-        assertThat(page.content()).singleElement()
+        assertThat(page.content())
                 .extracting(response -> response.projectIds())
-                .isEqualTo(List.of(targetProject.getId()));
+                .containsExactly(List.of(targetProject.getId()), List.of(targetProject.getId()));
+        verify(projectDocumentRepository).findByDocumentIdIn(
+                List.of(source.getId(), secondSource.getId()));
+        verify(projectDocumentRepository, never()).findByDocumentId(any());
         verify(currentUserService).requireCollectionAccess(user, collection);
     }
 

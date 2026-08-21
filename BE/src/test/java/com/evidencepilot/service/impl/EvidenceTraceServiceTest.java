@@ -81,7 +81,9 @@ class EvidenceTraceServiceTest {
     @Test
     void decide_changedSectionStoresTrimmedActionAndServerSnapshot() {
         Fixture fixture = fixture();
-        fixture.section.setContentTex("Updated claim with supporting detail.");
+        String prefix = "x".repeat(200);
+        String revised = "Updated claim";
+        fixture.section.setContentTex(prefix + revised + "y".repeat(200));
         fixture.section.setVersion(4);
         when(traceRepository.findById(fixture.trace.getId()))
                 .thenReturn(Optional.of(fixture.trace));
@@ -92,15 +94,41 @@ class EvidenceTraceServiceTest {
                 fixture.document.getId(),
                 fixture.section.getId(),
                 fixture.trace.getId(),
-                decision(StudentAction.PARAPHRASE, "  Clarified the claim.  "));
+                decision(
+                        StudentAction.PARAPHRASE,
+                        "  Clarified the claim.  ",
+                        4,
+                        prefix.length(),
+                        prefix.length() + revised.length()));
 
         assertThat(response.studentAction()).isEqualTo(StudentAction.PARAPHRASE);
         assertThat(response.explanation()).isEqualTo("Clarified the claim.");
-        assertThat(response.afterPassage()).contains("Updated claim");
+        assertThat(response.afterPassage()).contains(revised);
         assertThat(response.afterSectionVersion()).isEqualTo(4);
         assertThat(response.outcome()).isEqualTo(TraceOutcome.STALE);
         assertThat(fixture.trace.getAfterFingerprint()).isEqualTo("after-fingerprint");
         assertThat(fixture.trace.getRoundDurationMs()).isNotNegative();
+    }
+
+    @Test
+    void decide_rejectsRangeFromAnOlderSectionVersion() {
+        Fixture fixture = fixture();
+        fixture.section.setContentTex("Updated claim with supporting detail.");
+        fixture.section.setVersion(4);
+        when(traceRepository.findById(fixture.trace.getId()))
+                .thenReturn(Optional.of(fixture.trace));
+        when(reviewService.sectionContentFingerprint(fixture.section))
+                .thenReturn("after-fingerprint");
+
+        assertThatThrownBy(() -> service.decide(
+                fixture.document.getId(),
+                fixture.section.getId(),
+                fixture.trace.getId(),
+                decision(StudentAction.PARAPHRASE, "Clarified the claim.", 3, 0, 13)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("SECTION_VERSION_CHANGED");
+
+        verify(traceRepository, never()).save(fixture.trace);
     }
 
     @Test
@@ -134,7 +162,12 @@ class EvidenceTraceServiceTest {
                 fixture.document.getId(),
                 fixture.section.getId(),
                 fixture.trace.getId(),
-                decision(StudentAction.DISMISS_WITH_REASON, "The existing citation already supports it."));
+                decision(
+                        StudentAction.DISMISS_WITH_REASON,
+                        "The existing citation already supports it.",
+                        3,
+                        null,
+                        null));
 
         assertThat(response.studentAction()).isEqualTo(StudentAction.DISMISS_WITH_REASON);
         assertThat(response.outcome()).isEqualTo(TraceOutcome.UNRESOLVED);
@@ -157,17 +190,23 @@ class EvidenceTraceServiceTest {
     }
 
     @Test
-    void stampStaleStoresTheNewContentFingerprint() {
+    void stampStaleClearsOutdatedPassageWhenContentShrinks() {
         Fixture fixture = fixture();
+        fixture.trace.setStudentAction(StudentAction.DISMISS_WITH_REASON);
+        fixture.trace.setOutcome(TraceOutcome.UNRESOLVED);
+        fixture.trace.setAfterPassage("Outdated revised passage");
+        fixture.trace.setExcerptStart(500);
+        fixture.trace.setExcerptEnd(510);
         when(traceRepository.findBySectionIdOrderByCreatedAtDesc(fixture.section.getId()))
                 .thenReturn(List.of(fixture.trace));
-        when(reviewService.sectionContentFingerprint("Updated claim."))
+        when(reviewService.sectionContentFingerprint("x"))
                 .thenReturn("updated-content-fingerprint");
 
         service.stampStaleOnContentChanged(
-                fixture.section.getId(), "Updated claim.", 4);
+                fixture.section.getId(), "x", 4);
 
         assertThat(fixture.trace.getOutcome()).isEqualTo(TraceOutcome.STALE);
+        assertThat(fixture.trace.getAfterPassage()).isNull();
         assertThat(fixture.trace.getAfterFingerprint())
                 .isEqualTo("updated-content-fingerprint");
         assertThat(fixture.trace.getAfterSectionVersion()).isEqualTo(4);
@@ -218,6 +257,7 @@ class EvidenceTraceServiceTest {
             return saved;
         });
         fixture.trace.setStudentAction(StudentAction.QUALIFY);
+        fixture.trace.setAfterPassage("The revised claim.");
         when(traceRepository.findByRoundIdOrderByFindingIndex(fixture.round.getId()))
                 .thenReturn(List.of(fixture.trace));
 
@@ -297,10 +337,30 @@ class EvidenceTraceServiceTest {
     }
 
     @Test
+    void recheck_skipsTraceWithoutReliableRevisedPassage() {
+        Fixture fixture = fixture();
+        CitationReviewRound linkedRound = linkedRound(fixture);
+        fixture.trace.setStudentAction(StudentAction.QUALIFY);
+        when(roundRepository.findById(fixture.round.getId()))
+                .thenReturn(Optional.of(fixture.round));
+        when(roundRepository.findById(linkedRound.getId()))
+                .thenReturn(Optional.of(linkedRound));
+        when(traceRepository.findByRoundIdOrderByFindingIndex(fixture.round.getId()))
+                .thenReturn(List.of(fixture.trace));
+
+        int count = service.recheck(
+                fixture.project.getId(), fixture.round.getId(), linkedRound.getId());
+
+        assertThat(count).isZero();
+        verify(aiModelClient, never()).generateForReview(anyString(), anyString());
+    }
+
+    @Test
     void recheck_aiFailureLeavesInstructorStateUntouched() {
         Fixture fixture = fixture();
         CitationReviewRound linkedRound = linkedRound(fixture);
         fixture.trace.setStudentAction(StudentAction.QUALIFY);
+        fixture.trace.setAfterPassage("The revised claim.");
         fixture.trace.setJudgment(InstructorJudgment.PARTIAL);
         fixture.trace.setInstructorFeedback("Keep this human review");
         fixture.trace.setOutcome(TraceOutcome.PARTIALLY_RESOLVED);
@@ -326,7 +386,25 @@ class EvidenceTraceServiceTest {
     }
 
     private TraceDecisionRequest decision(StudentAction action, String explanation) {
-        return new TraceDecisionRequest(action, explanation, null, null, null, null);
+        return decision(action, explanation, 3, 0, 8);
+    }
+
+    private TraceDecisionRequest decision(
+            StudentAction action,
+            String explanation,
+            Integer sectionVersion,
+            Integer revisedStartOffset,
+            Integer revisedEndOffset) {
+        return new TraceDecisionRequest(
+                action,
+                explanation,
+                null,
+                null,
+                null,
+                null,
+                sectionVersion,
+                revisedStartOffset,
+                revisedEndOffset);
     }
 
     private SectionCitationReviewResponse reviewResponse(PaperSection section) {

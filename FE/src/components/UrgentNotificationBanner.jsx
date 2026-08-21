@@ -23,7 +23,7 @@ export default function UrgentNotificationBanner() {
       }
     }).catch(() => {});
 
-    // the student workspace keeps its existing inbox socket; unify them if notification traffic grows.
+    // ponytail: banner, bell, and student workspace keep separate inbox sockets; share one if notification traffic grows.
     const client = new Client({
       brokerURL: baseURL.replace(/^http/, 'ws') + '/ws',
       connectHeaders: { Authorization: `Bearer ${token}` },

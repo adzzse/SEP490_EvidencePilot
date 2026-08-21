@@ -112,7 +112,7 @@ public class EvidenceTraceService {
         traceRepository.saveAll(traces);
         boolean recheckRequired = previousRound != null
                 && traceRepository.findByRoundIdOrderByFindingIndex(previousRound.getId()).stream()
-                        .anyMatch(trace -> trace.getStudentAction() != null);
+                        .anyMatch(EvidenceTraceService::isRecheckable);
         return new RoundMaterialization(
                 round.getId(),
                 previousRound == null ? null : previousRound.getId(),
@@ -148,9 +148,7 @@ public class EvidenceTraceService {
                     HttpStatus.CONFLICT,
                     "SECTION_NOT_CHANGED: this action requires a saved section revision");
         }
-        // ponytail: blind substring around the frozen excerpt offsets; becomes
-        // misaligned garbage after heavy rewrites. Upgrade path: diff against
-        // project_checkpoints.snapshot_json instead of offset arithmetic.
+        String revisedPassage = revisedPassage(section, trace, request, sectionChanged);
         trace.setStudentAction(request.studentAction());
         trace.setExplanation(request.explanation().trim());
         if (request.sourceId() != null) {
@@ -162,8 +160,7 @@ public class EvidenceTraceService {
         }
         trace.setEvidenceQuote(request.evidenceQuote());
         trace.setEvidenceRelation(request.relation());
-        trace.setAfterPassage(passageAround(section.getContentTex(),
-                trace.getExcerptStart(), trace.getExcerptEnd()));
+        trace.setAfterPassage(revisedPassage);
         trace.setAfterFingerprint(currentFingerprint);
         trace.setAfterSectionVersion(section.getVersion());
         LocalDateTime now = LocalDateTime.now();
@@ -184,7 +181,7 @@ public class EvidenceTraceService {
                 .toList();
         for (EvidenceRevisionTrace trace : open) {
             trace.setOutcome(TraceOutcome.STALE);
-            trace.setAfterPassage(passageAround(content, trace.getExcerptStart(), trace.getExcerptEnd()));
+            trace.setAfterPassage(null);
             trace.setAfterFingerprint(contentFingerprint);
             trace.setAfterSectionVersion(version);
         }
@@ -204,7 +201,7 @@ public class EvidenceTraceService {
         }
         List<EvidenceRevisionTrace> candidates = traceRepository
                 .findByRoundIdOrderByFindingIndex(previousRoundId).stream()
-                .filter(trace -> trace.getStudentAction() != null)
+                .filter(EvidenceTraceService::isRecheckable)
                 .toList();
         if (candidates.isEmpty()) {
             return 0;
@@ -407,12 +404,53 @@ public class EvidenceTraceService {
                 trace.getCreatedAt());
     }
 
+    private static String revisedPassage(
+            PaperSection section,
+            EvidenceRevisionTrace trace,
+            TraceDecisionRequest request,
+            boolean sectionChanged) {
+        if (!Objects.equals(request.sectionVersion(), section.getVersion())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "SECTION_VERSION_CHANGED: reload the section and select the revised passage again");
+        }
+        String content = section.getContentTex() == null ? "" : section.getContentTex();
+        Integer start = request.revisedStartOffset();
+        Integer end = request.revisedEndOffset();
+        if (start == null || end == null) {
+            if (request.studentAction() != StudentAction.DISMISS_WITH_REASON || sectionChanged) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "REVISED_PASSAGE_REQUIRED: select the revised passage in the saved section");
+            }
+            return passageAround(content, trace.getExcerptStart(), trace.getExcerptEnd());
+        }
+        if (start < 0 || end < start || end > content.length()
+                || (start.equals(end) && request.studentAction() != StudentAction.REMOVE)
+                || (request.studentAction() != StudentAction.REMOVE
+                        && content.substring(start, end).isBlank())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "INVALID_REVISED_RANGE: select a valid revised passage in the saved section");
+        }
+        return passageAround(content, start, end);
+    }
+
+    private static boolean isRecheckable(EvidenceRevisionTrace trace) {
+        return trace.getStudentAction() != null
+                && trace.getAfterPassage() != null
+                && !trace.getAfterPassage().isBlank();
+    }
+
     private static String passageAround(String content, int start, int end) {
         if (content == null || content.isBlank()) {
             return "";
         }
-        int from = Math.max(0, start - PASSAGE_RADIUS);
-        int to = Math.min(content.length(), end + PASSAGE_RADIUS);
+        int length = content.length();
+        int safeStart = Math.max(0, Math.min(start, length));
+        int safeEnd = Math.max(safeStart, Math.min(end, length));
+        int from = Math.max(0, safeStart - PASSAGE_RADIUS);
+        int to = (int) Math.min(length, (long) safeEnd + PASSAGE_RADIUS);
         String passage = content.substring(from, to);
         return passage.length() > EVIDENCE_TEXT_LIMIT
                 ? passage.substring(0, EVIDENCE_TEXT_LIMIT) : passage;

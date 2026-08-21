@@ -884,7 +884,7 @@ export default function WorkspaceLayout() {
       setSaveStatus('saved');
       dirtySectionsRef.current.delete(sectionId);
       saveStatusTimerRef.current = window.setTimeout(() => setSaveStatus(''), 3000);
-      return { paperId, sectionId, content };
+      return { paperId, sectionId, content, version: updated?.version };
     } catch (error) {
       setSaveStatus('error');
       const status = error?.response?.status;
@@ -1018,12 +1018,29 @@ export default function WorkspaceLayout() {
 
   const handleDecideTrace = async (trace, decision) => {
     if (!selectedPaper || !selectedSectionId) return;
+    const range = editorRef.current?.getSelectionRange();
+    const selectedRange = range && (range.from !== range.to || decision.studentAction === 'REMOVE')
+      ? range
+      : null;
+    if (decision.studentAction !== 'DISMISS_WITH_REASON' && !selectedRange) {
+      const message = t('revisedPassageSelectionRequired');
+      setTraceError(message);
+      showToast(message);
+      return false;
+    }
+    const saved = await handleSaveDraft();
+    if (!saved) return false;
     setUpdatingTraceIds(prev => [...new Set([...prev, trace.id])]);
     setTraceError('');
     try {
       const { data } = await api.patch(
         `/api/papers/${selectedPaper.id}/sections/${selectedSectionId}/traces/${trace.id}`,
-        decision,
+        {
+          ...decision,
+          sectionVersion: saved.version,
+          revisedStartOffset: selectedRange?.from ?? null,
+          revisedEndOffset: selectedRange?.to ?? null,
+        },
       );
       applyTraceResult(data);
       showToast(t('traceDecisionSaved'));
@@ -1035,12 +1052,20 @@ export default function WorkspaceLayout() {
           ? t('traceAlreadyJudged')
           : errorCode.includes('SECTION_NOT_CHANGED')
             ? t('traceSectionNotChanged')
-            : t('traceDecisionConflict');
+            : errorCode.includes('SECTION_VERSION_CHANGED')
+              ? t('traceSectionVersionChanged')
+              : t('traceDecisionConflict');
         setTraceError(message);
         showToast(message);
         fetchSectionTraces();
       } else {
-        showToast(t('traceDecisionFailed'));
+        const errorCode = error.response?.data?.message || '';
+        const message = errorCode.includes('REVISED_PASSAGE_REQUIRED')
+                || errorCode.includes('INVALID_REVISED_RANGE')
+          ? t('revisedPassageSelectionRequired')
+          : t('traceDecisionFailed');
+        setTraceError(message);
+        showToast(message);
       }
       throw error;
     } finally {

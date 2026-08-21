@@ -519,7 +519,7 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.AI_EVALUATION_QUEUE, Map.of("jobId", job.getId().toString()));
         } catch (Exception e) {
-            // job stays PENDING and is re-enqueued on next startup
+            // ponytail: publish failure leaves the job PENDING until restart; add retry scheduling if recovery cannot wait.
             log.error("Failed to publish AI evaluation job {}: {}", job.getId(), e.getMessage());
         }
     }

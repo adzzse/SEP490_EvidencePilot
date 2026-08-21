@@ -283,11 +283,16 @@ export default function CitationReviewList({
                           placeholder={t('explanationPlaceholder')} />
                         <span className="mt-0.5 block text-right text-[9px] text-(--text-tertiary)">{decideDraft.explanation.length}/2000</span>
                       </label>
+                      {decideDraft.action && decideDraft.action !== 'DISMISS_WITH_REASON' && (
+                        <p className="text-[9px] leading-relaxed text-amber-700">
+                          {t('revisedPassageSelectionRequired')}
+                        </p>
+                      )}
                       <div className="flex gap-2">
                         <button type="button" disabled={!decideDraft.action || !decideDraft.explanation.trim() || traceUpdating}
                           onClick={async () => {
                             try {
-                              await onDecideTrace(trace, {
+                              const updated = await onDecideTrace(trace, {
                                 studentAction: decideDraft.action,
                                 sourceId: decideDraft.sourceId || null,
                                 chunkId: decideDraft.chunkId || null,
@@ -295,7 +300,7 @@ export default function CitationReviewList({
                                 relation: decideDraft.relation || null,
                                 explanation: decideDraft.explanation.trim(),
                               });
-                              setDecideDraft(null);
+                              if (updated) setDecideDraft(null);
                             } catch { /* toast shown by parent */ }
                           }}
                           className="flex-1 rounded-lg bg-(--brand) px-2 py-1.5 text-[10px] font-bold text-(--on-brand) hover:bg-(--brand-hover) disabled:opacity-40">

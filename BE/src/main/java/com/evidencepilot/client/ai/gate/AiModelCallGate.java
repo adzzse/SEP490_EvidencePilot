@@ -11,10 +11,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
- * ponytail: one choke point for the hardware concurrency cap + per-minute pacing
- * so bursts stay under the provider's rate limit (ngrok free tier ~20 req/min).
- * No circuit breaker: retries in {@link com.evidencepilot.service.impl.AiModelClientImpl}
- * handle transient 429/502/503/504, and a breaker turns recoverable 429s into fatal 503s.
+ * ponytail: one JVM-local choke point for the hardware concurrency cap and pacing.
+ * The default 4-second interval starts at most about 15 calls/minute/JVM. Add a
+ * distributed limiter before 2+ JVMs share one provider quota. Add a circuit breaker
+ * if final 5xx or transport failures exceed 50% of at least 20 calls in 5 minutes
+ * after client retries; revisit that baseline with production metrics.
  */
 @Component
 public class AiModelCallGate {
