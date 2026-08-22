@@ -51,9 +51,12 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
 
     @Override
     public void process(UUID documentId) {
+        if (!documentPersistenceService.markProcessing(documentId)) {
+            log.info("Skipping extraction message for document {} because it is no longer QUEUED", documentId);
+            return;
+        }
         Document document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException(documentId, "Document"));
-        documentPersistenceService.markProcessing(documentId);
         try {
             processDocument(document);
         } catch (RuntimeException e) {

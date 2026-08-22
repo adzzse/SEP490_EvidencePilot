@@ -21,13 +21,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -83,6 +87,8 @@ class ProgressReportServiceImplTest {
         edit.setActor(previousAssignee);
         edit.setNewValue("{\"wordDelta\":2,\"sectionTitle\":\"Introduction\"}");
         edit.setOccurredAt(LocalDateTime.now().minusDays(1));
+        LocalDate from = LocalDate.now().minusDays(7);
+        LocalDate to = LocalDate.now();
 
         when(currentUserService.requireCurrentUser()).thenReturn(instructor);
         when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
@@ -97,11 +103,11 @@ class ProgressReportServiceImplTest {
                         member(project, previousAssignee),
                         member(project, currentAssignee),
                         member(project, idleStudent)));
-        when(auditLogRepository.findByActionAndEntityTypeAndEntityIdOrderByOccurredAtAsc(
-                "SECTION_CONTENT_UPDATED", "PROJECT", project.getId()))
+        when(auditLogRepository.findProjectEditsWithin(
+                project.getId(), from.atStartOfDay(), to.plusDays(1).atStartOfDay()))
                 .thenReturn(List.of(edit));
 
-        var report = service.getProgressReport(project.getId(), "ALL");
+        var report = service.getProgressReport(project.getId(), "ALL", from, to);
 
         assertThat(report.sections()).singleElement().satisfies(panel -> {
             assertThat(panel.assignedUserId()).isEqualTo(currentAssignee.getId());
@@ -138,6 +144,22 @@ class ProgressReportServiceImplTest {
                     assertThat(item.assignedSectionCount()).isZero();
                     assertThat(item.saveCount()).isZero();
                 });
+        verify(auditLogRepository).findProjectEditsWithin(
+                project.getId(), from.atStartOfDay(), to.plusDays(1).atStartOfDay());
+    }
+
+    @Test
+    void rejectsIncompleteOrReversedDateRange() {
+        LocalDate today = LocalDate.now();
+
+        assertThatThrownBy(() -> service.getProgressReport(
+                UUID.randomUUID(), "ALL", today, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Provide both from and to");
+        assertThatThrownBy(() -> service.getProgressReport(
+                UUID.randomUUID(), "ALL", today, today.minusDays(1)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("from on or before to");
     }
 
     private static ProjectMember member(Project project, User user) {

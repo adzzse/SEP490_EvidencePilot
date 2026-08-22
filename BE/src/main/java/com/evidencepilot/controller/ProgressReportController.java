@@ -6,12 +6,14 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @RestController
@@ -29,7 +31,11 @@ public class ProgressReportController {
     public ProgressReportResponse getProgressReport(
             @Parameter(description = "Project UUID") @PathVariable UUID projectId,
             @Parameter(description = "ALL or a Student UUID to filter contribution evidence")
-            @RequestParam(value = "memberFilter", required = false) String memberFilter) {
-        return progressReportService.getProgressReport(projectId, memberFilter);
+            @RequestParam(value = "memberFilter", required = false) String memberFilter,
+            @Parameter(description = "First edit date to include (ISO-8601)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @Parameter(description = "Last edit date to include (ISO-8601)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return progressReportService.getProgressReport(projectId, memberFilter, from, to);
     }
 }

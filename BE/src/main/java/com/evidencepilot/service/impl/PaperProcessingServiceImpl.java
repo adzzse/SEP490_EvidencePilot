@@ -225,23 +225,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                     .orElse(minimumLevel);
         }
 
-        LinkedHashSet<String> academicHeadings = new LinkedHashSet<>();
-        for (AiModelClient.ExtractionBlock block : blocks) {
-            if (("heading".equals(block.type()) || "reference".equals(block.type()))
-                    && academicHeading(block.text()) != null) {
-                academicHeadings.add(normalizeHeading(block.text()));
-            }
-        }
-
         int resolvedSectionLevel = sectionLevel;
-        boolean hasDeeperHeadings = headings.stream()
-                .anyMatch(block -> block.level() > resolvedSectionLevel);
-        if (!hasDeeperHeadings && academicHeadings.size() >= 2) {
-            // ponytail: MinerU can flatten every body heading to one level; use
-            // academic anchors until the extractor emits reliable hierarchy.
-            return academicHeadings;
-        }
-
         LinkedHashSet<String> selected = new LinkedHashSet<>();
         for (AiModelClient.ExtractionBlock block : headings) {
             if (block.level() == resolvedSectionLevel) {

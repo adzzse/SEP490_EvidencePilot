@@ -5,11 +5,13 @@ import com.evidencepilot.model.Document;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.service.impl.SourceExtractionServiceImpl;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,6 +30,15 @@ class SourceExtractionServiceImplTest {
     private final RabbitTemplate rabbit = mock(RabbitTemplate.class);
     private final SourceExtractionServiceImpl service = new SourceExtractionServiceImpl(documents, rabbit);
 
+    @BeforeEach
+    void allowQueueTransition() {
+        when(documents.queueForExtraction(
+                any(UUID.class),
+                eq(List.of(ProcessingStatus.UPLOADED, ProcessingStatus.QUEUED)),
+                eq(ProcessingStatus.QUEUED)))
+                .thenReturn(1);
+    }
+
     @Test
     void triggerExtractionMarksQueuedAndPublishesRequest() {
         UUID id = UUID.randomUUID();
@@ -36,14 +47,17 @@ class SourceExtractionServiceImplTest {
 
         service.triggerExtraction(id);
 
-        assertThat(document.getProcessingStatus()).isEqualTo(ProcessingStatus.QUEUED);
+        verify(documents).queueForExtraction(
+                id,
+                List.of(ProcessingStatus.UPLOADED, ProcessingStatus.QUEUED),
+                ProcessingStatus.QUEUED);
         var captor = ArgumentCaptor.forClass(ExtractionRequest.class);
         verify(rabbit).convertAndSend(eq("extraction.queue"), captor.capture());
         assertThat(captor.getValue().documentId()).isEqualTo(id);
     }
 
     @Test
-    void triggerExtractionMarksFailedWhenPublishFails() {
+    void triggerExtractionKeepsQueuedWhenPublishFails() {
         UUID id = UUID.randomUUID();
         Document document = document(id);
         when(documents.findById(id)).thenReturn(Optional.of(document));
@@ -52,8 +66,43 @@ class SourceExtractionServiceImplTest {
 
         service.triggerExtraction(id);
 
-        assertThat(document.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED);
-        assertThat(document.getProcessingError()).isEqualTo("Failed to queue extraction");
+        verify(documents).queueForExtraction(
+                id,
+                List.of(ProcessingStatus.UPLOADED, ProcessingStatus.QUEUED),
+                ProcessingStatus.QUEUED);
+    }
+
+    @Test
+    void reenqueuePendingExtractionsPublishesUploadedAndQueuedDocuments() {
+        Document uploaded = document(UUID.randomUUID());
+        Document queued = document(UUID.randomUUID());
+        when(documents.findIdsByProcessingStatusInAndActiveTrue(
+                List.of(ProcessingStatus.UPLOADED, ProcessingStatus.QUEUED)))
+                .thenReturn(List.of(uploaded.getId(), queued.getId()));
+
+        service.reenqueuePendingExtractions();
+
+        verify(rabbit).convertAndSend(
+                eq("extraction.queue"), eq(new ExtractionRequest(uploaded.getId())));
+        verify(rabbit).convertAndSend(
+                eq("extraction.queue"), eq(new ExtractionRequest(queued.getId())));
+    }
+
+    @Test
+    void reenqueueDoesNotPublishAfterDocumentLeavesQueue() {
+        UUID id = UUID.randomUUID();
+        when(documents.findIdsByProcessingStatusInAndActiveTrue(
+                List.of(ProcessingStatus.UPLOADED, ProcessingStatus.QUEUED)))
+                .thenReturn(List.of(id));
+        when(documents.queueForExtraction(
+                id,
+                List.of(ProcessingStatus.UPLOADED, ProcessingStatus.QUEUED),
+                ProcessingStatus.QUEUED))
+                .thenReturn(0);
+
+        service.reenqueuePendingExtractions();
+
+        verifyNoInteractions(rabbit);
     }
 
     @Test

@@ -95,7 +95,7 @@ class PaperProcessingServiceImplTest {
     }
 
     @Test
-    void keepsFlattenedMineruSubsectionsInsideTopLevelAcademicSections() {
+    void usesExtractorHierarchyForTopLevelSections() {
         UUID documentId = UUID.randomUUID();
         Document document = new Document();
         document.setId(documentId);
@@ -138,14 +138,14 @@ class PaperProcessingServiceImplTest {
                 heading("Abstract", 2),
                 heading("Introduction", 2),
                 heading("Material and methods Study design", 2),
-                heading("Population", 2),
-                heading("Laboratory methods", 2),
-                heading("Leptin and Vaspin Quantification: Enzymatic Method (Diasource, KAP2281)", 2),
-                heading("Statistical analysis", 2),
+                heading("Population", 3),
+                heading("Laboratory methods", 3),
+                heading("Leptin and Vaspin Quantification: Enzymatic Method (Diasource, KAP2281)", 3),
+                heading("Statistical analysis", 3),
                 heading("Results", 2),
-                heading("Adipokine level correlation analysis and principal component scores", 2),
+                heading("Adipokine level correlation analysis and principal component scores", 3),
                 heading("Discussion", 2),
-                heading("Study limitations", 2),
+                heading("Study limitations", 3),
                 heading("Conclusions", 2),
                 heading("Acknowledgments", 2),
                 new AiModelClient.ExtractionBlock("reference", "References", null, null));

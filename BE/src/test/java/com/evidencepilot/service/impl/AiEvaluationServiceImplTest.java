@@ -13,6 +13,7 @@ import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ReviewGuideRepository;
 import com.evidencepilot.service.AiModelClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -34,6 +35,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,6 +49,11 @@ class AiEvaluationServiceImplTest {
     private final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private final EvidenceTraceService evidenceTraceService = mock(EvidenceTraceService.class);
+
+    @BeforeEach
+    void allowPendingClaim() {
+        when(jobRepository.claimPending(any(UUID.class), any(LocalDateTime.class))).thenReturn(1);
+    }
 
     private AiEvaluationServiceImpl service() {
         return new AiEvaluationServiceImpl(
@@ -73,11 +80,12 @@ class AiEvaluationServiceImplTest {
         UUID jobId = UUID.randomUUID();
         AiEvaluationJob job = job(UUID.randomUUID(), UUID.randomUUID(), "{\"x\":1}");
         job.setStatus(AiEvaluationJob.STATUS_SUCCESS);
-        when(jobRepository.findById(jobId)).thenReturn(Optional.of(job));
+        when(jobRepository.claimPending(eq(jobId), any(LocalDateTime.class))).thenReturn(0);
 
         service().process(jobId);
 
         assertThat(job.getStatus()).isEqualTo(AiEvaluationJob.STATUS_SUCCESS);
+        verify(jobRepository, never()).findById(jobId);
     }
 
     @Test
@@ -555,6 +563,27 @@ class AiEvaluationServiceImplTest {
         verify(rabbitTemplate).convertAndSend(
                 com.evidencepilot.config.infrastructure.RabbitMQConfig.AI_EVALUATION_QUEUE,
                 Map.of("jobId", jobId.toString()));
+    }
+
+    @Test
+    void reenqueuePendingJobsRetriesPublishFailureWithoutRestart() {
+        UUID jobId = UUID.randomUUID();
+        AiEvaluationJob pending = job(UUID.randomUUID(), UUID.randomUUID(), "{\"x\":1}");
+        pending.setId(jobId);
+        Map<String, String> message = Map.of("jobId", jobId.toString());
+        when(jobRepository.findByStatus(AiEvaluationJob.STATUS_PENDING)).thenReturn(List.of(pending));
+        org.mockito.Mockito.doThrow(new RuntimeException("offline"))
+                .doNothing()
+                .when(rabbitTemplate).convertAndSend(
+                        com.evidencepilot.config.infrastructure.RabbitMQConfig.AI_EVALUATION_QUEUE,
+                        message);
+
+        service().reenqueuePendingJobs();
+        service().reenqueuePendingJobs();
+
+        verify(rabbitTemplate, times(2)).convertAndSend(
+                com.evidencepilot.config.infrastructure.RabbitMQConfig.AI_EVALUATION_QUEUE,
+                message);
     }
 
     private AiEvaluationJob job(UUID sectionId, UUID projectId, String payloadJson) {

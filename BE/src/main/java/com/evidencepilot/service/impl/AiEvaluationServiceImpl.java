@@ -25,6 +25,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -139,17 +140,14 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
 
     @Override
     public void process(UUID jobId) {
+        if (jobRepository.claimPending(jobId, LocalDateTime.now()) != 1) {
+            return;
+        }
         AiEvaluationJob job = jobRepository.findById(jobId).orElse(null);
         if (job == null) {
             log.warn("AI evaluation job {} not found, skipping", jobId);
             return;
         }
-        if (!AiEvaluationJob.STATUS_PENDING.equals(job.getStatus())) {
-            return;
-        }
-        job.setStatus(AiEvaluationJob.STATUS_PROCESSING);
-        job.setStartedAt(LocalDateTime.now());
-        jobRepository.save(job);
         try {
             job.setResultJson(objectMapper.writeValueAsString(run(job)));
             job.setStatus(AiEvaluationJob.STATUS_SUCCESS);
@@ -194,6 +192,9 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
     }
 
     @EventListener(ApplicationReadyEvent.class)
+    @Scheduled(
+            initialDelayString = "${ai.job.sweep-interval-ms:60000}",
+            fixedDelayString = "${ai.job.sweep-interval-ms:60000}")
     public void reenqueuePendingJobs() {
         List<AiEvaluationJob> pending = jobRepository.findByStatus(AiEvaluationJob.STATUS_PENDING);
         for (AiEvaluationJob job : pending) {
@@ -519,8 +520,7 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.AI_EVALUATION_QUEUE, Map.of("jobId", job.getId().toString()));
         } catch (Exception e) {
-            // ponytail: publish failure leaves the job PENDING until restart; add retry scheduling if recovery cannot wait.
-            log.error("Failed to publish AI evaluation job {}: {}", job.getId(), e.getMessage());
+            log.error("Failed to publish AI evaluation job {}; retry scheduled: {}", job.getId(), e.getMessage());
         }
     }
 }

@@ -71,12 +71,9 @@ public class DocumentPersistenceService {
     }
 
     @Transactional
-    public void markProcessing(UUID documentId) {
-        Document document = requireDocument(documentId);
-        document.setProcessingStatus(ProcessingStatus.PROCESSING);
-        document.setProcessingError(null);
-        document.setProcessedAt(null);
-        documentRepository.save(document);
+    public boolean markProcessing(UUID documentId) {
+        return documentRepository.claimQueued(
+                documentId, ProcessingStatus.QUEUED, ProcessingStatus.PROCESSING) == 1;
     }
 
     @Transactional

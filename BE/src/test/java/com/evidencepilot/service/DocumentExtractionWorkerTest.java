@@ -12,6 +12,7 @@ import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.service.impl.DocumentExtractionWorkerImpl;
 import com.evidencepilot.service.impl.DocumentPersistenceService;
 import com.evidencepilot.service.impl.SparseVectorGenerator;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -69,6 +70,22 @@ class DocumentExtractionWorkerTest {
     private MediaAssetService mediaAssetService;
     @Mock
     private PaperProcessingService paperProcessingService;
+
+    @BeforeEach
+    void allowQueuedClaim() {
+        when(persistence.markProcessing(any(UUID.class))).thenReturn(true);
+    }
+
+    @Test
+    void processSkipsDuplicateMessageAfterDocumentLeavesQueue() {
+        UUID documentId = UUID.randomUUID();
+        when(persistence.markProcessing(documentId)).thenReturn(false);
+
+        worker().process(documentId);
+
+        verify(documentRepository, never()).findById(documentId);
+        verify(aiModelClient, never()).extractDocument(any(), any());
+    }
 
     @Test
     void processImportsProjectSourcePdfImagesBeforeWritingCheckpointAndDeletesArchive() throws IOException {

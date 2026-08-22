@@ -22,6 +22,17 @@ public interface AiEvaluationJobRepository extends JpaRepository<AiEvaluationJob
     @Query("SELECT j FROM AiEvaluationJob j WHERE j.status = 'PROCESSING' AND j.startedAt < :cutoff")
     List<AiEvaluationJob> findStuckProcessing(@Param("cutoff") LocalDateTime cutoff);
 
+    @Modifying(clearAutomatically = true)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Query("""
+            UPDATE AiEvaluationJob j
+            SET j.status = 'PROCESSING', j.startedAt = :startedAt
+            WHERE j.id = :jobId AND j.status = 'PENDING'
+            """)
+    int claimPending(
+            @Param("jobId") UUID jobId,
+            @Param("startedAt") LocalDateTime startedAt);
+
     @Modifying
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Query("UPDATE AiEvaluationJob j SET j.progressCurrent = :current, j.progressTotal = :total WHERE j.id = :jobId")

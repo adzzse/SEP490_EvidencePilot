@@ -18,6 +18,11 @@ import DeleteConfirm from '../../components/DeleteConfirm.jsx';
 
 const STANDARDS = ['IEEE', 'ACM', 'SPRINGER_LNCS', 'APA', 'MLA', 'CUSTOM'];
 const MODAL_PAGE_SIZE = 20;
+const reportDate = (daysAgo) => {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
 
 export default function ProjectDetail() {
   const { id } = useParams();
@@ -47,6 +52,8 @@ export default function ProjectDetail() {
   const [checkpointDiff, setCheckpointDiff] = useState(null);
   const [reportSectionId, setReportSectionId] = useState(null);
   const [reportMemberId, setReportMemberId] = useState('ALL');
+  const [reportFrom, setReportFrom] = useState(() => reportDate(29));
+  const [reportTo, setReportTo] = useState(() => reportDate(0));
   const [users, setUsers] = useState([]);
   const [showAddMember, setShowAddMember] = useState(false);
   const [newMemberId, setNewMemberId] = useState('');
@@ -140,14 +147,17 @@ export default function ProjectDetail() {
     try {
       const [progRes, diffRes] = await Promise.all([
         api.get(`/api/projects/${id}/progress-report`, {
-          params: { memberFilter: reportMemberId },
+          params: {
+            memberFilter: reportMemberId,
+            ...(reportFrom && reportTo ? { from: reportFrom, to: reportTo } : {}),
+          },
         }).catch(() => null),
         api.get(`/api/projects/${id}/checkpoints/diff`).catch(() => null),
       ]);
       setProgressReport(progRes?.data || null);
       setCheckpointDiff(diffRes?.data || null);
     } catch { }
-  }, [id, reportMemberId]);
+  }, [id, reportFrom, reportMemberId, reportTo]);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -1075,23 +1085,60 @@ export default function ProjectDetail() {
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-3">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t.contributionEvidence}</h2>
-                <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
-                  {t.studentFilter}
-                  <select
-                    value={reportMemberId}
-                    onChange={event => {
-                      setProgressReport(null);
-                      setReportMemberId(event.target.value);
-                      setReportSectionId(null);
-                    }}
-                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
+                    {t.fromLabel}
+                    <input
+                      type="date"
+                      value={reportFrom}
+                      max={reportTo || undefined}
+                      onChange={event => {
+                        setProgressReport(null);
+                        setReportFrom(event.target.value);
+                        if (!event.target.value) setReportTo('');
+                      }}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-2 text-xs text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
+                    {t.toLabel}
+                    <input
+                      type="date"
+                      value={reportTo}
+                      min={reportFrom || undefined}
+                      onChange={event => {
+                        setProgressReport(null);
+                        setReportTo(event.target.value);
+                        if (!event.target.value) setReportFrom('');
+                      }}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-2 text-xs text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => { setProgressReport(null); setReportFrom(''); setReportTo(''); }}
+                    className="rounded-lg px-2 py-2 text-xs font-bold text-[var(--brand-foreground)] hover:bg-[var(--brand-soft)]"
                   >
-                    <option value="ALL">{t.allStudents}</option>
-                    {studentMembers.map(member => (
-                      <option key={member.userId} value={member.userId}>{displayName(member)}</option>
-                    ))}
-                  </select>
-                </label>
+                    {t.allTime}
+                  </button>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
+                    {t.studentFilter}
+                    <select
+                      value={reportMemberId}
+                      onChange={event => {
+                        setProgressReport(null);
+                        setReportMemberId(event.target.value);
+                        setReportSectionId(null);
+                      }}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                    >
+                      <option value="ALL">{t.allStudents}</option>
+                      {studentMembers.map(member => (
+                        <option key={member.userId} value={member.userId}>{displayName(member)}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
               <p className="mb-4 text-xs text-[var(--text-tertiary)]">{t.contributionEvidenceNote}</p>
               {!progressReport ? (

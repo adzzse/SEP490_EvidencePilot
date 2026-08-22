@@ -3,7 +3,6 @@ package com.evidencepilot.service.impl;
 import com.evidencepilot.config.infrastructure.RabbitMQConfig;
 import com.evidencepilot.dto.ExtractionRequest;
 import com.evidencepilot.exception.ResourceNotFoundException;
-import com.evidencepilot.model.Document;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.service.SourceExtractionService;
@@ -11,9 +10,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -26,25 +26,32 @@ public class SourceExtractionServiceImpl implements SourceExtractionService {
 
     @Override
     public void triggerExtraction(UUID documentId) {
-        Document document = documentRepository.findById(documentId)
+        documentRepository.findById(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException(documentId, "Document"));
-        document.setProcessingStatus(ProcessingStatus.QUEUED);
-        document.setProcessingError(null);
-        document.setProcessedAt(null);
-        documentRepository.save(document);
+        queueAndPublish(documentId);
+    }
 
-        // ponytail: direct publish may leave QUEUED after a process crash;
-        // add an outbox only when delivery must be guaranteed.
-        ExtractionRequest request = new ExtractionRequest(document.getId());
+    @Scheduled(fixedDelayString = "${extraction.job.sweep-interval-ms:60000}")
+    public void reenqueuePendingExtractions() {
+        documentRepository.findIdsByProcessingStatusInAndActiveTrue(
+                        List.of(ProcessingStatus.UPLOADED, ProcessingStatus.QUEUED))
+                .forEach(this::queueAndPublish);
+    }
+
+    private void queueAndPublish(UUID documentId) {
+        if (documentRepository.queueForExtraction(
+                documentId,
+                List.of(ProcessingStatus.UPLOADED, ProcessingStatus.QUEUED),
+                ProcessingStatus.QUEUED) != 1) {
+            return;
+        }
+
+        ExtractionRequest request = new ExtractionRequest(documentId);
         try {
             rabbitTemplate.convertAndSend(RabbitMQConfig.EXTRACTION_QUEUE, request);
             log.info("Published document {} to extraction.queue", documentId);
         } catch (AmqpException e) {
-            document.setProcessingStatus(ProcessingStatus.FAILED);
-            document.setProcessingError("Failed to queue extraction");
-            document.setProcessedAt(LocalDateTime.now());
-            documentRepository.save(document);
-            log.error("Failed to publish document {} to extraction.queue", documentId, e);
+            log.error("Failed to publish document {} to extraction.queue; retry scheduled", documentId, e);
         }
     }
 }

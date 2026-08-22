@@ -22,8 +22,10 @@ import com.evidencepilot.service.ProgressReportService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -55,7 +57,12 @@ public class ProgressReportServiceImpl implements ProgressReportService {
 
     @Override
     @Transactional(readOnly = true)
-    public ProgressReportResponse getProgressReport(UUID projectId, String memberFilter) {
+    public ProgressReportResponse getProgressReport(
+            UUID projectId, String memberFilter, LocalDate from, LocalDate to) {
+        if ((from == null) != (to == null) || from != null && from.isAfter(to)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Provide both from and to with from on or before to");
+        }
         User currentUser = currentUserService.requireCurrentUser();
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException(projectId, "Project"));
@@ -110,10 +117,12 @@ public class ProgressReportServiceImpl implements ProgressReportService {
                 contribution.addCurrentSection(panel);
             }
         }
-        // ponytail: project-sized scan; add a date range only when edit volume makes this report slow.
-        for (AuditLog edit : auditLogRepository
-                .findByActionAndEntityTypeAndEntityIdOrderByOccurredAtAsc(
-                        SECTION_EDIT_ACTION, "PROJECT", projectId)) {
+        List<AuditLog> edits = from == null
+                ? auditLogRepository.findByActionAndEntityTypeAndEntityIdOrderByOccurredAtAsc(
+                        SECTION_EDIT_ACTION, "PROJECT", projectId)
+                : auditLogRepository.findProjectEditsWithin(
+                        projectId, from.atStartOfDay(), to.plusDays(1).atStartOfDay());
+        for (AuditLog edit : edits) {
             ContributionAccumulator contribution = edit.getActor() == null
                     ? null : contributionByUser.get(edit.getActor().getId());
             if (contribution == null || edit.getNewValue() == null || edit.getOccurredAt() == null) {
