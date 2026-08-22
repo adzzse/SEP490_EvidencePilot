@@ -1,5 +1,7 @@
 package com.evidencepilot.controller;
 
+import com.evidencepilot.model.ExportJob;
+import com.evidencepilot.model.enums.ExportStatus;
 import com.evidencepilot.service.ExportService;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.InputStreamResource;
@@ -13,8 +15,10 @@ import java.util.UUID;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
 
@@ -37,5 +41,21 @@ class ExportControllerTest {
                         "attachment; filename=\"export-" + jobId + ".zip\""))
                 .andExpect(content().contentType(MediaType.APPLICATION_OCTET_STREAM))
                 .andExpect(content().bytes(archive));
+    }
+
+    @Test
+    void retryFailedExportReturnsAcceptedJob() throws Exception {
+        ExportService service = mock(ExportService.class);
+        MockMvc mockMvc = standaloneSetup(new ExportController(service)).build();
+        UUID jobId = UUID.randomUUID();
+        ExportJob job = new ExportJob();
+        job.setId(jobId);
+        job.setStatus(ExportStatus.PENDING);
+        when(service.retryExport(jobId)).thenReturn(job);
+
+        mockMvc.perform(post("/api/exports/{jobId}/retry", jobId))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.jobId").value(jobId.toString()))
+                .andExpect(jsonPath("$.status").value("PENDING"));
     }
 }

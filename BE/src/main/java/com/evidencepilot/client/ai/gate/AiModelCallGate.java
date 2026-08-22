@@ -11,11 +11,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
- * ponytail: one JVM-local choke point for the hardware concurrency cap and pacing.
- * The default 4-second interval starts at most about 15 calls/minute/JVM. Add a
- * distributed limiter before 2+ JVMs share one provider quota. Add a circuit breaker
- * if final 5xx or transport failures exceed 50% of at least 20 calls in 5 minutes
- * after client retries; revisit that baseline with production metrics.
+ * JVM-local backpressure complements the shared gate in the single-process model
+ * service. The default 4-second interval starts at most about 15 calls/minute/JVM.
+ * ponytail: replace the model-service gate with a distributed limiter before that
+ * service runs in 2+ processes/instances. Add a circuit breaker if final 5xx or
+ * transport failures exceed 50% of at least 20 calls in 5 minutes after client
+ * retries; revisit that baseline with production metrics.
  */
 @Component
 public class AiModelCallGate {

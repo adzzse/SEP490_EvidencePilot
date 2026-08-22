@@ -215,6 +215,61 @@ class ExportServiceImplTest {
         }
     }
 
+    @Test
+    void retryFailedExportClaimsJobAndPublishesOnlyAfterCommit() {
+        ExportJob job = job(ExportStatus.FAILED);
+        job.setFormat(ExportFormat.TEX);
+        job.setErrorMessage("renderer unavailable");
+        User currentUser = new User();
+        Project project = new Project();
+        project.setId(job.getProjectId());
+        when(currentUsers.requireCurrentUser()).thenReturn(currentUser);
+        when(exportJobs.findById(job.getId())).thenReturn(Optional.of(job));
+        when(projects.findById(job.getProjectId())).thenReturn(Optional.of(project));
+        when(exportJobs.retryFailed(
+                eq(job.getId()), eq(ExportStatus.FAILED), eq(ExportStatus.PENDING), any()))
+                .thenReturn(1);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            ExportJob retried = service.retryExport(job.getId());
+
+            assertThat(retried.getStatus()).isEqualTo(ExportStatus.PENDING);
+            assertThat(retried.getErrorMessage()).isNull();
+            verifyNoInteractions(rabbitTemplate);
+
+            var synchronizations = TransactionSynchronizationManager.getSynchronizations();
+            assertThat(synchronizations).hasSize(1);
+            synchronizations.getFirst().afterCommit();
+
+            verify(rabbitTemplate).convertAndSend(
+                    RabbitMQConfig.EXPORT_QUEUE,
+                    new ExportRequest(job.getId(), job.getProjectId(), job.getUserId(), "tex"));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void retryExportRejectsJobAlreadyClaimedByAnotherRequest() {
+        ExportJob job = job(ExportStatus.FAILED);
+        User currentUser = new User();
+        Project project = new Project();
+        project.setId(job.getProjectId());
+        when(currentUsers.requireCurrentUser()).thenReturn(currentUser);
+        when(exportJobs.findById(job.getId())).thenReturn(Optional.of(job));
+        when(projects.findById(job.getProjectId())).thenReturn(Optional.of(project));
+        when(exportJobs.retryFailed(
+                eq(job.getId()), eq(ExportStatus.FAILED), eq(ExportStatus.PENDING), any()))
+                .thenReturn(0);
+
+        assertThatThrownBy(() -> service.retryExport(job.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(error -> ((ResponseStatusException) error).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
+        verifyNoInteractions(rabbitTemplate);
+    }
+
     private static ExportJob job(ExportStatus status) {
         ExportJob job = new ExportJob();
         job.setId(UUID.randomUUID());

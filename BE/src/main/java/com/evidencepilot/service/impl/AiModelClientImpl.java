@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
@@ -61,7 +62,7 @@ public class AiModelClientImpl implements AiModelClient {
     @SuppressWarnings("unchecked")
     @Override
     public Map<String, Object> health() {
-        return call("/health", () -> restClient.get()
+        return call("/health", 0, () -> restClient.get()
                 .uri(baseUrl + "/health")
                 .retrieve()
                 .body(Map.class));
@@ -199,15 +200,23 @@ public class AiModelClientImpl implements AiModelClient {
         if (baseUrl.isBlank()) {
             throw new AiApiException(endpoint, 503, "AI_MODEL_BASE_URL is not configured", null);
         }
+        long startedNanos = System.nanoTime();
         int attempt = 0;
         while (true) {
             try {
-                return aiModelCallGate.execute(endpoint, call::execute);
+                T result = aiModelCallGate.execute(endpoint, call::execute);
+                log.info("ai_call endpoint={} outcome=success status=200 attempts={} duration_ms={}",
+                        endpoint, attempt + 1, elapsedMillis(startedNanos));
+                return result;
             } catch (AiApiException e) {
+                log.warn("ai_call endpoint={} outcome=api_error status={} attempts={} duration_ms={}",
+                        endpoint, e.getStatusCode(), attempt + 1, elapsedMillis(startedNanos));
                 throw e;
             } catch (RestClientResponseException e) {
                 int status = e.getStatusCode().value();
                 if (!RETRYABLE_STATUSES.contains(status) || attempt >= retryLimit) {
+                    log.warn("ai_call endpoint={} outcome=http_error status={} attempts={} duration_ms={}",
+                            endpoint, status, attempt + 1, elapsedMillis(startedNanos));
                     throw new AiApiException(endpoint, status);
                 }
                 long retryAfterMillis = retryAfterMillis(e);
@@ -218,14 +227,27 @@ public class AiModelClientImpl implements AiModelClient {
                             ? Math.max(RATE_LIMIT_FLOOR_MS,
                                     Math.min(BASE_RETRY_DELAY_MS * (1L << (attempt - 1)), MAX_RETRY_DELAY_MS))
                             : Math.min(BASE_RETRY_DELAY_MS * (1L << (attempt - 1)), MAX_RETRY_DELAY_MS);
-                log.warn("AI endpoint {} returned HTTP {} at configured base URL {}; retry {}/{} in {} ms.",
-                        endpoint, status, baseUrl, attempt, retryLimit, backoffMillis);
+                log.warn("ai_call_retry endpoint={} failure=http status={} retry={}/{} delay_ms={}",
+                        endpoint, status, attempt, retryLimit, backoffMillis);
                 sleep(backoffMillis);
             } catch (RestClientException e) {
-                log.warn("AI endpoint {} failed at configured base URL {}.", endpoint, baseUrl, e);
-                throw new AiApiException(endpoint, 503, "AI model offline at " + baseUrl, e);
+                if (attempt >= retryLimit) {
+                    log.warn("ai_call endpoint={} outcome=transport_error status=503 attempts={} duration_ms={} error_type={}",
+                            endpoint, attempt + 1, elapsedMillis(startedNanos), e.getClass().getSimpleName());
+                    throw new AiApiException(endpoint, 503, "AI model offline", e);
+                }
+                attempt++;
+                long backoffMillis = Math.min(
+                        BASE_RETRY_DELAY_MS * (1L << (attempt - 1)), MAX_RETRY_DELAY_MS);
+                log.warn("ai_call_retry endpoint={} failure=transport status=503 retry={}/{} delay_ms={} error_type={}",
+                        endpoint, attempt, retryLimit, backoffMillis, e.getClass().getSimpleName());
+                sleep(backoffMillis);
             }
         }
+    }
+
+    private static long elapsedMillis(long startedNanos) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     }
 
     private static long retryAfterMillis(RestClientResponseException e) {

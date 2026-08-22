@@ -1,7 +1,11 @@
 package com.evidencepilot.config.infrastructure;
 
+import org.springframework.amqp.AmqpRejectAndDontRequeueException;
+import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.retry.MessageRecoverer;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,9 +13,10 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class RabbitMQConfig {
 
-    // ponytail: extraction/export queues have no DLQ; add DLQs when failed-job replay is required.
     public static final String EXTRACTION_QUEUE = "extraction.queue";
+    public static final String EXTRACTION_DLQ = "extraction.dlq";
     public static final String EXPORT_QUEUE = "export.queue";
+    public static final String EXPORT_DLQ = "export.dlq";
     public static final String AI_EVALUATION_QUEUE = "ai.evaluation.queue";
     public static final String AI_EVALUATION_DLQ = "ai.evaluation.dlq";
 
@@ -26,6 +31,16 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Queue extractionDlq() {
+        return QueueBuilder.durable(EXTRACTION_DLQ).build();
+    }
+
+    @Bean
+    public Queue exportDlq() {
+        return QueueBuilder.durable(EXPORT_DLQ).build();
+    }
+
+    @Bean
     public Queue aiEvaluationQueue() {
         return QueueBuilder.durable(AI_EVALUATION_QUEUE)
                 .withArgument("x-dead-letter-exchange", "")
@@ -36,6 +51,24 @@ public class RabbitMQConfig {
     @Bean
     public Queue aiEvaluationDlq() {
         return QueueBuilder.durable(AI_EVALUATION_DLQ).build();
+    }
+
+    @Bean
+    public MessageRecoverer failedJobRecoverer(RabbitTemplate rabbitTemplate) {
+        return (Message message, Throwable cause) -> {
+            String sourceQueue = message.getMessageProperties().getConsumerQueue();
+            String deadLetterQueue;
+            if (EXTRACTION_QUEUE.equals(sourceQueue)) {
+                deadLetterQueue = EXTRACTION_DLQ;
+            } else if (EXPORT_QUEUE.equals(sourceQueue)) {
+                deadLetterQueue = EXPORT_DLQ;
+            } else {
+                throw new AmqpRejectAndDontRequeueException(
+                        "Retries exhausted for queue " + sourceQueue, cause);
+            }
+            message.getMessageProperties().setHeader("x-original-queue", sourceQueue);
+            rabbitTemplate.send("", deadLetterQueue, message);
+        };
     }
 
     @Bean

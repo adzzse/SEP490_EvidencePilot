@@ -121,6 +121,42 @@ class AiModelClientTest {
     }
 
     @Test
+    void healthFailsFastOnTransportFailure() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://ai.test/health"))
+                .andRespond(request -> {
+                    throw new IOException("connection reset");
+                });
+
+        assertThatThrownBy(() -> client(builder.build(), "http://ai.test", 3).health())
+                .isInstanceOf(AiModelClient.AiApiException.class)
+                .extracting(error -> ((AiModelClient.AiApiException) error).getStatusCode())
+                .isEqualTo(503);
+        server.verify();
+    }
+
+    @Test
+    void generateRetriesTransportFailureThenSucceeds() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://ai.test/ai/generate"))
+                .andRespond(request -> {
+                    throw new IOException("connection reset");
+                });
+        server.expect(requestTo("http://ai.test/ai/generate"))
+                .andRespond(withSuccess(
+                        "{\"provider\":\"ollama\",\"model\":\"qwen\",\"response\":\"Retried\",\"done\":true}",
+                        MediaType.APPLICATION_JSON));
+
+        AiModelClient.GenerationResult result = client(builder.build(), "http://ai.test", 1)
+                .generate("system", "prompt");
+
+        assertThat(result.response()).isEqualTo("Retried");
+        server.verify();
+    }
+
+    @Test
     void generateForReviewUsesAtMostOneRetry() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

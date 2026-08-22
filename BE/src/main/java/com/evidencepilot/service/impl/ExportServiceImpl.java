@@ -26,6 +26,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Slf4j
@@ -68,18 +69,29 @@ public class ExportServiceImpl implements ExportService {
         job.setUpdatedAt(LocalDateTime.now());
         job = exportJobRepository.save(job);
 
-        ExportRequest request = new ExportRequest(job.getId(), projectId, currentUser.getId(), format);
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    rabbitTemplate.convertAndSend(RabbitMQConfig.EXPORT_QUEUE, request);
-                }
-            });
-        } else {
-            rabbitTemplate.convertAndSend(RabbitMQConfig.EXPORT_QUEUE, request);
+        publishAfterCommit(new ExportRequest(job.getId(), projectId, currentUser.getId(), format));
+
+        return job;
+    }
+
+    @Override
+    @Transactional
+    public ExportJob retryExport(UUID jobId) {
+        ExportJob job = getJob(jobId);
+        LocalDateTime retriedAt = LocalDateTime.now();
+        if (job.getStatus() != ExportStatus.FAILED
+                || exportJobRepository.retryFailed(
+                        jobId, ExportStatus.FAILED, ExportStatus.PENDING, retriedAt) != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only failed exports can be retried");
         }
 
+        job.setStatus(ExportStatus.PENDING);
+        job.setErrorMessage(null);
+        job.setDownloadUrl(null);
+        job.setUpdatedAt(retriedAt);
+        publishAfterCommit(new ExportRequest(
+                job.getId(), job.getProjectId(), job.getUserId(),
+                job.getFormat().name().toLowerCase(Locale.ROOT)));
         return job;
     }
 
@@ -167,5 +179,18 @@ public class ExportServiceImpl implements ExportService {
             job.setDownloadUrl("/api/exports/" + job.getId() + "/download");
         }
         return job;
+    }
+
+    private void publishAfterCommit(ExportRequest request) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    rabbitTemplate.convertAndSend(RabbitMQConfig.EXPORT_QUEUE, request);
+                }
+            });
+        } else {
+            rabbitTemplate.convertAndSend(RabbitMQConfig.EXPORT_QUEUE, request);
+        }
     }
 }

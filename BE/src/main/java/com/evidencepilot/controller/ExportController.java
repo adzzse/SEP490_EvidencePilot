@@ -41,6 +41,16 @@ public class ExportController {
         return exportService.getJob(jobId);
     }
 
+    @PostMapping("/{jobId}/retry")
+    @Operation(summary = "Retry a failed export", description = "Moves a failed job back to the export queue (202).")
+    public ResponseEntity<Map<String, Object>> retryExport(@PathVariable UUID jobId) {
+        ExportJob job = exportService.retryExport(jobId);
+        return ResponseEntity.accepted()
+                .body(Map.of(
+                        "jobId", job.getId(),
+                        "status", job.getStatus().name()));
+    }
+
     @GetMapping("/{jobId}/download")
     @Operation(summary = "Download export ZIP")
     public ResponseEntity<Resource> download(@PathVariable UUID jobId) {
