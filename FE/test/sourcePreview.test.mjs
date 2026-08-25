@@ -33,3 +33,12 @@ test('metadata-only source exposes the failed upstream download URL', async () =
   assert.match(contextPanel, /sourceDownloadFailureReason/);
   assert.match(contextPanel, /href=\{sourceDownloadUrl\}/);
 });
+
+test('metadata failure URL parsing rejects malformed input and strips sentence punctuation', () => {
+  assert.equal(getSourceDownloadUrl(null), null);
+  assert.equal(getSourceDownloadUrl('Download failed for https://.'), null);
+  assert.equal(
+    getSourceDownloadUrl('Download failed for https://example.com/paper.pdf). Metadata saved.'),
+    'https://example.com/paper.pdf',
+  );
+});

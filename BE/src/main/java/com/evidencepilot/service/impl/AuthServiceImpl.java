@@ -53,23 +53,18 @@ public class AuthServiceImpl implements AuthService {
         if (token == null || !jwtUtils.validateToken(token)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid or expired token");
         }
-        // ponytail: JVM-local refresh lock; use atomic DB token rotation before running multiple backend instances.
-        synchronized (sessionRegistry) {
-            String jti = jwtUtils.extractJti(token);
-            if (!sessionRegistry.isValid(jti)) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token has been revoked");
-            }
-            User user = userRepository.findById(jwtUtils.extractUserId(token))
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User no longer exists"));
-            if (user.getAccountStatus() != AccountStatus.ACTIVE) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is not active");
-            }
-
-            sessionRegistry.revoke(jti);
-            String newToken = jwtUtils.generateToken(user);
-            sessionRegistry.register(jwtUtils.extractJti(newToken));
-            return new AuthResponse(newToken, UserResponse.from(user), false);
+        String jti = jwtUtils.extractJti(token);
+        User user = userRepository.findById(jwtUtils.extractUserId(token))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User no longer exists"));
+        if (user.getAccountStatus() != AccountStatus.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is not active");
         }
+
+        String newToken = jwtUtils.generateToken(user);
+        if (!sessionRegistry.rotate(jti, jwtUtils.extractJti(newToken))) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token has been revoked");
+        }
+        return new AuthResponse(newToken, UserResponse.from(user), false);
     }
 
     @Override

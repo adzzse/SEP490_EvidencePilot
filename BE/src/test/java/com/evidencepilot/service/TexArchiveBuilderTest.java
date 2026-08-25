@@ -9,6 +9,7 @@ import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.service.impl.SourceMatchingService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -37,7 +38,7 @@ class TexArchiveBuilderTest {
                 projects,
                 documents,
                 sections,
-                new PaperStandardService(),
+                new PaperStandardService(mock(AiModelClient.class), new ObjectMapper()),
                 media,
                 sourceMatchingService);
         UUID projectId = UUID.randomUUID();

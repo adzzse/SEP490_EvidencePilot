@@ -126,7 +126,8 @@ public class QdrantClientImpl implements QdrantClient {
 
     @Override
     public List<QdrantSearchResult> findClosestChunks(
-            List<Float> queryVector,
+            List<Float> denseQueryVector,
+            SparseVector sparseQueryVector,
             List<String> documentIds,
             int topK) {
         if (documentIds == null || documentIds.isEmpty()) {
@@ -140,13 +141,34 @@ public class QdrantClientImpl implements QdrantClient {
                 )
         );
 
-        Map<String, Object> body = Map.of(
-                "query", queryVector,
-                "using", "dense",
-                "filter", filter,
-                "limit", safeTopK,
-                "with_payload", false
-        );
+        Map<String, Object> body;
+        if (sparseQueryVector == null || sparseQueryVector.indices().isEmpty()) {
+            body = Map.of(
+                    "query", denseQueryVector,
+                    "using", "dense",
+                    "filter", filter,
+                    "limit", safeTopK,
+                    "with_payload", false
+            );
+        } else {
+            int candidateLimit = Math.min(100, Math.max(20, safeTopK * 4));
+            body = Map.of(
+                    "prefetch", List.of(
+                            Map.of(
+                                    "query", denseQueryVector,
+                                    "using", "dense",
+                                    "filter", filter,
+                                    "limit", candidateLimit),
+                            Map.of(
+                                    "query", sparseQueryVector,
+                                    "using", "sparse",
+                                    "filter", filter,
+                                    "limit", candidateLimit)),
+                    "query", Map.of("rrf", Map.of()),
+                    "limit", safeTopK,
+                    "with_payload", false
+            );
+        }
 
         String url = baseUrl + "/collections/" + COLLECTION + "/points/query";
 

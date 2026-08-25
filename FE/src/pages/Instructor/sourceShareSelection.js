@@ -5,12 +5,15 @@ export function isSourceShareable(source) {
 }
 
 export function isSourceSharedWithProject(source, projectId) {
-  return (source?.projectIds || []).some(id => String(id) === String(projectId));
+  return (Array.isArray(source?.projectIds) ? source.projectIds : [])
+    .some(id => String(id) === String(projectId));
 }
 
 export function getBlockedSources(collectionSources, selectedSourceIds) {
-  const selected = new Set(selectedSourceIds.map(String));
-  return collectionSources
+  const sources = (Array.isArray(collectionSources) ? collectionSources : [])
+    .filter(source => source?.id != null);
+  const selected = new Set((Array.isArray(selectedSourceIds) ? selectedSourceIds : []).map(String));
+  return sources
     .filter(source => selected.has(String(source.id)) && !isSourceShareable(source))
     .map(source => ({
       id: source.id,
@@ -20,16 +23,18 @@ export function getBlockedSources(collectionSources, selectedSourceIds) {
 }
 
 export function getSourceShareChanges(collectionSources, projectId, selectedSourceIds) {
-  const selected = new Set(selectedSourceIds.map(String));
-  const shared = new Set(collectionSources
+  const sources = (Array.isArray(collectionSources) ? collectionSources : [])
+    .filter(source => source?.id != null);
+  const selected = new Set((Array.isArray(selectedSourceIds) ? selectedSourceIds : []).map(String));
+  const shared = new Set(sources
     .filter(source => isSourceSharedWithProject(source, projectId))
     .map(source => String(source.id)));
 
   return {
-    toShare: collectionSources
+    toShare: sources
       .filter(source => selected.has(String(source.id)) && !shared.has(String(source.id)))
       .map(source => source.id),
-    toUnshare: collectionSources
+    toUnshare: sources
       .filter(source => shared.has(String(source.id)) && !selected.has(String(source.id)))
       .map(source => source.id),
   };

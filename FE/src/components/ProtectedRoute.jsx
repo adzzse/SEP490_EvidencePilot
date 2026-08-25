@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { rememberLoginOrigin } from '../pages/loginOrigin';
 
 export default function ProtectedRoute({ children, allowedRoles }) {
   const { isAuthenticated, role, loading } = useAuth();
@@ -16,9 +17,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   }
 
   if (!isAuthenticated) {
-    if (!window.location.pathname.startsWith('/login')) {
-      sessionStorage.setItem('login_origin', window.location.pathname + window.location.search);
-    }
+    rememberLoginOrigin(window.location.pathname, window.location.search);
     return <Navigate to="/login" replace />;
   }
 

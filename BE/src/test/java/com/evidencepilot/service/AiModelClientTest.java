@@ -1,6 +1,7 @@
 package com.evidencepilot.service;
 
 import com.evidencepilot.client.ai.gate.AiModelCallGate;
+import com.evidencepilot.client.ai.gate.AiModelCallPolicy;
 import com.evidencepilot.service.impl.AiModelClientImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,12 @@ import java.util.zip.ZipOutputStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
@@ -39,6 +46,21 @@ class AiModelClientTest {
     private static AiModelClientImpl client(RestClient restClient, String baseUrl, int maxRetries) {
         return new AiModelClientImpl(restClient, restClient, baseUrl, new ObjectMapper(), maxRetries,
                 new AiModelCallGate(new Semaphore(4)));
+    }
+
+    private static AiModelClientImpl client(
+            RestClient restClient,
+            String baseUrl,
+            int maxRetries,
+            AiModelCallPolicy policy) {
+        when(policy.tryAcquireLease(anyInt(), anyLong())).thenReturn("test-lease");
+        return new AiModelClientImpl(
+                restClient,
+                restClient,
+                baseUrl,
+                new ObjectMapper(),
+                maxRetries,
+                new AiModelCallGate(new Semaphore(4), policy));
     }
 
     @Test
@@ -111,12 +133,15 @@ class AiModelClientTest {
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", "0"));
 
+        AiModelCallPolicy policy = mock(AiModelCallPolicy.class);
         AiModelClient.AiApiException error = assertThrows(
                 AiModelClient.AiApiException.class,
-                () -> client(builder.build(), "http://ai.test", 1)
+                () -> client(builder.build(), "http://ai.test", 1, policy)
                         .generate("system", "prompt"));
 
         assertThat(error.getStatusCode()).isEqualTo(429);
+        verify(policy).recordFinalOutcome(false);
+        verify(policy, never()).recordFinalOutcome(true);
         server.verify();
     }
 
@@ -149,10 +174,45 @@ class AiModelClientTest {
                         "{\"provider\":\"ollama\",\"model\":\"qwen\",\"response\":\"Retried\",\"done\":true}",
                         MediaType.APPLICATION_JSON));
 
-        AiModelClient.GenerationResult result = client(builder.build(), "http://ai.test", 1)
+        AiModelCallPolicy policy = mock(AiModelCallPolicy.class);
+        AiModelClient.GenerationResult result = client(
+                builder.build(), "http://ai.test", 1, policy)
                 .generate("system", "prompt");
 
         assertThat(result.response()).isEqualTo("Retried");
+        verify(policy).recordFinalOutcome(false);
+        verify(policy, never()).recordFinalOutcome(true);
+        server.verify();
+    }
+
+    @Test
+    void finalServerFailureCountsTowardsTheCircuit() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://ai.test/ai/generate"))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        AiModelCallPolicy policy = mock(AiModelCallPolicy.class);
+
+        assertThatThrownBy(() -> client(builder.build(), "http://ai.test", 0, policy)
+                .generate("system", "prompt"))
+                .isInstanceOf(AiModelClient.AiApiException.class)
+                .extracting(error -> ((AiModelClient.AiApiException) error).getStatusCode())
+                .isEqualTo(503);
+        verify(policy).recordFinalOutcome(true);
+        server.verify();
+    }
+
+    @Test
+    void openCircuitRejectsBeforeTheHttpCall() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AiModelCallPolicy policy = mock(AiModelCallPolicy.class);
+        when(policy.isCircuitOpen()).thenReturn(true);
+
+        assertThatThrownBy(() -> client(builder.build(), "http://ai.test", 0, policy)
+                .generate("system", "prompt"))
+                .isInstanceOf(AiModelClient.AiApiException.class)
+                .hasMessageContaining("circuit is open");
         server.verify();
     }
 

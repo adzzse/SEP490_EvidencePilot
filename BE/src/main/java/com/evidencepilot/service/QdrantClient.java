@@ -17,7 +17,8 @@ public interface QdrantClient {
     void deleteByDocumentId(String documentId);
 
     List<QdrantSearchResult> findClosestChunks(
-            List<Float> queryVector,
+            List<Float> denseQueryVector,
+            SparseVector sparseQueryVector,
             List<String> documentIds,
             int topK);
 

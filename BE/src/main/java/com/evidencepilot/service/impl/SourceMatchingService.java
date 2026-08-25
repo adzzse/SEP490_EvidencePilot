@@ -1,6 +1,7 @@
 package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.QdrantSearchResult;
+import com.evidencepilot.dto.SparseVector;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentChunk;
 import com.evidencepilot.model.ProjectDocument;
@@ -37,6 +38,7 @@ public class SourceMatchingService {
     private final ProjectDocumentRepository projectDocumentRepository;
     private final DocumentChunkRepository documentChunkRepository;
     private final AiModelClient aiModelClient;
+    private final SparseVectorGenerator sparseVectorGenerator;
     private final QdrantClient qdrantClient;
 
     @Transactional(readOnly = true)
@@ -59,9 +61,10 @@ public class SourceMatchingService {
                 .map(UUID::toString)
                 .toList();
         List<List<SourceMatch>> results = new ArrayList<>();
-        for (List<Float> embedding : embeddings) {
+        for (int index = 0; index < embeddings.size(); index++) {
+            SparseVector sparseQuery = sparseVectorGenerator.generate(excerpts.get(index));
             List<QdrantSearchResult> matches = qdrantClient.findClosestChunks(
-                    embedding, documentIds, topK);
+                    embeddings.get(index), sparseQuery, documentIds, topK);
             if (matches == null || matches.isEmpty()) {
                 results.add(List.of());
                 continue;

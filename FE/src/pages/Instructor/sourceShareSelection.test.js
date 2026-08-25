@@ -53,3 +53,12 @@ test('getBlockedSources lists selected non-shareable sources with title and stat
     ],
   );
 });
+
+test('missing or malformed collection data produces no share operations', () => {
+  assert.equal(isSourceSharedWithProject({ projectIds: 'project-a' }, 'project-a'), false);
+  assert.deepEqual(getBlockedSources([null, { projectIds: 'bad' }], null), []);
+  assert.deepEqual(getSourceShareChanges([null, { projectIds: 'bad' }], 'project-a', null), {
+    toShare: [],
+    toUnshare: [],
+  });
+});

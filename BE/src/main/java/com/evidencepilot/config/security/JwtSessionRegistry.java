@@ -6,12 +6,13 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-// DB-backed jti allowlist — survives restarts. Fast in-memory set, write-through on register/revoke.
+// The database is authoritative in production; the set exists only for isolated unit tests.
 @Component
 public class JwtSessionRegistry {
 
@@ -34,32 +35,37 @@ public class JwtSessionRegistry {
     }
 
     @PostConstruct
-    void loadFromDatabase() {
+    void removeExpiredSessions() {
         if (sessions == null) return;
         sessions.deleteByExpiresAtBefore(LocalDateTime.now());
-        for (Session session : sessions.findAll()) {
-            validJtis.add(session.getJti());
-        }
     }
 
     public boolean isValid(String jti) {
-        return jti != null && validJtis.contains(jti);
+        return jti != null && (sessions == null ? validJtis.contains(jti) : sessions.existsById(jti));
     }
 
     public void register(String jti) {
         if (jti == null) return;
-        validJtis.add(jti);
-        if (sessions != null) {
-            LocalDateTime now = LocalDateTime.now();
-            sessions.save(new Session(jti, null, now, now.plusNanos(expirationMs * 1_000_000)));
+        if (sessions == null) {
+            validJtis.add(jti);
+            return;
         }
+        LocalDateTime now = LocalDateTime.now();
+        sessions.save(new Session(jti, null, now, now.plusNanos(expirationMs * 1_000_000)));
     }
 
-    public void revoke(String jti) {
-        if (jti == null) return;
-        validJtis.remove(jti);
-        if (sessions != null) {
-            sessions.deleteById(jti);
+    @Transactional
+    public boolean rotate(String oldJti, String newJti) {
+        if (oldJti == null || newJti == null) return false;
+        if (sessions == null) {
+            synchronized (validJtis) {
+                if (!validJtis.remove(oldJti)) return false;
+                validJtis.add(newJti);
+                return true;
+            }
         }
+        if (sessions.consume(oldJti) != 1) return false;
+        register(newJti);
+        return true;
     }
 }

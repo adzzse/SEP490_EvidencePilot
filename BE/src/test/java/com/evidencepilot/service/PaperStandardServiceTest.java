@@ -1,15 +1,31 @@
 package com.evidencepilot.service;
 
 import com.evidencepilot.model.enums.PaperStandard;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class PaperStandardServiceTest {
 
-    private final PaperStandardService service = new PaperStandardService();
+    private final AiModelClient aiModelClient = mock(AiModelClient.class);
+    private final PaperStandardService service = new PaperStandardService(
+            aiModelClient, new ObjectMapper());
+
+    @BeforeEach
+    void classifierDefaultsToCustom() {
+        when(aiModelClient.generate(anyString(), anyString())).thenReturn(
+                new AiModelClient.GenerationResult("test", "classifier", """
+                        {"standard":"CUSTOM","confidencePercent":0,"evidence":[]}
+                        """));
+    }
 
     @Test
     void everyPaperStandardHasAResolvableTexTemplate() {
@@ -32,7 +48,7 @@ class PaperStandardServiceTest {
     }
 
     @Test
-    void suggestsStandardsOnlyFromRecognizableFormatMarkers() {
+    void recognizableFormatMarkersRemainTheFastPath() {
         assertThat(service.suggestStandard("paper.tex", "\\documentclass{IEEEtran}"))
                 .extracting("suggestedStandard", "confidencePercent")
                 .containsExactly(PaperStandard.IEEE, 99);
@@ -48,6 +64,7 @@ class PaperStandardServiceTest {
         assertThat(service.suggestStandard("paper.docx", "# Works Cited\nEntry"))
                 .extracting("suggestedStandard", "confidencePercent")
                 .containsExactly(PaperStandard.MLA, 75);
+        verifyNoInteractions(aiModelClient);
     }
 
     @Test
@@ -60,5 +77,26 @@ class PaperStandardServiceTest {
         assertThat(service.suggestStandard("springer-article.pdf", "Generic content"))
                 .extracting("suggestedStandard", "confidencePercent")
                 .containsExactly(PaperStandard.CUSTOM, 0);
+    }
+
+    @Test
+    void classifierHandlesPapersWithoutExactMarkers() {
+        when(aiModelClient.generate(anyString(), anyString())).thenReturn(
+                new AiModelClient.GenerationResult("test", "classifier", """
+                        {
+                          "standard":"APA",
+                          "confidencePercent":82,
+                          "evidence":["author-date citations and a References list"]
+                        }
+                        """));
+
+        assertThat(service.suggestStandard(
+                "paper.pdf",
+                "Prior work (Smith, 2024) supports the result.\nReferences\nSmith, J. (2024). Title."))
+                .extracting("suggestedStandard", "confidencePercent", "evidence")
+                .containsExactly(
+                        PaperStandard.APA,
+                        82,
+                        List.of("AI classifier: author-date citations and a References list"));
     }
 }

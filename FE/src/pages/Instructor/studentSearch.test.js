@@ -26,3 +26,8 @@ test('does not suggest instructors or existing project members', () => {
     ['student-2'],
   );
 });
+
+test('returns no suggestions when user data is unavailable or malformed', () => {
+  assert.deepEqual(getStudentSuggestions(null, null, 'student'), []);
+  assert.deepEqual(getStudentSuggestions([null, { role: 'STUDENT' }], undefined, ''), []);
+});

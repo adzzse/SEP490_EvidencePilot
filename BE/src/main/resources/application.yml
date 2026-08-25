@@ -119,10 +119,11 @@ ai:
     api-key: ${AI_MODEL_API_KEY:}
     # MinerU extraction can run for several minutes on large PDFs.
     read-timeout-seconds: ${AI_MODEL_READ_TIMEOUT_SECONDS:660}
-    # Cap concurrent AI model calls per JVM.
+    # Shared maximum across backend instances; each JVM also keeps local backpressure.
     max-concurrent-requests: ${AI_MODEL_MAX_CONCURRENT_REQUESTS:4}
-    # Minimum spacing between AI calls (global, per JVM) so bursts stay under the
-    # provider rate limit (ngrok free tier ~20 req/min). 4000ms = max 15 req/min.
+    # Expired leases recover capacity after a backend crashes mid-call.
+    lease-timeout-ms: ${AI_MODEL_LEASE_TIMEOUT_MS:3600000}
+    # Database-backed minimum spacing shared by all backend instances.
     min-interval-ms: ${AI_MODEL_MIN_INTERVAL_MS:4000}
     # Retry transient AI failures (429/502/503/504) with backoff; 429 backs off at least 60s.
     max-retries: ${AI_MODEL_MAX_RETRIES:3}

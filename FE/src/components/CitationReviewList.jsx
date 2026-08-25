@@ -205,7 +205,6 @@ export default function CitationReviewList({
                               <p className="truncate text-[11px] font-bold text-(--text-primary)">{candidate.title || candidate.sourceFilename}</p>
                               <p className="text-[9px] text-(--text-tertiary)">{[candidate.authors, candidate.publicationYear].filter(Boolean).join(' · ')}</p>
                             </div>
-                            <span className="text-[9px] font-bold text-indigo-600">{Number.isFinite(candidate.similarityScore) ? `${Math.round(candidate.similarityScore * 100)}%` : '--'}</span>
                           </div>
                           <p className="mt-1 line-clamp-3 text-[10px] italic leading-relaxed text-(--text-secondary)">“{candidate.excerpt}”</p>
                           <button type="button" onClick={() => onInsertCitation(finding, index, candidate, trace)} disabled={!trace || decided || judged || traceUpdating || !canReviewSection}

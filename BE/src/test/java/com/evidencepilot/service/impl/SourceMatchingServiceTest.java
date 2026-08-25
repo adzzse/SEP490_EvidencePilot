@@ -1,6 +1,7 @@
 package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.QdrantSearchResult;
+import com.evidencepilot.dto.SparseVector;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentChunk;
 import com.evidencepilot.model.ProjectDocument;
@@ -32,6 +33,7 @@ class SourceMatchingServiceTest {
     private final DocumentChunkRepository documentChunkRepository =
             mock(DocumentChunkRepository.class);
     private final AiModelClient aiModelClient = mock(AiModelClient.class);
+    private final SparseVectorGenerator sparseVectorGenerator = new SparseVectorGenerator();
     private final QdrantClient qdrantClient = mock(QdrantClient.class);
 
     @Test
@@ -79,12 +81,14 @@ class SourceMatchingServiceTest {
         DocumentChunk foreignChunk = chunk(foreignSource);
         List<String> excerpts = List.of("A project-scoped external benchmark claim");
         List<Float> embedding = List.of(0.1f, 0.2f);
+        SparseVector sparseQuery = sparseVectorGenerator.generate(excerpts.getFirst());
         when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(
                 projectId, DocumentType.SOURCE)).thenReturn(List.of(allowedSource));
         when(projectDocumentRepository.findByProjectId(projectId)).thenReturn(List.of());
         when(aiModelClient.generateEmbeddings(excerpts)).thenReturn(List.of(embedding));
         when(qdrantClient.findClosestChunks(
-                eq(embedding), eq(List.of(allowedSource.getId().toString())), eq(20)))
+                eq(embedding), eq(sparseQuery),
+                eq(List.of(allowedSource.getId().toString())), eq(20)))
                 .thenReturn(List.of(
                         new QdrantSearchResult(
                                 allowedChunk.getId().toString(), new BigDecimal("0.95")),
@@ -104,7 +108,7 @@ class SourceMatchingServiceTest {
                     assertThat(match.similarityScore()).isEqualTo(0.95f);
                 }));
         verify(qdrantClient).findClosestChunks(
-                embedding, List.of(allowedSource.getId().toString()), 20);
+                embedding, sparseQuery, List.of(allowedSource.getId().toString()), 20);
     }
 
     private SourceMatchingService service() {
@@ -113,6 +117,7 @@ class SourceMatchingServiceTest {
                 projectDocumentRepository,
                 documentChunkRepository,
                 aiModelClient,
+                sparseVectorGenerator,
                 qdrantClient);
     }
 

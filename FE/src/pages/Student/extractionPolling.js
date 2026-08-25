@@ -8,4 +8,5 @@ const ACTIVE_EXTRACTION_STATES = new Set([
 ]);
 
 export const hasActiveExtraction = (sources = []) =>
-  sources.some(source => ACTIVE_EXTRACTION_STATES.has(source.processingStatus));
+  Array.isArray(sources)
+  && sources.some(source => ACTIVE_EXTRACTION_STATES.has(source?.processingStatus));

@@ -43,10 +43,7 @@ public class AiClientConfig {
     @Value("${ai.model.max-concurrent-requests:4}")
     private int maxConcurrentRequests;
 
-    /**
-     * Global semaphore {@code aiRequestLimiter} capping concurrent AI model calls per JVM.
-     * Callers acquire around their HTTP call and release in {@code finally}.
-     */
+    /** Local backpressure; the database-backed gate enforces the shared limit. */
     @Bean("aiRequestLimiter")
     public Semaphore aiRequestLimiter() {
         return new Semaphore(Math.max(1, maxConcurrentRequests));

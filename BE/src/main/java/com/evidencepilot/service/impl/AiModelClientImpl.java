@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Component
@@ -33,8 +34,8 @@ public class AiModelClientImpl implements AiModelClient {
     private static final Set<Integer> RETRYABLE_STATUSES = Set.of(429, 502, 503, 504);
     private static final long BASE_RETRY_DELAY_MS = 2_000;
     private static final long MAX_RETRY_DELAY_MS = 30_000;
-    // Provider throttle windows (e.g. ngrok free tier ~20 req/min) are ~60s wide;
-    // a shorter backoff would retry inside the same window and fail every time.
+    // Some provider throttle windows are minute-scale; a shorter 429 backoff can
+    // retry inside the same window and fail every time.
     private static final long RATE_LIMIT_FLOOR_MS = 60_000;
 
     private final RestClient restClient;
@@ -200,21 +201,34 @@ public class AiModelClientImpl implements AiModelClient {
         if (baseUrl.isBlank()) {
             throw new AiApiException(endpoint, 503, "AI_MODEL_BASE_URL is not configured", null);
         }
+        aiModelCallGate.checkCircuit(endpoint);
         long startedNanos = System.nanoTime();
         int attempt = 0;
+        AtomicBoolean attempted = new AtomicBoolean();
         while (true) {
+            attempted.set(false);
             try {
-                T result = aiModelCallGate.execute(endpoint, call::execute);
+                T result = aiModelCallGate.execute(endpoint, () -> {
+                    attempted.set(true);
+                    return call.execute();
+                });
+                aiModelCallGate.recordFinalOutcome(endpoint, false);
                 log.info("ai_call endpoint={} outcome=success status=200 attempts={} duration_ms={}",
                         endpoint, attempt + 1, elapsedMillis(startedNanos));
                 return result;
             } catch (AiApiException e) {
+                if (attempted.get()) {
+                    aiModelCallGate.recordFinalOutcome(
+                            endpoint, e.getStatusCode() >= 500 && e.getStatusCode() <= 599);
+                }
                 log.warn("ai_call endpoint={} outcome=api_error status={} attempts={} duration_ms={}",
                         endpoint, e.getStatusCode(), attempt + 1, elapsedMillis(startedNanos));
                 throw e;
             } catch (RestClientResponseException e) {
                 int status = e.getStatusCode().value();
                 if (!RETRYABLE_STATUSES.contains(status) || attempt >= retryLimit) {
+                    aiModelCallGate.recordFinalOutcome(
+                            endpoint, status >= 500 && status <= 599);
                     log.warn("ai_call endpoint={} outcome=http_error status={} attempts={} duration_ms={}",
                             endpoint, status, attempt + 1, elapsedMillis(startedNanos));
                     throw new AiApiException(endpoint, status);
@@ -232,6 +246,7 @@ public class AiModelClientImpl implements AiModelClient {
                 sleep(backoffMillis);
             } catch (RestClientException e) {
                 if (attempt >= retryLimit) {
+                    aiModelCallGate.recordFinalOutcome(endpoint, true);
                     log.warn("ai_call endpoint={} outcome=transport_error status=503 attempts={} duration_ms={} error_type={}",
                             endpoint, attempt + 1, elapsedMillis(startedNanos), e.getClass().getSimpleName());
                     throw new AiApiException(endpoint, 503, "AI model offline", e);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getPostLoginDestination } from '../src/pages/loginOrigin.js';
+import { getPostLoginDestination, rememberLoginOrigin } from '../src/pages/loginOrigin.js';
 
 const baseOrigin = 'https://evidencepilot.test';
 
@@ -27,4 +27,20 @@ test('falls back for public, foreign, unknown, or role-mismatched origins', () =
   assert.equal(getPostLoginDestination('/instructor/not-a-route', 'INSTRUCTOR', baseOrigin), '/instructor/dashboard');
   assert.equal(getPostLoginDestination('/admin/dashboard', 'INSTRUCTOR', baseOrigin), '/instructor/dashboard');
   assert.equal(getPostLoginDestination(null, 'STUDENT', baseOrigin), '/student/projects');
+});
+
+test('login redirect survives unavailable session storage', () => {
+  const writes = [];
+  const storage = { setItem: (...args) => writes.push(args) };
+
+  rememberLoginOrigin('/student/projects/project-1', '?tab=sources', storage);
+  rememberLoginOrigin('/login', '', storage);
+
+  assert.deepEqual(writes, [[
+    'login_origin',
+    '/student/projects/project-1?tab=sources',
+  ]]);
+  assert.doesNotThrow(() => rememberLoginOrigin('/student/projects', '', {
+    setItem: () => { throw new Error('storage disabled'); },
+  }));
 });

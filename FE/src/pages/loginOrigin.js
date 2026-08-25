@@ -15,6 +15,15 @@ const privateRoutes = [
   { roles: ['STUDENT'], pattern: /^\/student\/projects(?:\/[^/]+)?\/?$/ },
 ];
 
+export function rememberLoginOrigin(pathname, search = '', storage = globalThis.sessionStorage) {
+  if (typeof pathname !== 'string' || pathname.startsWith('/login')) return;
+  try {
+    storage?.setItem('login_origin', pathname + (typeof search === 'string' ? search : ''));
+  } catch {
+    // Storage can be unavailable in private browsing; login must still continue.
+  }
+}
+
 export function getPostLoginDestination(origin, role, baseOrigin) {
   const fallback = defaultWorkspace[role] || defaultWorkspace.STUDENT;
   if (typeof origin !== 'string' || !origin.startsWith('/') || origin.startsWith('//')) return fallback;

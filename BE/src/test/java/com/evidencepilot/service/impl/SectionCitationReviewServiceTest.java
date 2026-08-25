@@ -929,7 +929,7 @@ class SectionCitationReviewServiceTest {
                 sectionRepository,
                 snapshotRepository,
                 userRepository,
-                new PaperStandardService(),
+                new PaperStandardService(mock(AiModelClient.class), objectMapper),
                 sourceMatchingService,
                 auditService,
                 objectMapper);
