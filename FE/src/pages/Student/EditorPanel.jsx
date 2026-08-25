@@ -132,6 +132,14 @@ export default function EditorPanel({
             </div>
           )}
         </div>
+        {currentSection && (
+          <div className="shrink-0 flex items-center gap-0 border-b border-(--border) bg-(--surface-secondary)/70 px-3 py-2 font-mono text-xs" title={t('readOnly')}>
+            <span className="text-indigo-600">{'\\section{'}</span>
+            <span className="min-w-0 truncate font-semibold text-(--text-primary)">{currentSection.sectionTitle}</span>
+            <span className="text-indigo-600">{'}'}</span>
+            <span className="ml-auto pl-3 text-[9px] font-sans font-bold uppercase tracking-wide text-(--text-tertiary)">{t('readOnly')}</span>
+          </div>
+        )}
         <div className="flex-1 min-h-0 overflow-hidden">
           <LatexEditor ref={editorRef} content={displayContent} onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} />
         </div>
@@ -154,6 +162,7 @@ export default function EditorPanel({
         <div className="flex-1 min-h-0 overflow-auto flex justify-center">
           <div style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: 'center top' }}>
             <PreviewPane
+              sectionTitle={currentSection?.sectionTitle}
               latex={displayContent}
               mediaAssets={mediaAssets}
               citationNumbers={citationPreview?.citationNumbers}

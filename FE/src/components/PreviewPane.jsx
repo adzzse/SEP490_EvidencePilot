@@ -3,6 +3,7 @@ import api from '../api.js';
 import { renderLatexToHtml } from './latexHtml.js';
 
 export default function PreviewPane({
+  sectionTitle,
   latex,
   mediaAssets,
   citationNumbers,
@@ -41,13 +42,14 @@ export default function PreviewPane({
       : renderLatexToHtml(latex, mediaUrlMap, citationNumbers)),
     [citationNumbers, generatedReferences.length, latex, mediaUrlMap],
   );
+  const heading = sectionTitle || (generatedReferences.length > 0 ? referencesTitle : '');
 
   return (
     <div className="h-full overflow-y-auto bg-white p-8">
+      {heading && <h2 className="max-w-prose mx-auto text-lg font-bold mb-3 text-slate-800">{heading}</h2>}
       {html && <div className="max-w-prose mx-auto whitespace-pre-wrap break-words preview-content" dangerouslySetInnerHTML={{ __html: html }} />}
       {generatedReferences.length > 0 && (
         <section className="max-w-prose mx-auto text-slate-700">
-          <h2 className="text-lg font-bold mt-6 mb-3 text-slate-800">{referencesTitle}</h2>
           <ol className="space-y-3 text-sm">
             {generatedReferences.map(reference => (
               <li key={reference.key} className="flex gap-2 leading-relaxed">

@@ -23,6 +23,7 @@ export function renderLatexToHtml(latex, mediaUrlMap, citationNumbers = {}) {
     .replace(/\\end\{document\}/g, '')
     .replace(/\\section\{([^}]*)\}/g, '<h2 class="text-lg font-bold mt-6 mb-3 text-slate-800">$1</h2>')
     .replace(/\\subsection\{([^}]*)\}/g, '<h3 class="text-base font-semibold mt-4 mb-2 text-slate-700">$1</h3>')
+    .replace(/\\subsubsection\{([^}]*)\}/g, '<h4 class="text-sm font-semibold mt-3 mb-2 text-slate-700">$1</h4>')
     .replace(/\\textbf\{([^}]*)\}/g, '<strong>$1</strong>')
     .replace(/\\textit\{([^}]*)\}/g, '<em>$1</em>')
     .replace(/\\hl\{([^}]*)\}/g, '<span class="bg-yellow-200 px-1 rounded">$1</span>')

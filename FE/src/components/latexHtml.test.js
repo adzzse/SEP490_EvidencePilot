@@ -18,3 +18,9 @@ test('hides unresolved generated keys while preserving manual citation keys', ()
   assert.match(html, /\[\?, smith2026\]/);
   assert.doesNotMatch(html, new RegExp(key));
 });
+
+test('renders subsubsection headings', () => {
+  const html = renderLatexToHtml('\\subsubsection{Details}');
+
+  assert.match(html, /<h4[^>]*>Details<\/h4>/);
+});
