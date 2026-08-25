@@ -57,6 +57,8 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
 
     private static final Pattern MARKDOWN_HEADING = Pattern.compile(
             "(?m)^(#{1,6})\\h+(.+?)\\h*(?:\\R|$)");
+    private static final Pattern INLINE_ABSTRACT = Pattern.compile(
+            "(?im)^\\h*Abstract:\\h*");
     private static final Pattern HEADING_NUMBER = Pattern.compile(
             "^(?:\\d+(?:\\.\\d+)*|[IVXLCDM]+)[.)]?\\h+",
             Pattern.CASE_INSENSITIVE);
@@ -253,6 +255,18 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
             String rawHeading = matcher.group(2).trim();
             if (!topLevelHeadings.contains(normalizeHeading(rawHeading))) {
                 continue;
+            }
+
+            if (sections.isEmpty()) {
+                Matcher abstractMatcher = INLINE_ABSTRACT.matcher(text);
+                if (abstractMatcher.find() && abstractMatcher.start() < matcher.start()) {
+                    PaperSection abstractSection = new PaperSection();
+                    abstractSection.setDocument(document);
+                    abstractSection.setSectionOrder(0);
+                    abstractSection.setSectionTitle("Abstract");
+                    sections.add(abstractSection);
+                    lastEnd = abstractMatcher.end();
+                }
             }
 
             if (!sections.isEmpty()) {

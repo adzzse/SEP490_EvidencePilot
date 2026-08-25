@@ -183,7 +183,7 @@ class PaperProcessingServiceImplTest {
     }
 
     @Test
-    void preservesTwelveTopLevelSectionsForFlattenedNumberedPaper() {
+    void promotesInlineAbstractAndPreservesNumberedSections() {
         UUID documentId = UUID.randomUUID();
         Document document = new Document();
         document.setId(documentId);
@@ -202,7 +202,15 @@ class PaperProcessingServiceImplTest {
                 "Appendix B",
                 "Appendix C",
                 "Appendix D");
-        text.setExtractedText("# Paper title\n" + String.join(
+        text.setExtractedText("""
+                # Paper title
+                Authors
+
+                Abstract: Abstract body.
+
+                Keywords: AI, ML
+
+                """ + String.join(
                 "\n",
                 headings.stream().map(title -> "## " + title + "\nBody.").toList()));
         document.setDocumentText(text);
@@ -223,6 +231,7 @@ class PaperProcessingServiceImplTest {
 
         assertThat(saved).extracting(PaperSection::getSectionTitle)
                 .containsExactly(
+                        "Abstract",
                         "Introduction",
                         "Background",
                         "Research methodology",
@@ -235,6 +244,8 @@ class PaperProcessingServiceImplTest {
                         "Appendix B",
                         "Appendix C",
                         "Appendix D");
+        assertThat(saved.getFirst().getContentTex())
+                .isEqualTo("Abstract body.\n\nKeywords: AI, ML");
     }
 
     private static AiModelClient.ExtractionBlock heading(String text, int level) {
