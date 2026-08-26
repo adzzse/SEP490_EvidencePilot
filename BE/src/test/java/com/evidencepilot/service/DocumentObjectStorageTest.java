@@ -62,7 +62,7 @@ class DocumentObjectStorageTest {
         String hash = "a".repeat(64);
 
         assertThat(DocumentObjectStorage.extractionCacheKey(hash))
-                .isEqualTo("documents/processed/cache/v1/sha256/" + hash + "/extraction.zip");
+                .isEqualTo("documents/processed/cache/v2/sha256/" + hash + "/extraction.zip");
         assertThatThrownBy(() -> DocumentObjectStorage.extractionCacheKey("../not-a-hash"))
                 .isInstanceOf(IllegalArgumentException.class);
     }

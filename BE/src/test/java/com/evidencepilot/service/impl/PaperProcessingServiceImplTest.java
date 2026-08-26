@@ -199,6 +199,7 @@ class PaperProcessingServiceImplTest {
                 "7. Acknowledgments",
                 "8. References",
                 "Appendix A",
+                "Table A.17",
                 "Appendix B",
                 "Appendix C",
                 "Appendix D");
@@ -246,6 +247,8 @@ class PaperProcessingServiceImplTest {
                         "Appendix D");
         assertThat(saved.getFirst().getContentTex())
                 .isEqualTo("Abstract body.\n\nKeywords: AI, ML");
+        assertThat(saved.get(9).getContentTex())
+                .contains("## Table A.17\nBody.");
     }
 
     private static AiModelClient.ExtractionBlock heading(String text, int level) {

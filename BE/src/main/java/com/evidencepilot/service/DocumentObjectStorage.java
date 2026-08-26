@@ -140,7 +140,7 @@ public class DocumentObjectStorage {
                                 || character >= 'a' && character <= 'f')) {
             throw new IllegalArgumentException("Extraction cache requires a lowercase SHA-256 hash");
         }
-        return "documents/processed/cache/v1/sha256/" + fileHashSha256 + "/extraction.zip";
+        return "documents/processed/cache/v2/sha256/" + fileHashSha256 + "/extraction.zip";
     }
 
     public void deleteExtractionCheckpoint(UUID documentId, String fileHashSha256) {
