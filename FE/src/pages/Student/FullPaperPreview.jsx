@@ -3,10 +3,10 @@ import { useTranslation } from 'react-i18next';
 import PreviewPane from '../../components/PreviewPane';
 import { isReferenceSectionTitle } from '../../components/latexHtml.js';
 
-export default function FullPaperPreview({ sections, paperTitle, mediaAssets, citationPreview, onClose }) {
+export default function FullPaperPreview({ sections, paperTitle, mediaAssets, onClose }) {
   const { t } = useTranslation();
   const sectionRefs = useRef({});
-  const generatedReferences = citationPreview?.references || [];
+  const generatedReferences = [];
   const hasReferenceSection = sections.some(section =>
     isReferenceSectionTitle(section.sectionTitle));
 
@@ -54,7 +54,6 @@ export default function FullPaperPreview({ sections, paperTitle, mediaAssets, ci
                       sectionTitle={sec.sectionTitle}
                       latex={sec.contentTex || ''}
                       mediaAssets={mediaAssets}
-                      citationNumbers={citationPreview?.citationNumbers}
                       generatedReferences={referenceSection ? generatedReferences : []}
                       referencesTitle={sec.sectionTitle || 'References'}
                     />
@@ -67,7 +66,6 @@ export default function FullPaperPreview({ sections, paperTitle, mediaAssets, ci
                 <PreviewPane
                   latex=""
                   mediaAssets={mediaAssets}
-                  citationNumbers={citationPreview?.citationNumbers}
                   generatedReferences={generatedReferences}
                 />
               )}

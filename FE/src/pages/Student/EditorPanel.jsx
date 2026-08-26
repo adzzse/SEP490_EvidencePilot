@@ -1,26 +1,131 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import LatexEditor from '../../components/LatexEditor';
 import PreviewPane from '../../components/PreviewPane';
-import { isReferenceSectionTitle } from '../../components/latexHtml.js';
+import VisualSourceMap from '../../components/VisualSourceMap.jsx';
 import { useTranslation } from 'react-i18next';
 
 export default function EditorPanel({
   compact,
-  selectedPaper, selectedSectionId, assignedSections, canEditCurrentSection, currentSection, displayContent, previewContent, updateCode,
+  selectedPaper, selectedSectionId, assignedSections, canEditCurrentSection, currentSection, displayContent, updateCode,
   editorWidth, onEditorResizeStart,
-  saveStatus, lastSaved, handleSaveDraft, handleScanCitations,
+  saveStatus, lastSaved, handleSaveDraft,
   insertLatexTag, insertSymbol, handleFindReplace, handleDownloadTex,
   showSymbolMenu, setShowSymbolMenu, showTextSizeMenu, setShowTextSizeMenu,
   showSearchPanel, setShowSearchPanel, searchQuery, setSearchQuery, replaceQuery, setReplaceQuery,
-  textSize, setTextSize, showToast, editorRef, mediaAssets, citationPreview, isLocked
+  textSize, setTextSize, showToast, editorRef, mediaAssets, isLocked,
+  findings = [], onFindingClick,
+  sources = [], aiSourceMatches = {}
 }) {
   const { t } = useTranslation();
   const isOwnSection = canEditCurrentSection
     ?? (assignedSections && assignedSections.some(s => String(s.id) === String(selectedSectionId)));
   const [previewZoom, setPreviewZoom] = useState(100);
-  const generatedReferences = isReferenceSectionTitle(currentSection?.sectionTitle)
-    ? citationPreview?.references || []
-    : [];
+  const [showVisualMap, setShowVisualMap] = useState(false);
+  const generatedReferences = [];
+  const previewOuterRef = useRef(null);
+
+  // --- Anchor-only sync engine (Overleaf-style) ---
+  const zoomScaleRef = useRef(1);
+  const contentKeyRef = useRef(displayContent);
+  const blocksCacheRef = useRef({ key: null, items: [] });
+  const editorScrollHandlerRef = useRef(null);
+  const editorScrollBridge = useCallback(() => { editorScrollHandlerRef.current?.(); }, []);
+
+  contentKeyRef.current = displayContent;
+  useEffect(() => { zoomScaleRef.current = previewZoom / 100; }, [previewZoom]);
+
+  // Recreated per section so locks/anchors reset; both panes start at top.
+  useEffect(() => {
+    const container = previewOuterRef.current;
+    if (!container) return undefined;
+
+    let frame = null;
+    let pending = null;
+    let lock = null;
+    let lastToPreview = null;
+    let lastToEditor = null;
+
+    const getBlocks = () => {
+      if (blocksCacheRef.current.key !== contentKeyRef.current) {
+        blocksCacheRef.current = {
+          key: contentKeyRef.current,
+          items: Array.from(container.querySelectorAll('[data-src-start]')).map(el => ({
+            el,
+            start: Number(el.getAttribute('data-src-start')),
+          })),
+        };
+      }
+      return blocksCacheRef.current.items;
+    };
+
+    const alignBlockTop = (el) => {
+      const scale = zoomScaleRef.current || 1;
+      const delta = el.getBoundingClientRect().top - container.getBoundingClientRect().top;
+      container.scrollTop += delta / scale;
+    };
+
+    const runFromEditor = () => {
+      const blocks = getBlocks();
+      if (!blocks.length || !editorRef.current?.getTopVisibleOffset) return;
+      const offset = editorRef.current.getTopVisibleOffset();
+      let target = null;
+      for (const b of blocks) {
+        if (b.start <= offset) target = b;
+        else break;
+      }
+      if (!target) target = blocks[0]; // preamble / unrenderable region → anchor to first block
+      if (target.start === lastToPreview) return; // idempotent anchor — no jitter
+      lastToPreview = target.start;
+      lock = 'preview';
+      if (target === blocks[0] && offset <= blocks[0].start) container.scrollTop = 0;
+      else alignBlockTop(target.el);
+      requestAnimationFrame(() => { lock = null; });
+    };
+
+    const runFromPreview = () => {
+      const blocks = getBlocks();
+      if (!blocks.length || !editorRef.current?.scrollToOffset) return;
+      const cTop = container.getBoundingClientRect().top;
+      let target = blocks[0];
+      for (const b of blocks) {
+        if (b.el.getBoundingClientRect().top <= cTop + 1) target = b;
+        else break;
+      }
+      if (target.start === lastToEditor) return;
+      lastToEditor = target.start;
+      lock = 'editor';
+      editorRef.current.scrollToOffset(target.start);
+      requestAnimationFrame(() => { lock = null; });
+    };
+
+    const flush = () => {
+      frame = null;
+      const side = pending;
+      pending = null;
+      if (side === 'editor') runFromEditor();
+      else if (side === 'preview') runFromPreview();
+    };
+    const schedule = (side) => {
+      pending = side;
+      if (frame == null) frame = requestAnimationFrame(flush);
+    };
+
+    editorScrollHandlerRef.current = () => { if (lock !== 'editor') schedule('editor'); };
+    const onPreviewScroll = () => { if (lock !== 'preview') schedule('preview'); };
+
+    container.addEventListener('scroll', onPreviewScroll, { passive: true });
+
+    // Reset both panes for the new section.
+    container.scrollTop = 0;
+    editorRef.current?.scrollToTop?.();
+
+    return () => {
+      container.removeEventListener('scroll', onPreviewScroll);
+      editorScrollHandlerRef.current = null;
+      if (frame != null) cancelAnimationFrame(frame);
+    };
+  }, [selectedSectionId]);
+
   return (
     <div id="editor-preview-container" className="flex-1 min-w-0 flex overflow-hidden bg-(--surface-tertiary)/50 p-2 gap-2">
       <div style={{ width: compact ? '100%' : `${editorWidth}%`, flexGrow: 0, flexShrink: 0 }} className="bg-(--surface) rounded-lg shadow-sm border border-(--border) flex flex-col overflow-hidden min-w-0">
@@ -33,12 +138,6 @@ export default function EditorPanel({
           <div className="flex items-center gap-3">
             {(isLocked || (currentSection && !isOwnSection)) && (
               <span className="text-[9px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-md border border-amber-200 dark:border-amber-800">{t('readOnly')}</span>
-            )}
-            {selectedPaper && (
-              <button onClick={handleScanCitations} disabled={isLocked} className="border border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 disabled:opacity-40 px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1 transition-colors" title={t('scanFormatTitle')}>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                {t('scanFormat')}
-              </button>
             )}
             <button onClick={handleSaveDraft} disabled={saveStatus === 'saving' || !isOwnSection || isLocked} className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-50 ${saveStatus === 'saving' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30' : saveStatus === 'saved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30' : saveStatus === 'error' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30' : 'bg-(--surface-tertiary) text-(--text-secondary) hover:bg-(--border)'}`}>
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
@@ -141,7 +240,7 @@ export default function EditorPanel({
           </div>
         )}
         <div className="flex-1 min-h-0 overflow-hidden">
-          <LatexEditor ref={editorRef} content={displayContent} onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} />
+          <LatexEditor key={selectedSectionId || 'no-section'} ref={editorRef} content={displayContent} onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} />
         </div>
       </div>
       <div onMouseDown={onEditorResizeStart} className={`${compact ? 'hidden' : 'flex'} w-1.5 hover:bg-indigo-500 cursor-col-resize self-stretch transition-all shrink-0 z-10 relative group items-center justify-center border-l border-r border-(--border)`} title={t('dragToResize')}>
@@ -154,22 +253,35 @@ export default function EditorPanel({
             {t('preview')}
           </div>
           <div className="flex items-center gap-1">
+            <button onClick={() => setShowVisualMap(!showVisualMap)} className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${showVisualMap ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700' : 'hover:bg-(--surface-secondary) text-(--text-primary)'}`} title={t('visualSourceMap') || 'Visual Map of Sources'}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 13a5 5 0 007.54.54l2-2a5 5 0 00-7.07-7.07l-1.15 1.15m2.68 5.38a5 5 0 00-7.54-.54l-2 2a5 5 0 007.07 7.07l1.15-1.15" /></svg>
+            </button>
             <button onClick={() => setPreviewZoom(p => Math.min(200, p + 10))} className="text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary) px-1.5 py-0.5 rounded transition-colors">+</button>
             <span className="text-xs font-mono text-(--text-primary) min-w-[36px] text-center">{previewZoom}%</span>
             <button onClick={() => setPreviewZoom(p => Math.max(50, p - 10))} className="text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary) px-1.5 py-0.5 rounded transition-colors">−</button>
           </div>
         </div>
-        <div className="flex-1 min-h-0 overflow-auto flex justify-center">
+        <div ref={previewOuterRef} className="flex-1 min-h-0 overflow-auto flex justify-center relative">
           <div style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: 'center top' }}>
             <PreviewPane
               sectionTitle={currentSection?.sectionTitle}
               latex={displayContent}
               mediaAssets={mediaAssets}
-              citationNumbers={citationPreview?.citationNumbers}
               generatedReferences={generatedReferences}
               referencesTitle={currentSection?.sectionTitle || 'References'}
             />
           </div>
+          {showVisualMap && (
+            <div className="absolute inset-0 z-10 bg-(--surface)/95 backdrop-blur-sm">
+              <div className="h-full">
+                <VisualSourceMap
+                  sources={sources}
+                  aiSourceMatches={aiSourceMatches}
+                  isDark={document.documentElement.classList.contains('dark')}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

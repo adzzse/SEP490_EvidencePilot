@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../../api.js';
 import { getSourceDownloadUrl } from './sourceDownload.js';
 import CitationReviewList from '../../components/CitationReviewList.jsx';
-import TraceEvidenceList from '../../components/TraceEvidenceList.jsx';
+import VisualSourceMap from '../../components/VisualSourceMap.jsx';
 
 const FUNCTIONAL_TYPES = [
   { value: 'EMPIRICAL', labelKey: 'functionalTypeEmpirical' },
@@ -113,7 +113,7 @@ function EvidenceEvaluationCard({ match, status, breakdownOpenId, setBreakdownOp
 }
 
 export default function ContextPanel({
-  compact, isOpen, width, onResizeStart,
+  compact, isOpen, width,
   activeTab, setActiveTab,
   showToast,
   // Source tab
@@ -121,12 +121,12 @@ export default function ContextPanel({
   // Feedback tab
   feedbacks, assignedSections, setShowSubmitReviewModal, userProjectRole,
   // Citation Review tab
-  aiReview, aiReviewLoading, aiReviewProgress, aiReviewError, aiReviewStale, aiSourceMatches,
-  aiSourcesLoading, aiSourcesError, sectionTraces, updatingTraceIds, traceError,
-  onDecideTrace, reviewSectionTitle,
+  aiReview, aiReviewLoading, aiReviewProgress, aiReviewError, aiSourceMatches,
+  aiSourcesLoading, aiSourcesError,
   onRunAiReview, onSelectReviewFinding, onInsertCitation, onRetryReviewSources,
   canReviewSection,
   isLocked,
+  reviewSectionTitle,
 }) {
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [sourceMode, setSourceMode] = useState('doi');
@@ -140,11 +140,6 @@ export default function ContextPanel({
   const [answerDrafts, setAnswerDrafts] = useState({});
   const [answeringId, setAnsweringId] = useState(null);
   const [answerErrors, setAnswerErrors] = useState({});
-  const [decideDraft, setDecideDraft] = useState(null);
-
-  useEffect(() => {
-    setDecideDraft(null);
-  }, [reviewSectionTitle, aiReview?.result?.id, activeTab]);
 
   const submitAnswer = async (item, fb) => {
     const content = (answerDrafts[item.id] || '').trim();
@@ -206,10 +201,7 @@ export default function ContextPanel({
 
   return (
     <>
-      <div onMouseDown={onResizeStart} className={`${compact ? 'hidden' : 'flex'} w-1 hover:w-1.5 bg-(--border) hover:bg-(--text-tertiary) cursor-col-resize self-stretch transition-all shrink-0 z-10 relative group items-center justify-center border-l border-(--border)/80`}>
-        <div className="h-6 w-0.5 bg-(--text-tertiary) group-hover:bg-(--text-secondary) rounded"></div>
-      </div>
-      <aside data-tour="context-panel" style={{ width: compact ? 'min(24rem, calc(100vw - 3.5rem))' : width }} className={`bg-(--surface) border-l border-(--border) flex flex-col shrink-0 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.12)] overflow-hidden ${compact ? 'absolute inset-y-0 right-0 z-30' : 'z-10'}`}>
+      <aside data-tour="context-panel" style={{ width: compact ? 'min(24rem, calc(100vw - 3.5rem))' : width }} className="absolute inset-y-0 right-0 z-40 bg-(--surface) border-l border-(--border) flex flex-col shadow-[-8px_0_24px_-6px_rgba(0,0,0,0.25)] overflow-hidden">
         <div className="flex border-b border-(--border) bg-(--surface) relative shrink-0">
           <button data-tour="context-info-tab" onClick={() => setActiveTab('Source')} className={activeClass('Source')}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -360,7 +352,7 @@ export default function ContextPanel({
             </div>
           )}
 
-          {activeTab === 'AI Review' && (
+{activeTab === 'AI Review' && (
             <div className="space-y-4 animate-in fade-in duration-300">
               <CitationReviewList
                 reviewSectionTitle={reviewSectionTitle}
@@ -368,38 +360,28 @@ export default function ContextPanel({
                 aiReviewLoading={aiReviewLoading}
                 aiReviewProgress={aiReviewProgress}
                 aiReviewError={aiReviewError}
-                aiReviewStale={aiReviewStale}
                 aiSourceMatches={aiSourceMatches}
                 aiSourcesLoading={aiSourcesLoading}
                 aiSourcesError={aiSourcesError}
-                sectionTraces={sectionTraces}
-                updatingTraceIds={updatingTraceIds}
                 canReviewSection={canReviewSection}
                 isLocked={isLocked}
                 onRunAiReview={onRunAiReview}
                 onSelectReviewFinding={onSelectReviewFinding}
                 onInsertCitation={onInsertCitation}
                 onRetryReviewSources={onRetryReviewSources}
-                onStartTraceDecision={(findingIndex, trace) => setDecideDraft({
-                  findingIndex,
-                  action: trace?.studentAction || '',
-                  sourceId: trace?.sourceId || '',
-                  chunkId: trace?.documentChunkId || '',
-                  evidenceQuote: trace?.evidenceQuote || '',
-                  relation: trace?.evidenceRelation || '',
-                  explanation: trace?.explanation || '',
-                })}
-                decideDraft={decideDraft}
-                setDecideDraft={setDecideDraft}
-                onDecideTrace={onDecideTrace}
               />
-              <TraceEvidenceList
-                sectionTraces={sectionTraces}
-                updatingTraceIds={updatingTraceIds}
-                traceError={traceError}
-                onRunReview={onRunAiReview}
-                showHistory={!aiReview && sectionTraces.length > 0}
-              />
+              <div className="mt-4 rounded-xl border border-(--border) bg-(--surface) overflow-hidden">
+                <div className="px-3 py-2 border-b border-(--border) bg-(--surface-secondary) flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-(--text-primary)">{t('visualSourceMap') || 'Visual Map of Sources'}</h4>
+                </div>
+                <div className="h-96">
+                  <VisualSourceMap
+                    sources={sources}
+                    aiSourceMatches={aiSourceMatches}
+                    isDark={document.documentElement.classList.contains('dark')}
+                  />
+                </div>
+              </div>
             </div>
           )}
 

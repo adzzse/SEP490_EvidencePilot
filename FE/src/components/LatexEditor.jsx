@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import DiffMatchPatch from 'diff-match-patch';
 import { basicSetup } from 'codemirror';
 import { EditorState, StateEffect, StateField } from '@codemirror/state';
-import { Decoration, EditorView } from '@codemirror/view';
+import { EditorView, Decoration } from '@codemirror/view';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { latex } from 'codemirror-lang-latex';
 
@@ -26,13 +27,15 @@ const reviewRanges = StateField.define({
   provide: field => EditorView.decorations.from(field),
 });
 
-const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnly = false, fontSize = 14 }, ref) {
+const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll }, ref) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
   const lastEmittedRef = useRef('');
+  const onScrollRef = useRef(null);
   const [isDark, setIsDark] = useState(() =>
     typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   );
+  onScrollRef.current = onScroll;
 
   useImperativeHandle(ref, () => ({
     getSelection: () => {
@@ -133,6 +136,42 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
         .sort((left, right) => left.from - right.from);
       v.dispatch({ effects: setReviewRanges.of(valid) });
     },
+    getScrollInfo: () => {
+      const v = viewRef.current;
+      if (!v) return { top: 0, height: 0, clientHeight: 0 };
+      const scroller = v.scrollDOM;
+      return {
+        top: scroller.scrollTop,
+        height: scroller.scrollHeight,
+        clientHeight: scroller.clientHeight,
+      };
+    },
+    // --- Anchor sync primitives (Overleaf-style source↔preview mapping) ---
+    getTopVisibleOffset: () => {
+      const v = viewRef.current;
+      if (!v) return 0;
+      try {
+        const block = v.lineBlockAtHeight(v.scrollDOM.scrollTop + 1);
+        return Math.max(0, Math.min(block.from, v.state.doc.length));
+      } catch {
+        return 0;
+      }
+    },
+    scrollToOffset: (offset) => {
+      const v = viewRef.current;
+      if (!v) return;
+      const at = Math.max(0, Math.min(offset, v.state.doc.length));
+      const dom = v.domAtPos(at);
+      const node = dom.node.nodeType === 1 ? dom.node : dom.node.parentElement;
+      if (!node) return;
+      const rect = node.getBoundingClientRect();
+      const scrollerRect = v.scrollDOM.getBoundingClientRect();
+      v.scrollDOM.scrollTop += rect.top - scrollerRect.top;
+    },
+    scrollToTop: () => {
+      const v = viewRef.current;
+      if (v) v.scrollDOM.scrollTop = 0;
+    },
   }));
 
   useEffect(() => {
@@ -187,20 +226,56 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
 
     viewRef.current = new EditorView({ state, parent: containerRef.current });
 
-    return () => { if (viewRef.current) viewRef.current.destroy(); };
+    // Scroll listener lives with the view so readOnly/fontSize/theme rebuilds re-bind it.
+    const handleScroll = () => { onScrollRef.current?.(); };
+    viewRef.current.scrollDOM.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      if (viewRef.current) {
+        viewRef.current.scrollDOM.removeEventListener('scroll', handleScroll);
+        viewRef.current.destroy();
+      }
+    };
   }, [readOnly, fontSize, isDark]);
 
+  // Hydration effect — same-section external store updates (e.g. AI "Insert
+  // Citation") are pushed into the doc as a MINIMAL diff so the cursor and
+  // undo history survive. Section switches never hit this path: the key remount
+  // builds a fresh view whose initial doc already equals `content`.
   useEffect(() => {
-    if (viewRef.current && content !== undefined && content !== lastEmittedRef.current) {
-      const current = viewRef.current.state.doc.toString();
-      if (current !== content) {
-        lastEmittedRef.current = content || '';
-        viewRef.current.dispatch({
-          changes: { from: 0, to: current.length, insert: content || '' },
-        });
-      }
+    const v = viewRef.current;
+    if (!v || content === undefined) return;
+    const current = v.state.doc.toString();
+    if (current === content) {
+      lastEmittedRef.current = content || '';
+      return;
+    }
+    const dmp = new DiffMatchPatch();
+    const diffs = dmp.diff_main(current, content);
+    dmp.diff_cleanupSemantic(diffs);
+    const changes = [];
+    let pos = 0;
+    for (const [op, text] of diffs) {
+      const len = text.length;
+      if (op === 0) pos += len;
+      else if (op === -1) changes.push({ from: pos, to: pos + len });
+      else changes.push({ from: pos, insert: text });
+    }
+    if (changes.length) {
+      lastEmittedRef.current = content || ''; // stamp before dispatch → updateListener echo is a no-op
+      v.dispatch({ changes });
+    } else {
+      lastEmittedRef.current = content || '';
     }
   }, [content]);
+
+  // Update review ranges when findings change
+  useEffect(() => {
+    if (viewRef.current && findings) {
+      const ranges = findings.map(f => ({ from: f.from, to: f.to }));
+      viewRef.current.dispatch({ effects: setReviewRanges.of(ranges) });
+    }
+  }, [findings]);
 
   return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
 });

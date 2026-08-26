@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import TourLauncher from '../../components/TourLauncher';
 import FileViewerModal from '../../components/FileViewerModal';
+import CitationPopover from '../../components/CitationPopover.jsx';
 import api from '../../api.js';
 import { subscribeToNotifications } from '../../notificationSocket.js';
 import WorkspaceHeader from './WorkspaceHeader.jsx';
@@ -98,7 +99,6 @@ export default function WorkspaceLayout() {
     return stored === 'Graph' || stored === 'Claims' ? 'AI Review' : stored;
   });
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [showOverview, setShowOverview] = useState(false);
   const [sectionsExpanded, setSectionsExpanded] = useState(true);
   const [showReviseModal, setShowReviseModal] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -126,7 +126,7 @@ export default function WorkspaceLayout() {
   const [replaceQuery, setReplaceQuery] = useState('');
   const [editorWidth, setEditorWidth] = useState(50);
   const [fileTreeWidth, setFileTreeWidth] = useState(256);
-  const [rightDrawerWidth, setRightDrawerWidth] = useState(380);
+  const [rightDrawerWidth] = useState(380);
   const [isCompactWorkspace, setIsCompactWorkspace] = useState(compactAtLoad);
   const [isDrawerOpen, setIsDrawerOpen] = useState(!compactAtLoad);
   const [isFileTreeOpen, setIsFileTreeOpen] = useState(!compactAtLoad);
@@ -136,10 +136,6 @@ export default function WorkspaceLayout() {
 
   const [showSubmitReviewModal, setShowSubmitReviewModal] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [citationResult, setCitationResult] = useState(null);
-  const [showFormatScanModal, setShowFormatScanModal] = useState(false);
-  const [loadingCitation, setLoadingCitation] = useState(false);
-
   const [loadingAiReview, setLoadingAiReview] = useState(false);
   const [aiReviewProgress, setAiReviewProgress] = useState(null);
   const [rollingBack, setRollingBack] = useState(false);
@@ -149,9 +145,6 @@ export default function WorkspaceLayout() {
   const [aiSourceMatches, setAiSourceMatches] = useState({});
   const [loadingAiSources, setLoadingAiSources] = useState(false);
   const [aiSourcesError, setAiSourcesError] = useState('');
-  const [sectionTraces, setSectionTraces] = useState([]);
-  const [updatingTraceIds, setUpdatingTraceIds] = useState([]);
-  const [traceError, setTraceError] = useState('');
   const [newClaimContent, setNewClaimContent] = useState('');
   const [newClaimFunctionalType, setNewClaimFunctionalType] = useState('EMPIRICAL');
   const [claimEvaluation, setClaimEvaluation] = useState(null);
@@ -178,6 +171,9 @@ export default function WorkspaceLayout() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [sectionTraces, setSectionTraces] = useState([]);
+  const [updatingTraceIds, setUpdatingTraceIds] = useState([]);
+  const [traceError, setTraceError] = useState('');
   const editorRef = useRef(null);
   const loadRequestRef = useRef(0);
   const projectRef = useRef(null);
@@ -191,20 +187,6 @@ export default function WorkspaceLayout() {
   const aiReviewJobRef = useRef(null);
   const aiReviewRequestRef = useRef(0);
   const aiSourceRequestRef = useRef(0);
-  const sectionTracesRequestRef = useRef(0);
-  const formatScanRequestRef = useRef(0);
-
-  const formatScanInputKey = useMemo(() => {
-    if (!selectedPaper?.id) return '';
-    const sectionState = sections
-      .map(section => [section.id, section.sectionOrder, section.sectionTitle, section.active, section.contentTex].join('\u0001'))
-      .join('\u0002');
-    const sourceState = sources
-      .map(source => [source.id, source.active, source.processingStatus].join('\u0001'))
-      .sort()
-      .join('\u0002');
-    return [selectedPaper.id, project?.targetStandard || '', sectionState, sourceState].join('\u0003');
-  }, [project?.targetStandard, sections, selectedPaper?.id, sources]);
 
   const updateCode = (newVal) => {
     codeContentRef.current = newVal;
@@ -249,6 +231,7 @@ export default function WorkspaceLayout() {
     if (current && current !== sec.id && dirtySectionsRef.current.has(current)) {
       if (!window.confirm(t('unsavedSectionSwitch'))) return false;
       dirtySectionsRef.current.delete(current);
+      removeWorkspaceDraft(projectRef.current?.id, current); // discard also drops the stale local draft
     }
     selectSection(sec.id);
     const draft = readWorkspaceDraft(projectRef.current?.id, sec.id);
@@ -269,12 +252,6 @@ export default function WorkspaceLayout() {
   };
 
   const displayContent = selectedPaper ? codeContent : `% ${t('noPaper')}`;
-
-  const [previewContent, setPreviewContent] = useState(displayContent);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setPreviewContent(displayContent), 250);
-    return () => window.clearTimeout(timer);
-  }, [displayContent]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -317,44 +294,8 @@ export default function WorkspaceLayout() {
     setLoadingAiSources(false);
     setAiSourceMatches({});
     setAiSourcesError('');
-    setSectionTraces([]);
-    setUpdatingTraceIds([]);
-    setTraceError('');
     editorRef.current?.setReviewRanges([]);
   }, [selectedPaper?.id, selectedSectionId]);
-
-  useEffect(() => {
-    if (!selectedPaper?.id) {
-      formatScanRequestRef.current += 1;
-      setCitationResult(null);
-      setShowFormatScanModal(false);
-      return undefined;
-    }
-
-    const paperId = selectedPaper.id;
-    const requestId = ++formatScanRequestRef.current;
-    setCitationResult(null);
-    setShowFormatScanModal(false);
-    const timer = window.setTimeout(async () => {
-      setLoadingCitation(true);
-      try {
-        const response = await api.get(`/api/papers/${paperId}/format-scan`);
-        if (formatScanRequestRef.current === requestId) {
-          setCitationResult(response.data);
-        }
-      } catch {
-        if (formatScanRequestRef.current === requestId) {
-          setCitationResult(null);
-          showToast(t('formatScanFailed'));
-        }
-      } finally {
-        if (formatScanRequestRef.current === requestId) {
-          setLoadingCitation(false);
-        }
-      }
-    }, 500);
-    return () => window.clearTimeout(timer);
-  }, [formatScanInputKey]);
 
   // Resize handlers
   const handleMouseDown = (e) => {
@@ -392,23 +333,6 @@ export default function WorkspaceLayout() {
     document.addEventListener('mouseup', onMouseUp);
   };
 
-  const handleRightDividerMouseDown = (e) => {
-    e.preventDefault();
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    const onMouseMove = (me) => {
-      let nw = 380;
-      const p = document.getElementById('workspace-container');
-      if (p) nw = p.getBoundingClientRect().right - me.clientX;
-      if (nw < 250) nw = 250;
-      if (nw > 600) nw = 600;
-      setRightDrawerWidth(nw);
-    };
-    const onMouseUp = () => { document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); document.body.style.cursor = ''; document.body.style.userSelect = ''; };
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  };
-
   // Data loading
 
   const loadProjectData = useCallback(async (projId) => {
@@ -430,18 +354,12 @@ export default function WorkspaceLayout() {
     setSections([]);
     setSelectedPaper(null);
     selectSection('');
-    setCitationResult(null);
-    setShowFormatScanModal(false);
-    formatScanRequestRef.current += 1;
     setAiReviewResult(null);
     setAiReviewError(null);
     setAiReviewProgress(null);
     setAiReviewedContent('');
     setAiSourceMatches({});
     setAiSourcesError('');
-    setSectionTraces([]);
-    setUpdatingTraceIds([]);
-    setTraceError('');
     setClaimEvaluation(null);
     setEvaluatedClaimContent('');
     setEvaluatedClaimSectionId('');
@@ -578,22 +496,51 @@ export default function WorkspaceLayout() {
     });
   }, [sections]);
   const canEditCurrentSection = canEditSection(currentSection);
-  const aiReviewStale = Boolean(aiReviewResult && aiReviewedContent !== codeContent);
+  // Only mark review as stale when explicitly re-run, not on local edits
+  // Highlights persist during editing and only clear when a new review runs
   const requireEditableCurrentSection = () => {
     if (canEditCurrentSection) return true;
     showToast(t('readOnlySection'));
     return false;
   };
 
+  // Citation popover state
+  const [citationPopover, setCitationPopover] = useState({ open: false, findingIndex: -1, anchor: null });
+  const closeCitationPopover = () => setCitationPopover({ open: false, findingIndex: -1, anchor: null });
+
+  // Build findings data for editor decorations (with candidates for popover)
+  const editorFindings = useMemo(() => {
+    if (!aiReviewResult?.findings) return [];
+    return aiReviewResult.findings.map((finding, index) => ({
+      from: finding.startOffset,
+      to: finding.endOffset,
+      findingIndex: index,
+      candidates: aiSourceMatches?.[index] || [],
+    }));
+  }, [aiReviewResult, aiSourceMatches]);
+
+  const handleFindingClick = (findingIndex) => {
+    const finding = aiReviewResult?.findings?.[findingIndex];
+    if (!finding) return;
+    // Get anchor position from editor
+    const coords = editorRef.current?.coordsAtPos(finding.startOffset);
+    if (!coords) return;
+    setCitationPopover({
+      open: true,
+      findingIndex,
+      anchor: { left: coords.left, top: coords.bottom },
+    });
+  };
+
   useEffect(() => {
-    const ranges = !aiReviewStale
+    const ranges = aiReviewResult
       ? (aiReviewResult?.findings || []).map(finding => ({
         from: finding.startOffset,
         to: finding.endOffset,
       }))
       : [];
     editorRef.current?.setReviewRanges(ranges);
-  }, [aiReviewResult, aiReviewStale]);
+  }, [aiReviewResult]);
 
   useEffect(() => {
     if (!selectedPaper) { setSections([]); return; }
@@ -823,6 +770,9 @@ export default function WorkspaceLayout() {
     }
   };
 
+  const [saveStatus, setSaveStatus] = useState('');
+  const [lastSaved, setLastSaved] = useState(null);
+
   const handleSaveDraft = async () => {
     if (!requireEditableCurrentSection()) return false;
     if (!selectedPaper) { showToast(t('noPaperSelected')); return false; }
@@ -869,9 +819,6 @@ export default function WorkspaceLayout() {
     }
   };
 
-  const [saveStatus, setSaveStatus] = useState('');
-  const [lastSaved, setLastSaved] = useState(null);
-
   const handleExportTraceabilityJson = async () => {
     if (!project) return;
     try {
@@ -893,26 +840,6 @@ export default function WorkspaceLayout() {
       a.click(); URL.revokeObjectURL(url);
       showToast(t('traceabilityCsvDownloaded'));
     } catch { showToast(t('exportFailed')); }
-  };
-
-  const handleScanCitations = async () => {
-    if (isLocked) { showToast(t('projectLocked')); return; }
-    if (!selectedPaper) { showToast(t('selectPaperFirst')); return; }
-    const requestId = ++formatScanRequestRef.current;
-    setLoadingCitation(true);
-    setCitationResult(null);
-    setShowFormatScanModal(false);
-    try {
-      const r = await api.get(`/api/papers/${selectedPaper.id}/format-scan`);
-      if (formatScanRequestRef.current === requestId) {
-        setCitationResult(r.data);
-        setShowFormatScanModal(true);
-      }
-    } catch {
-      if (formatScanRequestRef.current === requestId) showToast(t('formatScanFailed'));
-    } finally {
-      if (formatScanRequestRef.current === requestId) setLoadingCitation(false);
-    }
   };
 
   const fetchAiReviewSources = async (review, reviewRequestId = aiReviewRequestRef.current) => {
@@ -961,90 +888,6 @@ export default function WorkspaceLayout() {
     }
   };
 
-  const fetchSectionTraces = useCallback(async () => {
-    if (!selectedPaper?.id || !selectedSectionId || !canEditCurrentSection) {
-      setSectionTraces([]);
-      return;
-    }
-    const requestId = ++sectionTracesRequestRef.current;
-    try {
-      const { data } = await api.get(
-        `/api/papers/${selectedPaper.id}/sections/${selectedSectionId}/traces`,
-      );
-      if (sectionTracesRequestRef.current !== requestId) return;
-      setSectionTraces(data || []);
-      setTraceError('');
-    } catch {
-      if (sectionTracesRequestRef.current === requestId) setTraceError(t('tracesLoadFailed'));
-    }
-  }, [canEditCurrentSection, selectedPaper?.id, selectedSectionId, t]);
-
-  useEffect(() => {
-    fetchSectionTraces();
-  }, [fetchSectionTraces]);
-
-  const applyTraceResult = (updated) => {
-    setSectionTraces(prev => prev.map(trace =>
-      String(trace.id) === String(updated.id) ? updated : trace));
-  };
-
-  const handleDecideTrace = async (trace, decision) => {
-    if (!selectedPaper || !selectedSectionId) return;
-    const range = editorRef.current?.getSelectionRange();
-    const selectedRange = range && (range.from !== range.to || decision.studentAction === 'REMOVE')
-      ? range
-      : null;
-    if (decision.studentAction !== 'DISMISS_WITH_REASON' && !selectedRange) {
-      const message = t('revisedPassageSelectionRequired');
-      setTraceError(message);
-      showToast(message);
-      return false;
-    }
-    const saved = await handleSaveDraft();
-    if (!saved) return false;
-    setUpdatingTraceIds(prev => [...new Set([...prev, trace.id])]);
-    setTraceError('');
-    try {
-      const { data } = await api.patch(
-        `/api/papers/${selectedPaper.id}/sections/${selectedSectionId}/traces/${trace.id}`,
-        {
-          ...decision,
-          sectionVersion: saved.version,
-          revisedStartOffset: selectedRange?.from ?? null,
-          revisedEndOffset: selectedRange?.to ?? null,
-        },
-      );
-      applyTraceResult(data);
-      showToast(t('traceDecisionSaved'));
-      return data;
-    } catch (error) {
-      if (error.response?.status === 409) {
-        const errorCode = error.response?.data?.message || '';
-        const message = errorCode.includes('TRACE_ALREADY_JUDGED')
-          ? t('traceAlreadyJudged')
-          : errorCode.includes('SECTION_NOT_CHANGED')
-            ? t('traceSectionNotChanged')
-            : errorCode.includes('SECTION_VERSION_CHANGED')
-              ? t('traceSectionVersionChanged')
-              : t('traceDecisionConflict');
-        setTraceError(message);
-        showToast(message);
-        fetchSectionTraces();
-      } else {
-        const errorCode = error.response?.data?.message || '';
-        const message = errorCode.includes('REVISED_PASSAGE_REQUIRED')
-                || errorCode.includes('INVALID_REVISED_RANGE')
-          ? t('revisedPassageSelectionRequired')
-          : t('traceDecisionFailed');
-        setTraceError(message);
-        showToast(message);
-      }
-      throw error;
-    } finally {
-      setUpdatingTraceIds(prev => prev.filter(id => String(id) !== String(trace.id)));
-    }
-  };
-
   const handleRunAiReview = async () => {
     setActiveTab('AI Review');
     localStorage.setItem('student_workspace_active_tab', 'AI Review');
@@ -1085,7 +928,6 @@ export default function WorkspaceLayout() {
       setAiReviewedContent(reviewedContent);
       showToast(t('aiReviewComplete'));
       setLoadingAiReview(false);
-      fetchSectionTraces();
       fetchAiReviewSources(job.result, requestId);
     } catch (error) {
       if (aiReviewRequestRef.current !== requestId) return;
@@ -1124,7 +966,7 @@ export default function WorkspaceLayout() {
     editorRef.current?.selectRange(range.start, range.end);
   };
 
-  const handleInsertReviewCitation = async (finding, findingIndex, candidate, trace) => {
+  const handleInsertReviewCitation = async (finding, candidate) => {
     if (!selectedPaper || !selectedSectionId || !requireEditableCurrentSection()) return;
     const range = locateReviewFinding(finding);
     if (!range) { showToast(t('reviewExcerptChanged')); return; }
@@ -1154,7 +996,6 @@ export default function WorkspaceLayout() {
         setAiReviewResult(review);
         setAiReviewedContent(codeContentRef.current);
         fetchAiReviewSources(review, requestId);
-        fetchSectionTraces();
       })
       .catch(() => {
         if (aiReviewRequestRef.current === requestId) {
@@ -1374,30 +1215,24 @@ export default function WorkspaceLayout() {
             <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-r-md transition-colors ${isFileTreeOpen ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]' : 'bg-transparent'}`}></div>
             <svg className={`w-[22px] h-[22px] transition-colors ${isFileTreeOpen ? 'text-white' : 'text-indigo-300 group-hover:text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
           </button>
-          <button onClick={() => setShowOverview(!showOverview)} className="w-full flex justify-center cursor-pointer mb-6 group relative" title={t('overview')} aria-pressed={showOverview}>
-            <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-r-md transition-colors ${showOverview ? 'bg-indigo-400' : 'bg-transparent'}`}></div>
-            <svg className={`w-[22px] h-[22px] transition-colors ${showOverview ? 'text-white' : 'text-indigo-300 group-hover:text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
-          </button>
           <button onClick={toggleContextPanel} className="w-full flex justify-center cursor-pointer mb-6 group relative" title={t('toggleContextPanel')} aria-pressed={isDrawerOpen}>
             <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-r-md transition-colors ${isDrawerOpen ? 'bg-indigo-400' : 'bg-transparent'}`}></div>
             <svg className={`w-[22px] h-[22px] transition-colors ${isDrawerOpen ? 'text-white' : 'text-indigo-300 group-hover:text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           </button>
         </div>
 
-        <FilePanel compact={isCompactWorkspace} isOpen={isFileTreeOpen} width={fileTreeWidth} onResizeStart={handleLeftDividerMouseDown} sections={sections} assignedSections={assignedSections} selectedSectionId={selectedSectionId} onSelectSection={handleSelectSection} selectedPaper={selectedPaper} onSelectPaper={handleSelectPaper} papers={papers} onUploadPaper={isLocked ? undefined : handleUploadPaper} sources={sources} onUploadSource={isLocked ? undefined : handleUploadSource} onDeleteSource={handleDeleteSource} mediaAssets={mediaAssets} onUploadMedia={isLocked ? undefined : handleUploadMedia} onDeleteMedia={handleDeleteMedia} onInsertMedia={canEditCurrentSection ? handleInsertMedia : undefined} showToast={showToast} isLocked={isLocked} onSaveDraft={handleSaveDraft} saveStatus={saveStatus} />
+        <FilePanel compact={isCompactWorkspace} isOpen={isFileTreeOpen} width={fileTreeWidth} onResizeStart={handleLeftDividerMouseDown} sections={sections} assignedSections={assignedSections} selectedSectionId={selectedSectionId} onSelectSection={handleSelectSection} selectedPaper={selectedPaper} onSelectPaper={handleSelectPaper} onViewFullPaper={setShowFullPaperPreview} papers={papers} onUploadPaper={isLocked ? undefined : handleUploadPaper} sources={sources} onUploadSource={isLocked ? undefined : handleUploadSource} onDeleteSource={handleDeleteSource} mediaAssets={mediaAssets} onUploadMedia={isLocked ? undefined : handleUploadMedia} onDeleteMedia={handleDeleteMedia} onInsertMedia={canEditCurrentSection ? handleInsertMedia : undefined} showToast={showToast} isLocked={isLocked} onSaveDraft={handleSaveDraft} saveStatus={saveStatus} />
 
-        <EditorPanel compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={handleSaveDraft} handleScanCitations={handleScanCitations} insertLatexTag={insertLatexTag} insertSymbol={insertSymbol} handleFindReplace={handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} citationPreview={citationResult} isLocked={isLocked} />
+        <EditorPanel compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={handleSaveDraft} insertLatexTag={insertLatexTag} insertSymbol={insertSymbol} handleFindReplace={handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} isLocked={isLocked} findings={editorFindings} onFindingClick={handleFindingClick} sources={sources} aiSourceMatches={aiSourceMatches} />
 
-        <ContextPanel compact={isCompactWorkspace} isOpen={isDrawerOpen} width={rightDrawerWidth} onResizeStart={handleRightDividerMouseDown} activeTab={activeTab} setActiveTab={(tab) => { setActiveTab(tab); localStorage.setItem('student_workspace_active_tab', tab); }} showToast={showToast}
+        <ContextPanel compact={isCompactWorkspace} isOpen={isDrawerOpen} width={rightDrawerWidth} activeTab={activeTab} setActiveTab={(tab) => { setActiveTab(tab); localStorage.setItem('student_workspace_active_tab', tab); }} showToast={showToast}
           sources={sources} isUploading={isUploading} setIsUploading={setIsUploading} project={project} setViewerFile={setViewerFile} fetchSources={fetchSources} isLocked={isLocked}
           feedbacks={feedbacks} assignedSections={assignedSections} setShowSubmitReviewModal={setShowSubmitReviewModal} userProjectRole={project?.currentUserRole}
-          aiReview={aiReviewResult} aiReviewLoading={loadingAiReview} aiReviewProgress={aiReviewProgress} aiReviewError={aiReviewError} aiReviewStale={aiReviewStale}
+          aiReview={aiReviewResult} aiReviewLoading={loadingAiReview} aiReviewProgress={aiReviewProgress} aiReviewError={aiReviewError}
           aiSourceMatches={aiSourceMatches} aiSourcesLoading={loadingAiSources} aiSourcesError={aiSourcesError}
-          sectionTraces={sectionTraces} updatingTraceIds={updatingTraceIds} traceError={traceError}
-          onDecideTrace={handleDecideTrace} reviewSectionTitle={currentSection?.sectionTitle}
           onRunAiReview={handleRunAiReview} onSelectReviewFinding={handleSelectReviewFinding}
           onInsertCitation={handleInsertReviewCitation} onRetryReviewSources={() => fetchAiReviewSources(aiReviewResult)}
-          canReviewSection={canEditCurrentSection} />
+          canReviewSection={canEditCurrentSection} reviewSectionTitle={currentSection?.sectionTitle || null} />
       </div>
 
       {/* Restore Previous Save Modal */}
@@ -1463,56 +1298,6 @@ export default function WorkspaceLayout() {
         </div>
       )}
 
-      {/* Overview — Sections accordion, assigned sections, preview button */}
-      {showOverview && (
-        <div className="absolute left-14 top-14 bottom-0 w-72 bg-(--surface) border-r border-(--border) shadow-xl z-30 animate-in slide-in-from-left duration-200 flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-(--border) shrink-0">
-            <h2 className="text-sm font-bold text-(--text-primary)">{t('sections')}</h2>
-            <button onClick={() => setShowOverview(false)} className="text-(--text-tertiary) hover:text-(--text-secondary) transition-colors">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-1">
-            <button onClick={() => setSectionsExpanded(!sectionsExpanded)}
-              className="w-full flex items-center justify-between px-2 py-1.5 text-xs font-bold text-(--text-secondary) tracking-wider uppercase cursor-pointer hover:bg-(--surface-secondary) rounded-lg">
-              <span className="flex items-center gap-1.5">{sectionsExpanded ? '▼' : '▶'} {t('sections')} ({sections.length})</span>
-            </button>
-            {sectionsExpanded && (
-              <div className="space-y-1 pl-1">
-                {sections.length === 0 ? (
-                  <p className="text-xs text-(--text-tertiary) italic text-center py-4">{t('noSections')}</p>
-                ) : (
-                  sections.map(sec => {
-                    const isMySection = assignedSections.some(s => String(s.id) === String(sec.id));
-                    return (
-                      <div key={sec.id}
-                        onClick={async () => { if (!(await handleSelectSection(sec))) return; setShowOverview(false); }}
-                        className={`flex items-center justify-between p-2.5 rounded-lg text-xs border cursor-pointer transition-all ${isMySection ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-(--surface-secondary) border-(--border) hover:bg-(--surface-tertiary)'}`}>
-                        <div className="flex items-center gap-2 truncate min-w-0">
-                          {isMySection && <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title={t('assignedToYou')}></span>}
-                          <span className="truncate font-medium text-(--text-primary)">{sec.sectionTitle || t('untitled')}</span>
-                          <span className="text-[9px] text-(--text-tertiary) font-mono shrink-0">#{sec.sectionOrder}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">v{sec.version || 1}</span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
-          </div>
-          <div className="px-3 py-3 border-t border-(--border) shrink-0">
-            <button onClick={() => setShowFullPaperPreview(true)} disabled={sections.length === 0}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-2">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-              {t('previewFullPaper')}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Revise Modal */}
       {showReviseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -1561,48 +1346,6 @@ export default function WorkspaceLayout() {
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowSubmitReviewModal(false)} className="px-4 py-2 text-sm font-semibold text-(--text-secondary) hover:bg-(--surface-tertiary) rounded-lg transition-colors">{t('cancel')}</button>
               <button onClick={handleSubmitReview} className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm shadow-indigo-200 transition-colors cursor-pointer">{t('submitReview')}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showFormatScanModal && citationResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-(--surface) rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center px-6 py-4 border-b border-(--border-light) bg-(--surface-secondary) shrink-0">
-              <h2 className="text-sm font-bold text-(--text-primary) flex items-center gap-2">
-                <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                {t('formatScan')}
-              </h2>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${citationResult.findings?.length === 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
-                {citationResult.findings?.length === 0 ? t('allGood') : t('issueCount', { count: citationResult.findings?.length })}
-              </span>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6 space-y-3 text-xs">
-              {(citationResult.findings || []).length === 0 ? (
-                <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-4 text-center">
-                  <p className="text-emerald-700 font-bold">{t('noIssues')}</p>
-                </div>
-              ) : (
-                (citationResult.findings || []).map((f, i) => {
-                  const sevColor = f.severity === 'ERROR' ? 'border-l-rose-500 bg-rose-50' : f.severity === 'WARN' ? 'border-l-amber-500 bg-amber-50' : 'border-l-indigo-500 bg-indigo-50';
-                  const sevLabel = f.severity === 'ERROR' ? t('errorLabel') : f.severity === 'WARN' ? t('warningLabel') : t('infoLabel');
-                  return (
-                    <div key={i} className={`border-l-4 ${sevColor} rounded-r-lg p-3 text-[11px]`}>
-                      <div className="flex justify-between items-start mb-1">
-                        <span className="font-bold text-(--text-primary) uppercase tracking-wider text-[10px]">{f.category}</span>
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${f.severity === 'ERROR' ? 'bg-rose-200 text-rose-800' : f.severity === 'WARN' ? 'bg-amber-200 text-amber-800' : 'bg-indigo-200 text-indigo-800'}`}>{sevLabel}</span>
-                      </div>
-                      {f.section && <div className="text-[10px] text-(--text-tertiary) mb-0.5 font-mono">{f.section}</div>}
-                      <div className="text-(--text-primary) font-medium">{f.message}</div>
-                      {f.suggestion && <div className="text-(--text-secondary) mt-1 italic">{t('tip', { suggestion: f.suggestion })}</div>}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            <div className="px-6 py-4 border-t border-(--border-light) bg-(--surface-secondary) flex justify-end shrink-0">
-              <button onClick={() => setShowFormatScanModal(false)} className="px-4 py-2 text-xs font-semibold text-(--text-secondary) hover:bg-(--surface-tertiary) rounded-lg transition-colors border border-(--border) bg-(--surface) cursor-pointer">{t('close')}</button>
             </div>
           </div>
         </div>
@@ -1660,6 +1403,15 @@ export default function WorkspaceLayout() {
 
       {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
 
+      <CitationPopover
+        open={citationPopover.open}
+        finding={aiReviewResult?.findings?.[citationPopover.findingIndex]}
+        candidates={aiSourceMatches?.[citationPopover.findingIndex] || []}
+        onInsertCitation={handleInsertReviewCitation}
+        onClose={closeCitationPopover}
+        anchor={citationPopover.anchor}
+      />
+
       <TourLauncher steps={tourSteps} tourKey="student-workspace" />
 
       {showFullPaperPreview && (
@@ -1667,7 +1419,6 @@ export default function WorkspaceLayout() {
           sections={sections}
           paperTitle={selectedPaper?.originalFilename || 'Paper'}
           mediaAssets={mediaAssets}
-          citationPreview={citationResult}
           onClose={() => setShowFullPaperPreview(false)}
         />
       )}

@@ -2,7 +2,6 @@ package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.response.CitationValidationResponse;
 import com.evidencepilot.dto.response.DocumentResponse;
-import com.evidencepilot.dto.response.FormatScanResponse;
 import com.evidencepilot.dto.response.PaperSectionResponse;
 import com.evidencepilot.dto.response.PaperStandardSuggestionResponse;
 import com.evidencepilot.dto.response.PaperValidationResponse;
@@ -34,7 +33,6 @@ import com.evidencepilot.service.CitationValidationService;
 import com.evidencepilot.service.CheckpointService;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.DocumentService;
-import com.evidencepilot.service.FormatScanService;
 import com.evidencepilot.service.AiEvaluationService;
 import com.evidencepilot.service.PaperProcessingService;
 import com.evidencepilot.service.impl.EvidenceTraceService;
@@ -78,7 +76,6 @@ public class PaperController {
     private final DocumentService documentService;
     private final PaperProcessingService paperProcessingService;
     private final CitationValidationService citationValidationService;
-    private final FormatScanService formatScanService;
     private final ProjectRepository projectRepository;
     private final DocumentRepository documentRepository;
     private final PaperSectionRepository paperSectionRepository;
@@ -206,21 +203,6 @@ public class PaperController {
     public CitationValidationResponse validateCitations(
             @Parameter(description = "Paper document UUID") @PathVariable UUID id) {
         return citationValidationService.validateCitations(id);
-    }
-
-    @Operation(summary = "Smart format scan",
-            description = "Scans paper for structure, tone, citation, and quotation issues. "
-                    + "Replaces the old citation-only scan with a comprehensive format check.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Format scan result"),
-            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
-            @ApiResponse(responseCode = "403", description = "Access denied"),
-            @ApiResponse(responseCode = "404", description = "Paper not found")
-    })
-    @GetMapping("/papers/{id}/format-scan")
-    public FormatScanResponse formatScan(
-            @Parameter(description = "Paper document UUID") @PathVariable UUID id) {
-        return formatScanService.scanFormat(id);
     }
 
     @Operation(summary = "Update a paper section",

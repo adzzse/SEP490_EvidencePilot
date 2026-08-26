@@ -22,7 +22,6 @@ import com.evidencepilot.service.AiEvaluationService;
 import com.evidencepilot.service.CheckpointService;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.DocumentService;
-import com.evidencepilot.service.FormatScanService;
 import com.evidencepilot.service.PaperProcessingService;
 import com.evidencepilot.service.impl.SectionCitationReviewService;
 import com.evidencepilot.service.impl.EvidenceTraceService;
@@ -57,7 +56,6 @@ class PaperControllerTest {
     private final PaperSectionRepository paperSectionRepository = mock(PaperSectionRepository.class);
     private final InstructorFeedbackRepository instructorFeedbackRepository = mock(InstructorFeedbackRepository.class);
     private final FeedbackRequestRepository feedbackRequestRepository = mock(FeedbackRequestRepository.class);
-    private final FormatScanService formatScanService = mock(FormatScanService.class);
     private final CurrentUserService currentUserService = mock(CurrentUserService.class);
     private final CheckpointService checkpointService = mock(CheckpointService.class);
     private final AiEvaluationService aiEvaluationService = mock(AiEvaluationService.class);
@@ -67,7 +65,7 @@ class PaperControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = standaloneSetup(new PaperController(documentService, paperService, citationValidationService, formatScanService, projectRepository, documentRepository, paperSectionRepository, instructorFeedbackRepository, feedbackRequestRepository, currentUserService, checkpointService, aiEvaluationService, sectionCitationReviewService, evidenceTraceService))
+        mockMvc = standaloneSetup(new PaperController(documentService, paperService, citationValidationService, projectRepository, documentRepository, paperSectionRepository, instructorFeedbackRepository, feedbackRequestRepository, currentUserService, checkpointService, aiEvaluationService, sectionCitationReviewService, evidenceTraceService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
