@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import TourLauncher from '../../components/TourLauncher';
 import FileViewerModal from '../../components/FileViewerModal';
-import CitationPopover from '../../components/CitationPopover.jsx';
+import InlineCitationCard from '../../components/InlineCitationCard.jsx';
 import api from '../../api.js';
 import { subscribeToNotifications } from '../../notificationSocket.js';
 import WorkspaceHeader from './WorkspaceHeader.jsx';
@@ -28,6 +28,27 @@ async function loadAllProjectSources(projectId) {
     page += 1;
   }
   return sources;
+}
+
+// Mirrors BE SourceMatchingService.citationKey(UUID).
+const citationKeyFor = (documentId) => `ep${String(documentId).replace(/-/g, '')}`;
+
+function findingClassName(finding) {
+  const evidence = finding.evidence || [];
+  const hasSupport = evidence.some(item => item.relation === 'SUPPORTS');
+  const parts = ['cm-review-finding'];
+  if (finding.type === 'SOURCE_DISCREPANCY') parts.push('cm-review-finding--discrepancy');
+  else if (!hasSupport) parts.push('cm-review-finding--unsupported');
+  const confidence = String(finding.confidence || '').toLowerCase();
+  if (['high', 'medium', 'low'].includes(confidence)) parts.push(`cm-review-finding--${confidence}`);
+  return parts.join(' ');
+}
+
+function findingTone(finding) {
+  if (finding.type === 'SOURCE_DISCREPANCY') return 'discrepancy';
+  const evidence = finding.evidence || [];
+  if (evidence.length === 0 || evidence.every(item => item.relation === 'NOT_FOUND')) return 'neutral';
+  return 'warn';
 }
 
 function workspaceDraftKey(projectId, sectionId) {
@@ -96,7 +117,8 @@ export default function WorkspaceLayout() {
   };
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem('student_workspace_active_tab') || 'Source';
-    return stored === 'Graph' || stored === 'Claims' ? 'AI Review' : stored;
+    // Legacy tabs (incl. the removed AI Review tab) collapse to Source.
+    return ['Graph', 'Claims', 'AI Review'].includes(stored) ? 'Source' : stored;
   });
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [sectionsExpanded, setSectionsExpanded] = useState(true);
@@ -504,33 +526,68 @@ export default function WorkspaceLayout() {
     return false;
   };
 
-  // Citation popover state
-  const [citationPopover, setCitationPopover] = useState({ open: false, findingIndex: -1, anchor: null });
-  const closeCitationPopover = () => setCitationPopover({ open: false, findingIndex: -1, anchor: null });
+  // Inline citation review overlay state.
+  // Anchor pixels arrive from the CM widget's click-time coordsAtPos — never queried here.
+  const [reviewOverlay, setReviewOverlay] = useState({ open: false, findingIndex: -1, anchor: null });
+  const isReviewOverlayOpen = reviewOverlay.open;
+  const closeReviewOverlay = useCallback(() => {
+    setReviewOverlay(prev => (prev.open ? { open: false, findingIndex: -1, anchor: null } : prev));
+  }, []);
+
+  // Global highlight visibility (eye toggle) — hides review UI noise without a re-scan.
+  const [isReviewVisible, setIsReviewVisible] = useState(
+    () => localStorage.getItem('student_review_visible') !== 'false',
+  );
+  useEffect(() => {
+    localStorage.setItem('student_review_visible', String(isReviewVisible));
+  }, [isReviewVisible]);
+  const toggleReviewVisible = useCallback(() => setIsReviewVisible(v => !v), []);
 
   // Build findings data for editor decorations (with candidates for popover)
   const editorFindings = useMemo(() => {
-    if (!aiReviewResult?.findings) return [];
+    if (!aiReviewResult?.findings || !isReviewVisible) return [];
     return aiReviewResult.findings.map((finding, index) => ({
       from: finding.startOffset,
       to: finding.endOffset,
       findingIndex: index,
+      className: findingClassName(finding),
+      tone: findingTone(finding),
       candidates: aiSourceMatches?.[index] || [],
     }));
-  }, [aiReviewResult, aiSourceMatches]);
+  }, [aiReviewResult, aiSourceMatches, isReviewVisible]);
 
-  const handleFindingClick = (findingIndex) => {
-    const finding = aiReviewResult?.findings?.[findingIndex];
-    if (!finding) return;
-    // Get anchor position from editor
-    const coords = editorRef.current?.coordsAtPos(finding.startOffset);
-    if (!coords) return;
-    setCitationPopover({
+  const handleFindingClick = useCallback((findingIndex, coords) => {
+    if (!aiReviewResult?.findings?.[findingIndex] || !coords) return;
+    setReviewOverlay({
       open: true,
       findingIndex,
-      anchor: { left: coords.left, top: coords.bottom },
+      anchor: { left: coords.left, top: coords.top, bottom: coords.bottom },
     });
-  };
+  }, [aiReviewResult]);
+
+  // citationKey → {authors, publicationYear} for in-editor \cite{} pill masking.
+  // Primary: project sources (DocumentResponse). Overlay: AI source-match candidates.
+  const citationIndex = useMemo(() => {
+    const map = {};
+    sources.forEach(source => {
+      if (!source?.id) return;
+      map[citationKeyFor(source.id)] = {
+        authors: source.authors || '',
+        publicationYear: source.publicationYear || null,
+      };
+    });
+    Object.values(aiSourceMatches || {}).forEach(candidates => {
+      (candidates || []).forEach(candidate => {
+        if (candidate.citationKey && !map[candidate.citationKey]) {
+          map[candidate.citationKey] = {
+            authors: candidate.authors || '',
+            publicationYear: candidate.publicationYear || null,
+          };
+        }
+      });
+    });
+    return map;
+  }, [sources, aiSourceMatches]);
 
   useEffect(() => {
     const ranges = aiReviewResult
@@ -889,9 +946,6 @@ export default function WorkspaceLayout() {
   };
 
   const handleRunAiReview = async () => {
-    setActiveTab('AI Review');
-    localStorage.setItem('student_workspace_active_tab', 'AI Review');
-    setIsDrawerOpen(true);
     if (isLocked) { showToast(t('projectLocked')); return; }
     if (!selectedPaper) { showToast(t('selectPaperFirst')); return; }
     if (!selectedSectionId || !requireEditableCurrentSection()) return;
@@ -958,12 +1012,6 @@ export default function WorkspaceLayout() {
     const start = content.indexOf(finding.excerpt);
     if (start < 0 || content.indexOf(finding.excerpt, start + 1) >= 0) return null;
     return { start, end: start + finding.excerpt.length };
-  };
-
-  const handleSelectReviewFinding = (finding) => {
-    const range = locateReviewFinding(finding);
-    if (!range) { showToast(t('reviewExcerptChanged')); return; }
-    editorRef.current?.selectRange(range.start, range.end);
   };
 
   const handleInsertReviewCitation = async (finding, candidate) => {
@@ -1223,16 +1271,11 @@ export default function WorkspaceLayout() {
 
         <FilePanel compact={isCompactWorkspace} isOpen={isFileTreeOpen} width={fileTreeWidth} onResizeStart={handleLeftDividerMouseDown} sections={sections} assignedSections={assignedSections} selectedSectionId={selectedSectionId} onSelectSection={handleSelectSection} selectedPaper={selectedPaper} onSelectPaper={handleSelectPaper} onViewFullPaper={setShowFullPaperPreview} papers={papers} onUploadPaper={isLocked ? undefined : handleUploadPaper} sources={sources} onUploadSource={isLocked ? undefined : handleUploadSource} onDeleteSource={handleDeleteSource} mediaAssets={mediaAssets} onUploadMedia={isLocked ? undefined : handleUploadMedia} onDeleteMedia={handleDeleteMedia} onInsertMedia={canEditCurrentSection ? handleInsertMedia : undefined} showToast={showToast} isLocked={isLocked} onSaveDraft={handleSaveDraft} saveStatus={saveStatus} />
 
-        <EditorPanel compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={handleSaveDraft} insertLatexTag={insertLatexTag} insertSymbol={insertSymbol} handleFindReplace={handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} isLocked={isLocked} findings={editorFindings} onFindingClick={handleFindingClick} sources={sources} aiSourceMatches={aiSourceMatches} />
+        <EditorPanel compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={handleSaveDraft} insertLatexTag={insertLatexTag} insertSymbol={insertSymbol} handleFindReplace={handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} isLocked={isLocked} findings={editorFindings} onFindingClick={handleFindingClick} sources={sources} aiSourceMatches={aiSourceMatches} onRunCitationReview={handleRunAiReview} reviewBusy={loadingAiReview} reviewProgress={aiReviewProgress} reviewFindingsCount={(aiReviewResult?.findings || []).length} reviewError={aiReviewError?.message} canRunCitationReview={!isLocked && !!selectedPaper && !!selectedSectionId && canEditCurrentSection} onEditorUserScroll={closeReviewOverlay} isReviewVisible={isReviewVisible} onToggleReviewVisible={toggleReviewVisible} citationIndex={citationIndex} />
 
         <ContextPanel compact={isCompactWorkspace} isOpen={isDrawerOpen} width={rightDrawerWidth} activeTab={activeTab} setActiveTab={(tab) => { setActiveTab(tab); localStorage.setItem('student_workspace_active_tab', tab); }} showToast={showToast}
           sources={sources} isUploading={isUploading} setIsUploading={setIsUploading} project={project} setViewerFile={setViewerFile} fetchSources={fetchSources} isLocked={isLocked}
-          feedbacks={feedbacks} assignedSections={assignedSections} setShowSubmitReviewModal={setShowSubmitReviewModal} userProjectRole={project?.currentUserRole}
-          aiReview={aiReviewResult} aiReviewLoading={loadingAiReview} aiReviewProgress={aiReviewProgress} aiReviewError={aiReviewError}
-          aiSourceMatches={aiSourceMatches} aiSourcesLoading={loadingAiSources} aiSourcesError={aiSourcesError}
-          onRunAiReview={handleRunAiReview} onSelectReviewFinding={handleSelectReviewFinding}
-          onInsertCitation={handleInsertReviewCitation} onRetryReviewSources={() => fetchAiReviewSources(aiReviewResult)}
-          canReviewSection={canEditCurrentSection} reviewSectionTitle={currentSection?.sectionTitle || null} />
+          feedbacks={feedbacks} assignedSections={assignedSections} setShowSubmitReviewModal={setShowSubmitReviewModal} userProjectRole={project?.currentUserRole} />
       </div>
 
       {/* Restore Previous Save Modal */}
@@ -1403,13 +1446,13 @@ export default function WorkspaceLayout() {
 
       {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
 
-      <CitationPopover
-        open={citationPopover.open}
-        finding={aiReviewResult?.findings?.[citationPopover.findingIndex]}
-        candidates={aiSourceMatches?.[citationPopover.findingIndex] || []}
+      <InlineCitationCard
+        open={isReviewOverlayOpen}
+        finding={aiReviewResult?.findings?.[reviewOverlay.findingIndex]}
+        candidates={aiSourceMatches?.[reviewOverlay.findingIndex] || []}
         onInsertCitation={handleInsertReviewCitation}
-        onClose={closeCitationPopover}
-        anchor={citationPopover.anchor}
+        onClose={closeReviewOverlay}
+        anchor={reviewOverlay.anchor}
       />
 
       <TourLauncher steps={tourSteps} tourKey="student-workspace" />

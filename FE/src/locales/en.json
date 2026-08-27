@@ -326,7 +326,8 @@
   ,"reviewStale": "The section changed after this review. Rerun the review for current highlights; unchanged excerpts can still receive citations."
   ,"sectionNotReviewed": "This section has not been reviewed yet."
   ,"citationInserted": "Citation inserted"
-  ,"relatedSources": "Related sources"
+  ,"relatedSources": "Related sources",
+  "noEvidenceInSources": "No evidence found in project sources."
   ,"noRelatedSources": "No related project sources found."
   ,"insertCitation": "Insert citation"
   ,"noCitationFindings": "No statements requiring citations were found in this section."

@@ -2,8 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../../api.js';
 import { getSourceDownloadUrl } from './sourceDownload.js';
-import CitationReviewList from '../../components/CitationReviewList.jsx';
-import VisualSourceMap from '../../components/VisualSourceMap.jsx';
 
 const FUNCTIONAL_TYPES = [
   { value: 'EMPIRICAL', labelKey: 'functionalTypeEmpirical' },
@@ -120,13 +118,7 @@ export default function ContextPanel({
   sources, isUploading, setIsUploading, project, setViewerFile, fetchSources,
   // Feedback tab
   feedbacks, assignedSections, setShowSubmitReviewModal, userProjectRole,
-  // Citation Review tab
-  aiReview, aiReviewLoading, aiReviewProgress, aiReviewError, aiSourceMatches,
-  aiSourcesLoading, aiSourcesError,
-  onRunAiReview, onSelectReviewFinding, onInsertCitation, onRetryReviewSources,
-  canReviewSection,
   isLocked,
-  reviewSectionTitle,
 }) {
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [sourceMode, setSourceMode] = useState('doi');
@@ -207,11 +199,6 @@ export default function ContextPanel({
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             {t('sources')}
             {activeTab === 'Source' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 shadow-[0_-2px_8px_rgba(79,70,229,0.5)]"></div>}
-          </button>
-          <button data-tour="context-ai-review-tab" onClick={() => setActiveTab('AI Review')} className={activeClass('AI Review')}>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 3.5h4.5M12 2v3m6.36.64-.7.7M21 12h-3m-12 0H3m3.34-5.66-.7-.7M8 19h8m-7-3h6a5 5 0 10-6 0z" /></svg>
-            {t('aiReview')}
-            {activeTab === 'AI Review' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 shadow-[0_-2px_8px_rgba(79,70,229,0.5)]"></div>}
           </button>
           <button data-tour="context-feedback-tab" onClick={() => setActiveTab('Feedback')} className={activeClass('Feedback')}>
             <div className="relative">
@@ -347,39 +334,6 @@ export default function ContextPanel({
                       );
                     })
                   )}
-                </div>
-              </div>
-            </div>
-          )}
-
-{activeTab === 'AI Review' && (
-            <div className="space-y-4 animate-in fade-in duration-300">
-              <CitationReviewList
-                reviewSectionTitle={reviewSectionTitle}
-                aiReview={aiReview}
-                aiReviewLoading={aiReviewLoading}
-                aiReviewProgress={aiReviewProgress}
-                aiReviewError={aiReviewError}
-                aiSourceMatches={aiSourceMatches}
-                aiSourcesLoading={aiSourcesLoading}
-                aiSourcesError={aiSourcesError}
-                canReviewSection={canReviewSection}
-                isLocked={isLocked}
-                onRunAiReview={onRunAiReview}
-                onSelectReviewFinding={onSelectReviewFinding}
-                onInsertCitation={onInsertCitation}
-                onRetryReviewSources={onRetryReviewSources}
-              />
-              <div className="mt-4 rounded-xl border border-(--border) bg-(--surface) overflow-hidden">
-                <div className="px-3 py-2 border-b border-(--border) bg-(--surface-secondary) flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-(--text-primary)">{t('visualSourceMap') || 'Visual Map of Sources'}</h4>
-                </div>
-                <div className="h-96">
-                  <VisualSourceMap
-                    sources={sources}
-                    aiSourceMatches={aiSourceMatches}
-                    isDark={document.documentElement.classList.contains('dark')}
-                  />
                 </div>
               </div>
             </div>

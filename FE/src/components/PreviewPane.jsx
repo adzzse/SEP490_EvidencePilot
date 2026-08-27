@@ -9,6 +9,7 @@ export default function PreviewPane({
   citationNumbers,
   generatedReferences = [],
   referencesTitle = 'References',
+  onScroll,
 }) {
   const [mediaUrlMap, setMediaUrlMap] = useState({});
 
@@ -45,7 +46,7 @@ export default function PreviewPane({
   const heading = sectionTitle || (generatedReferences.length > 0 ? referencesTitle : '');
 
   return (
-    <div className="h-full overflow-y-auto bg-white p-8">
+    <div className="h-full overflow-y-auto bg-white p-8" onScroll={onScroll}>
       {heading && <h2 className="max-w-prose mx-auto text-lg font-bold mb-3 text-slate-800">{heading}</h2>}
       {html && <div className="max-w-prose mx-auto whitespace-pre-wrap break-words preview-content" dangerouslySetInnerHTML={{ __html: html }} />}
       {generatedReferences.length > 0 && (

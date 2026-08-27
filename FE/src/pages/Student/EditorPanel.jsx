@@ -14,7 +14,12 @@ export default function EditorPanel({
   showSearchPanel, setShowSearchPanel, searchQuery, setSearchQuery, replaceQuery, setReplaceQuery,
   textSize, setTextSize, showToast, editorRef, mediaAssets, isLocked,
   findings = [], onFindingClick,
-  sources = [], aiSourceMatches = {}
+  sources = [], aiSourceMatches = {},
+  onRunCitationReview, reviewBusy = false, reviewProgress = null,
+  reviewFindingsCount = 0, reviewError = null,
+  canRunCitationReview = false, onEditorUserScroll,
+  isReviewVisible = true, onToggleReviewVisible,
+  citationIndex = {}
 }) {
   const { t } = useTranslation();
   const isOwnSection = canEditCurrentSection
@@ -22,107 +27,76 @@ export default function EditorPanel({
   const [previewZoom, setPreviewZoom] = useState(100);
   const [showVisualMap, setShowVisualMap] = useState(false);
   const generatedReferences = [];
-  const previewOuterRef = useRef(null);
+  const previewPaneRef = useRef(null);
 
-  // --- Anchor-only sync engine (Overleaf-style) ---
-  const zoomScaleRef = useRef(1);
-  const contentKeyRef = useRef(displayContent);
-  const blocksCacheRef = useRef({ key: null, items: [] });
+  // --- Proportional percentage sync ---
+  const isSyncingLeft = useRef(false);  // programmatic write into editor in flight
+  const isSyncingRight = useRef(false); // programmatic write into preview in flight
+  const frameRef = useRef(null);
+  const pendingSideRef = useRef(null);
   const editorScrollHandlerRef = useRef(null);
   const editorScrollBridge = useCallback(() => { editorScrollHandlerRef.current?.(); }, []);
+  const previewScrollBridge = useCallback(() => { previewScrollHandlerRef.current?.(); }, []);
+  const previewScrollHandlerRef = useRef(null);
 
-  contentKeyRef.current = displayContent;
-  useEffect(() => { zoomScaleRef.current = previewZoom / 100; }, [previewZoom]);
-
-  // Recreated per section so locks/anchors reset; both panes start at top.
+  // Recreated per section so locks reset; both panes start at top.
   useEffect(() => {
-    const container = previewOuterRef.current;
-    if (!container) return undefined;
-
-    let frame = null;
-    let pending = null;
-    let lock = null;
-    let lastToPreview = null;
-    let lastToEditor = null;
-
-    const getBlocks = () => {
-      if (blocksCacheRef.current.key !== contentKeyRef.current) {
-        blocksCacheRef.current = {
-          key: contentKeyRef.current,
-          items: Array.from(container.querySelectorAll('[data-src-start]')).map(el => ({
-            el,
-            start: Number(el.getAttribute('data-src-start')),
-          })),
-        };
-      }
-      return blocksCacheRef.current.items;
-    };
-
-    const alignBlockTop = (el) => {
-      const scale = zoomScaleRef.current || 1;
-      const delta = el.getBoundingClientRect().top - container.getBoundingClientRect().top;
-      container.scrollTop += delta / scale;
-    };
+    let lastToRight = null;
+    let lastToLeft = null;
 
     const runFromEditor = () => {
-      const blocks = getBlocks();
-      if (!blocks.length || !editorRef.current?.getTopVisibleOffset) return;
-      const offset = editorRef.current.getTopVisibleOffset();
-      let target = null;
-      for (const b of blocks) {
-        if (b.start <= offset) target = b;
-        else break;
-      }
-      if (!target) target = blocks[0]; // preamble / unrenderable region → anchor to first block
-      if (target.start === lastToPreview) return; // idempotent anchor — no jitter
-      lastToPreview = target.start;
-      lock = 'preview';
-      if (target === blocks[0] && offset <= blocks[0].start) container.scrollTop = 0;
-      else alignBlockTop(target.el);
-      requestAnimationFrame(() => { lock = null; });
+      const target = previewPaneRef.current;
+      if (!target || !editorRef.current?.getScrollInfo) return;
+      const e = editorRef.current.getScrollInfo();
+      const denomE = e.height - e.clientHeight;
+      const denomP = target.scrollHeight - target.clientHeight;
+      if (denomE <= 0 || denomP <= 0) return;
+      const nextTop = Math.round((e.top / denomE) * denomP); // pct = top / (scrollHeight - clientHeight)
+      if (Math.abs(target.scrollTop - nextTop) < 1 || lastToRight === nextTop) return; // anti-jitter
+      lastToRight = nextTop;
+      isSyncingRight.current = true;
+      target.scrollTop = nextTop;
+      requestAnimationFrame(() => { isSyncingRight.current = false; });
     };
 
     const runFromPreview = () => {
-      const blocks = getBlocks();
-      if (!blocks.length || !editorRef.current?.scrollToOffset) return;
-      const cTop = container.getBoundingClientRect().top;
-      let target = blocks[0];
-      for (const b of blocks) {
-        if (b.el.getBoundingClientRect().top <= cTop + 1) target = b;
-        else break;
-      }
-      if (target.start === lastToEditor) return;
-      lastToEditor = target.start;
-      lock = 'editor';
-      editorRef.current.scrollToOffset(target.start);
-      requestAnimationFrame(() => { lock = null; });
+      const source = previewPaneRef.current;
+      if (!source || !editorRef.current?.scrollTo || !editorRef.current?.getScrollInfo) return;
+      const e = editorRef.current.getScrollInfo();
+      const denomS = source.scrollHeight - source.clientHeight;
+      const denomE = e.height - e.clientHeight;
+      if (denomS <= 0 || denomE <= 0) return;
+      const nextTop = Math.round((source.scrollTop / denomS) * denomE);
+      if (Math.abs(e.top - nextTop) < 1 || lastToLeft === nextTop) return;
+      lastToLeft = nextTop;
+      isSyncingLeft.current = true;
+      editorRef.current.scrollTo(nextTop);
+      requestAnimationFrame(() => { isSyncingLeft.current = false; });
     };
 
     const flush = () => {
-      frame = null;
-      const side = pending;
-      pending = null;
+      frameRef.current = null;
+      const side = pendingSideRef.current;
+      pendingSideRef.current = null;
       if (side === 'editor') runFromEditor();
       else if (side === 'preview') runFromPreview();
     };
     const schedule = (side) => {
-      pending = side;
-      if (frame == null) frame = requestAnimationFrame(flush);
+      pendingSideRef.current = side;
+      if (frameRef.current == null) frameRef.current = requestAnimationFrame(flush);
     };
 
-    editorScrollHandlerRef.current = () => { if (lock !== 'editor') schedule('editor'); };
-    const onPreviewScroll = () => { if (lock !== 'preview') schedule('preview'); };
-
-    container.addEventListener('scroll', onPreviewScroll, { passive: true });
+    editorScrollHandlerRef.current = () => { if (!isSyncingLeft.current) schedule('editor'); };
+    previewScrollHandlerRef.current = () => { if (!isSyncingRight.current) schedule('preview'); };
 
     // Reset both panes for the new section.
-    container.scrollTop = 0;
+    if (previewPaneRef.current) previewPaneRef.current.scrollTop = 0;
     editorRef.current?.scrollToTop?.();
 
     return () => {
-      container.removeEventListener('scroll', onPreviewScroll);
       editorScrollHandlerRef.current = null;
-      if (frame != null) cancelAnimationFrame(frame);
+      previewScrollHandlerRef.current = null;
+      if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
     };
   }, [selectedSectionId]);
 
@@ -135,9 +109,58 @@ export default function EditorPanel({
             <span data-tour="editor-section-name" className="text-xs font-bold text-(--text-primary) truncate">{currentSection ? currentSection.sectionTitle : selectedPaper ? selectedPaper.originalFilename : 'document.tex'}</span>
             {currentSection && <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1 py-0.5 rounded shrink-0">v{currentSection.version || 1}</span>}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {(isLocked || (currentSection && !isOwnSection)) && (
               <span className="text-[9px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-md border border-amber-200 dark:border-amber-800">{t('readOnly')}</span>
+            )}
+            {reviewError && (
+              <span className="hidden md:inline max-w-[180px] truncate text-[10px] font-semibold text-rose-600" title={reviewError}>{reviewError}</span>
+            )}
+            {reviewBusy && (
+              <span className="hidden sm:flex items-center gap-1 text-[10px] font-bold text-indigo-600">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600 motion-reduce:animate-none"></span>
+                {reviewProgress?.total > 0
+                  ? `${Math.round(((reviewProgress.current || 0) / reviewProgress.total) * 100)}%`
+                  : '…'}
+              </span>
+            )}
+            {!reviewBusy && reviewFindingsCount > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={onToggleReviewVisible}
+                  title={isReviewVisible ? t('hideReviewHighlights') || 'Hide highlights' : t('showReviewHighlights') || 'Show highlights'}
+                  aria-pressed={!isReviewVisible}
+                  className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${isReviewVisible ? 'text-amber-600 hover:bg-(--surface-tertiary)' : 'text-(--text-tertiary) hover:bg-(--surface-tertiary)'}`}
+                >
+                  {isReviewVisible ? (
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={onRunCitationReview}
+                  title={t('citationReview')}
+                  className="flex items-center gap-1 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-black text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors cursor-pointer"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 16v-4M12 8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  {reviewFindingsCount}
+                </button>
+              </>
+            )}
+            {selectedPaper && canRunCitationReview !== null && (
+              <button
+                type="button"
+                onClick={onRunCitationReview}
+                disabled={!canRunCitationReview || reviewBusy || isLocked}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-40 ${reviewBusy ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600' : 'bg-(--brand) hover:bg-(--brand-hover) text-(--on-brand)'}`}
+                title={t('aiReview')}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                <span className="hidden lg:inline">{reviewBusy ? t('loading') : t('aiReview')}</span>
+              </button>
             )}
             <button onClick={handleSaveDraft} disabled={saveStatus === 'saving' || !isOwnSection || isLocked} className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-50 ${saveStatus === 'saving' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30' : saveStatus === 'saved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30' : saveStatus === 'error' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30' : 'bg-(--surface-tertiary) text-(--text-secondary) hover:bg-(--border)'}`}>
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
@@ -240,7 +263,7 @@ export default function EditorPanel({
           </div>
         )}
         <div className="flex-1 min-h-0 overflow-hidden">
-          <LatexEditor key={selectedSectionId || 'no-section'} ref={editorRef} content={displayContent} onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} />
+          <LatexEditor key={selectedSectionId || 'no-section'} ref={editorRef} content={displayContent} onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} />
         </div>
       </div>
       <div onMouseDown={onEditorResizeStart} className={`${compact ? 'hidden' : 'flex'} w-1.5 hover:bg-indigo-500 cursor-col-resize self-stretch transition-all shrink-0 z-10 relative group items-center justify-center border-l border-r border-(--border)`} title={t('dragToResize')}>
@@ -261,9 +284,11 @@ export default function EditorPanel({
             <button onClick={() => setPreviewZoom(p => Math.max(50, p - 10))} className="text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary) px-1.5 py-0.5 rounded transition-colors">−</button>
           </div>
         </div>
-        <div ref={previewOuterRef} className="flex-1 min-h-0 overflow-auto flex justify-center relative">
-          <div style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: 'center top' }}>
+        <div className="flex-1 min-h-0 relative overflow-hidden">
+          <div className="h-full w-full" style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: 'center top' }}>
             <PreviewPane
+              ref={previewPaneRef}
+              onScroll={previewScrollBridge}
               sectionTitle={currentSection?.sectionTitle}
               latex={displayContent}
               mediaAssets={mediaAssets}

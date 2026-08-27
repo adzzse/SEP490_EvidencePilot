@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 're
 import DiffMatchPatch from 'diff-match-patch';
 import { basicSetup } from 'codemirror';
 import { EditorState, StateEffect, StateField } from '@codemirror/state';
-import { EditorView, Decoration } from '@codemirror/view';
+import { EditorView, Decoration, WidgetType, ViewPlugin } from '@codemirror/view';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { latex } from 'codemirror-lang-latex';
 
@@ -11,15 +11,26 @@ const lightTheme = EditorView.theme({
   '.cm-scroller': { fontFamily: '"JetBrains Mono", "Fira Code", monospace' },
 });
 
+// Bridge so CM decorations can reach React without rebuilding the view.
+let reviewClickBridge = null;
+
+const TONE_COLORS = { discrepancy: '#ef4444', warn: '#f59e0b', neutral: '#94a3b8' };
+
 const setReviewRanges = StateEffect.define();
 const reviewRanges = StateField.define({
   create: () => Decoration.none,
   update: (decorations, transaction) => {
+    // Map existing decorations through the transaction FIRST so citation
+    // insertions keep every finding (mark + icon) glued to its text.
     let next = decorations.map(transaction.changes);
     for (const effect of transaction.effects) {
       if (effect.is(setReviewRanges)) {
-        next = Decoration.set(effect.value.map(({ from, to }) =>
-          Decoration.mark({ class: 'cm-review-finding' }).range(from, to)), true);
+        next = Decoration.set(effect.value.flatMap(({ from, to, findingIndex, className, tone }) => [
+          Decoration.mark({ class: className || 'cm-review-finding' }).range(from, to),
+          Decoration.widget({
+            widget: new InfoIconWidget(findingIndex, to, tone),
+          }, { side: 1 }).range(to),
+        ]), true);
       }
     }
     return next;
@@ -27,15 +38,112 @@ const reviewRanges = StateField.define({
   provide: field => EditorView.decorations.from(field),
 });
 
-const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll }, ref) {
+class InfoIconWidget extends WidgetType {
+  constructor(findingIndex, pos, tone) {
+    super();
+    this.findingIndex = findingIndex;
+    this.pos = pos;
+    this.tone = tone || 'warn';
+  }
+
+  toDOM(view) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cm-finding-widget';
+    btn.style.background = TONE_COLORS[this.tone] || TONE_COLORS.warn;
+    btn.setAttribute('aria-label', 'Show citation review');
+    btn.title = 'Show citation review';
+    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>';
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation(); // don't move the CM selection
+      reviewClickBridge?.(this.findingIndex, view.coordsAtPos(this.pos));
+    };
+    return btn;
+  }
+
+  eq(other) {
+    return other.findingIndex === this.findingIndex
+      && other.pos === this.pos && other.tone === this.tone;
+  }
+  ignoreEvent() { return true; } // CM must not swallow the DOM click
+}
+
+// --- Citation pill masking: \cite{id} renders as (Author, Year); cursor
+// proximity (±1 char) dissolves the mask to reveal the raw LaTeX. ---
+
+function firstAuthorSurname(authors) {
+  if (!authors) return '';
+  const first = String(authors).split(/[;,]/)[0].trim();
+  if (!first) return '';
+  const words = first.split(/\s+/);
+  return words.length > 1 ? words[words.length - 1] : first;
+}
+
+class CitePillWidget extends WidgetType {
+  constructor(key, meta) {
+    super();
+    this.key = key;
+    this.meta = meta;
+  }
+
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = `cm-cite-pill${this.meta ? '' : ' cm-cite-pill--unresolved'}`;
+    const surname = firstAuthorSurname(this.meta?.authors);
+    const year = this.meta?.publicationYear || null;
+    span.textContent = surname || year
+      ? `(${surname || this.key}${year ? `, ${year}` : ''})`
+      : this.key;
+    span.title = `\\cite{${this.key}}`;
+    span.contentEditable = 'false';
+    return span;
+  }
+
+  eq(other) { return other.key === this.key && other.meta === this.meta; }
+  ignoreEvent() { return false; } // clicks place the cursor at the edge → reveal raw text
+}
+
+const CITE_RE = /\\cite\{([^}]+)\}/g;
+
+function buildCiteMask(view, citationIndexRef) {
+  const decorations = [];
+  const head = view.state.selection.main.head;
+  const doc = view.state.doc.toString();
+  CITE_RE.lastIndex = 0;
+  let match;
+  while ((match = CITE_RE.exec(doc))) {
+    const from = match.index;
+    const to = from + match[0].length;
+    // Reveal rule: dissolve when the cursor sits inside or immediately adjacent.
+    if (head >= from - 1 && head <= to + 1) continue;
+    decorations.push(Decoration.replace({
+      widget: new CitePillWidget(match[1], citationIndexRef.current?.[match[1]]),
+    }).range(from, to));
+  }
+  return Decoration.set(decorations, true);
+}
+
+const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onUserScroll, citationIndex = {} }, ref) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
   const lastEmittedRef = useRef('');
   const onScrollRef = useRef(null);
+  const onUserScrollRef = useRef(null);
+  const citationIndexRef = useRef({});
+  const citationIndexVersionRef = useRef(0);
+  const prevCitationIndexRef = useRef(citationIndex);
+  if (prevCitationIndexRef.current !== citationIndex) {
+    prevCitationIndexRef.current = citationIndex;
+    citationIndexVersionRef.current += 1;
+  }
+  citationIndexRef.current = citationIndex;
   const [isDark, setIsDark] = useState(() =>
     typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   );
   onScrollRef.current = onScroll;
+  onUserScrollRef.current = onUserScroll;
+  reviewClickBridge = onFindingClick; // live bridge for CM widget clicks
 
   useImperativeHandle(ref, () => ({
     getSelection: () => {
@@ -128,9 +236,10 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
       const v = viewRef.current;
       if (!v) return;
       const valid = ranges
-        .map(({ from, to }) => ({
+        .map(({ from, to, ...rest }) => ({
           from: Math.max(0, Math.min(from, v.state.doc.length)),
           to: Math.max(0, Math.min(to, v.state.doc.length)),
+          ...rest,
         }))
         .filter(({ from, to }) => to > from)
         .sort((left, right) => left.from - right.from);
@@ -146,31 +255,15 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
         clientHeight: scroller.clientHeight,
       };
     },
-    // --- Anchor sync primitives (Overleaf-style source↔preview mapping) ---
-    getTopVisibleOffset: () => {
-      const v = viewRef.current;
-      if (!v) return 0;
-      try {
-        const block = v.lineBlockAtHeight(v.scrollDOM.scrollTop + 1);
-        return Math.max(0, Math.min(block.from, v.state.doc.length));
-      } catch {
-        return 0;
-      }
-    },
-    scrollToOffset: (offset) => {
-      const v = viewRef.current;
-      if (!v) return;
-      const at = Math.max(0, Math.min(offset, v.state.doc.length));
-      const dom = v.domAtPos(at);
-      const node = dom.node.nodeType === 1 ? dom.node : dom.node.parentElement;
-      if (!node) return;
-      const rect = node.getBoundingClientRect();
-      const scrollerRect = v.scrollDOM.getBoundingClientRect();
-      v.scrollDOM.scrollTop += rect.top - scrollerRect.top;
-    },
+    // --- Proportional sync primitives ---
     scrollToTop: () => {
       const v = viewRef.current;
       if (v) v.scrollDOM.scrollTop = 0;
+    },
+    scrollTo: (top) => {
+      const v = viewRef.current;
+      if (!v) return;
+      v.scrollDOM.scrollTop = top;
     },
   }));
 
@@ -204,6 +297,27 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
         EditorView.editable.of(!readOnly),
         EditorView.lineWrapping,
         reviewRanges,
+        // \cite{} pill masking with cursor-proximity reveal + atomic navigation
+        ViewPlugin.fromClass(
+          class CitationMasker {
+            constructor(view) {
+              this.version = citationIndexVersionRef.current;
+              this.decorations = buildCiteMask(view, citationIndexRef);
+            }
+            update(update) {
+              const indexChanged = this.version !== citationIndexVersionRef.current;
+              if (!update.docChanged && !update.selectionSet && !indexChanged) return;
+              this.version = citationIndexVersionRef.current;
+              this.decorations = buildCiteMask(update.view, citationIndexRef);
+            }
+          },
+          {
+            decorations: plugin => plugin.decorations,
+            provide: plugin => EditorView.atomicRanges.of(
+              view => view.plugin(plugin)?.decorations ?? Decoration.none,
+            ),
+          },
+        ),
         updateListener,
         EditorView.theme({
           '&': { fontSize: `${fontSize}px`, backgroundColor: isDark ? '#0f172a' : '#ffffff', color: isDark ? '#f8fafc' : '#000000', height: '100%' },
@@ -219,6 +333,49 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
           '.cm-lintRange-warning': { backgroundColor: 'transparent', borderBottom: '2px solid #eab308' },
           '.cm-lintRange-error': { backgroundColor: 'transparent', borderBottom: '2px solid #ef4444' },
           '.cm-review-finding': { backgroundColor: 'rgba(245, 158, 11, 0.18)', borderBottom: '2px solid #f59e0b' },
+          '.cm-review-finding--discrepancy': { backgroundColor: 'rgba(239, 68, 68, 0.14)', borderBottomColor: '#ef4444' },
+          '.cm-review-finding--unsupported': { backgroundColor: 'rgba(148, 163, 184, 0.16)', borderBottomColor: '#94a3b8' },
+          '.cm-review-finding--high': { borderBottomStyle: 'solid' },
+          '.cm-review-finding--medium': { borderBottomStyle: 'dashed' },
+          '.cm-review-finding--low': { borderBottomStyle: 'dotted' },
+          '.cm-finding-widget': {
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '16px',
+            height: '16px',
+            marginLeft: '3px',
+            padding: '0',
+            border: 'none',
+            borderRadius: '50%',
+            background: '#f59e0b',
+            color: '#ffffff',
+            cursor: 'pointer',
+            verticalAlign: '-2px',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+          },
+          '.cm-finding-widget:hover': { background: '#d97706' },
+          '.cm-cite-pill': {
+            display: 'inline-block',
+            padding: '0 6px',
+            margin: '0 1px',
+            borderRadius: '9999px',
+            background: 'rgba(99, 102, 241, 0.12)',
+            border: '1px solid rgba(99, 102, 241, 0.35)',
+            color: '#4f46e5',
+            fontSize: '0.85em',
+            fontWeight: '600',
+            lineHeight: '1.5',
+            whiteSpace: 'nowrap',
+            userSelect: 'none',
+          },
+          '.cm-cite-pill--unresolved': {
+            background: 'rgba(148, 163, 184, 0.15)',
+            borderColor: 'rgba(148, 163, 184, 0.4)',
+            color: '#94a3b8',
+            fontFamily: '"JetBrains Mono", monospace',
+            fontSize: '0.75em',
+          },
           '.cm-gutters': { display: 'none' },
         }),
       ],
@@ -227,7 +384,10 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
     viewRef.current = new EditorView({ state, parent: containerRef.current });
 
     // Scroll listener lives with the view so readOnly/fontSize/theme rebuilds re-bind it.
-    const handleScroll = () => { onScrollRef.current?.(); };
+    const handleScroll = () => {
+      onScrollRef.current?.();
+      onUserScrollRef.current?.(); // e.g. instantly close the inline citation card
+    };
     viewRef.current.scrollDOM.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
@@ -272,7 +432,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
   // Update review ranges when findings change
   useEffect(() => {
     if (viewRef.current && findings) {
-      const ranges = findings.map(f => ({ from: f.from, to: f.to }));
+      const ranges = findings.map(({ from, to, ...rest }) => ({ from, to, ...rest }));
       viewRef.current.dispatch({ effects: setReviewRanges.of(ranges) });
     }
   }, [findings]);
