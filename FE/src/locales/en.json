@@ -288,6 +288,7 @@
   ,"selectPaperFirst": "Select a paper first."
   ,"formatScanFailed": "Format scan failed."
   ,"aiReviewComplete": "Citation Review complete."
+  ,"aiReviewPartial": "Citation Review partially completed: {{failedBatches}} batch(es) could not be reviewed."
   ,"aiProviderRateLimited": "The AI provider is rate limiting requests. Please retry later."
   ,"aiWorkerUnavailable": "The Citation Review worker is unavailable or timed out."
   ,"aiInvalidResponse": "Citation Review returned an invalid response after retrying."

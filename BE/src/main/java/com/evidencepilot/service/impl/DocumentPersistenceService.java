@@ -77,6 +77,12 @@ public class DocumentPersistenceService {
     }
 
     @Transactional
+    public boolean markQueuedForRetry(UUID documentId) {
+        return documentRepository.queueForExtraction(
+                documentId, List.of(ProcessingStatus.PROCESSING), ProcessingStatus.QUEUED) == 1;
+    }
+
+    @Transactional
     public List<DocumentChunk> saveExtraction(
             UUID documentId,
             String method,

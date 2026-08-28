@@ -76,20 +76,24 @@ class SectionCitationReviewServiceTest {
         DocumentChunk retrievedChunk = sourceChunk(sourceId, chunkId,
                 "The final model achieved 89.2 percent accuracy on the benchmark evaluation.");
         when(sourceMatchingService.search(eq(projectId), any(), eq(5)))
-                .thenReturn(List.of(List.of(
-                        new SourceMatchingService.SourceMatch(retrievedChunk, 0.91f))));
+                .thenReturn(List.of(
+                        List.of(),
+                        List.of(new SourceMatchingService.SourceMatch(retrievedChunk, 0.91f))));
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"SOURCE_DISCREPANCY",
-                          "excerpt":"%s",
-                          "rationale":"The paper reports 92 percent but the cited source reports 89.2 percent.",
-                          "confidence":"HIGH",
-                          "evidence":[{"source_id":"%s","chunk_id":"%s",
-                            "quote":"achieved 89.2 percent accuracy",
-                            "relation":"CONTRADICTS"}]
-                        }]}
-                        """, sectionId, excerpt, sourceId, chunkId)));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId,
+                        0,
+                        okVerdict(0),
+                        findingVerdict(
+                                1,
+                                "SOURCE_DISCREPANCY",
+                                "The paper reports 92 percent but the cited source reports 89.2 percent.",
+                                "HIGH",
+                                String.format(
+                                        "[{\"source_id\":\"%s\",\"chunk_id\":\"%s\","
+                                                + "\"quote\":\"achieved 89.2 percent accuracy\","
+                                                + "\"relation\":\"CONTRADICTS\"}]",
+                                        sourceId, chunkId)))));
 
         SectionCitationReviewResponse result = service().run(
                 documentId, projectId, sectionId, service().reviewInputFingerprint(section), actorId);
@@ -135,15 +139,15 @@ class SectionCitationReviewServiceTest {
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
         when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"UNSUBSTANTIATED_CLAIM",
-                          "excerpt":"%s",
-                          "rationale":"The precise comparison has no supporting project source.",
-                          "confidence":"HIGH",
-                          "evidence":[]
-                        }]}
-                        """, sectionId, excerpt)));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId, 0,
+                        okVerdict(0),
+                        findingVerdict(
+                                1,
+                                "UNSUBSTANTIATED_CLAIM",
+                                "The precise comparison has no supporting project source.",
+                                "HIGH",
+                                "[]"))));
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
@@ -179,15 +183,9 @@ class SectionCitationReviewServiceTest {
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
         when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"UNSUBSTANTIATED_CLAIM",
-                          "excerpt":"%s",
-                          "rationale":"%s",
-                          "confidence":"HIGH",
-                          "evidence":[]
-                        }]}
-                        """, sectionId, excerpt, rationale)));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId, 0, findingVerdict(
+                                0, "UNSUBSTANTIATED_CLAIM", rationale, "HIGH", "[]"))));
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
@@ -195,51 +193,41 @@ class SectionCitationReviewServiceTest {
 
         assertThat(result.findings()).singleElement().satisfies(finding ->
                 assertThat(finding.rationale()).hasSize(1_000));
-        assertThat(SectionCitationReviewPrompt.SYSTEM).contains("\"rationale\":\"max 400 chars");
+        assertThat(SectionCitationReviewPrompt.SYSTEM)
+                .contains("\"rationale\":\"empty for OK; otherwise max 400 chars");
         verify(aiModelClient).generateForReview(anyString(), anyString());
     }
 
     @Test
-    void runKeepsGroundedFindingsWhenAnotherFindingIsInvalid() {
+    void runRejectsBatchWhenOneCandidateVerdictIsMissing() {
         UUID projectId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
-        UUID actorId = UUID.randomUUID();
-        String excerpt = "The proposed method improves recall by exactly 34 percent over the Alpha baseline";
+        String firstExcerpt = "The proposed method improves recall by exactly 34 percent over the Alpha baseline";
+        String secondExcerpt = "The external benchmark reports exactly 90 percent accuracy for the final model";
         PaperSection section = section(
-                projectId, documentId, sectionId, "Introduction", excerpt + ".");
-        User actor = new User();
-        actor.setId(actorId);
+                projectId, documentId, sectionId, "Introduction",
+                firstExcerpt + ". " + secondExcerpt + ".");
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
-        when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
         when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"UNSUBSTANTIATED_CLAIM",
-                          "excerpt":"%s",
-                          "rationale":"The precise comparison has no supporting project source.",
-                          "confidence":"HIGH",
-                          "evidence":[]
-                        },{
-                          "type":"UNSUBSTANTIATED_CLAIM",
-                          "excerpt":"Paraphrased text that is absent from the section",
-                          "rationale":"This finding is not grounded in the supplied chunk.",
-                          "confidence":"LOW",
-                          "evidence":[]
-                        }]}
-                        """, sectionId, excerpt)));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId, 0, findingVerdict(
+                                0,
+                                "UNSUBSTANTIATED_CLAIM",
+                                "The precise comparison has no supporting project source.",
+                                "HIGH",
+                                "[]"))));
 
         SectionCitationReviewService service = service();
-        SectionCitationReviewResponse result = service.run(
-                documentId, projectId, sectionId, service.reviewInputFingerprint(section), actorId);
-
-        assertThat(result.complete()).isTrue();
-        assertThat(result.findings()).singleElement().satisfies(finding ->
-                assertThat(finding.excerpt()).isEqualTo(excerpt));
-        assertThat(result.limitations()).singleElement().asString()
-                .contains("omitted 1 invalid AI finding(s)");
-        verify(aiModelClient).generateForReview(anyString(), anyString());
+        assertThatThrownBy(() -> service.run(
+                documentId, projectId, sectionId,
+                service.reviewInputFingerprint(section), UUID.randomUUID()))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(exception -> assertThat(
+                        ((ResponseStatusException) exception).getStatusCode())
+                        .isEqualTo(HttpStatus.BAD_GATEWAY));
+        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
     }
 
     @Test
@@ -263,16 +251,18 @@ class SectionCitationReviewServiceTest {
                 .thenReturn(List.of(List.of(
                         new SourceMatchingService.SourceMatch(retrievedChunk, 0.42f))));
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"UNSUBSTANTIATED_CLAIM",
-                          "excerpt":"%s",
-                          "rationale":"The retrieved candidate does not substantiate the precise comparison.",
-                          "confidence":"MEDIUM",
-                          "evidence":[{"source_id":"%s","chunk_id":"%s",
-                            "quote":"","relation":"NOT_FOUND"}]
-                        }]}
-                        """, sectionId, excerpt, sourceId, chunkId)));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId,
+                        0,
+                        findingVerdict(
+                                0,
+                                "UNSUBSTANTIATED_CLAIM",
+                                "The retrieved candidate does not substantiate the precise comparison.",
+                                "MEDIUM",
+                                String.format(
+                                        "[{\"source_id\":\"%s\",\"chunk_id\":\"%s\","
+                                                + "\"quote\":\"\",\"relation\":\"NOT_FOUND\"}]",
+                                        sourceId, chunkId)))));
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
@@ -304,17 +294,19 @@ class SectionCitationReviewServiceTest {
                 .thenReturn(List.of(List.of(
                         new SourceMatchingService.SourceMatch(supportingChunk, 0.88f))));
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"UNSUBSTANTIATED_CLAIM",
-                          "excerpt":"%s",
-                          "rationale":"Empirical claim without citation.",
-                          "confidence":"MEDIUM",
-                          "evidence":[{"source_id":"%s","chunk_id":"%s",
-                            "quote":"Recall improved by 34 percent",
-                            "relation":"SUPPORTS"}]
-                        }]}
-                        """, sectionId, excerpt, sourceId, chunkId)));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId,
+                        0,
+                        findingVerdict(
+                                0,
+                                "UNSUBSTANTIATED_CLAIM",
+                                "Empirical claim without citation.",
+                                "MEDIUM",
+                                String.format(
+                                        "[{\"source_id\":\"%s\",\"chunk_id\":\"%s\","
+                                                + "\"quote\":\"Recall improved by 34 percent\","
+                                                + "\"relation\":\"SUPPORTS\"}]",
+                                        sourceId, chunkId)))));
 
         assertThatThrownBy(() -> service().run(
                 documentId, projectId, sectionId, service().reviewInputFingerprint(section), UUID.randomUUID()))
@@ -336,15 +328,13 @@ class SectionCitationReviewServiceTest {
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"SOURCE_DISCREPANCY",
-                          "excerpt":"%s",
-                          "rationale":"The source reports a different value.",
-                          "confidence":"HIGH",
-                          "evidence":[]
-                        }]}
-                        """, sectionId, excerpt)));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId, 0, findingVerdict(
+                                0,
+                                "SOURCE_DISCREPANCY",
+                                "The source reports a different value.",
+                                "HIGH",
+                                "[]"))));
 
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
@@ -373,17 +363,19 @@ class SectionCitationReviewServiceTest {
                 .thenReturn(List.of(List.of(
                         new SourceMatchingService.SourceMatch(retrievedChunk, 0.91f))));
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"SOURCE_DISCREPANCY",
-                          "excerpt":"%s",
-                          "rationale":"The source reports a different value.",
-                          "confidence":"HIGH",
-                          "evidence":[{"source_id":"%s","chunk_id":"%s",
-                            "quote":"The final model achieved 88 percent accuracy",
-                            "relation":"CONTRADICTS"}]
-                        }]}
-                        """, sectionId, excerpt, sourceId, chunkId)));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId,
+                        0,
+                        findingVerdict(
+                                0,
+                                "SOURCE_DISCREPANCY",
+                                "The source reports a different value.",
+                                "HIGH",
+                                String.format(
+                                        "[{\"source_id\":\"%s\",\"chunk_id\":\"%s\","
+                                                + "\"quote\":\"The final model achieved 88 percent accuracy\","
+                                                + "\"relation\":\"CONTRADICTS\"}]",
+                                        sourceId, chunkId)))));
 
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
@@ -396,33 +388,43 @@ class SectionCitationReviewServiceTest {
     }
 
     @Test
-    void runRejectsEvidenceChunkThatWasNotRetrievedForTheProject() {
+    void runRejectsEvidenceRetrievedForAnotherCandidate() {
         UUID projectId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
-        UUID retrievedSourceId = UUID.randomUUID();
-        UUID retrievedChunkId = UUID.randomUUID();
-        String excerpt = "Smith et al. report 92 percent accuracy on the benchmark";
+        UUID firstSourceId = UUID.randomUUID();
+        UUID firstChunkId = UUID.randomUUID();
+        UUID secondSourceId = UUID.randomUUID();
+        UUID secondChunkId = UUID.randomUUID();
+        String firstExcerpt = "Smith et al. report 92 percent accuracy on the benchmark";
+        String secondExcerpt = "Jones et al. report 80 percent accuracy on another benchmark";
         PaperSection section = section(
-                projectId, documentId, sectionId, "Introduction", excerpt + ".");
-        DocumentChunk retrievedChunk = sourceChunk(
-                retrievedSourceId, retrievedChunkId,
-                "The final model achieved 89.2 percent accuracy.");
+                projectId, documentId, sectionId, "Introduction",
+                firstExcerpt + ". " + secondExcerpt + ".");
+        DocumentChunk firstChunk = sourceChunk(
+                firstSourceId, firstChunkId, "The first model achieved 89.2 percent accuracy.");
+        DocumentChunk secondChunk = sourceChunk(
+                secondSourceId, secondChunkId, "The second model achieved 79 percent accuracy.");
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(sourceMatchingService.search(eq(projectId), any(), eq(5)))
-                .thenReturn(List.of(List.of(
-                        new SourceMatchingService.SourceMatch(retrievedChunk, 0.91f))));
+                .thenReturn(List.of(
+                        List.of(new SourceMatchingService.SourceMatch(firstChunk, 0.91f)),
+                        List.of(new SourceMatchingService.SourceMatch(secondChunk, 0.90f))));
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"SOURCE_DISCREPANCY",
-                          "excerpt":"%s",
-                          "rationale":"The source reports a different value.",
-                          "confidence":"HIGH",
-                          "evidence":[{"source_id":"%s","chunk_id":"%s",
-                            "quote":"fabricated quote","relation":"CONTRADICTS"}]
-                        }]}
-                        """, sectionId, excerpt, UUID.randomUUID(), UUID.randomUUID())));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId,
+                        0,
+                        findingVerdict(
+                                0,
+                                "SOURCE_DISCREPANCY",
+                                "The source reports a different value.",
+                                "HIGH",
+                                String.format(
+                                        "[{\"source_id\":\"%s\",\"chunk_id\":\"%s\","
+                                                + "\"quote\":\"achieved 79 percent accuracy\","
+                                                + "\"relation\":\"CONTRADICTS\"}]",
+                                        secondSourceId, secondChunkId)),
+                        okVerdict(1))));
 
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
@@ -446,13 +448,13 @@ class SectionCitationReviewServiceTest {
         when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"UNSUBSTANTIATED_CLAIM",
-                          "excerpt":"%s",
+                        {"section_id":"%s","batch_index":0,"verdicts":[{
+                          "candidate_id":0,
+                          "verdict":"UNSUBSTANTIATED_CLAIM",
                           "rationale":"The precise result has no supporting source.",
                           "confidence":"HIGH"
                         }]}
-                        """, sectionId, excerpt)));
+                        """, sectionId)));
 
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
@@ -465,29 +467,23 @@ class SectionCitationReviewServiceTest {
     }
 
     @Test
-    void runRejectsMoreThanTenFindings() {
+    void runRejectsUnknownCandidateId() {
         UUID projectId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
-        List<String> excerpts = IntStream.range(0, 11)
-                .mapToObj(index -> "External benchmark claim number " + index
-                        + " reports exactly 90 percent accuracy")
-                .toList();
+        String excerpt = "The external benchmark reports exactly 90 percent accuracy";
         PaperSection section = section(
-                projectId, documentId, sectionId, "Introduction",
-                String.join(". ", excerpts) + ".");
-        String findingsJson = IntStream.range(0, excerpts.size())
-                .mapToObj(index -> String.format("""
-                        {"type":"UNSUBSTANTIATED_CLAIM","excerpt":"%s",
-                         "rationale":"No supporting source.","confidence":"LOW","evidence":[]}
-                        """, excerpts.get(index)))
-                .collect(Collectors.joining(","));
+                projectId, documentId, sectionId, "Introduction", excerpt + ".");
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format(
-                        "{\"section_id\":\"%s\",\"chunk_index\":0,\"findings\":[%s]}",
-                        sectionId, findingsJson)));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId, 0, findingVerdict(
+                                99,
+                                "UNSUBSTANTIATED_CLAIM",
+                                "No supporting source.",
+                                "LOW",
+                                "[]"))));
 
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
@@ -500,44 +496,44 @@ class SectionCitationReviewServiceTest {
     }
 
     @Test
-    void runKeepsMoreThanTenFindingsAcrossChunks() {
+    void runKeepsMoreThanTenFindingsAcrossCandidateBatches() {
         UUID projectId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
-        List<String> firstChunkExcerpts = IntStream.range(0, 10)
-                .mapToObj(index -> "First chunk benchmark claim number " + index
+        List<String> firstBatchExcerpts = IntStream.range(0, 10)
+                .mapToObj(index -> "First batch benchmark claim number " + index
                         + " reports exactly 90 percent accuracy")
                 .toList();
-        String secondChunkExcerpt =
-                "Second chunk benchmark claim reports exactly 80 percent accuracy";
-        String firstChunkText = String.join(". ", firstChunkExcerpts) + ". ";
-        String content = firstChunkText + "x".repeat(8_000 - firstChunkText.length())
-                + secondChunkExcerpt + ".";
+        String secondBatchExcerpt =
+                "Second batch benchmark claim reports exactly 80 percent accuracy";
+        String content = String.join(". ", Stream.concat(
+                firstBatchExcerpts.stream(), Stream.of(secondBatchExcerpt)).toList()) + ".";
         PaperSection section = section(
                 projectId, documentId, sectionId, "Introduction", content);
         User actor = new User();
         actor.setId(actorId);
-        String firstChunkFindings = firstChunkExcerpts.stream()
-                .map(excerpt -> String.format("""
-                        {"type":"UNSUBSTANTIATED_CLAIM","excerpt":"%s",
-                         "rationale":"No supporting source.","confidence":"LOW","evidence":[]}
-                        """, excerpt))
-                .collect(Collectors.joining(","));
-        String secondChunkFinding = String.format("""
-                {"type":"UNSUBSTANTIATED_CLAIM","excerpt":"%s",
-                 "rationale":"No supporting source.","confidence":"LOW","evidence":[]}
-                """, secondChunkExcerpt);
+        String[] firstBatchVerdicts = IntStream.range(0, 10)
+                .mapToObj(index -> findingVerdict(
+                        index,
+                        "UNSUBSTANTIATED_CLAIM",
+                        "No supporting source.",
+                        "LOW",
+                        "[]"))
+                .toArray(String[]::new);
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
         when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format(
-                        "{\"section_id\":\"%s\",\"chunk_index\":0,\"findings\":[%s]}",
-                        sectionId, firstChunkFindings)),
-                new AiModelClient.GenerationResult("provider", "model", String.format(
-                        "{\"section_id\":\"%s\",\"chunk_index\":1,\"findings\":[%s]}",
-                        sectionId, secondChunkFinding)));
+                new AiModelClient.GenerationResult(
+                        "provider", "model", review(sectionId, 0, firstBatchVerdicts)),
+                new AiModelClient.GenerationResult(
+                        "provider", "model", review(sectionId, 1, findingVerdict(
+                                10,
+                                "UNSUBSTANTIATED_CLAIM",
+                                "No supporting source.",
+                                "LOW",
+                                "[]"))));
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
@@ -548,7 +544,7 @@ class SectionCitationReviewServiceTest {
         assertThat(result.findings())
                 .extracting(SectionCitationReviewResponse.Finding::excerpt)
                 .containsExactlyElementsOf(Stream.concat(
-                        firstChunkExcerpts.stream(), Stream.of(secondChunkExcerpt)).toList());
+                        firstBatchExcerpts.stream(), Stream.of(secondBatchExcerpt)).toList());
         assertThat(result.summary()).startsWith("11 finding(s)");
         verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
     }
@@ -577,15 +573,13 @@ class SectionCitationReviewServiceTest {
                 .thenReturn(List.of(List.of(
                         new SourceMatchingService.SourceMatch(retrievedChunk, 0.91f))));
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"SOURCE_DISCREPANCY",
-                          "excerpt":"%s",
-                          "rationale":"The source reports a different value.",
-                          "confidence":"HIGH",
-                          "evidence":[%s]
-                        }]}
-                        """, sectionId, excerpt, evidenceJson)));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId, 0, findingVerdict(
+                                0,
+                                "SOURCE_DISCREPANCY",
+                                "The source reports a different value.",
+                                "HIGH",
+                                "[" + evidenceJson + "]"))));
 
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
@@ -613,9 +607,8 @@ class SectionCitationReviewServiceTest {
         when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult("first-provider", "first-model", "not-json"),
-                new AiModelClient.GenerationResult("retry-provider", "retry-model", String.format(
-                        "{\"section_id\":\"%s\",\"chunk_index\":0,\"findings\":[]}",
-                        sectionId)));
+                new AiModelClient.GenerationResult(
+                        "retry-provider", "retry-model", review(sectionId, 0, okVerdict(0))));
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
@@ -633,26 +626,25 @@ class SectionCitationReviewServiceTest {
     }
 
     @Test
-    void runRejectsAmbiguousExcerptInsteadOfGuessingOffset() {
+    void runRejectsDuplicateCandidateVerdict() {
         UUID projectId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
-        String excerpt = "The method improves recall";
+        String excerpt = "The proposed method improves recall by exactly 34 percent";
+        String secondExcerpt = "The external benchmark reports exactly 90 percent accuracy";
         PaperSection section = section(
                 projectId, documentId, sectionId, "Introduction",
-                excerpt + ". Later, " + excerpt + ".");
+                excerpt + ". " + secondExcerpt + ".");
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"UNSUBSTANTIATED_CLAIM",
-                          "excerpt":"%s",
-                          "rationale":"Empirical claim without citation.",
-                          "confidence":"MEDIUM",
-                          "evidence":[]
-                        }]}
-                        """, sectionId, excerpt)));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId,
+                        0,
+                        findingVerdict(
+                                0, "UNSUBSTANTIATED_CLAIM",
+                                "Empirical claim without citation.", "MEDIUM", "[]"),
+                        okVerdict(0))));
 
         assertThatThrownBy(() -> service().run(
                 documentId, projectId, sectionId, service().reviewInputFingerprint(section), UUID.randomUUID()))
@@ -679,15 +671,13 @@ class SectionCitationReviewServiceTest {
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
         when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"UNSUBSTANTIATED_CLAIM",
-                          "excerpt":"%s",
-                          "rationale":"The model overlooked the adjacent citation.",
-                          "confidence":"LOW",
-                          "evidence":[]
-                        }]}
-                        """, sectionId, excerpt)));
+                new AiModelClient.GenerationResult("provider", "model", review(
+                        sectionId, 0, findingVerdict(
+                                0,
+                                "UNSUBSTANTIATED_CLAIM",
+                                "The model overlooked the adjacent citation.",
+                                "LOW",
+                                "[]"))));
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
@@ -708,7 +698,7 @@ class SectionCitationReviewServiceTest {
         SectionCitationReviewService service = service();
         String fingerprint = service.reviewInputFingerprint(section);
         SectionCitationReviewResponse cached = new SectionCitationReviewResponse(
-                "section-critique-v3",
+                "section-critique-v4",
                 "critique-rules-v2",
                 sectionId,
                 section.getVersion(),
@@ -725,7 +715,7 @@ class SectionCitationReviewServiceTest {
         snapshot.setResponseJson(objectMapper.writeValueAsString(cached));
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(snapshotRepository.findByProjectIdAndStyleAndInputFingerprint(
-                eq(projectId), anyString(), eq(fingerprint))).thenReturn(Optional.of(snapshot));
+                eq(projectId), eq("section-critique-v4"), eq(fingerprint))).thenReturn(Optional.of(snapshot));
 
         SectionCitationReviewResponse result = service.run(
                 documentId, projectId, sectionId, fingerprint, UUID.randomUUID());
@@ -735,6 +725,54 @@ class SectionCitationReviewServiceTest {
         verify(sourceMatchingService, never()).search(any(), any(), anyInt());
         verify(snapshotRepository, never()).save(any(ReviewSnapshot.class));
         verifyNoInteractions(auditService);
+    }
+
+    @Test
+    void runIgnoresIncompleteCachedSnapshot() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        PaperSection section = section(
+                projectId, documentId, sectionId, "Introduction",
+                "Saved content for incomplete cache lookup.");
+        SectionCitationReviewService service = service();
+        String fingerprint = service.reviewInputFingerprint(section);
+        SectionCitationReviewResponse partial = new SectionCitationReviewResponse(
+                "section-critique-v4",
+                "critique-rules-v2",
+                sectionId,
+                section.getVersion(),
+                fingerprint,
+                service.sectionContentFingerprint(section),
+                LocalDateTime.of(2026, 8, 11, 10, 30),
+                "cached-provider",
+                "cached-model",
+                false,
+                "Partial review",
+                List.of(),
+                List.of("Batch failed"));
+        ReviewSnapshot snapshot = new ReviewSnapshot();
+        snapshot.setResponseJson(objectMapper.writeValueAsString(partial));
+        User actor = new User();
+        actor.setId(actorId);
+        when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
+        when(snapshotRepository.findByProjectIdAndStyleAndInputFingerprint(
+                projectId, "section-critique-v4", fingerprint)).thenReturn(Optional.of(snapshot));
+        when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
+        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
+                new AiModelClient.GenerationResult(
+                        "provider", "model", review(sectionId, 0, okVerdict(0))));
+
+        assertThat(service.cached(documentId, sectionId)).isEmpty();
+        SectionCitationReviewResponse result = service.run(
+                documentId, projectId, sectionId, fingerprint, actorId);
+
+        assertThat(result.complete()).isTrue();
+        assertThat(result.provider()).isEqualTo("provider");
+        verify(aiModelClient).generateForReview(anyString(), anyString());
+        verify(snapshotRepository).save(snapshot);
     }
 
     @Test
@@ -748,23 +786,30 @@ class SectionCitationReviewServiceTest {
     }
 
     @Test
-    void runKeepsSuccessfulChunksWhenLaterChunkProviderCallFails() {
+    void runKeepsSuccessfulBatchesWhenLaterBatchProviderCallFails() {
         UUID projectId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
+        List<String> candidates = IntStream.range(0, 11)
+                .mapToObj(index -> "External benchmark claim number " + index
+                        + " reports exactly 90 percent accuracy")
+                .toList();
         PaperSection section = section(
-                projectId, documentId, sectionId, "Introduction", "x".repeat(8_100));
+                projectId, documentId, sectionId, "Introduction",
+                String.join(". ", candidates) + ".");
         User actor = new User();
         actor.setId(actorId);
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(projectId), any(), eq(5)))
+                .thenReturn(emptyMatches(10), emptyMatches(1));
+        String[] firstBatchVerdicts = IntStream.range(0, 10)
+                .mapToObj(SectionCitationReviewServiceTest::okVerdict)
+                .toArray(String[]::new);
         when(aiModelClient.generateForReview(anyString(), anyString()))
                 .thenReturn(new AiModelClient.GenerationResult(
-                        "provider", "model", String.format(
-                                "{\"section_id\":\"%s\",\"chunk_index\":0,\"findings\":[]}",
-                                sectionId)))
+                        "provider", "model", review(sectionId, 0, firstBatchVerdicts)))
                 .thenThrow(new ResponseStatusException(
                         HttpStatus.SERVICE_UNAVAILABLE, "provider unavailable"));
 
@@ -780,52 +825,115 @@ class SectionCitationReviewServiceTest {
 
         assertThat(result.complete()).isFalse();
         assertThat(result.provider()).isEqualTo("provider");
-        assertThat(result.limitations()).singleElement().asString().contains("Chunk 2/2");
+        assertThat(result.limitations()).singleElement().asString().contains("Batch 2/2");
         assertThat(progress).containsExactly("0/2", "1/2", "2/2");
         verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
-        verify(snapshotRepository).save(any(ReviewSnapshot.class));
+        verify(snapshotRepository, never()).save(any(ReviewSnapshot.class));
     }
 
     @Test
-    void runDeduplicatesTheSameFindingAcrossChunkOverlap() {
+    void runReviewsCandidatesAtTheStartMiddleAndEndOfTheSection() {
         UUID projectId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
-        String excerpt = "The external benchmark reports exactly 90 percent accuracy";
-        int excerptStart = 7_700;
-        String content = "x".repeat(excerptStart - 2) + ". " + excerpt + ". " + "y".repeat(900);
+        List<String> candidates = IntStream.range(0, 21)
+                .mapToObj(index -> index == 0
+                        ? "Accuracy reached 70 percent"
+                        : "External benchmark claim number " + index
+                                + " reports exactly " + (70 + index) + " percent accuracy")
+                .toList();
+        String content = String.join(". ", candidates) + ".";
         PaperSection section = section(
                 projectId, documentId, sectionId, "Introduction", content);
         User actor = new User();
         actor.setId(actorId);
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(projectId), any(), eq(5)))
+                .thenReturn(emptyMatches(10), emptyMatches(10), emptyMatches(1));
+        String[] firstBatchVerdicts = IntStream.range(0, 10)
+                .mapToObj(index -> index == 0
+                        ? findingVerdict(index, "UNSUBSTANTIATED_CLAIM",
+                                "No supporting source.", "MEDIUM", "[]")
+                        : okVerdict(index))
+                .toArray(String[]::new);
+        String[] secondBatchVerdicts = IntStream.range(10, 20)
+                .mapToObj(index -> index == 10
+                        ? findingVerdict(index, "UNSUBSTANTIATED_CLAIM",
+                                "No supporting source.", "MEDIUM", "[]")
+                        : okVerdict(index))
+                .toArray(String[]::new);
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":0,"findings":[{
-                          "type":"UNSUBSTANTIATED_CLAIM","excerpt":"%s",
-                          "rationale":"No supporting source.","confidence":"MEDIUM","evidence":[]
-                        }]}
-                        """, sectionId, excerpt)),
-                new AiModelClient.GenerationResult("provider", "model", String.format("""
-                        {"section_id":"%s","chunk_index":1,"findings":[{
-                          "type":"UNSUBSTANTIATED_CLAIM","excerpt":"%s",
-                          "rationale":"No supporting source.","confidence":"MEDIUM","evidence":[]
-                        }]}
-                        """, sectionId, excerpt)));
+                new AiModelClient.GenerationResult(
+                        "provider", "model", review(sectionId, 0, firstBatchVerdicts)),
+                new AiModelClient.GenerationResult(
+                        "provider", "model", review(sectionId, 1, secondBatchVerdicts)),
+                new AiModelClient.GenerationResult(
+                        "provider", "model", review(sectionId, 2, findingVerdict(
+                                20, "UNSUBSTANTIATED_CLAIM",
+                                "No supporting source.", "MEDIUM", "[]"))));
 
         SectionCitationReviewService service = service();
         SectionCitationReviewResponse result = service.run(
                 documentId, projectId, sectionId, service.reviewInputFingerprint(section), actorId);
 
         assertThat(result.complete()).isTrue();
-        assertThat(result.findings()).singleElement().satisfies(finding -> {
-            assertThat(finding.startOffset()).isEqualTo(excerptStart);
-            assertThat(finding.endOffset()).isEqualTo(excerptStart + excerpt.length());
+        assertThat(result.findings())
+                .extracting(SectionCitationReviewResponse.Finding::excerpt)
+                .containsExactly(candidates.get(0), candidates.get(10), candidates.get(20));
+        result.findings().forEach(finding -> {
+            assertThat(finding.startOffset()).isEqualTo(content.indexOf(finding.excerpt()));
+            assertThat(finding.endOffset())
+                    .isEqualTo(finding.startOffset() + finding.excerpt().length());
         });
-        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
+        verify(sourceMatchingService).search(projectId, candidates.subList(0, 10), 5);
+        verify(sourceMatchingService).search(projectId, candidates.subList(10, 20), 5);
+        verify(sourceMatchingService).search(projectId, candidates.subList(20, 21), 5);
+        verify(aiModelClient, times(3)).generateForReview(anyString(), anyString());
+    }
+
+    @Test
+    void runKeepsFullEvidenceBatchWithinModelPromptLimit() {
+        UUID projectId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        List<String> candidates = IntStream.range(0, 10)
+                .mapToObj(index -> "External benchmark claim number " + index
+                        + " reports exactly 90 percent accuracy")
+                .toList();
+        PaperSection section = section(
+                projectId, documentId, sectionId, "Introduction",
+                String.join(". ", candidates) + ".");
+        User actor = new User();
+        actor.setId(actorId);
+        when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
+        when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
+        List<List<SourceMatchingService.SourceMatch>> matches = IntStream.range(0, 10)
+                .mapToObj(candidate -> IntStream.range(0, 5)
+                        .mapToObj(rank -> new SourceMatchingService.SourceMatch(
+                                sourceChunk(UUID.randomUUID(), UUID.randomUUID(), "e".repeat(1_200)),
+                                1.0f - rank * 0.1f))
+                        .toList())
+                .toList();
+        when(sourceMatchingService.search(projectId, candidates, 5)).thenReturn(matches);
+        String[] verdicts = IntStream.range(0, 10)
+                .mapToObj(SectionCitationReviewServiceTest::okVerdict)
+                .toArray(String[]::new);
+        when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
+                new AiModelClient.GenerationResult(
+                        "provider", "model", review(sectionId, 0, verdicts)));
+
+        SectionCitationReviewService service = service();
+        SectionCitationReviewResponse result = service.run(
+                documentId, projectId, sectionId,
+                service.reviewInputFingerprint(section), actorId);
+
+        assertThat(result.complete()).isTrue();
+        verify(aiModelClient).generateForReview(
+                eq(SectionCitationReviewPrompt.SYSTEM),
+                argThat(prompt -> prompt.length() <= 48_000));
     }
 
     @Test
@@ -988,6 +1096,37 @@ class SectionCitationReviewServiceTest {
                 sourceMatchingService,
                 auditService,
                 objectMapper);
+    }
+
+    private static String review(UUID sectionId, int batchIndex, String... verdicts) {
+        return String.format(
+                "{\"section_id\":\"%s\",\"batch_index\":%d,\"verdicts\":[%s]}",
+                sectionId, batchIndex, String.join(",", verdicts));
+    }
+
+    private static String findingVerdict(
+            int candidateId,
+            String verdict,
+            String rationale,
+            String confidence,
+            String evidenceJson) {
+        return String.format(
+                "{\"candidate_id\":%d,\"verdict\":\"%s\",\"rationale\":\"%s\","
+                        + "\"confidence\":\"%s\",\"evidence\":%s}",
+                candidateId, verdict, rationale, confidence, evidenceJson);
+    }
+
+    private static String okVerdict(int candidateId) {
+        return String.format(
+                "{\"candidate_id\":%d,\"verdict\":\"OK\",\"rationale\":\"\","
+                        + "\"confidence\":null,\"evidence\":[]}",
+                candidateId);
+    }
+
+    private static List<List<SourceMatchingService.SourceMatch>> emptyMatches(int count) {
+        return IntStream.range(0, count)
+                .mapToObj(ignored -> List.<SourceMatchingService.SourceMatch>of())
+                .toList();
     }
 
     private static DocumentChunk sourceChunk(UUID sourceId, UUID chunkId, String text) {

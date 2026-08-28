@@ -989,7 +989,11 @@ export default function WorkspaceLayout() {
       if (!job) return;
       setAiReviewResult(job.result);
       setAiReviewedContent(reviewedContent);
-      showToast(t('aiReviewComplete'));
+      showToast(job.result?.complete
+        ? t('aiReviewComplete')
+        : t('aiReviewPartial', {
+          failedBatches: job.result?.limitations?.length || 0,
+        }));
       setLoadingAiReview(false);
       fetchAiReviewSources(job.result, requestId);
     } catch (error) {

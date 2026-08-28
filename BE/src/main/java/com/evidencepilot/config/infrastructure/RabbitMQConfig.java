@@ -1,5 +1,7 @@
 package com.evidencepilot.config.infrastructure;
 
+import com.evidencepilot.dto.ExtractionRequest;
+import com.evidencepilot.service.impl.DocumentPersistenceService;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.Queue;
@@ -54,12 +56,23 @@ public class RabbitMQConfig {
     }
 
     @Bean
-    public MessageRecoverer failedJobRecoverer(RabbitTemplate rabbitTemplate) {
+    public MessageRecoverer failedJobRecoverer(
+            RabbitTemplate rabbitTemplate,
+            Jackson2JsonMessageConverter messageConverter,
+            DocumentPersistenceService documentPersistenceService) {
         return (Message message, Throwable cause) -> {
             String sourceQueue = message.getMessageProperties().getConsumerQueue();
             String deadLetterQueue;
             if (EXTRACTION_QUEUE.equals(sourceQueue)) {
                 deadLetterQueue = EXTRACTION_DLQ;
+                Object payload = messageConverter.fromMessage(message);
+                if (!(payload instanceof ExtractionRequest request)) {
+                    throw new AmqpRejectAndDontRequeueException(
+                            "Invalid extraction message after retries", cause);
+                }
+                documentPersistenceService.markFailed(
+                        request.documentId(),
+                        "Extraction failed after retries; message moved to DLQ");
             } else if (EXPORT_QUEUE.equals(sourceQueue)) {
                 deadLetterQueue = EXPORT_DLQ;
             } else {

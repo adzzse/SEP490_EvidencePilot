@@ -288,6 +288,7 @@
   ,"selectPaperFirst": "Hãy chọn một bài viết trước."
   ,"formatScanFailed": "Quét định dạng thất bại."
   ,"aiReviewComplete": "Citation Review hoàn tất."
+  ,"aiReviewPartial": "Citation Review chỉ hoàn thành một phần: {{failedBatches}} batch không thể kiểm tra."
   ,"aiProviderRateLimited": "Nhà cung cấp AI đang giới hạn lượt gọi. Vui lòng thử lại sau."
   ,"aiWorkerUnavailable": "Dịch vụ Citation Review không sẵn sàng hoặc đã hết thời gian chờ."
   ,"aiInvalidResponse": "Citation Review trả về phản hồi không hợp lệ sau khi thử lại."

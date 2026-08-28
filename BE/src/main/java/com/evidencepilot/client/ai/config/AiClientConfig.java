@@ -65,7 +65,7 @@ public class AiClientConfig {
 
     @Bean("aiReviewRestClient")
     public RestClient aiReviewRestClient() {
-        return buildRestClient(120);
+        return buildRestClient(readTimeoutSeconds);
     }
 
     private RestClient buildRestClient(long timeoutSeconds) {

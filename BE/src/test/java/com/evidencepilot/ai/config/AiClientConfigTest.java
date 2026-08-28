@@ -1,20 +1,13 @@
 package com.evidencepilot.ai.config;
 
-import com.evidencepilot.service.AiModelClient;
-import com.evidencepilot.service.impl.AiModelClientImpl;
 import com.evidencepilot.client.ai.config.AiClientConfig;
-import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestClient;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AiClientConfigTest {
 
@@ -36,51 +29,24 @@ class AiClientConfigTest {
     }
 
     @Test
-    void appliesConfiguredReadTimeoutToAiCalls() throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/health", exchange -> {
-            try {
-                Thread.sleep(Duration.ofSeconds(2).toMillis());
-                byte[] body = "{}".getBytes(StandardCharsets.UTF_8);
-                exchange.getResponseHeaders().add("Content-Type", "application/json");
-                exchange.sendResponseHeaders(200, body.length);
-                exchange.getResponseBody().write(body);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } finally {
-                exchange.close();
-            }
-        });
-        server.start();
+    void appliesConfiguredReadTimeoutToReviewCalls() {
+        contextRunner
+                .withPropertyValues(
+                        "ai.model.base-url=http://ai.test",
+                        "ai.model.api-key=",
+                        "ai.model.read-timeout-seconds=7")
+                .run(context -> {
+                    RestClient normal = context.getBean("aiRestClient", RestClient.class);
+                    RestClient review = context.getBean("aiReviewRestClient", RestClient.class);
 
-        try {
-            String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-            new ApplicationContextRunner()
-                    .withUserConfiguration(AiClientConfig.class)
-                    .withPropertyValues(
-                            "ai.model.base-url=" + baseUrl,
-                            "ai.model.api-key=",
-                            "ai.model.read-timeout-seconds=1")
-                    .run(context -> {
-                        AiModelClientImpl client = new AiModelClientImpl(
-                                context.getBean("aiRestClient", RestClient.class),
-                                context.getBean("aiReviewRestClient", RestClient.class),
-                                context.getBean("aiModelBaseUrl", String.class),
-                                new com.fasterxml.jackson.databind.ObjectMapper(),
-                                3,
-                                new com.evidencepilot.client.ai.gate.AiModelCallGate(
-                                        new java.util.concurrent.Semaphore(4)));
+                    assertThat(readTimeout(normal)).isEqualTo(7_000);
+                    assertThat(readTimeout(review)).isEqualTo(7_000);
+                });
+    }
 
-                        long started = System.nanoTime();
-                        assertThatThrownBy(client::health)
-                                .isInstanceOf(AiModelClient.AiApiException.class)
-                                .hasMessageContaining("/health");
-
-                        long elapsedMillis = Duration.ofNanos(System.nanoTime() - started).toMillis();
-                        assertThat(elapsedMillis).isLessThan(Duration.ofSeconds(2).toMillis());
-                    });
-        } finally {
-            server.stop(0);
-        }
+    private static int readTimeout(RestClient client) {
+        Object factory = ReflectionTestUtils.getField(client, "clientRequestFactory");
+        assertThat(factory).isInstanceOf(SimpleClientHttpRequestFactory.class);
+        return (int) ReflectionTestUtils.getField(factory, "readTimeout");
     }
 }

@@ -446,18 +446,20 @@ class DocumentExtractionWorkerTest {
     }
 
     @Test
-    void processMarksFailedWhenExtractionFails() {
+    void processReturnsFailedExtractionToQueueForListenerRetry() {
         UUID documentId = UUID.randomUUID();
         Document document = document(documentId);
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(documentObjectStorage.exists(any())).thenReturn(false);
         when(aiModelClient.extractDocument(eq("source.pdf"), anyString()))
                 .thenThrow(new AiModelClient.AiApiException("/extract", 503));
+        when(persistence.markQueuedForRetry(documentId)).thenReturn(true);
 
         assertThatThrownBy(() -> worker().process(documentId))
                 .isInstanceOf(AiModelClient.AiApiException.class);
 
-        verify(persistence).markFailed(eq(documentId), any());
+        verify(persistence).markQueuedForRetry(documentId);
+        verify(persistence, never()).markFailed(eq(documentId), any());
         verify(persistence, never()).markReady(any(), any(Integer.class));
     }
 

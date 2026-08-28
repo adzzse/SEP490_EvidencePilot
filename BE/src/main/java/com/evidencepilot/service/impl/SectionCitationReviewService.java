@@ -31,12 +31,14 @@ import org.springframework.web.server.ResponseStatusException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.text.BreakIterator;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -48,12 +50,10 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class SectionCitationReviewService {
 
-    public static final String REVIEW_VERSION = "section-critique-v3";
+    public static final String REVIEW_VERSION = "section-critique-v4";
     public static final String RULE_CATALOG_VERSION = "critique-rules-v2";
     private static final String SNAPSHOT_STYLE = REVIEW_VERSION;
-    private static final int CHUNK_SIZE = 8_000;
-    private static final int CHUNK_OVERLAP = 400;
-    private static final int MAX_FINDINGS_PER_BATCH = 10;
+    private static final int REVIEW_BATCH_SIZE = 10;
     private static final int SOURCE_TOP_K = 20;
     private static final int SOURCE_LIMIT = 3;
     private static final int CANDIDATE_MIN_LENGTH = 30;
@@ -62,6 +62,7 @@ public class SectionCitationReviewService {
     private static final int RETRIEVAL_TOP_K = 5;
     private static final int EVIDENCE_CHUNK_LIMIT = 12;
     private static final int EVIDENCE_TEXT_LIMIT = 1_200;
+    private static final int REVIEW_EVIDENCE_TEXT_LIMIT = 600;
     private static final int MAX_RATIONALE_LENGTH = 1_000;
     private static final int MAX_EVIDENCE_PER_FINDING = 3;
     private static final Pattern SENTENCE_BOUNDARY = Pattern.compile("(?<=[.!?])\\s+");
@@ -84,7 +85,8 @@ public class SectionCitationReviewService {
                 .findByProjectIdAndStyleAndInputFingerprint(
                         section.getDocument().getProject().getId(), SNAPSHOT_STYLE,
                         reviewInputFingerprint)
-                .flatMap(this::readSnapshot);
+                .flatMap(this::readSnapshot)
+                .filter(SectionCitationReviewResponse::complete);
     }
 
     @Transactional
@@ -125,7 +127,8 @@ public class SectionCitationReviewService {
         Optional<SectionCitationReviewResponse> cached = reviewSnapshotRepository
                 .findByProjectIdAndStyleAndInputFingerprint(
                         projectId, SNAPSHOT_STYLE, reviewInputFingerprint)
-                .flatMap(this::readSnapshot);
+                .flatMap(this::readSnapshot)
+                .filter(SectionCitationReviewResponse::complete);
         if (cached.isPresent()) {
             return cached.get();
         }
@@ -135,7 +138,9 @@ public class SectionCitationReviewService {
                 ? notApplicable(
                         section, reviewInputFingerprint, exemptionSummary(normalizedTitle))
                 : generate(section, reviewInputFingerprint, normalizedTitle, onProgress);
-        saveSnapshot(project, reviewInputFingerprint, review);
+        if (review.complete()) {
+            saveSnapshot(project, reviewInputFingerprint, review);
+        }
 
         User actor = userRepository.findById(requestedByUserId)
                 .orElseThrow(() -> new ResourceNotFoundException(requestedByUserId, "User"));
@@ -157,7 +162,7 @@ public class SectionCitationReviewService {
         PaperSection section = requireSection(documentId, sectionId, true);
         List<SectionReviewSourceMatchRequest.Finding> findings = request.findings();
         if (findings == null || findings.isEmpty()
-                || findings.size() > MAX_FINDINGS_PER_BATCH) {
+                || findings.size() > REVIEW_BATCH_SIZE) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "Provide between 1 and 10 review findings per batch");
         }
@@ -242,46 +247,49 @@ public class SectionCitationReviewService {
             String normalizedTitle,
             BiConsumer<Integer, Integer> onProgress) {
         UUID projectId = section.getDocument().getProject().getId();
-        List<Chunk> chunks = chunks(section.getContentTex());
+        List<ClaimCandidate> candidates = sectionCandidates(section.getContentTex());
+        int batchCount = (candidates.size() + REVIEW_BATCH_SIZE - 1) / REVIEW_BATCH_SIZE;
         List<SectionCitationReviewResponse.Finding> findings = new ArrayList<>();
         List<String> limitations = new ArrayList<>();
         String provider = null;
         String model = null;
         RuntimeException lastFailure = null;
-        int completedChunks = 0;
-        onProgress.accept(0, chunks.size());
+        int completedBatches = 0;
+        onProgress.accept(0, batchCount);
 
-        for (int i = 0; i < chunks.size(); i++) {
-            Chunk chunk = chunks.get(i);
+        for (int batchIndex = 0; batchIndex < batchCount; batchIndex++) {
+            int fromIndex = batchIndex * REVIEW_BATCH_SIZE;
+            List<ClaimCandidate> batch = List.copyOf(candidates.subList(
+                    fromIndex, Math.min(candidates.size(), fromIndex + REVIEW_BATCH_SIZE)));
             try {
-                List<RetrievedEvidence> evidence = retrieveEvidence(projectId, chunk.content());
-                Map<UUID, RetrievedEvidence> evidenceByChunkId = new LinkedHashMap<>();
-                evidence.forEach(item -> evidenceByChunkId.put(item.chunkId(), item));
-                GeneratedReview generated = generateChunkReview(
-                        section, normalizedTitle, chunk, i, chunks.size(), evidence, evidenceByChunkId);
+                List<CandidateContext> contexts = retrieveCandidateEvidence(projectId, batch);
+                GeneratedReview generated = generateBatchReview(
+                        section, normalizedTitle, contexts, batchIndex, batchCount);
                 if (provider == null) {
                     provider = generated.provider();
                     model = generated.model();
                 }
-                if (generated.discardedFindings() > 0) {
-                    limitations.add("Chunk " + (i + 1) + "/" + chunks.size()
-                            + " omitted " + generated.discardedFindings() + " invalid AI finding(s)");
-                }
-                for (ModelFinding finding : generated.review().findings()) {
-                    int start = chunk.startOffset() + excerptStart(chunk.content(), finding.excerpt());
-                    int end = start + finding.excerpt().length();
-                    if (finding.type() == SectionCitationReviewResponse.FindingType.UNSUBSTANTIATED_CLAIM
-                            && alreadyCited(section.getContentTex(), finding.excerpt(), end)) {
+                Map<Integer, ClaimCandidate> candidateById = new LinkedHashMap<>();
+                batch.forEach(candidate -> candidateById.put(candidate.id(), candidate));
+                for (ModelVerdict verdict : generated.review().verdicts()) {
+                    if (verdict.verdict() == Verdict.OK) {
+                        continue;
+                    }
+                    ClaimCandidate candidate = candidateById.get(verdict.candidateId());
+                    SectionCitationReviewResponse.FindingType findingType =
+                            SectionCitationReviewResponse.FindingType.valueOf(verdict.verdict().name());
+                    if (findingType == SectionCitationReviewResponse.FindingType.UNSUBSTANTIATED_CLAIM
+                            && alreadyCited(section.getContentTex(), candidate.text(), candidate.endOffset())) {
                         continue;
                     }
                     findings.add(new SectionCitationReviewResponse.Finding(
-                            finding.type(),
-                            finding.excerpt(),
-                            start,
-                            end,
-                            finding.rationale().strip(),
-                            finding.confidence(),
-                            finding.evidence().stream()
+                            findingType,
+                            candidate.text(),
+                            candidate.startOffset(),
+                            candidate.endOffset(),
+                            verdict.rationale().strip(),
+                            verdict.confidence(),
+                            verdict.evidence().stream()
                                     .map(item -> new SectionCitationReviewResponse.Evidence(
                                             item.sourceId(),
                                             item.chunkId(),
@@ -289,26 +297,22 @@ public class SectionCitationReviewService {
                                             item.relation()))
                                     .toList()));
                 }
-                completedChunks++;
+                completedBatches++;
             } catch (RuntimeException exception) {
                 lastFailure = exception;
-                limitations.add("Chunk " + (i + 1) + "/" + chunks.size()
+                limitations.add("Batch " + (batchIndex + 1) + "/" + batchCount
                         + " could not be reviewed: " + exception.getMessage());
             } finally {
-                onProgress.accept(i + 1, chunks.size());
+                onProgress.accept(batchIndex + 1, batchCount);
             }
         }
-        if (completedChunks == 0 && lastFailure != null) {
+        if (completedBatches == 0 && lastFailure != null) {
             throw lastFailure;
         }
 
-        Map<String, SectionCitationReviewResponse.Finding> unique = new LinkedHashMap<>();
-        findings.stream()
+        List<SectionCitationReviewResponse.Finding> allFindings = findings.stream()
                 .sorted(Comparator.comparingInt(SectionCitationReviewResponse.Finding::startOffset))
-                .forEach(finding -> unique.putIfAbsent(
-                        finding.type() + ":" + finding.startOffset() + ":" + finding.endOffset(),
-                        finding));
-        List<SectionCitationReviewResponse.Finding> allFindings = List.copyOf(unique.values());
+                .toList();
         return new SectionCitationReviewResponse(
                 REVIEW_VERSION,
                 RULE_CATALOG_VERSION,
@@ -319,7 +323,7 @@ public class SectionCitationReviewService {
                 LocalDateTime.now(),
                 provider,
                 model,
-                completedChunks == chunks.size(),
+                completedBatches == batchCount,
                 summarize(allFindings),
                 allFindings,
                 limitations);
@@ -369,6 +373,42 @@ public class SectionCitationReviewService {
         return List.copyOf(unique.values());
     }
 
+    private List<CandidateContext> retrieveCandidateEvidence(
+            UUID projectId, List<ClaimCandidate> candidates) {
+        List<List<SourceMatchingService.SourceMatch>> matches = sourceMatchingService.search(
+                projectId, candidates.stream().map(ClaimCandidate::text).toList(), RETRIEVAL_TOP_K);
+        if (matches.isEmpty()) {
+            return candidates.stream()
+                    .map(candidate -> new CandidateContext(candidate, List.of()))
+                    .toList();
+        }
+        if (matches.size() != candidates.size()) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "AI service returned an invalid evidence batch");
+        }
+        List<CandidateContext> contexts = new ArrayList<>();
+        for (int index = 0; index < candidates.size(); index++) {
+            Map<UUID, RetrievedEvidence> unique = new LinkedHashMap<>();
+            for (SourceMatchingService.SourceMatch match : matches.get(index)) {
+                DocumentChunk chunk = match.chunk();
+                Document source = chunk.getDocument();
+                String text = chunk.getText() == null ? "" : chunk.getText();
+                if (text.length() > REVIEW_EVIDENCE_TEXT_LIMIT) {
+                    text = text.substring(0, REVIEW_EVIDENCE_TEXT_LIMIT);
+                }
+                unique.putIfAbsent(chunk.getId(), new RetrievedEvidence(
+                        source.getId(),
+                        chunk.getId(),
+                        SourceMatchingService.citationKey(source.getId()),
+                        source.getTitle() == null || source.getTitle().isBlank()
+                                ? source.getOriginalFilename() : source.getTitle(),
+                        text));
+            }
+            contexts.add(new CandidateContext(candidates.get(index), List.copyOf(unique.values())));
+        }
+        return List.copyOf(contexts);
+    }
+
     private static List<String> candidateClaims(String chunkContent) {
         List<String> candidates = new ArrayList<>();
         for (String sentence : SENTENCE_BOUNDARY.split(chunkContent)) {
@@ -384,15 +424,41 @@ public class SectionCitationReviewService {
         return candidates;
     }
 
-    private GeneratedReview generateChunkReview(
+    private static List<ClaimCandidate> sectionCandidates(String content) {
+        List<ClaimCandidate> candidates = new ArrayList<>();
+        BreakIterator boundary = BreakIterator.getSentenceInstance(Locale.ENGLISH);
+        boundary.setText(content);
+        int start = boundary.first();
+        for (int end = boundary.next(); end != BreakIterator.DONE; start = end, end = boundary.next()) {
+            addCandidate(candidates, content, start, end);
+        }
+        return List.copyOf(candidates);
+    }
+
+    private static void addCandidate(
+            List<ClaimCandidate> candidates, String content, int start, int end) {
+        while (start < end && Character.isWhitespace(content.charAt(start))) {
+            start++;
+        }
+        while (end > start && Character.isWhitespace(content.charAt(end - 1))) {
+            end--;
+        }
+        if (end > start && ".!?".indexOf(content.charAt(end - 1)) >= 0) {
+            end--;
+        }
+        if (end > start) {
+            candidates.add(new ClaimCandidate(
+                    candidates.size(), content.substring(start, end), start, end));
+        }
+    }
+
+    private GeneratedReview generateBatchReview(
             PaperSection section,
             String normalizedTitle,
-            Chunk chunk,
-            int chunkIndex,
-            int chunkCount,
-            List<RetrievedEvidence> evidence,
-            Map<UUID, RetrievedEvidence> evidenceByChunkId) {
-        String prompt = reviewPrompt(section, normalizedTitle, chunk, chunkIndex, chunkCount, evidence);
+            List<CandidateContext> contexts,
+            int batchIndex,
+            int batchCount) {
+        String prompt = reviewPrompt(section, normalizedTitle, contexts, batchIndex, batchCount);
         RuntimeException lastFailure = null;
         for (int attempt = 0; attempt < 2; attempt++) {
             try {
@@ -401,11 +467,8 @@ public class SectionCitationReviewService {
                         attempt == 0 ? prompt : prompt + "\nPrevious output was invalid. Return valid JSON only.");
                 ModelReview review = strictMapper().readValue(
                         extractJson(generation.response()), ModelReview.class);
-                ValidatedReview validated = validateReview(
-                        review, chunk, section.getId().toString(), chunkIndex, evidenceByChunkId);
-                return new GeneratedReview(
-                        generation.provider(), generation.model(),
-                        validated.review(), validated.discardedFindings());
+                validateReview(review, contexts, section.getId().toString(), batchIndex);
+                return new GeneratedReview(generation.provider(), generation.model(), review);
             } catch (JsonProcessingException | IllegalArgumentException exception) {
                 lastFailure = new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
@@ -419,10 +482,9 @@ public class SectionCitationReviewService {
     private String reviewPrompt(
             PaperSection section,
             String normalizedTitle,
-            Chunk chunk,
-            int chunkIndex,
-            int chunkCount,
-            List<RetrievedEvidence> evidence) {
+            List<CandidateContext> contexts,
+            int batchIndex,
+            int batchCount) {
         Map<String, Object> context = new LinkedHashMap<>();
         Project project = section.getDocument().getProject();
         context.put("paperStandard", project.getTargetStandard() == null
@@ -431,16 +493,20 @@ public class SectionCitationReviewService {
         context.put("sectionTitle", section.getSectionTitle());
         context.put("normalizedSectionTitle", normalizedTitle);
         context.put("sectionPolicy", sectionPolicy(normalizedTitle));
-        context.put("chunkIndex", chunkIndex);
-        context.put("chunkCount", chunkCount);
-        context.put("contentTex", chunk.content());
-        context.put("evidence", evidence.stream()
+        context.put("batchIndex", batchIndex);
+        context.put("batchCount", batchCount);
+        context.put("candidates", contexts.stream()
                 .map(item -> Map.of(
-                        "source_id", item.sourceId().toString(),
-                        "chunk_id", item.chunkId().toString(),
-                        "citation_key", item.citationKey(),
-                        "title", item.title() == null ? "" : item.title(),
-                        "text", item.text()))
+                        "candidate_id", item.candidate().id(),
+                        "text", item.candidate().text(),
+                        "evidence", item.evidence().stream()
+                                .map(evidence -> Map.of(
+                                        "source_id", evidence.sourceId().toString(),
+                                        "chunk_id", evidence.chunkId().toString(),
+                                        "citation_key", evidence.citationKey(),
+                                        "title", evidence.title() == null ? "" : evidence.title(),
+                                        "text", evidence.text()))
+                                .toList()))
                 .toList());
         try {
             return objectMapper.writeValueAsString(context);
@@ -449,67 +515,63 @@ public class SectionCitationReviewService {
         }
     }
 
-    private ValidatedReview validateReview(
+    private void validateReview(
             ModelReview review,
-            Chunk chunk,
+            List<CandidateContext> contexts,
             String sectionId,
-            int chunkIndex,
-            Map<UUID, RetrievedEvidence> evidenceByChunkId) {
+            int batchIndex) {
         if (review == null
-                || review.findings() == null
-                || review.findings().size() > MAX_FINDINGS_PER_BATCH
+                || review.verdicts() == null
+                || review.verdicts().size() != contexts.size()
                 || !sectionId.equals(review.sectionId())
-                || review.chunkIndex() != chunkIndex) {
+                || review.batchIndex() == null
+                || review.batchIndex() != batchIndex) {
             throw new IllegalArgumentException("Invalid review envelope");
         }
-        List<ModelFinding> validFindings = new ArrayList<>();
-        IllegalArgumentException firstFailure = null;
-        for (ModelFinding finding : review.findings()) {
-            try {
-                validateFinding(finding, chunk, evidenceByChunkId);
-                validFindings.add(finding);
-            } catch (IllegalArgumentException exception) {
-                if (firstFailure == null) {
-                    firstFailure = exception;
-                }
+        Map<Integer, CandidateContext> contextById = new LinkedHashMap<>();
+        contexts.forEach(context -> contextById.put(context.candidate().id(), context));
+        Set<Integer> seen = new LinkedHashSet<>();
+        for (ModelVerdict verdict : review.verdicts()) {
+            CandidateContext context = verdict == null || verdict.candidateId() == null
+                    ? null : contextById.get(verdict.candidateId());
+            if (context == null || !seen.add(verdict.candidateId())) {
+                throw new IllegalArgumentException("AI must return one verdict for every candidate");
             }
+            validateVerdict(verdict, context);
         }
-        if (!review.findings().isEmpty() && validFindings.isEmpty()) {
-            throw firstFailure;
+        if (seen.size() != contexts.size()) {
+            throw new IllegalArgumentException("AI must return one verdict for every candidate");
         }
-        return new ValidatedReview(
-                new ModelReview(review.sectionId(), review.chunkIndex(), List.copyOf(validFindings)),
-                review.findings().size() - validFindings.size());
     }
 
-    private void validateFinding(
-            ModelFinding finding,
-            Chunk chunk,
-            Map<UUID, RetrievedEvidence> evidenceByChunkId) {
-        if (finding == null
-                || finding.type() == null
-                || finding.confidence() == null
-                || finding.excerpt() == null
-                || finding.excerpt().isBlank()
-                || finding.rationale() == null
-                || finding.rationale().isBlank()
-                || finding.rationale().length() > MAX_RATIONALE_LENGTH) {
-            throw new IllegalArgumentException("Finding is not grounded in the supplied chunk");
+    private void validateVerdict(ModelVerdict verdict, CandidateContext context) {
+        if (verdict.verdict() == null || verdict.evidence() == null) {
+            throw new IllegalArgumentException("Candidate verdict is incomplete");
         }
-        excerptStart(chunk.content(), finding.excerpt());
-        validateEvidence(finding, evidenceByChunkId);
+        if (verdict.verdict() == Verdict.OK) {
+            if (!verdict.evidence().isEmpty()) {
+                throw new IllegalArgumentException("OK verdict cannot carry evidence");
+            }
+            return;
+        }
+        if (verdict.confidence() == null
+                || verdict.rationale() == null
+                || verdict.rationale().isBlank()
+                || verdict.rationale().length() > MAX_RATIONALE_LENGTH) {
+            throw new IllegalArgumentException("Finding verdict is incomplete");
+        }
+        validateEvidence(verdict, context.evidence());
     }
 
     private void validateEvidence(
-            ModelFinding finding,
-            Map<UUID, RetrievedEvidence> evidenceByChunkId) {
-        if (finding.evidence() == null) {
-            throw new IllegalArgumentException("Finding evidence array is required");
-        }
-        List<ModelEvidence> evidence = finding.evidence();
+            ModelVerdict verdict,
+            List<RetrievedEvidence> candidateEvidence) {
+        List<ModelEvidence> evidence = verdict.evidence();
         if (evidence.size() > MAX_EVIDENCE_PER_FINDING) {
             throw new IllegalArgumentException("Finding cites too many evidence entries");
         }
+        Map<UUID, RetrievedEvidence> evidenceByChunkId = new LinkedHashMap<>();
+        candidateEvidence.forEach(item -> evidenceByChunkId.put(item.chunkId(), item));
         boolean contradicts = false;
         for (ModelEvidence item : evidence) {
             if (item == null || item.relation() == null || item.chunkId() == null || item.sourceId() == null) {
@@ -529,13 +591,13 @@ public class SectionCitationReviewService {
             if (item.relation() == SectionCitationReviewResponse.EvidenceRelation.CONTRADICTS) {
                 contradicts = true;
             }
-            if (finding.type() == SectionCitationReviewResponse.FindingType.UNSUBSTANTIATED_CLAIM
+            if (verdict.verdict() == Verdict.UNSUBSTANTIATED_CLAIM
                     && item.relation() == SectionCitationReviewResponse.EvidenceRelation.SUPPORTS) {
                 throw new IllegalArgumentException(
                         "An unsubstantiated claim cannot carry supporting evidence");
             }
         }
-        if (finding.type() == SectionCitationReviewResponse.FindingType.SOURCE_DISCREPANCY
+        if (verdict.verdict() == Verdict.SOURCE_DISCREPANCY
                 && !contradicts) {
             throw new IllegalArgumentException(
                     "A source discrepancy requires at least one contradicting quote");
@@ -580,7 +642,10 @@ public class SectionCitationReviewService {
             Project project,
             String fingerprint,
             SectionCitationReviewResponse review) {
-        ReviewSnapshot snapshot = new ReviewSnapshot();
+        ReviewSnapshot snapshot = reviewSnapshotRepository
+                .findByProjectIdAndStyleAndInputFingerprint(
+                        project.getId(), SNAPSHOT_STYLE, fingerprint)
+                .orElseGet(ReviewSnapshot::new);
         snapshot.setProject(project);
         snapshot.setStyle(SNAPSHOT_STYLE);
         snapshot.setInputFingerprint(fingerprint);
@@ -644,19 +709,6 @@ public class SectionCitationReviewService {
         return LEADING_SOURCE_HEADINGS.matcher(text.stripLeading()).replaceFirst("").strip();
     }
 
-    private static List<Chunk> chunks(String content) {
-        List<Chunk> chunks = new ArrayList<>();
-        for (int start = 0; start < content.length();) {
-            int end = Math.min(content.length(), start + CHUNK_SIZE);
-            chunks.add(new Chunk(start, content.substring(start, end)));
-            if (end == content.length()) {
-                break;
-            }
-            start = end - CHUNK_OVERLAP;
-        }
-        return chunks;
-    }
-
     private static boolean alreadyCited(String content, String excerpt, int endOffset) {
         if (excerpt.contains("\\cite")) {
             return true;
@@ -697,7 +749,10 @@ public class SectionCitationReviewService {
         return "Abstract".equals(title) || "References".equals(title) || "Works Cited".equals(title);
     }
 
-    private record Chunk(int startOffset, String content) {
+    private record ClaimCandidate(int id, String text, int startOffset, int endOffset) {
+    }
+
+    private record CandidateContext(ClaimCandidate candidate, List<RetrievedEvidence> evidence) {
     }
 
     public record RetrievedEvidence(
@@ -707,25 +762,27 @@ public class SectionCitationReviewService {
     private record GeneratedReview(
             String provider,
             String model,
-            ModelReview review,
-            int discardedFindings) {
-    }
-
-    private record ValidatedReview(ModelReview review, int discardedFindings) {
+            ModelReview review) {
     }
 
     private record ModelReview(
             @JsonProperty("section_id") String sectionId,
-            @JsonProperty("chunk_index") int chunkIndex,
-            List<ModelFinding> findings) {
+            @JsonProperty("batch_index") Integer batchIndex,
+            List<ModelVerdict> verdicts) {
     }
 
-    private record ModelFinding(
-            SectionCitationReviewResponse.FindingType type,
-            String excerpt,
+    private record ModelVerdict(
+            @JsonProperty("candidate_id") Integer candidateId,
+            Verdict verdict,
             String rationale,
             SectionCitationReviewResponse.Confidence confidence,
             List<ModelEvidence> evidence) {
+    }
+
+    private enum Verdict {
+        OK,
+        UNSUBSTANTIATED_CLAIM,
+        SOURCE_DISCREPANCY
     }
 
     private record ModelEvidence(

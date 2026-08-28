@@ -73,6 +73,19 @@ class DocumentPersistenceServiceTest {
     }
 
     @Test
+    void markQueuedForRetryOnlyTransitionsProcessingDocument() {
+        UUID id = UUID.randomUUID();
+        when(documents.queueForExtraction(
+                id, List.of(ProcessingStatus.PROCESSING), ProcessingStatus.QUEUED))
+                .thenReturn(1);
+
+        assertThat(service.markQueuedForRetry(id)).isTrue();
+
+        verify(documents).queueForExtraction(
+                id, List.of(ProcessingStatus.PROCESSING), ProcessingStatus.QUEUED);
+    }
+
+    @Test
     void saveExtractionReusesExistingChunkIndex() {
         UUID id = UUID.randomUUID();
         Document document = new Document();

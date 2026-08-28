@@ -60,7 +60,9 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
         try {
             processDocument(document);
         } catch (RuntimeException e) {
-            documentPersistenceService.markFailed(documentId, e.getMessage());
+            if (!documentPersistenceService.markQueuedForRetry(documentId)) {
+                log.warn("Could not requeue failed extraction for document {}", documentId);
+            }
             throw e;
         }
     }

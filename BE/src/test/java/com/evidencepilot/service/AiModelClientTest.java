@@ -8,12 +8,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
@@ -186,6 +188,25 @@ class AiModelClientTest {
     }
 
     @Test
+    void generateForReviewDoesNotRetryAmbiguousReadTimeout() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://ai.test/ai/generate"))
+                .andRespond(request -> {
+                    throw new SocketTimeoutException("Read timed out");
+                });
+
+        AiModelClient.AiApiException error = assertThrows(
+                AiModelClient.AiApiException.class,
+                () -> client(builder.build(), "http://ai.test", 5)
+                        .generateForReview("system", "prompt"));
+
+        assertThat(error.getStatusCode()).isEqualTo(503);
+        assertThat(error).hasMessageContaining("request timed out");
+        server.verify();
+    }
+
+    @Test
     void finalServerFailureCountsTowardsTheCircuit() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
@@ -247,6 +268,81 @@ class AiModelClientTest {
                         .generate("system", "prompt"));
 
         assertThat(error.getStatusCode()).isEqualTo(422);
+        server.verify();
+    }
+
+    @Test
+    void generatePreservesSafeTemporaryProviderDetail() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://ai.test/ai/generate"))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"detail\":\"Generation provider is temporarily overloaded\"}"));
+
+        AiModelClient.AiApiException error = assertThrows(
+                AiModelClient.AiApiException.class,
+                () -> client(builder.build(), "http://ai.test", 0)
+                        .generate("system", "prompt"));
+
+        assertThat(error.getStatusCode()).isEqualTo(503);
+        assertThat(error).hasMessageContaining("Generation provider is temporarily overloaded");
+        server.verify();
+    }
+
+    @Test
+    void generateDoesNotRetryRejectedProviderRequest() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://ai.test/ai/generate"))
+                .andRespond(withStatus(HttpStatus.BAD_GATEWAY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"detail\":\"Generation provider rejected the request\"}"));
+
+        AiModelClient.AiApiException error = assertThrows(
+                AiModelClient.AiApiException.class,
+                () -> client(builder.build(), "http://ai.test", 3)
+                        .generate("system", "prompt"));
+
+        assertThat(error.getStatusCode()).isEqualTo(502);
+        assertThat(error).hasMessageContaining("Generation provider rejected the request");
+        server.verify();
+    }
+
+    @Test
+    void generateDoesNotRetryUnavailableProviderModel() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://ai.test/ai/generate"))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"detail\":\"Generation model is currently unavailable\"}"));
+
+        AiModelClient.AiApiException error = assertThrows(
+                AiModelClient.AiApiException.class,
+                () -> client(builder.build(), "http://ai.test", 3)
+                        .generate("system", "prompt"));
+
+        assertThat(error.getStatusCode()).isEqualTo(503);
+        assertThat(error).hasMessageContaining("Generation model is currently unavailable");
+        server.verify();
+    }
+
+    @Test
+    void generateDoesNotExposeUntrustedUpstreamDetail() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://ai.test/ai/generate"))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"detail\":\"raw provider body with secret\"}"));
+
+        AiModelClient.AiApiException error = assertThrows(
+                AiModelClient.AiApiException.class,
+                () -> client(builder.build(), "http://ai.test", 0)
+                        .generate("system", "prompt"));
+
+        assertThat(error).hasMessageNotContaining("raw provider body with secret");
         server.verify();
     }
 
@@ -332,7 +428,10 @@ class AiModelClientTest {
 
     @Test
     void missingBaseUrlAndEmptyResponsesThrowAiApiException() {
-        assertThatThrownBy(() -> client(RestClient.create(), " ").health())
+        RestClient noNetworkClient = RestClient.builder()
+                .requestFactory(new SimpleClientHttpRequestFactory())
+                .build();
+        assertThatThrownBy(() -> client(noNetworkClient, " ").health())
                 .isInstanceOf(AiModelClient.AiApiException.class)
                 .hasMessageContaining("not configured");
 
