@@ -15,7 +15,7 @@ export default function EditorPanel({
   textSize, setTextSize, showToast, editorRef, mediaAssets, isLocked,
   findings = [], onFindingClick,
   sources = [], aiSourceMatches = {},
-  onRunCitationReview, reviewBusy = false, reviewProgress = null,
+  onRunCitationReview, onOpenCitationReview, reviewBusy = false, reviewProgress = null,
   reviewFindingsCount = 0, reviewError = null,
   canRunCitationReview = false, onEditorUserScroll,
   isReviewVisible = true, onToggleReviewVisible,
@@ -24,6 +24,8 @@ export default function EditorPanel({
   const { t } = useTranslation();
   const isOwnSection = canEditCurrentSection
     ?? (assignedSections && assignedSections.some(s => String(s.id) === String(selectedSectionId)));
+  const citationReviewTitle = reviewBusy ? t('reviewing') : canRunCitationReview && !isLocked ? t('citationReviewDescription') : t('citationReviewUnavailable');
+  const saveTitle = saveStatus === 'saving' ? t('saving') : !isOwnSection ? t('noAssignedSection') : isLocked ? t('saveReadOnly') : t('saveSectionHelp');
   const [previewZoom, setPreviewZoom] = useState(100);
   const [showVisualMap, setShowVisualMap] = useState(false);
   const generatedReferences = [];
@@ -130,7 +132,7 @@ export default function EditorPanel({
                   type="button"
                   onClick={onToggleReviewVisible}
                   title={isReviewVisible ? t('hideReviewHighlights') || 'Hide highlights' : t('showReviewHighlights') || 'Show highlights'}
-                  aria-pressed={!isReviewVisible}
+                  aria-pressed={isReviewVisible}
                   className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${isReviewVisible ? 'text-amber-600 hover:bg-(--surface-tertiary)' : 'text-(--text-tertiary) hover:bg-(--surface-tertiary)'}`}
                 >
                   {isReviewVisible ? (
@@ -141,8 +143,9 @@ export default function EditorPanel({
                 </button>
                 <button
                   type="button"
-                  onClick={onRunCitationReview}
-                  title={t('citationReview')}
+                  onClick={onOpenCitationReview}
+                  title={t('openCitationReviewFindings', { count: reviewFindingsCount })}
+                  aria-label={t('openCitationReviewFindings', { count: reviewFindingsCount })}
                   className="flex items-center gap-1 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-black text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors cursor-pointer"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 16v-4M12 8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -151,22 +154,26 @@ export default function EditorPanel({
               </>
             )}
             {selectedPaper && canRunCitationReview !== null && (
-              <button
-                type="button"
-                onClick={onRunCitationReview}
-                disabled={!canRunCitationReview || reviewBusy || isLocked}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-40 ${reviewBusy ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600' : 'bg-(--brand) hover:bg-(--brand-hover) text-(--on-brand)'}`}
-                title={t('aiReview')}
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-                <span className="hidden lg:inline">{reviewBusy ? t('loading') : t('aiReview')}</span>
-              </button>
+              <span className="inline-flex" title={citationReviewTitle}>
+                <button
+                  type="button"
+                  onClick={onRunCitationReview}
+                  disabled={!canRunCitationReview || reviewBusy || isLocked}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-40 ${reviewBusy ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600' : 'bg-(--brand) hover:bg-(--brand-hover) text-(--on-brand)'}`}
+                  aria-label={t('aiReview')}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                  <span className="hidden lg:inline">{reviewBusy ? t('loading') : reviewFindingsCount > 0 ? t('rerunReview') : t('aiReview')}</span>
+                </button>
+              </span>
             )}
-            <button onClick={handleSaveDraft} disabled={saveStatus === 'saving' || !isOwnSection || isLocked} className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-50 ${saveStatus === 'saving' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30' : saveStatus === 'saved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30' : saveStatus === 'error' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30' : 'bg-(--surface-tertiary) text-(--text-secondary) hover:bg-(--border)'}`}>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
-              {saveStatus === 'saving' ? t('saving') : saveStatus === 'saved' ? t('saved') : saveStatus === 'error' ? t('error') : t('save')}
-              {lastSaved && saveStatus !== 'saving' && <span className="text-[9px] opacity-60 ml-0.5">{lastSaved.toLocaleTimeString()}</span>}
-            </button>
+            <span className="inline-flex" title={saveTitle}>
+              <button onClick={handleSaveDraft} disabled={saveStatus === 'saving' || !isOwnSection || isLocked} className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-50 ${saveStatus === 'saving' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30' : saveStatus === 'saved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30' : saveStatus === 'error' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30' : 'bg-(--surface-tertiary) text-(--text-secondary) hover:bg-(--border)'}`}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+                {saveStatus === 'saving' ? t('saving') : saveStatus === 'saved' ? t('saved') : saveStatus === 'error' ? t('error') : t('save')}
+                {lastSaved && saveStatus !== 'saving' && <span className="text-[9px] opacity-60 ml-0.5">{lastSaved.toLocaleTimeString()}</span>}
+              </button>
+            </span>
           </div>
         </div>
         <div className="bg-(--surface-secondary) border-b border-(--border) flex flex-col shrink-0 select-none">
@@ -214,7 +221,7 @@ export default function EditorPanel({
               <button onClick={() => insertLatexTag('label')} className="w-7 h-7 flex items-center justify-center hover:bg-(--surface-tertiary) rounded text-(--text-primary) cursor-pointer" title={t('insertLabel')}>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 7h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
               </button>
-              <button onClick={() => insertLatexTag('cite')} className="w-7 h-7 flex items-center justify-center hover:bg-(--surface-tertiary) rounded text-(--text-primary) cursor-pointer" title={t('insertCitation')}>
+              <button onClick={() => insertLatexTag('cite')} className="w-7 h-7 flex items-center justify-center hover:bg-(--surface-tertiary) rounded text-(--text-primary) cursor-pointer" title={t('insertCitationHelp')} aria-label={t('insertCitation')}>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
               </button>
               <button onClick={() => insertLatexTag('figure')} className="w-7 h-7 flex items-center justify-center hover:bg-(--surface-tertiary) rounded text-(--text-primary) cursor-pointer" title={t('insertFigure')}>

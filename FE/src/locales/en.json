@@ -18,6 +18,7 @@
   "feedback": "Feedback",
   "info": "Info",
   "aiReview": "Citation Review",
+  "citationReviewUnavailable": "Select a paper and an editable section assigned to you before running Citation Review.",
   "submitReview": "Submit for Review",
   "revise": "Revise",
   "history": "History",
@@ -66,6 +67,7 @@
   "smallFont": "Small font",
   "downloadTexTitle": "Download .tex file",
   "saved": "Saved",
+  "saveSectionHelp": "Save the current section as a new version; conflicting edits are rejected instead of overwritten.",
   "saveFailed": "Save failed.",
   "saveConflict": "Another editor changed this section. Reload to see the latest version before saving again.",
   "saveContentInvalid": "This section is too large or invalid. Reduce its size and try again.",
@@ -90,6 +92,7 @@
   "insertComment": "Insert comment",
   "insertLabel": "Insert label",
   "insertCitation": "Insert citation",
+  "insertCitationHelp": "Insert a \\cite{...} command at the cursor using the citation key you enter.",
   "insertFigure": "Insert figure",
   "insertTable": "Insert table",
 
@@ -141,28 +144,12 @@
   "exportLocked": "Export is available once the project is Approved or Archived",
 
   "tour": {
-    "projectName": "Project Name",
-    "projectNameDesc": "You are currently working on this project.",
-    "versionHistory": "Undo previous save",
-    "versionHistoryDesc": "Preview and restore only the immediately previous save.",
-    "aiReview": "Citation Review",
-    "aiReviewDesc": "Find statements in the selected section that may need citations.",
-    "sidebarLeft": "Workspace Navigation",
-    "sidebarLeftDesc": "Toggle the file sidebar, overview panel, and context panel.",
     "filePanel": "Sections",
-    "filePanelDesc": "Browse and select paper sections to edit.",
+    "filePanelDesc": "Choose a paper and a section assigned to you; its content opens in the editor.",
     "editorToolbar": "Editor Toolbar",
-    "editorToolbarDesc": "Format your LaTeX content with headings, bold, italic, and more.",
-    "editorSectionName": "Current Section",
-    "editorSectionNameDesc": "The section you're currently editing, with its version number.",
+    "aiReview": "Citation Review",
     "contextPanel": "Context Panel",
-    "contextPanelDesc": "Manage sources, run Citation Review, and view feedback.",
-    "feedback": "Feedback",
-    "feedbackDesc": "View instructor feedback on your work.",
-    "darkMode": "Dark Mode",
-    "darkModeDesc": "Toggle between light and dark themes.",
-    "language": "Language",
-    "languageDesc": "Switch between English and Vietnamese."
+    "contextPanelDesc": "Add reference sources and review instructor feedback in one place."
   },
   "availableSource": "Available Source",
   "previewFullPaper": "Preview Full Paper",
@@ -322,11 +309,48 @@
   ,"citationReview": "Citation Review"
   ,"reviewing": "Reviewing..."
   ,"runReview": "Review"
-  ,"citationReviewDescription": "AI checks only the selected section for statements that may need external citations. Suggested sources are related matches and should be verified before use."
+  ,"citationReviewDescription": "Save the current section, find statements that may need citations, then show highlights and related sources for you to verify."
   ,"reviewStale": "The section changed after this review. Rerun the review for current highlights; unchanged excerpts can still receive citations."
+  ,"openCitationReviewFindings": "Open {{count}} Citation Review findings"
+  ,"rerunReview": "Review again"
+  ,"previousFinding": "Previous finding"
+  ,"nextFinding": "Next finding"
+  ,"citationFindingDiscrepancy": "Source discrepancy"
+  ,"citationFindingNoEvidence": "No supporting evidence"
+  ,"citationFindingNeedsReview": "Review needed"
+  ,"findingConfidence": "Alert confidence: {{level}}"
+  ,"confidenceHigh": "High"
+  ,"confidenceMedium": "Medium"
+  ,"confidenceLow": "Low"
+  ,"flaggedExcerpt": "Flagged excerpt"
+  ,"reviewConclusion": "Conclusion"
+  ,"reviewEvidence": "Evidence"
+  ,"relationSupports": "Supports"
+  ,"relationContradicts": "Contradicts"
+  ,"relationNotFound": "Not found"
+  ,"searchingRelatedSources": "Searching related project sources..."
+  ,"retrievalSimilarity": "Retrieval similarity {{score}}%"
+  ,"retrievalSimilarityHelp": "Semantic retrieval similarity only; this is not citation accuracy or evidence strength."
+  ,"reviewLimitations": "Review limitations"
   ,"sectionNotReviewed": "This section has not been reviewed yet."
   ,"citationInserted": "Citation inserted"
   ,"relatedSources": "Related sources",
+  "sourceEvidence": "Sources and evidence",
+  "usedInConclusion": "Used in conclusion",
+  "checkedInReview": "Checked",
+  "relatedSource": "Related",
+  "otherRelatedPassages": "{{count}} other related passages",
+  "openPassage": "Open passage",
+  "sourceViewMode": "Source view",
+  "extractedPassage": "Extracted passage",
+  "originalSourceFile": "Original file",
+  "openOriginalSourceFile": "Open original file",
+  "loadingPassage": "Loading extracted passage...",
+  "passageUnavailable": "This extracted passage is no longer available.",
+  "selectedSourcePassage": "Selected source passage",
+  "chunkLabel": "Extracted chunk {{index}}",
+  "extractedPassageNotice": "This is extracted source text. Use Original file to inspect the document itself.",
+  "passageQuoteNotLocated": "The selected quote was not found verbatim in this chunk; the full chunk is shown.",
   "noEvidenceInSources": "No evidence found in project sources."
   ,"noRelatedSources": "No related project sources found."
   ,"insertCitation": "Insert citation"

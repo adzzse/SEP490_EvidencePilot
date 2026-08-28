@@ -31,6 +31,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -495,6 +496,60 @@ class SectionCitationReviewServiceTest {
                 .satisfies(exception -> assertThat(
                         ((ResponseStatusException) exception).getStatusCode())
                         .isEqualTo(HttpStatus.BAD_GATEWAY));
+        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
+    }
+
+    @Test
+    void runKeepsMoreThanTenFindingsAcrossChunks() {
+        UUID projectId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        List<String> firstChunkExcerpts = IntStream.range(0, 10)
+                .mapToObj(index -> "First chunk benchmark claim number " + index
+                        + " reports exactly 90 percent accuracy")
+                .toList();
+        String secondChunkExcerpt =
+                "Second chunk benchmark claim reports exactly 80 percent accuracy";
+        String firstChunkText = String.join(". ", firstChunkExcerpts) + ". ";
+        String content = firstChunkText + "x".repeat(8_000 - firstChunkText.length())
+                + secondChunkExcerpt + ".";
+        PaperSection section = section(
+                projectId, documentId, sectionId, "Introduction", content);
+        User actor = new User();
+        actor.setId(actorId);
+        String firstChunkFindings = firstChunkExcerpts.stream()
+                .map(excerpt -> String.format("""
+                        {"type":"UNSUBSTANTIATED_CLAIM","excerpt":"%s",
+                         "rationale":"No supporting source.","confidence":"LOW","evidence":[]}
+                        """, excerpt))
+                .collect(Collectors.joining(","));
+        String secondChunkFinding = String.format("""
+                {"type":"UNSUBSTANTIATED_CLAIM","excerpt":"%s",
+                 "rationale":"No supporting source.","confidence":"LOW","evidence":[]}
+                """, secondChunkExcerpt);
+        when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
+        when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
+        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
+                new AiModelClient.GenerationResult("provider", "model", String.format(
+                        "{\"section_id\":\"%s\",\"chunk_index\":0,\"findings\":[%s]}",
+                        sectionId, firstChunkFindings)),
+                new AiModelClient.GenerationResult("provider", "model", String.format(
+                        "{\"section_id\":\"%s\",\"chunk_index\":1,\"findings\":[%s]}",
+                        sectionId, secondChunkFinding)));
+
+        SectionCitationReviewService service = service();
+        SectionCitationReviewResponse result = service.run(
+                documentId, projectId, sectionId,
+                service.reviewInputFingerprint(section), actorId);
+
+        assertThat(result.findings()).hasSize(11);
+        assertThat(result.findings())
+                .extracting(SectionCitationReviewResponse.Finding::excerpt)
+                .containsExactlyElementsOf(Stream.concat(
+                        firstChunkExcerpts.stream(), Stream.of(secondChunkExcerpt)).toList());
+        assertThat(result.summary()).startsWith("11 finding(s)");
         verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
     }
 

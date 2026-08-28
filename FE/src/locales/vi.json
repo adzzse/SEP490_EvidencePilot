@@ -18,6 +18,7 @@
   "feedback": "Nhận xét",
   "info": "Thông tin",
   "aiReview": "Citation Review",
+  "citationReviewUnavailable": "Chọn bài viết và một phần được giao cho bạn trước khi chạy Citation Review.",
   "submitReview": "Gửi đánh giá",
   "revise": "Chỉnh sửa",
   "history": "Lịch sử",
@@ -66,6 +67,7 @@
   "smallFont": "Chữ nhỏ",
   "downloadTexTitle": "Tải tệp .tex",
   "saved": "Đã lưu",
+  "saveSectionHelp": "Lưu phần hiện tại thành phiên bản mới; nếu có chỉnh sửa xung đột, hệ thống sẽ yêu cầu tải lại thay vì ghi đè.",
   "saveFailed": "Lưu thất bại.",
   "saveConflict": "Một người khác đã chỉnh sửa phần này. Hãy tải lại để xem phiên bản mới nhất trước khi lưu lại.",
   "saveContentInvalid": "Nội dung phần này quá lớn hoặc không hợp lệ. Hãy giảm kích thước rồi thử lại.",
@@ -90,6 +92,7 @@
   "insertComment": "Chèn bình luận",
   "insertLabel": "Chèn nhãn",
   "insertCitation": "Chèn trích dẫn",
+  "insertCitationHelp": "Chèn lệnh \\cite{...} tại con trỏ bằng khóa trích dẫn bạn nhập.",
   "insertFigure": "Chèn hình",
   "insertTable": "Chèn bảng",
 
@@ -141,28 +144,12 @@
   "exportLocked": "Xuất chỉ khả dụng khi dự án ở trạng thái Đã duyệt hoặc Đã lưu trữ",
 
   "tour": {
-    "projectName": "Tên dự án",
-    "projectNameDesc": "Bạn đang làm việc trên dự án này.",
-    "versionHistory": "Khôi phục lần lưu trước",
-    "versionHistoryDesc": "Xem trước và chỉ khôi phục đúng lần lưu ngay trước.",
-    "aiReview": "Citation Review",
-    "aiReviewDesc": "Tìm các phát biểu trong phần đang chọn có thể cần trích dẫn.",
-    "sidebarLeft": "Điều hướng",
-    "sidebarLeftDesc": "Chuyển đổi bảng tệp, tổng quan và bảng ngữ cảnh.",
     "filePanel": "Phần bài viết",
-    "filePanelDesc": "Duyệt và chọn phần bài viết để chỉnh sửa.",
+    "filePanelDesc": "Chọn bài viết và phần được giao; nội dung của phần sẽ mở trong trình soạn thảo.",
     "editorToolbar": "Thanh công cụ",
-    "editorToolbarDesc": "Định dạng nội dung LaTeX với tiêu đề, in đậm, in nghiêng và hơn thế nữa.",
-    "editorSectionName": "Phần hiện tại",
-    "editorSectionNameDesc": "Phần bạn đang chỉnh sửa, kèm số phiên bản.",
+    "aiReview": "Citation Review",
     "contextPanel": "Bảng ngữ cảnh",
-    "contextPanelDesc": "Quản lý nguồn, chạy Citation Review và xem phản hồi.",
-    "feedback": "Nhận xét",
-    "feedbackDesc": "Xem phản hồi của giảng viên về bài làm của bạn.",
-    "darkMode": "Chế độ tối",
-    "darkModeDesc": "Chuyển đổi giữa chủ đề sáng và tối.",
-    "language": "Ngôn ngữ",
-    "languageDesc": "Chuyển đổi giữa Tiếng Anh và Tiếng Việt."
+    "contextPanelDesc": "Thêm nguồn tham khảo và xem phản hồi của giảng viên tại cùng một nơi."
   },
   "availableSource": "Nguồn có sẵn",
   "previewFullPaper": "Xem toàn bộ bài viết",
@@ -320,11 +307,49 @@
   ,"citationReview": "Citation Review"
   ,"reviewing": "Đang kiểm tra..."
   ,"runReview": "Kiểm tra"
-  ,"citationReviewDescription": "AI chỉ kiểm tra phần đang chọn để tìm nội dung có thể cần nguồn bên ngoài. Nguồn gợi ý chỉ là kết quả liên quan và cần được xác minh trước khi dùng."
+  ,"citationReviewDescription": "Lưu phần hiện tại, tìm các phát biểu có thể cần trích dẫn, rồi hiển thị đánh dấu và nguồn liên quan để bạn xác minh."
   ,"reviewStale": "Nội dung đã thay đổi sau lần kiểm tra này. Hãy chạy lại để cập nhật đánh dấu; các đoạn không đổi vẫn có thể được chèn trích dẫn."
+  ,"openCitationReviewFindings": "Mở {{count}} cảnh báo Citation Review"
+  ,"rerunReview": "Kiểm tra lại"
+  ,"previousFinding": "Cảnh báo trước"
+  ,"nextFinding": "Cảnh báo tiếp theo"
+  ,"citationFindingDiscrepancy": "Nguồn mâu thuẫn"
+  ,"citationFindingNoEvidence": "Chưa tìm thấy bằng chứng"
+  ,"citationFindingNeedsReview": "Cần kiểm tra"
+  ,"findingConfidence": "Mức chắc chắn cảnh báo: {{level}}"
+  ,"confidenceHigh": "Cao"
+  ,"confidenceMedium": "Vừa"
+  ,"confidenceLow": "Thấp"
+  ,"flaggedExcerpt": "Đoạn được phát hiện"
+  ,"reviewConclusion": "Kết luận"
+  ,"reviewEvidence": "Bằng chứng"
+  ,"relationSupports": "Ủng hộ"
+  ,"relationContradicts": "Mâu thuẫn"
+  ,"relationNotFound": "Không tìm thấy"
+  ,"searchingRelatedSources": "Đang tìm nguồn liên quan trong dự án..."
+  ,"retrievalSimilarity": "Tương đồng truy hồi {{score}}%"
+  ,"retrievalSimilarityHelp": "Chỉ là độ tương đồng khi truy hồi ngữ nghĩa, không phải độ chính xác của trích dẫn hoặc độ mạnh bằng chứng."
+  ,"reviewLimitations": "Giới hạn của lần kiểm tra"
   ,"sectionNotReviewed": "Phần này chưa được AI kiểm tra."
   ,"citationInserted": "Đã chèn trích dẫn"
   ,"relatedSources": "Nguồn liên quan"
+  ,"sourceEvidence": "Nguồn và bằng chứng"
+  ,"usedInConclusion": "Dùng trong kết luận"
+  ,"checkedInReview": "Đã kiểm tra"
+  ,"relatedSource": "Liên quan"
+  ,"otherRelatedPassages": "{{count}} đoạn liên quan khác"
+  ,"openPassage": "Mở đoạn"
+  ,"sourceViewMode": "Chế độ xem nguồn"
+  ,"extractedPassage": "Đoạn đã trích xuất"
+  ,"originalSourceFile": "Tệp gốc"
+  ,"openOriginalSourceFile": "Mở tệp gốc"
+  ,"loadingPassage": "Đang tải đoạn đã trích xuất..."
+  ,"passageUnavailable": "Đoạn đã trích xuất này không còn khả dụng."
+  ,"selectedSourcePassage": "Đoạn nguồn đã chọn"
+  ,"chunkLabel": "Đoạn trích xuất {{index}}"
+  ,"extractedPassageNotice": "Đây là văn bản được trích xuất từ nguồn. Chọn Tệp gốc để kiểm tra trực tiếp tài liệu."
+  ,"passageQuoteNotLocated": "Không tìm thấy nguyên văn đoạn đã chọn trong chunk này; hệ thống đang hiển thị toàn bộ chunk."
+  ,"noEvidenceInSources": "Không tìm thấy bằng chứng trong các nguồn của dự án."
   ,"noRelatedSources": "Không tìm thấy nguồn liên quan trong dự án."
   ,"insertCitation": "Chèn trích dẫn"
   ,"noCitationFindings": "Không phát hiện nội dung cần bổ sung trích dẫn trong phần này."

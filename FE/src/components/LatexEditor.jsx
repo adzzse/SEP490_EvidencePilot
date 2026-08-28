@@ -187,6 +187,21 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
       });
       v.focus();
     },
+    revealRange: (from, to, onReady) => {
+      const v = viewRef.current;
+      if (!v) return false;
+      const start = Math.max(0, Math.min(from, v.state.doc.length));
+      const end = Math.max(start, Math.min(to, v.state.doc.length));
+      v.dispatch({
+        selection: { anchor: start, head: end },
+        effects: EditorView.scrollIntoView(start, { y: 'center' }),
+      });
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (viewRef.current === v) onReady?.(v.coordsAtPos(end) || v.coordsAtPos(start));
+      }));
+      v.focus();
+      return true;
+    },
     undo: () => {
       const v = viewRef.current;
       if (!v) return;

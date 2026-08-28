@@ -5,13 +5,14 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 
-export default function WorkspaceHeader({ project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, historyDisabled, handleRunAiReview, loadingAiReview, selectedPaper, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, isLocked }) {
+export default function WorkspaceHeader({ project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, historyDisabled, handleRunAiReview, loadingAiReview, canRunAiReview, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv }) {
   const { user } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
   const { t } = useTranslation();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const canExport = project?.status === 'APPROVED' || project?.status === 'ARCHIVED';
+  const citationReviewTitle = loadingAiReview ? t('reviewing') : canRunAiReview ? t('citationReviewDescription') : t('citationReviewUnavailable');
   const iconButton = 'p-2 hover:bg-(--surface-secondary) rounded-lg text-(--text-secondary) transition-colors disabled:opacity-30';
 
   const runMobileAction = (action) => {
@@ -72,10 +73,12 @@ export default function WorkspaceHeader({ project, notifications, unreadCount, s
             {theme === 'light' ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>}
           </button>
           <button data-tour="header-language" onClick={toggleLanguage} className={`${iconButton} text-xs font-bold`} title={language === 'en' ? t('switchToVietnamese') : t('switchToEnglish')}>{language === 'en' ? 'VI' : 'EN'}</button>
-          <button data-tour="header-ai-review" onClick={handleRunAiReview} disabled={!selectedPaper || isLocked || loadingAiReview} className="bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-50 text-(--on-brand) p-2 lg:px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors" title={t('aiReview')}>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-            <span className="hidden lg:inline">{loadingAiReview ? t('loading') : t('aiReview')}</span>
-          </button>
+          <span data-tour="header-ai-review" className="inline-flex" title={citationReviewTitle}>
+            <button onClick={handleRunAiReview} disabled={!canRunAiReview || loadingAiReview} className="bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-50 text-(--on-brand) p-2 lg:px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors" aria-label={t('aiReview')}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+              <span className="hidden lg:inline">{loadingAiReview ? t('loading') : t('aiReview')}</span>
+            </button>
+          </span>
           <div className="relative">
             <button data-tour="header-export" onClick={() => { if (canExport) setShowExportMenu(!showExportMenu); }} disabled={!canExport} className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 lg:px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed" title={canExport ? t('export') : t('exportLocked')}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
@@ -98,7 +101,7 @@ export default function WorkspaceHeader({ project, notifications, unreadCount, s
               <button onClick={() => runMobileAction(onShowHistory)} disabled={historyDisabled} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{t('versionHistory')}</button>
               <button onClick={() => runMobileAction(toggleTheme)} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{theme === 'light' ? t('darkMode') : t('lightMode')}</button>
               <button onClick={() => runMobileAction(toggleLanguage)} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{t('language')}: {language === 'en' ? 'VI' : 'EN'}</button>
-              <button onClick={() => runMobileAction(handleRunAiReview)} disabled={!selectedPaper || isLocked || loadingAiReview} className="w-full text-left px-4 py-3 text-xs font-bold text-(--brand) hover:bg-(--brand-soft) disabled:opacity-40">{loadingAiReview ? t('loading') : t('aiReview')}</button>
+              <button onClick={() => runMobileAction(handleRunAiReview)} disabled={!canRunAiReview || loadingAiReview} className="w-full text-left px-4 py-3 text-xs font-bold text-(--brand) hover:bg-(--brand-soft) disabled:opacity-40">{loadingAiReview ? t('loading') : t('aiReview')}</button>
               {canExport && <div className="border-t border-(--border)"><p className="px-4 pt-3 text-[10px] font-bold uppercase tracking-wider text-emerald-700">{t('export')}</p>{exportMenu}</div>}
             </div>
           )}

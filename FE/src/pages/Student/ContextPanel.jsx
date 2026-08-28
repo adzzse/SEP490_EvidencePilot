@@ -346,7 +346,7 @@ export default function ContextPanel({
                   <p className="text-[10px] text-(--text-tertiary) uppercase tracking-wider font-bold">{t('projectStatus')}</p>
                   <p className="text-sm font-bold text-(--text-primary) mt-0.5">{project?.status ? t(`status.${project.status}`, { defaultValue: project.status }) : t('unknown')}</p>
                 </div>
-                {userProjectRole === 'LEADER' && (project?.status === 'ASSIGNED' || project?.status === 'IN_PROGRESS' || project?.status === 'RETURNED') && <button onClick={() => setShowSubmitReviewModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all">{t('submitReview')}</button>}
+                {userProjectRole === 'LEADER' && (project?.status === 'ASSIGNED' || project?.status === 'IN_PROGRESS' || project?.status === 'RETURNED') && <button onClick={() => setShowSubmitReviewModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all" title={t('submitReviewDescription')}>{t('submitReview')}</button>}
               </div>
               <h3 className="text-[11px] font-bold text-(--text-tertiary) tracking-widest uppercase flex items-center gap-2 mt-2"><div className="h-px bg-(--border) flex-1"></div> {t('reviewHistory')} <div className="h-px bg-(--border) flex-1"></div></h3>
               <div className="space-y-4">

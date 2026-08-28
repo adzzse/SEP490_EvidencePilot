@@ -53,7 +53,7 @@ public class SectionCitationReviewService {
     private static final String SNAPSHOT_STYLE = REVIEW_VERSION;
     private static final int CHUNK_SIZE = 8_000;
     private static final int CHUNK_OVERLAP = 400;
-    private static final int MAX_FINDINGS = 10;
+    private static final int MAX_FINDINGS_PER_BATCH = 10;
     private static final int SOURCE_TOP_K = 20;
     private static final int SOURCE_LIMIT = 3;
     private static final int CANDIDATE_MIN_LENGTH = 30;
@@ -156,9 +156,10 @@ public class SectionCitationReviewService {
             SectionReviewSourceMatchRequest request) {
         PaperSection section = requireSection(documentId, sectionId, true);
         List<SectionReviewSourceMatchRequest.Finding> findings = request.findings();
-        if (findings == null || findings.isEmpty() || findings.size() > MAX_FINDINGS) {
+        if (findings == null || findings.isEmpty()
+                || findings.size() > MAX_FINDINGS_PER_BATCH) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "Provide between 1 and 10 review findings");
+                    HttpStatus.BAD_REQUEST, "Provide between 1 and 10 review findings per batch");
         }
 
         String content = section.getContentTex();
@@ -307,9 +308,7 @@ public class SectionCitationReviewService {
                 .forEach(finding -> unique.putIfAbsent(
                         finding.type() + ":" + finding.startOffset() + ":" + finding.endOffset(),
                         finding));
-        List<SectionCitationReviewResponse.Finding> prioritized = unique.values().stream()
-                .limit(MAX_FINDINGS)
-                .toList();
+        List<SectionCitationReviewResponse.Finding> allFindings = List.copyOf(unique.values());
         return new SectionCitationReviewResponse(
                 REVIEW_VERSION,
                 RULE_CATALOG_VERSION,
@@ -321,8 +320,8 @@ public class SectionCitationReviewService {
                 provider,
                 model,
                 completedChunks == chunks.size(),
-                summarize(prioritized),
-                prioritized,
+                summarize(allFindings),
+                allFindings,
                 limitations);
     }
 
@@ -458,7 +457,7 @@ public class SectionCitationReviewService {
             Map<UUID, RetrievedEvidence> evidenceByChunkId) {
         if (review == null
                 || review.findings() == null
-                || review.findings().size() > MAX_FINDINGS
+                || review.findings().size() > MAX_FINDINGS_PER_BATCH
                 || !sectionId.equals(review.sectionId())
                 || review.chunkIndex() != chunkIndex) {
             throw new IllegalArgumentException("Invalid review envelope");
