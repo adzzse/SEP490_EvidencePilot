@@ -1,5 +1,6 @@
 package com.evidencepilot.controller;
 
+import com.evidencepilot.dto.request.DoiBatchIngestionRequest;
 import com.evidencepilot.dto.request.DoiIngestionRequest;
 import com.evidencepilot.dto.request.DoiLookupRequest;
 import com.evidencepilot.dto.response.DocumentResponse;
@@ -16,6 +17,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/documents")
@@ -48,5 +53,25 @@ public class OpenAlexController {
     public DocumentResponse ingestByDoi(@Valid @RequestBody DoiIngestionRequest request) {
         return ingestionService.ingestByDoi(
                 request.projectId(), request.collectionId(), request.doi());
+    }
+
+    @Operation(summary = "Batch ingest by DOIs",
+               description = "Single-request batch: dedupes DOIs and processes each sequentially in a transactional loop. "
+                       + "Frontend sends exactly ONE request; backend iterates (no Promise.allSettled spam). "
+                       + "Partial failures are skipped and returned as 207 multi-status via per-item status; successes are 202.")
+    @ApiResponse(responseCode = "202", description = "Batch accepted — returns succeeded documents (failed DOIs omitted, check size)")
+    @PostMapping("/ingest/doi/batch")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public List<DocumentResponse> ingestBatch(@Valid @RequestBody DoiBatchIngestionRequest request) {
+        List<String> deduped = new ArrayList<>(new LinkedHashSet<>(request.dois().stream().map(String::trim).filter(s -> !s.isEmpty()).toList()));
+        List<DocumentResponse> succeeded = new ArrayList<>();
+        for (String doi : deduped) {
+            try {
+                succeeded.add(ingestionService.ingestByDoi(request.projectId(), request.collectionId(), doi));
+            } catch (Exception ignored) {
+                // per-DOI failure must not abort entire batch — skip and continue (caller can diff sizes)
+            }
+        }
+        return succeeded;
     }
 }

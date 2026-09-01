@@ -9,26 +9,39 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const verifyPromiseRef = useRef(null);
+  const verifyControllerRef = useRef(null);
 
   const verifySession = useCallback(() => {
-    // single-flight — mount + login share one in-flight profile fetch
-    if (!verifyPromiseRef.current) {
-      verifyPromiseRef.current = api.get('/api/users/profile')
-        .then((res) => { setUser(res.data); return res.data; })
-        .finally(() => { verifyPromiseRef.current = null; });
-    }
+    if (verifyPromiseRef.current) return verifyPromiseRef.current;
+    const controller = new AbortController();
+    verifyControllerRef.current = controller;
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    verifyPromiseRef.current = api.get('/api/users/profile', { signal: controller.signal })
+      .then((res) => { setUser(res.data); return res.data; })
+      .catch((err) => {
+        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') {
+          return Promise.reject(Object.assign(new Error('verify-aborted'), { response: { status: 401 } }));
+        }
+        throw err;
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        verifyPromiseRef.current = null;
+        verifyControllerRef.current = null;
+      });
     return verifyPromiseRef.current;
   }, []);
 
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
     const storedRole = localStorage.getItem('role');
+    let cancelled = false;
     if (storedToken) {
       setToken(storedToken);
       setRole(storedRole || '');
       verifySession()
         .catch((err) => {
-          // only clear the session on auth failures; network hiccups keep the token
+          if (cancelled) return;
           const status = err?.response?.status;
           if (status === 401 || status === 403) {
             localStorage.removeItem('token');
@@ -37,10 +50,15 @@ export function AuthProvider({ children }) {
             setRole('');
           }
         })
-        .finally(() => setLoading(false));
+        .finally(() => { if (!cancelled) setLoading(false); });
     } else {
       setLoading(false);
     }
+    return () => {
+      cancelled = true;
+      verifyControllerRef.current?.abort();
+      verifyPromiseRef.current = null;
+    };
   }, [verifySession]);
 
   const login = useCallback((newToken, newRole) => {

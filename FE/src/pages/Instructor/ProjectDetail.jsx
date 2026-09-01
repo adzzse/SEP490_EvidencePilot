@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { AppHeader, LoadingSkeleton, StatusBadge, Modal, TourLauncher, Spinner } from '../../components';
+import FileViewerModal from '../../components/FileViewerModal';
 import { Marker, MarkerIcon, MarkerContent } from '../../components/Marker';
 import { instructorText, commonText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
@@ -15,6 +16,8 @@ import {
 import { getStudentSuggestions, studentDisplayName } from './studentSearch';
 import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
 import DeleteConfirm from '../../components/DeleteConfirm.jsx';
+import ActionExpandHeader from './components/ActionExpandHeader.jsx';
+import ContributionGraph from './components/ContributionGraph.jsx';
 
 const STANDARDS = ['IEEE', 'ACM', 'SPRINGER_LNCS', 'APA', 'MLA', 'CUSTOM'];
 const MODAL_PAGE_SIZE = 20;
@@ -72,6 +75,7 @@ export default function ProjectDetail() {
   const [sourceDetail, setSourceDetail] = useState(null);
   const [showAddSource, setShowAddSource] = useState(false);
   const [pendingSourceFile, setPendingSourceFile] = useState(null);
+  const [pendingSourceFiles, setPendingSourceFiles] = useState([]);
   const [showShareCollection, setShowShareCollection] = useState(false);
   const [collections, setCollections] = useState([]);
   const [collectionPage, setCollectionPage] = useState(0);
@@ -99,6 +103,17 @@ export default function ProjectDetail() {
   const [addSourceLoading, setAddSourceLoading] = useState(false);
   const [shareLoadingId, setShareLoadingId] = useState(null);
   const [pendingAssign, setPendingAssign] = useState(null); // { sectionId, userId, userName }
+  const [statusPending, setStatusPending] = useState(null);
+  // Phase 2: Assign Member local state
+  const [selectedMemberId, setSelectedMemberId] = useState(null);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [sourceSearch, setSourceSearch] = useState('');
+  const [showAdvancedAdd, setShowAdvancedAdd] = useState(false);
+  const [advancedSelectedIds, setAdvancedSelectedIds] = useState([]);
+  const [advancedRoleMap, setAdvancedRoleMap] = useState({});
+  const [advancedSearch, setAdvancedSearch] = useState('');
+  // Phase 4: document preview (reuse FileViewerModal from Student Workspace / SourceLibraryPanel)
+  const [viewerFile, setViewerFile] = useState(null);
 
   const collectionSources = useMemo(
     () => Object.values(collectionSourcePages).flat(),
@@ -209,10 +224,44 @@ export default function ProjectDetail() {
     [members],
   );
 
+  // Phase 2 & 3: filtered members for Assign Member search + selection
+  const filteredMembers = useMemo(() => {
+    if (!memberSearch.trim()) return members;
+    const q = memberSearch.toLowerCase();
+    return members.filter(m => displayName(m).toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || String(m.userRole||'').toLowerCase().includes(q));
+  }, [members, memberSearch]);
+
+  const filteredSources = useMemo(() => {
+    if (!sourceSearch.trim()) return sources;
+    const q = sourceSearch.toLowerCase();
+    return sources.filter(s => (s.title||'').toLowerCase().includes(q) || (s.originalFilename||'').toLowerCase().includes(q) || (s.doi||'').toLowerCase().includes(q));
+  }, [sources, sourceSearch]);
+
+  const advancedFilteredStudents = useMemo(() => {
+    const q = advancedSearch.trim().toLowerCase();
+    const list = getStudentSuggestions(users, members, '');
+    if (!q) return list;
+    return list.filter(s => studentDisplayName(s).toLowerCase().includes(q) || s.email.toLowerCase().includes(q));
+  }, [users, members, advancedSearch]);
+
+  const selectedMember = useMemo(() => {
+    if (selectedMemberId) return members.find(m => String(m.userId) === String(selectedMemberId)) || members.find(m => String(m.id) === String(selectedMemberId)) || null;
+    return members[0] || null;
+  }, [members, selectedMemberId]);
+
   useEffect(() => {
     if (activeTab === 'review') loadFeedback();
     if (activeTab === 'progress') loadProgressReport();
   }, [activeTab, loadFeedback, loadProgressReport]);
+
+  // Phase 1: migrate old 'settings' tab key to 'assign-member'
+  useEffect(() => { if (activeTab === 'settings') setActiveTab('assign-member'); }, [activeTab]);
+
+  // Phase 2: auto-select first member when members load
+  useEffect(() => {
+    if (members.length > 0 && !selectedMemberId) setSelectedMemberId(String(members[0].userId || members[0].id));
+    if (members.length === 0) setSelectedMemberId(null);
+  }, [members, selectedMemberId]);
 
   const saveStandard = async (nextStandard) => {
     if (!nextStandard || !project) return;
@@ -247,15 +296,19 @@ export default function ProjectDetail() {
   const handleUpdateStandard = () => saveStandard(standard);
 
   const handleImportDoiUnified = async () => {
-    if (!doiInput.trim()) return;
+    const raw = doiInput.trim();
+    if (!raw) return;
+    const dois = [...new Set(raw.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean))];
+    if (dois.length === 0) return;
     setAddSourceLoading(true);
     setDoiError('');
     try {
-      const payload = {
-        doi: doiInput.trim(),
-        projectId: id,
-      };
-      await api.post('/api/documents/ingest/doi', payload);
+      if (dois.length === 1) {
+        await api.post('/api/documents/ingest/doi', { doi: dois[0], projectId: id });
+      } else {
+        // Phase 3: single batch request — backend transactional loop (no Promise.allSettled spam)
+        await api.post('/api/documents/ingest/doi/batch', { projectId: id, dois });
+      }
       setDoiInput('');
       await loadSources();
       setShowAddSource(false);
@@ -273,6 +326,27 @@ export default function ProjectDetail() {
       await loadSources();
       return true;
     } catch { alert(t.uploadFailed); return false; }
+  };
+
+  // Phase 3: concurrency queue max 3 for bulk file uploads
+  const handleUploadSourcesBatch = async (files) => {
+    if (!files || files.length === 0) return;
+    setAddSourceLoading(true);
+    const concurrency = 3;
+    let idx = 0;
+    const results = [];
+    const queue = Array(Math.min(concurrency, files.length)).fill(0).map(async () => {
+      while (idx < files.length) {
+        const i = idx++;
+        const file = files[i];
+        const fd = new FormData(); fd.append('file', file); fd.append('projectId', id);
+        try { await api.post('/api/sources', fd); results[i] = true; } catch { results[i] = false; }
+      }
+    });
+    await Promise.all(queue);
+    await loadSources();
+    setAddSourceLoading(false);
+    return results;
   };
 
   const handleUploadPaper = async (e) => {
@@ -595,6 +669,18 @@ export default function ProjectDetail() {
     } catch { alert(t.addMemberFailed); }
   };
 
+  // Phase 3: Advanced Add Multiple
+  const handleAdvancedAddMultiple = async () => {
+    if (advancedSelectedIds.length === 0) return;
+    try {
+      const results = await Promise.allSettled(advancedSelectedIds.map(uid => api.post(`/api/projects/${id}/members`, null, { params: { userId: uid, role: advancedRoleMap[uid] || 'MEMBER' } })));
+      const failed = results.filter(r=>r.status==='rejected');
+      if (failed.length) alert(`${t.addMemberFailed}: ${failed.length} failed`);
+      setShowAdvancedAdd(false); setAdvancedSelectedIds([]); setAdvancedRoleMap({});
+      await loadProject();
+    } catch { alert(t.addMemberFailed); }
+  };
+
   const handleRemoveMember = async (userId) => {
     try {
       await api.delete(`/api/projects/${id}/members/${userId}`);
@@ -615,22 +701,24 @@ export default function ProjectDetail() {
   };
 
   const handlePatch = async (action) => {
+    setStatusPending(action);
     try {
       await api.patch(`/api/projects/${id}/${action}`);
-      loadProject();
+      await loadProject();
     } catch { alert(t.projectActionFailed.replace('{{action}}', t[action] || action)); }
+    finally { setStatusPending(null); }
   };
 
   const TOUR_STEPS = [
     { element: '#project-header', popover: { title: t.tourProjectTitle, description: t.tourProjectDesc, side: 'bottom', align: 'start' } },
     { element: '#tab-setup', popover: { title: t.projectSetup, description: t.tourSetupDesc, side: 'bottom', align: 'center' } },
+    { element: '#tab-assign-member', popover: { title: 'Assign Member', description: t.tourProjectSettingsDesc, side: 'bottom', align: 'center' } },
     { element: '#tab-sections', popover: { title: t.projectSections, description: t.tourSectionsDesc, side: 'bottom', align: 'center' } },
     { element: '#tab-review', popover: { title: t.projectReview, description: t.tourProjectReviewDesc, side: 'bottom', align: 'center' } },
-    { element: '#tab-settings', popover: { title: t.projectSettings, description: t.tourProjectSettingsDesc, side: 'bottom', align: 'center' } },
     { element: '#source-documents', popover: { title: t.sourceDocuments, description: t.tourSourceDocumentsDesc, side: 'top', align: 'start' } },
     { element: '#set-up-paper', popover: { title: t.setUpPaper, description: t.tourSetUpPaperDesc, side: 'top', align: 'start' } },
     { element: '#project-members', popover: { title: t.members, description: t.tourMembersDesc, side: 'top', align: 'start' } },
-    { element: '#status-controls', popover: { title: ct.status, description: t.tourStatusControlsDesc, side: 'top', align: 'start' } },
+    { element: '#project-header', popover: { title: ct.status, description: t.tourStatusControlsDesc, side: 'top', align: 'start' } },
   ];
 
   useEffect(() => {
@@ -681,7 +769,7 @@ export default function ProjectDetail() {
     return () => { cancelled = true; };
   }, [project?.targetStandard, selectedPaper?.id, selectedPaper?.processingStatus]);
 
-  if (loading) return <div className="min-h-screen bg-[var(--page-bg)]"><AppHeader /><div className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8"><LoadingSkeleton count={6} /></div></div>;
+  if (loading) return <div className="h-screen w-full flex flex-col overflow-hidden bg-[var(--page-bg)]"><AppHeader /><div className="flex-1 min-h-0 overflow-hidden flex mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8"><LoadingSkeleton count={6} /></div></div>;
   if (!project) return null;
 
   const projectMembers = members;
@@ -691,10 +779,10 @@ export default function ProjectDetail() {
   const sectionStructureLocked = hasAssignedSections || projectReadOnly;
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[var(--page-bg)] text-[var(--text-primary)] font-sans">
+    <div className="h-screen w-full flex flex-col overflow-hidden bg-[var(--page-bg)] text-[var(--text-primary)] font-sans">
       <AppHeader />
-      <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
-        <div id="project-header" className="mb-6">
+      <main className="flex-1 min-h-0 overflow-hidden flex flex-col mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8">
+        <div id="project-header" className="mb-6 shrink-0">
           <Link to="/instructor/projects" className="text-xs font-bold text-[var(--text-secondary)] transition-colors hover:text-[var(--brand-foreground)]">&larr; {ct.back}</Link>
           <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -703,10 +791,21 @@ export default function ProjectDetail() {
               <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-[var(--text-tertiary)]">ID: {project.id} <span aria-hidden="true">&middot;</span> <StatusBadge status={project.status} /></p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Link to={`/instructor/projects/${id}/evidence-traces`} title={t.viewEvidenceTraceTooltip}
-                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-100">
-                {t.viewEvidenceTrace}
-              </Link>
+              {/* PHASE 1: Status Control lifted from Settings tab — replaces View Evidence Trace */}
+              {project.status === 'IN_PROGRESS' && (
+                <button onClick={() => handlePatch('complete')} disabled={!!statusPending} className="rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white transition hover:bg-[var(--brand-hover)] disabled:opacity-50">
+                  {statusPending === 'complete' ? '...' : t.markComplete}
+                </button>
+              )}
+              {project.status !== 'ARCHIVED' ? (
+                <button onClick={() => handlePatch('archive')} disabled={!!statusPending} className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-amber-700 disabled:opacity-50">
+                  {statusPending === 'archive' ? '...' : t.archive}
+                </button>
+              ) : (
+                <button onClick={() => handlePatch('unarchive')} disabled={!!statusPending} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50">
+                  {statusPending === 'unarchive' ? '...' : t.unarchive}
+                </button>
+              )}
               <button onClick={() => setShowExportModal(true)} className="rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white transition hover:bg-[var(--brand-hover)]">{t.export}</button>
               <TourLauncher steps={TOUR_STEPS} tourKey="instructor-project-detail"
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--text-secondary)] shadow-sm transition-all hover:border-indigo-300 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-foreground)]" />
@@ -714,14 +813,14 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="mb-6 flex max-w-full gap-1 overflow-x-auto border-b border-[var(--border)]">
+        {/* Tabs — Static, wrap not scroll */}
+        <div className="flex flex-wrap items-center border-b border-[var(--border)] shrink-0 mb-6">
           {[
             { key: 'setup', label: t.projectSetup },
+            { key: 'assign-member', label: 'Assign Member' },
             { key: 'sections', label: t.projectSections },
-            { key: 'review', label: t.projectReview },
             { key: 'progress', label: t.projectProgressReport },
-            { key: 'settings', label: t.projectSettings },
+            { key: 'review', label: t.projectReview },
           ].map(tab => (
             <button
               key={tab.key}
@@ -735,19 +834,19 @@ export default function ProjectDetail() {
           ))}
         </div>
 
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         {/* Tab: Setup */}
         {activeTab === 'setup' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div id="source-documents" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t.sourceDocuments}</h2>
-                <button onClick={() => setShowAddSource(true)} className="rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)]">+ {t.addSource}</button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full overflow-hidden">
+            <div id="source-documents" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 h-full overflow-y-auto">
+              <div className="mb-3">
+                <ActionExpandHeader title={t.sourceDocuments} placeholder={t.searchSource || 'Search sources...'} searchValue={sourceSearch} onSearch={setSourceSearch} onAdd={() => setShowAddSource(true)} addLabel={t.addSource} />
               </div>
-              {sources.length === 0 ? (
-                <p className="text-xs italic text-[var(--text-tertiary)]">{t.noSourceDocuments}</p>
+              {filteredSources.length === 0 ? (
+                <p className="text-xs italic text-[var(--text-tertiary)]">{sourceSearch ? t.noStudentsFound || 'No matches' : t.noSourceDocuments}</p>
               ) : (
                 <div className="space-y-1">
-                  {sources.map(s => (
+                  {filteredSources.map(s => (
                     <div key={s.id} className="flex items-center gap-2 rounded-lg bg-[var(--surface-secondary)] px-3 py-2 text-xs transition hover:bg-[var(--surface-tertiary)]">
                       <button onClick={() => { setSourceDetail(s); setShowSourceDetail(true); }} className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left">
                         <span className="min-w-0 truncate font-medium">{s.title || s.originalFilename || s.id}</span>
@@ -768,7 +867,7 @@ export default function ProjectDetail() {
                 </div>
               )}
             </div>
-            <div id="set-up-paper" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6">
+            <div id="set-up-paper" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 h-full overflow-y-auto">
               <h2 className="mb-4 text-sm font-bold text-[var(--brand-foreground)]">{t.setUpPaper}</h2>
               {standard && (
                 <div className="mb-3 flex items-center justify-between gap-2 rounded-lg bg-[var(--brand-soft)] px-3 py-2 text-xs">
@@ -857,8 +956,8 @@ export default function ProjectDetail() {
 
         {/* Tab: Sections */}
         {activeTab === 'sections' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-1">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full overflow-hidden">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-1 h-full overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t.papers}</h2>
               </div>
@@ -890,7 +989,7 @@ export default function ProjectDetail() {
                 </div>
               )}
             </div>
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-2">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-2 h-full overflow-y-auto">
               <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t.projectSections}</h2>
@@ -925,11 +1024,35 @@ export default function ProjectDetail() {
               </div>
               {!selectedPaper ? (
                 <p className="text-xs italic text-[var(--text-tertiary)]">{t.selectPaperSections}</p>
-              ) : selectedPaper.processingStatus === 'PROCESSING' || selectedPaper.processingStatus === 'QUEUED' ? (
-                <div className="flex items-center gap-2 text-xs italic text-[var(--text-secondary)]">
-                  <span className="inline-block w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
-                  {t.processingSections}
-                </div>
+              ) : selectedPaper.processingStatus === 'PROCESSING' || selectedPaper.processingStatus === 'QUEUED' || uploadState ? (
+                (() => {
+                  const s = selectedPaper.processingStatus;
+                  const isUploading = uploadState === 'uploading' || s === 'QUEUED';
+                  const isExtracting = uploadState === 'processing' || s === 'PROCESSING';
+                  // Native React + Tailwind extraction bar — 4 sequential steps tied to poll (ProjectDetail.jsx:655)
+                  // 3000ms poll may jump steps; transition-all duration-1000 masks latency
+                  const steps = ['Uploading paper','Extracting paper','Markdown paper','Divide into sections'];
+                  let progress = 0; let activeIdx = 0;
+                  if (isUploading) { progress = 25; activeIdx = 0; }
+                  else if (isExtracting) { progress = 50; activeIdx = 1; }
+                  else if (s === 'PROCESSING') { progress = 60; activeIdx = 1; }
+                  else if (s === 'READY' && sections.length===0) { progress = 75; activeIdx = 2; }
+                  else if (s === 'QUEUED') { progress = 25; activeIdx = 0; }
+                  const pct = Math.min(progress, 95);
+                  return (
+                    <div className="space-y-3">
+                      <div className="w-full h-2.5 rounded-full bg-[var(--surface-tertiary)] overflow-hidden">
+                        <div className="h-full bg-[var(--brand)] rounded-full transition-all duration-1000 ease-in-out" style={{ width: `${pct}%` }} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} />
+                      </div>
+                      <div className="grid grid-cols-4 gap-1 text-[9px] font-bold">
+                        {steps.map((label, i) => (
+                          <span key={label} className={`text-center truncate px-1 py-1 rounded ${i===activeIdx ? 'bg-[var(--brand-soft)] text-[var(--brand-foreground)]' : i < activeIdx ? 'text-emerald-600' : 'text-[var(--text-tertiary)]'}`}>{i < activeIdx ? '✓ ' : ''}{label}</span>
+                        ))}
+                      </div>
+                      <p className="text-xs italic text-[var(--text-secondary)] flex items-center gap-2"><span className="inline-block w-2 h-2 bg-amber-400 rounded-full animate-pulse" />{t.processingSections || steps[activeIdx]}</p>
+                    </div>
+                  );
+                })()
               ) : sections.length === 0 ? (
                 <div className="text-xs italic text-[var(--text-tertiary)]">
                   <p>{t.noSectionsHelp}</p>
@@ -938,7 +1061,7 @@ export default function ProjectDetail() {
                 <DragDropContext onDragEnd={handleDragEnd}>
                   <Droppable droppableId="sections">
                     {(provided) => (
-                      <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 max-h-[60vh] overflow-y-auto custom-scrollbar pr-1">
+                      <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 pr-1">
                         {sections.map((s, index) => (
                           <Draggable
                             key={s.id}
@@ -1047,42 +1170,10 @@ export default function ProjectDetail() {
           </div>
         )}
 
-        {/* Tab: Project Process Report */}
+        {/* Tab: Project Process Report — Phase 4: GitHub graph right panel */}
         {activeTab === 'progress' && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {progressReport?.readiness && (
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-3">
-                <h2 className="mb-4 text-sm font-bold text-[var(--brand-foreground)]">{t.readiness}</h2>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {[
-                    { label: t.overallScore, value: `${progressReport.readiness.score} / 100` },
-                    { label: t.contentCoverage, value: `${progressReport.readiness.contentCoveragePercent}%` },
-                  ].map(stat => (
-                    <div key={stat.label} className="rounded-xl bg-[var(--surface-secondary)] p-4 text-center">
-                      <p className="text-2xl font-black text-[var(--brand-foreground)]">{stat.value}</p>
-                      <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{stat.label}</p>
-                    </div>
-                  ))}
-                </div>
-                {progressReport.readiness.metrics?.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    {progressReport.readiness.metrics.map(metric => (
-                      <div key={metric.code} className="flex items-center gap-3">
-                        <span className="w-40 text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                          {metric.label} <span className="text-[var(--text-tertiary)]">({metric.weightPercent}%)</span>
-                        </span>
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--surface-tertiary)]">
-                          <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${metric.valuePercent}%` }} />
-                        </div>
-                        <span className="w-10 text-right text-xs font-bold text-[var(--brand-foreground)]">{metric.valuePercent}%</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-3">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full overflow-hidden">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-2 h-full overflow-y-auto">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t.contributionEvidence}</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1202,152 +1293,81 @@ export default function ProjectDetail() {
                 </div>
               )}
             </div>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-1 h-full overflow-y-auto">
+              <h2 className="mb-3 text-sm font-bold text-[var(--brand-foreground)]">Contribution Graph</h2>
+              <p className="mb-3 text-[10px] text-[var(--text-tertiary)]">GitHub-style daily saves — aggregated from audit_logs (V13 index, GROUP BY DATE)</p>
+              <ContributionGraph dailyDeltas={(progressReport?.contributions || []).flatMap(c => c.dailyWordDeltas || [])} />
+            </div>
+          </div>
+        )}
 
-            {reportMemberId === 'ALL' && (
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-2">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-sm font-bold text-[var(--brand-foreground)]">
-                  {t.changesSinceCheckpoint}
-                  {reportSectionId && <span className="ml-2 rounded bg-[var(--brand-soft)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--brand-foreground)]">{t.filteredBySection}</span>}
-                </h2>
+        {/* Tab: Assign Member — PHASE 2+3: former Settings, Status controls removed, 2-col layout */}
+        {(activeTab === 'assign-member' || activeTab === 'settings') && (
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-full overflow-hidden">
+            {/* Left: Members list with search — expanded from 33% to 40% so search fits without horizontal scroll */}
+            <div id="project-members" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-2 h-full overflow-y-auto">
+              <div className="mb-3">
+                <ActionExpandHeader title={t.members} placeholder={t.searchStudent || 'Search members...'} searchValue={memberSearch} onSearch={setMemberSearch} onAdd={() => { setShowAdvancedAdd(true); loadUsers(); }} addLabel={t.add} />
               </div>
-              {!sectionDiff ? (
-                <p className="text-xs italic text-[var(--text-tertiary)]">{t.noCheckpointComparison}</p>
+              {filteredMembers.length === 0 ? (
+                <p className="text-xs italic text-[var(--text-tertiary)]">{memberSearch ? t.noStudentsFound || 'No matches' : t.noMembers}</p>
               ) : (
-                <div className="space-y-4 text-xs">
-                  <div className="flex flex-wrap gap-4 text-[var(--text-secondary)]">
-                    <span>{t.fromLabel}: {sectionDiff.from ? new Date(sectionDiff.from).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US') : t.startLabel} ({sectionDiff.fromTrigger || t.initialLabel})</span>
-                    <span>{t.toLabel}: {sectionDiff.to ? new Date(sectionDiff.to).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US') : t.nowLabel} ({sectionDiff.toTrigger || t.latestLabel})</span>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {[
-                      { label: t.wordCountDelta, value: (sectionDiff.sectionWordDeltas || []).reduce((sum, delta) => sum + (delta.toWords - delta.fromWords), 0) },
-                      { label: t.feedbackAnswered, value: sectionDiff.feedbackAnsweredDelta },
-                    ].map(stat => (
-                      <div key={stat.label} className="rounded-xl bg-[var(--surface-secondary)] p-4 text-center">
-                        <p className={`text-2xl font-black ${stat.value > 0 ? 'text-emerald-600' : stat.value < 0 ? 'text-rose-600' : 'text-[var(--text-tertiary)]'}`}>{stat.value > 0 ? `+${stat.value}` : stat.value}</p>
-                        <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{stat.label}</p>
+                <div className="space-y-1">
+                  {filteredMembers.map(m => {
+                    const isSelected = selectedMember && String(selectedMember.userId||selectedMember.id) === String(m.userId||m.id);
+                    return (
+                      <button key={m.id} onClick={()=>setSelectedMemberId(String(m.userId||m.id))} className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs transition ${isSelected ? 'border border-indigo-200 bg-[var(--brand-soft)] text-[var(--brand-foreground)]' : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)]'}`}>
+                        <div className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{displayName(m)}</span>
+                          <span className="block truncate text-[10px] text-[var(--text-tertiary)]">{m.email}</span>
+                        </div>
+                        <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">{m.userRole || m.role}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {/* Right: Selected member detail — PHASE 2 */}
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-3 h-full overflow-y-auto">
+              {!selectedMember ? (
+                <div className="flex h-full min-h-[200px] items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-secondary)] p-6 text-center">
+                  <p className="text-xs text-[var(--text-tertiary)]">Select a member to view details</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-sm font-black text-white">{(selectedMember.firstName?.[0]||selectedMember.email?.[0]||'U').toUpperCase()}</div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-sm font-bold text-[var(--brand-foreground)]">{displayName(selectedMember)}</h3>
+                      <p className="truncate text-xs text-[var(--text-tertiary)]">{selectedMember.email}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">{selectedMember.userRole}</span>
+                        <span className="rounded bg-[var(--surface-tertiary)] px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)]">{selectedMember.role}</span>
+                        <StatusBadge status={project.status} />
                       </div>
-                    ))}
+                    </div>
                   </div>
-                  {(sectionDiff.sectionWordDeltas || []).filter(delta => delta.toWords !== delta.fromWords).length > 0 && (
-                    <div>
-                      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{t.wordCountBySection}</p>
-                      <div className="space-y-1">
-                        {(sectionDiff.sectionWordDeltas || []).filter(delta => delta.toWords !== delta.fromWords).map(delta => {
-                          const section = progressReport?.sections?.find(item => String(item.sectionId) === String(delta.sectionId));
-                          return (
-                            <div key={delta.sectionId} className="flex items-center justify-between rounded-lg bg-[var(--surface-secondary)] px-3 py-1.5 text-[10px]">
-                              <span className="text-[var(--text-secondary)]">{section?.sectionTitle || `${t.section} ${String(delta.sectionId).slice(0, 8)}`}</span>
-                              <span className="text-[var(--text-primary)]">{delta.fromWords} → {delta.toWords}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div><span className="block text-[10px] font-bold uppercase text-[var(--text-tertiary)]">User ID</span><span className="break-all font-mono text-[11px]">{selectedMember.userId}</span></div>
+                    <div><span className="block text-[10px] font-bold uppercase text-[var(--text-tertiary)]">Student Code</span><span className="text-[11px]">{selectedMember.studentCode || '-'}</span></div>
+                  </div>
+                  {selectedMember.role !== 'INSTRUCTOR' && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border-light)] pt-4">
+                      <span className="text-xs font-semibold text-[var(--text-secondary)]">{t.editMemberRole}:</span>
+                      <select value={selectedMember.role} onChange={e=>handleUpdateMemberRole(selectedMember.userId, e.target.value)} disabled={projectReadOnly || updatingMemberId!==null} className="rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs outline-none disabled:opacity-50">
+                        <option value="MEMBER">{t.memberRole}</option>
+                        <option value="LEADER">{t.leaderRole}</option>
+                      </select>
+                      <DeleteConfirm message={t.removeMemberConfirm} onConfirm={()=>{handleRemoveMember(selectedMember.userId); setSelectedMemberId(null)}} triggerLabel={t.remove} confirmLabel={t.remove} cancelLabel={ct.cancel} className="ml-auto rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-100">{t.remove}</DeleteConfirm>
                     </div>
                   )}
                 </div>
               )}
             </div>
-            )}
-
-            <div className={`rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 ${reportMemberId === 'ALL' ? '' : 'lg:col-span-3'}`}>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t.projectSections}</h2>
-                {reportSectionId && (
-                  <button onClick={() => setReportSectionId(null)} className="text-xs font-bold text-[var(--brand-foreground)] hover:underline">{t.allSections}</button>
-                )}
-              </div>
-              {!progressReport ? <p className="text-xs italic text-[var(--text-tertiary)]">{ct.loading}</p> : progressReport.sections?.length === 0 ? (
-                <p className="text-xs italic text-[var(--text-tertiary)]">{t.noSectionsYet}</p>
-              ) : (
-                <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
-                  {(progressReport.sections || []).map(section => (
-                    <button
-                      key={section.sectionId}
-                      onClick={() => setReportSectionId(String(reportSectionId) === String(section.sectionId) ? null : section.sectionId)}
-                      disabled={reportMemberId !== 'ALL'}
-                      className={`w-full rounded-xl bg-[var(--surface-secondary)] p-3 text-left text-xs transition ${String(reportSectionId) === String(section.sectionId) ? 'bg-[var(--brand-soft)] ring-2 ring-indigo-500/40' : 'hover:bg-[var(--brand-soft)]'}`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="font-bold text-[var(--text-primary)]">{section.sectionTitle}</span>
-                        <span className="rounded bg-[var(--brand-soft)] px-1.5 py-0.5 text-[9px] font-black text-[var(--brand-foreground)]">v{section.version}</span>
-                      </div>
-                      <p className="mt-1 text-[10px] text-[var(--text-tertiary)]">
-                        {t.sectionSummary.replace('{{words}}', section.wordCount)}{section.assignedUserName ? ` · ${section.assignedUserName}` : ''}
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-[var(--text-tertiary)]">
-                        {t.feedbackSummary.replace('{{answered}}', section.feedbackAnswered).replace('{{total}}', section.feedbackAnswered + section.feedbackUnanswered)}
-                        {section.lastUpdated ? ` · ${new Date(section.lastUpdated).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US')}` : ''}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
         )}
-
-        {/* Tab: Settings */}
-        {activeTab === 'settings' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div id="status-controls" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6">
-              <h2 className="mb-4 text-sm font-bold text-[var(--brand-foreground)]">{t.statusControls}</h2>
-              <div className="space-y-3">
-                {project.status === 'IN_PROGRESS' && (
-                  <button onClick={() => handlePatch('complete')} className="w-full rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)]">{t.markComplete}</button>
-                )}
-                {project.status !== 'ARCHIVED' && (
-                  <button onClick={() => handlePatch('archive')} className="w-full rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700">{t.archive}</button>
-                )}
-                {project.status === 'ARCHIVED' && (
-                  <button onClick={() => handlePatch('unarchive')} className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700">{t.unarchive}</button>
-                )}
-                <p className="text-[10px] text-[var(--text-tertiary)]">{t.currentStatus} <StatusBadge status={project.status} /></p>
-              </div>
-            </div>
-            <div id="project-members" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6">
-              <div className="mb-4 flex items-center justify-between gap-2">
-                <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t.members}</h2>
-                <button onClick={() => { setShowAddMember(true); loadUsers(); }} className="rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)]">+ {t.add}</button>
-              </div>
-              {projectMembers.length === 0 ? (
-                <p className="text-xs italic text-[var(--text-tertiary)]">{t.noMembers}</p>
-              ) : (
-                <div className="space-y-2">
-                  {projectMembers.map(m => (
-                    <div key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--surface-secondary)] px-3 py-2 text-xs">
-                      <div className="min-w-0 flex-1">
-                        <span className="font-medium">{displayName(m)}</span>
-                        <span className="block truncate text-[var(--text-tertiary)]">{m.email}</span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">{m.userRole}</span>
-                        {m.role === 'INSTRUCTOR' ? (
-                          <span className="rounded bg-[var(--surface-tertiary)] px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)]">{m.role}</span>
-                        ) : (
-                          <select
-                            value={m.role}
-                            onChange={e => handleUpdateMemberRole(m.userId, e.target.value)}
-                            disabled={projectReadOnly || updatingMemberId !== null}
-                            aria-label={`${t.editMemberRole}: ${displayName(m)}`}
-                            className="cursor-pointer rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] font-semibold text-[var(--text-secondary)] outline-none transition focus:ring-2 focus:ring-[var(--brand)] disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            <option value="MEMBER">{t.memberRole}</option>
-                            <option value="LEADER">{t.leaderRole}</option>
-                          </select>
-                        )}
-                        {m.role !== 'INSTRUCTOR' && (
-                          <DeleteConfirm message={t.removeMemberConfirm} onConfirm={() => handleRemoveMember(m.userId)} triggerLabel={t.remove} confirmLabel={t.remove} cancelLabel={ct.cancel} className="font-bold text-rose-600 transition-colors hover:text-rose-800">{t.remove}</DeleteConfirm>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        </div>
       </main>
 
       <Modal open={showAddMember} onClose={closeAddMemberModal} title={t.addMember} className="!overflow-visible">
@@ -1419,6 +1439,35 @@ export default function ProjectDetail() {
         </div>
       </Modal>
 
+      {/* Phase 3: Advanced Add Multiple Students — with local search */}
+      <Modal open={showAdvancedAdd} onClose={()=>{setShowAdvancedAdd(false); setAdvancedSelectedIds([]); setAdvancedSearch('');}} title="Advanced Add Multiple Students">
+        <div className="space-y-3">
+          <p className="text-xs text-[var(--text-secondary)]">Select multiple students and assign roles. Already members are hidden.</p>
+          <div className="relative">
+            <svg aria-hidden="true" viewBox="0 0 16 16" className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 fill-[var(--text-tertiary)]"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0" /></svg>
+            <input value={advancedSearch} onChange={e=>setAdvancedSearch(e.target.value)} placeholder="Search name or email..." className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] py-2 pl-8 pr-3 text-xs outline-none focus:border-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]" />
+          </div>
+          <div className="max-h-64 overflow-y-auto rounded-lg border border-[var(--border)] divide-y divide-[var(--border-light)]">
+            {advancedFilteredStudents.length===0 ? <p className="p-3 text-xs italic text-[var(--text-tertiary)]">{t.noStudentsFound}</p> : advancedFilteredStudents.map(st=> {
+              const checked = advancedSelectedIds.includes(String(st.id));
+              return (
+                <label key={st.id} className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-[var(--surface-secondary)]">
+                  <input type="checkbox" checked={checked} onChange={e=> setAdvancedSelectedIds(cur=> e.target.checked ? [...cur, String(st.id)] : cur.filter(id=>id!==String(st.id)))} />
+                  <span className="min-w-0 flex-1 truncate">{studentDisplayName(st)} <span className="text-[10px] text-[var(--text-tertiary)]">({st.email})</span></span>
+                  <select value={advancedRoleMap[st.id]||'MEMBER'} onChange={e=> setAdvancedRoleMap(m=>({...m,[st.id]:e.target.value}))} onClick={e=>e.stopPropagation()} className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-0.5 text-[10px]">
+                    <option value="MEMBER">{t.memberRole}</option><option value="LEADER">{t.leaderRole}</option>
+                  </select>
+                </label>
+              )
+            })}
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={()=>{setShowAdvancedAdd(false); setAdvancedSelectedIds([]); setAdvancedSearch('');}} className="rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-xs font-semibold">{ct.cancel}</button>
+            <button onClick={handleAdvancedAddMultiple} disabled={advancedSelectedIds.length===0} className="rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">Add {advancedSelectedIds.length ? `(${advancedSelectedIds.length})` : ''}</button>
+          </div>
+        </div>
+      </Modal>
+
       <Modal open={!!pendingAssign} onClose={() => setPendingAssign(null)} title={t.assignSection}>
         <div className="space-y-4 text-xs">
           <p className="text-[var(--text-secondary)]">{t.assignSectionQuestion.replace('{{student}}', pendingAssign?.userName || '')}</p>
@@ -1432,6 +1481,7 @@ export default function ProjectDetail() {
         </div>
       </Modal>
 
+      {/* Phase 4: Document preview modal — reuses FileViewerModal (SourceLibraryPanel / Student Workspace) */}
       <Modal open={showSourceDetail} onClose={() => setShowSourceDetail(false)} title={t.sourceDetail}>
         {sourceDetail && (
           <div className="space-y-3 text-xs">
@@ -1442,33 +1492,46 @@ export default function ProjectDetail() {
             <div><span className="font-bold text-[var(--text-secondary)]">{t.typeLabel}</span> <span>{sourceDetail.docType || 'SOURCE'}</span></div>
             <div><span className="font-bold text-[var(--text-secondary)]">ID:</span> <span className="font-mono text-[9px]">{sourceDetail.id}</span></div>
             <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => { setViewerFile({ fileUrl: `/api/documents/${sourceDetail.id}/download`, fileName: sourceDetail.originalFilename || sourceDetail.title }); }} className="rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)]">{t.previewSource || 'Preview'}</button>
               <button onClick={() => setShowSourceDetail(false)} className="rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:opacity-80">{ct.close}</button>
             </div>
           </div>
         )}
       </Modal>
+      {viewerFile && <FileViewerModal fileUrl={viewerFile.fileUrl} fileName={viewerFile.fileName} onClose={() => setViewerFile(null)} />}
 
-      <Modal open={showAddSource} onClose={() => { setShowAddSource(false); setDoiInput(''); setPendingSourceFile(null); }} title={t.addSource}>
+      <Modal open={showAddSource} onClose={() => { setShowAddSource(false); setDoiInput(''); setPendingSourceFile(null); setPendingSourceFiles([]); }} title={t.addSource}>
         <div className="space-y-5 text-xs">
           <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
             <h3 className="font-bold text-[var(--brand-foreground)]">{t.importByDoi}</h3>
+            <textarea value={doiInput} onChange={e => setDoiInput(e.target.value)} placeholder="10.1000/xyz123, 10.1001/abc&#10;One per line or comma/semicolon separated" rows={3} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none" />
             <div className="flex gap-2">
-              <input value={doiInput} onChange={e => setDoiInput(e.target.value)} placeholder="10.1000/xyz123" className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none" />
               <button onClick={() => handleImportDoiUnified()} disabled={addSourceLoading || !doiInput.trim()} className="rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-50">
                 {addSourceLoading ? '...' : t.import}
               </button>
+              {doiInput.trim().split(/[\n,;]+/).filter(Boolean).length > 1 && <span className="py-2 text-[10px] text-[var(--text-tertiary)]">{doiInput.trim().split(/[\n,;]+/).filter(Boolean).length} DOIs — one request</span>}
             </div>
             {doiError && <p className="text-xs font-semibold text-rose-600">{doiError}</p>}
-            <p className="text-[10px] italic text-[var(--text-tertiary)]">{t.sourcesAutoClassified}</p>
+            <p className="text-[10px] italic text-[var(--text-tertiary)]">{t.sourcesAutoClassified} • Batch uses single POST /api/documents/ingest/doi/batch</p>
           </div>
           <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
-            <h3 className="font-bold text-[var(--text-primary)]">{t.uploadSourceFile}</h3>
-            <input type="file" accept=".pdf,.docx" onChange={(e) => { setPendingSourceFile(e.target.files?.[0] || null); e.target.value = ''; }} className="text-xs" />
-            {pendingSourceFile && (
+            <h3 className="font-bold text-[var(--text-primary)]">{t.uploadSourceFile} — Multiple allowed (concurrency 3)</h3>
+            <input type="file" multiple accept=".pdf,.docx" onChange={(e) => { const files = [...(e.target.files||[])]; setPendingSourceFiles(files); setPendingSourceFile(files[0]||null); e.target.value = ''; }} className="text-xs" />
+            {pendingSourceFile && pendingSourceFiles.length === 1 && (
               <div className="flex items-center justify-between gap-2 rounded-lg bg-[var(--surface-secondary)] px-3 py-2">
                 <span className="truncate font-semibold">{pendingSourceFile.name}</span>
-                <button onClick={async () => { if (await handleUploadSource(pendingSourceFile)) { setPendingSourceFile(null); setShowAddSource(false); } }} disabled={addSourceLoading} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-50">
+                <button onClick={async () => { if (await handleUploadSource(pendingSourceFile)) { setPendingSourceFile(null); setPendingSourceFiles([]); setShowAddSource(false); } }} disabled={addSourceLoading} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-50">
                   {addSourceLoading ? '...' : ct.save}
+                </button>
+              </div>
+            )}
+            {pendingSourceFiles.length > 1 && (
+              <div className="space-y-2">
+                <div className="max-h-32 space-y-1 overflow-y-auto pr-1">
+                  {pendingSourceFiles.map(f => <div key={f.name+f.size} className="truncate rounded bg-[var(--surface-secondary)] px-2 py-1 text-[10px]">{f.name} — {(f.size/1024).toFixed(0)}KB</div>)}
+                </div>
+                <button onClick={async () => { await handleUploadSourcesBatch(pendingSourceFiles); setPendingSourceFile(null); setPendingSourceFiles([]); setShowAddSource(false); }} disabled={addSourceLoading} className="w-full rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-50">
+                  {addSourceLoading ? 'Uploading...' : `Upload ${pendingSourceFiles.length} files (max 3 concurrent)`}
                 </button>
               </div>
             )}

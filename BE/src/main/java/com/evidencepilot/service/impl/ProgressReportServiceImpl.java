@@ -117,31 +117,24 @@ public class ProgressReportServiceImpl implements ProgressReportService {
                 contribution.addCurrentSection(panel);
             }
         }
-        List<AuditLog> edits = from == null
-                ? auditLogRepository.findByActionAndEntityTypeAndEntityIdOrderByOccurredAtAsc(
-                        SECTION_EDIT_ACTION, "PROJECT", projectId)
-                : auditLogRepository.findProjectEditsWithin(
-                        projectId, from.atStartOfDay(), to.plusDays(1).atStartOfDay());
-        for (AuditLog edit : edits) {
-            ContributionAccumulator contribution = edit.getActor() == null
-                    ? null : contributionByUser.get(edit.getActor().getId());
-            if (contribution == null || edit.getNewValue() == null || edit.getOccurredAt() == null) {
-                continue;
-            }
-            try {
-                JsonNode payload = objectMapper.readTree(edit.getNewValue());
-                if (payload.has("wordDelta")) {
-                    int delta = payload.get("wordDelta").asInt();
-                    int wordsAdded = payload.has("wordsAdded")
-                            ? payload.get("wordsAdded").asInt() : Math.max(delta, 0);
-                    int wordsRemoved = payload.has("wordsRemoved")
-                            ? payload.get("wordsRemoved").asInt() : Math.max(-delta, 0);
-                    contribution.addEdit(delta, wordsAdded, wordsRemoved,
-                            payload.path("sectionTitle").asText(null), edit.getOccurredAt());
-                }
-            } catch (Exception ignored) {
-                // A malformed historical audit row must not hide the rest of the report.
-            }
+        // Phase 1.5: DB-level GROUP BY DATE — single aggregated query instead of per-row JSON parse loops
+        byte[] projectIdBytes = uuidToBytes(projectId);
+        List<Object[]> rows = from == null
+                ? auditLogRepository.aggregateDailyAll(projectIdBytes)
+                : auditLogRepository.aggregateDailyWithin(projectIdBytes, from.atStartOfDay(), to.plusDays(1).atStartOfDay());
+        for (Object[] row : rows) {
+            // row: [0]=actor_id (byte[]), [1]=DATE (java.sql.Date/LocalDate), [2]=cnt, [3]=sum_delta, [4]=sum_added, [5]=sum_removed, [6]=max_at (Timestamp), [7]=titles (String "t1||t2")
+            UUID actorId = bytesToUuid((byte[]) row[0]);
+            ContributionAccumulator contribution = contributionByUser.get(actorId);
+            if (contribution == null) continue;
+            LocalDate date = row[1] instanceof java.sql.Date ? ((java.sql.Date) row[1]).toLocalDate() : (LocalDate) row[1];
+            long cnt = ((Number) row[2]).longValue();
+            int sumDelta = row[3] == null ? 0 : ((Number) row[3]).intValue();
+            int sumAdded = row[4] == null ? 0 : ((Number) row[4]).intValue();
+            int sumRemoved = row[5] == null ? 0 : ((Number) row[5]).intValue();
+            LocalDateTime maxAt = row[6] instanceof java.sql.Timestamp ? ((java.sql.Timestamp) row[6]).toLocalDateTime() : (LocalDateTime) row[6];
+            String titlesConcat = (String) row[7];
+            contribution.addAggregated(date, cnt, sumDelta, sumAdded, sumRemoved, maxAt, titlesConcat);
         }
 
         List<ProgressReportResponse.SectionPanel> panels = allPanels.stream()
@@ -188,6 +181,18 @@ public class ProgressReportServiceImpl implements ProgressReportService {
         return name.isBlank() ? user.getEmail() : name;
     }
 
+    private static byte[] uuidToBytes(UUID uuid) {
+        java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(new byte[16]);
+        bb.putLong(uuid.getMostSignificantBits());
+        bb.putLong(uuid.getLeastSignificantBits());
+        return bb.array();
+    }
+
+    private static UUID bytesToUuid(byte[] bytes) {
+        java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(bytes);
+        return new UUID(bb.getLong(), bb.getLong());
+    }
+
     private static final class ContributionAccumulator {
         private final User user;
         private final Map<LocalDate, int[]> daily = new TreeMap<>(Comparator.reverseOrder());
@@ -225,6 +230,22 @@ public class ProgressReportServiceImpl implements ProgressReportService {
             }
             int[] day = daily.computeIfAbsent(occurredAt.toLocalDate(), ignored -> new int[4]);
             day[0]++;
+            day[1] += delta;
+            day[2] += Math.max(added, 0);
+            day[3] += Math.max(removed, 0);
+        }
+
+        private void addAggregated(LocalDate date, long cnt, int delta, int added, int removed, LocalDateTime maxAt, String titlesConcat) {
+            saveCount += cnt;
+            wordDelta += delta;
+            wordsAdded += Math.max(added, 0);
+            wordsRemoved += Math.max(removed, 0);
+            if (titlesConcat != null && !titlesConcat.isBlank()) {
+                for (String t : titlesConcat.split("\\|\\|")) { if (t != null && !t.isBlank()) editedSections.add(t.trim()); }
+            }
+            if (lastEditedAt == null || (maxAt != null && maxAt.isAfter(lastEditedAt))) lastEditedAt = maxAt;
+            int[] day = daily.computeIfAbsent(date, ignored -> new int[4]);
+            day[0] += cnt;
             day[1] += delta;
             day[2] += Math.max(added, 0);
             day[3] += Math.max(removed, 0);

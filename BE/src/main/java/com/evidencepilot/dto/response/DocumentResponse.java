@@ -29,6 +29,7 @@ public record DocumentResponse(
     String openAlexSubfield,
     String openAlexField,
     String openAlexDomain,
+    String doi,
     List<UUID> projectIds
 ) {
     public static DocumentResponse from(Document doc) {
@@ -58,6 +59,7 @@ public record DocumentResponse(
             doc.getOpenAlexSubfield(),
             doc.getOpenAlexField(),
             doc.getOpenAlexDomain(),
+            doc.getDoi(),
             projectIds
         );
     }

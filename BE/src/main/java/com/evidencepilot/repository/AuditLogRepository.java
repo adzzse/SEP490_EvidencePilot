@@ -34,4 +34,49 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             @Param("projectId") UUID projectId,
             @Param("fromInclusive") LocalDateTime fromInclusive,
             @Param("toExclusive") LocalDateTime toExclusive);
+
+    // Phase 1.5: DB-level daily aggregation — avoids Java loop over every audit row
+    @Query(value = """
+            SELECT
+              actor_id,
+              DATE(occurred_at) as d,
+              COUNT(*) as cnt,
+              COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED)),0) as sum_delta,
+              COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsAdded')) AS SIGNED)),0) as sum_added,
+              COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsRemoved')) AS SIGNED)),0) as sum_removed,
+              MAX(occurred_at) as max_at,
+              GROUP_CONCAT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.sectionTitle')) SEPARATOR '||') as titles
+            FROM audit_logs
+            WHERE action = 'SECTION_CONTENT_UPDATED'
+              AND entity_type = 'PROJECT'
+              AND entity_id = :projectId
+              AND occurred_at >= :fromInclusive
+              AND occurred_at < :toExclusive
+            GROUP BY actor_id, DATE(occurred_at)
+            ORDER BY actor_id, d
+            """, nativeQuery = true)
+    List<Object[]> aggregateDailyWithin(
+            @Param("projectId") byte[] projectId,
+            @Param("fromInclusive") LocalDateTime fromInclusive,
+            @Param("toExclusive") LocalDateTime toExclusive);
+
+    @Query(value = """
+            SELECT
+              actor_id,
+              DATE(occurred_at) as d,
+              COUNT(*) as cnt,
+              COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED)),0) as sum_delta,
+              COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsAdded')) AS SIGNED)),0) as sum_added,
+              COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsRemoved')) AS SIGNED)),0) as sum_removed,
+              MAX(occurred_at) as max_at,
+              GROUP_CONCAT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.sectionTitle')) SEPARATOR '||') as titles
+            FROM audit_logs
+            WHERE action = 'SECTION_CONTENT_UPDATED'
+              AND entity_type = 'PROJECT'
+              AND entity_id = :projectId
+            GROUP BY actor_id, DATE(occurred_at)
+            ORDER BY actor_id, d
+            """, nativeQuery = true)
+    List<Object[]> aggregateDailyAll(
+            @Param("projectId") byte[] projectId);
 }

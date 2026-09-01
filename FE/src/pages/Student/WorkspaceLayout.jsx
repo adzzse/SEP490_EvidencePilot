@@ -420,16 +420,31 @@ export default function WorkspaceLayout() {
         setFeedbacks(all.filter(fb => String(fb.projectId) === String(projId)));
       } catch { if (!stale()) setLoadErrors(errs => [...errs, 'feedback']); }
     } catch (err) {
+      const status = err?.response?.status;
+      if (status === 403) {
+        if (!stale()) {
+          setProjectLoadError('forbidden');
+          setProject(null);
+          navigate('/unauthorized', { replace: true });
+        }
+        return;
+      }
+      if (status === 401) {
+        if (!stale()) {
+          setProjectLoadError('unauthorized');
+          setProject(null);
+          navigate('/login', { replace: true });
+        }
+        return;
+      }
       if (!stale()) {
-        const status = err?.response?.status;
-        if (status === 403) setProjectLoadError('forbidden');
-        else if (status === 400 || status === 404) setProjectLoadError('notFound');
+        if (status === 400 || status === 404) setProjectLoadError('notFound');
         else setProjectLoadError('generic');
         setProject(null);
         console.error('loadProjectData error:', err);
       }
     }
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     const warn = (e) => {
@@ -468,10 +483,18 @@ export default function WorkspaceLayout() {
         setProjects(active);
         if (!pid && active.length > 0) { pid = active[0].id; navigate(`/student/projects/${pid}`, { replace: true }); return; }
         if (pid) await loadProjectData(pid);
-      } catch (err) { console.error(err); }
-      finally { setLoadingProject(false); }
+      } catch (err) {
+        const status = err?.response?.status;
+        if (status === 403) {
+          setProjectLoadError('forbidden');
+          navigate('/unauthorized', { replace: true });
+        }
+        console.error(err);
+      } finally {
+        setLoadingProject(false);
+      }
     })();
-  }, [projectId, loadProjectData]);
+  }, [projectId, loadProjectData, navigate]);
 
   useEffect(() => {
     if (!project?.id || !hasActiveExtraction(sources)) return undefined;

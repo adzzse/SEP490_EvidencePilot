@@ -87,12 +87,11 @@ function retryProactiveRefresh(token) {
 function handleRefreshFailure(error, attemptedToken) {
   const currentToken = localStorage.getItem('token');
   if (currentToken && attemptedToken && currentToken !== attemptedToken) {
-    armProactiveRefresh();
-    return;
+    armProactiveRefresh(); return;
   }
-  const expMs = currentToken ? decodeExp(currentToken) : null;
-  if (!currentToken || isAuthFailure(error) || (expMs && expMs <= Date.now())) {
+  if (!currentToken || isAuthFailure(error) || (currentToken && decodeExp(currentToken) && decodeExp(currentToken) <= Date.now())) {
     notifyAuthExpired();
+    if (refreshPromise) refreshPromise = null;
     return;
   }
   retryProactiveRefresh(currentToken);
@@ -155,11 +154,13 @@ api.interceptors.response.use(
     const { config, response } = error;
     const isAuthCall = config.url?.startsWith('/api/auth/');
     const onLoginPage = window.location.pathname.startsWith('/login');
+    if (response?.status === 403 && !isAuthCall) {
+      return Promise.reject(error);
+    }
     if (response?.status === 401 && !config._retried && !isAuthCall && !onLoginPage) {
       config._retried = true;
       const currentToken = localStorage.getItem('token');
       if (config._authToken && currentToken && config._authToken !== currentToken) {
-        // token rotated by another tab — retry with the current one, no refresh
         config.headers.Authorization = `Bearer ${currentToken}`;
         return api(config);
       }
@@ -169,7 +170,6 @@ api.interceptors.response.use(
         config.headers.Authorization = `Bearer ${token}`;
         return api(config);
       } catch (refreshError) {
-        // refresh failed, but the token may have changed mid-flight (concurrent tab refresh)
         const nowToken = localStorage.getItem('token');
         if (nowToken && nowToken !== refreshAttemptToken) {
           config.headers.Authorization = `Bearer ${nowToken}`;
