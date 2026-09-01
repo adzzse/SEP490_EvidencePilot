@@ -35,15 +35,15 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             @Param("fromInclusive") LocalDateTime fromInclusive,
             @Param("toExclusive") LocalDateTime toExclusive);
 
-    // Phase 1.5: DB-level daily aggregation — avoids Java loop over every audit row
+    // Phase 1.5: DB-level daily aggregation — preserves wordDelta→wordsAdded/Removed fallback for legacy rows
     @Query(value = """
             SELECT
               actor_id,
               DATE(occurred_at) as d,
               COUNT(*) as cnt,
               COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED)),0) as sum_delta,
-              COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsAdded')) AS SIGNED)),0) as sum_added,
-              COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsRemoved')) AS SIGNED)),0) as sum_removed,
+              COALESCE(SUM(CASE WHEN JSON_EXTRACT(new_value, '$.wordsAdded') IS NOT NULL THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsAdded')) AS SIGNED) ELSE GREATEST(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED),0) END),0) as sum_added,
+              COALESCE(SUM(CASE WHEN JSON_EXTRACT(new_value, '$.wordsRemoved') IS NOT NULL THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsRemoved')) AS SIGNED) ELSE GREATEST(-CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED),0) END),0) as sum_removed,
               MAX(occurred_at) as max_at,
               GROUP_CONCAT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.sectionTitle')) SEPARATOR '||') as titles
             FROM audit_logs
@@ -66,8 +66,8 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
               DATE(occurred_at) as d,
               COUNT(*) as cnt,
               COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED)),0) as sum_delta,
-              COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsAdded')) AS SIGNED)),0) as sum_added,
-              COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsRemoved')) AS SIGNED)),0) as sum_removed,
+              COALESCE(SUM(CASE WHEN JSON_EXTRACT(new_value, '$.wordsAdded') IS NOT NULL THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsAdded')) AS SIGNED) ELSE GREATEST(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED),0) END),0) as sum_added,
+              COALESCE(SUM(CASE WHEN JSON_EXTRACT(new_value, '$.wordsRemoved') IS NOT NULL THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsRemoved')) AS SIGNED) ELSE GREATEST(-CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED),0) END),0) as sum_removed,
               MAX(occurred_at) as max_at,
               GROUP_CONCAT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.sectionTitle')) SEPARATOR '||') as titles
             FROM audit_logs

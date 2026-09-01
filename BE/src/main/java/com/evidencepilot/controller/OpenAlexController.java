@@ -58,20 +58,28 @@ public class OpenAlexController {
     @Operation(summary = "Batch ingest by DOIs",
                description = "Single-request batch: dedupes DOIs and processes each sequentially in a transactional loop. "
                        + "Frontend sends exactly ONE request; backend iterates (no Promise.allSettled spam). "
-                       + "Partial failures are skipped and returned as 207 multi-status via per-item status; successes are 202.")
-    @ApiResponse(responseCode = "202", description = "Batch accepted — returns succeeded documents (failed DOIs omitted, check size)")
+                       + "Partial failures return 207 multi-status.")
+    @ApiResponse(responseCode = "202", description = "All DOIs accepted")
+    @ApiResponse(responseCode = "207", description = "Partial failure — succeeded list size < requested, failed DOIs omitted")
     @PostMapping("/ingest/doi/batch")
-    @ResponseStatus(HttpStatus.ACCEPTED)
-    public List<DocumentResponse> ingestBatch(@Valid @RequestBody DoiBatchIngestionRequest request) {
+    public org.springframework.http.ResponseEntity<List<DocumentResponse>> ingestBatch(@Valid @RequestBody DoiBatchIngestionRequest request) {
         List<String> deduped = new ArrayList<>(new LinkedHashSet<>(request.dois().stream().map(String::trim).filter(s -> !s.isEmpty()).toList()));
         List<DocumentResponse> succeeded = new ArrayList<>();
+        List<String> failed = new ArrayList<>();
         for (String doi : deduped) {
             try {
                 succeeded.add(ingestionService.ingestByDoi(request.projectId(), request.collectionId(), doi));
-            } catch (Exception ignored) {
-                // per-DOI failure must not abort entire batch — skip and continue (caller can diff sizes)
+            } catch (Exception e) {
+                failed.add(doi);
             }
         }
-        return succeeded;
+        if (!failed.isEmpty() && succeeded.isEmpty()) {
+            // all failed still 207 so frontend can distinguish from 202
+            return org.springframework.http.ResponseEntity.status(HttpStatus.MULTI_STATUS).body(succeeded);
+        }
+        if (!failed.isEmpty()) {
+            return org.springframework.http.ResponseEntity.status(HttpStatus.MULTI_STATUS).body(succeeded);
+        }
+        return org.springframework.http.ResponseEntity.status(HttpStatus.ACCEPTED).body(succeeded);
     }
 }

@@ -31,6 +31,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -103,9 +105,13 @@ class ProgressReportServiceImplTest {
                         member(project, previousAssignee),
                         member(project, currentAssignee),
                         member(project, idleStudent)));
-        when(auditLogRepository.findProjectEditsWithin(
-                project.getId(), from.atStartOfDay(), to.plusDays(1).atStartOfDay()))
-                .thenReturn(List.of(edit));
+        // Service now uses native GROUP BY aggregateDailyWithin (keeps history by actor_id, not assignedUser, and falls back wordDelta→wordsAdded)
+        java.sql.Date sqlDate = java.sql.Date.valueOf(edit.getOccurredAt().toLocalDate());
+        java.sql.Timestamp sqlTs = java.sql.Timestamp.valueOf(edit.getOccurredAt());
+        byte[] actorBytes = uuidToBytes(previousAssignee.getId());
+        Object[] row = new Object[]{actorBytes, sqlDate, 1L, 2, 2, 0, sqlTs, "Introduction"};
+        when(auditLogRepository.aggregateDailyWithin(any(byte[].class), eq(from.atStartOfDay()), eq(to.plusDays(1).atStartOfDay())))
+                .thenReturn(List.<Object[]>of(row));
 
         var report = service.getProgressReport(project.getId(), "ALL", from, to);
 
@@ -144,8 +150,7 @@ class ProgressReportServiceImplTest {
                     assertThat(item.assignedSectionCount()).isZero();
                     assertThat(item.saveCount()).isZero();
                 });
-        verify(auditLogRepository).findProjectEditsWithin(
-                project.getId(), from.atStartOfDay(), to.plusDays(1).atStartOfDay());
+        verify(auditLogRepository).aggregateDailyWithin(any(byte[].class), eq(from.atStartOfDay()), eq(to.plusDays(1).atStartOfDay()));
     }
 
     @Test
@@ -177,5 +182,12 @@ class ProgressReportServiceImplTest {
         user.setFirstName(name);
         user.setEmail(name.toLowerCase() + "@example.com");
         return user;
+    }
+
+    private static byte[] uuidToBytes(UUID uuid) {
+        java.nio.ByteBuffer b = java.nio.ByteBuffer.wrap(new byte[16]);
+        b.putLong(uuid.getMostSignificantBits());
+        b.putLong(uuid.getLeastSignificantBits());
+        return b.array();
     }
 }
