@@ -8,6 +8,7 @@ import com.evidencepilot.model.InstructorFeedback;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
+import com.evidencepilot.model.SectionStandardEvaluation;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.FeedbackStatus;
 import com.evidencepilot.model.enums.ProjectRole;
@@ -18,6 +19,7 @@ import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
+import com.evidencepilot.repository.SectionStandardEvaluationRepository;
 import com.evidencepilot.service.impl.FeedbackServiceImpl;
 import com.evidencepilot.service.impl.ProjectCollectionService;
 import org.junit.jupiter.api.Test;
@@ -39,7 +41,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class FeedbackServiceImplTest {
@@ -73,6 +74,10 @@ class FeedbackServiceImplTest {
 
     @Mock
     private ProjectCollectionService projectCollectionService;
+    @Mock
+    private SectionStandardEvaluationRepository sectionStandardEvaluationRepository;
+    @Mock
+    private SectionStandardService sectionStandardService;
 
     @Test
     void submitForReviewUsesProjectInstructorAndStudent() {
@@ -593,6 +598,69 @@ class FeedbackServiceImplTest {
         assertThat(project.getStatus()).isEqualTo(ProjectStatus.SUBMITTED_FOR_REVIEW);
     }
 
+    @Test
+    void submitForReviewChecksEveryPaperAndRejectsConfiguredOnlyStandard() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(instructor, student);
+        PaperSection first = section(project, "Introduction");
+        PaperSection second = section(project, "Method");
+        first.setActive(true);
+        second.setActive(true);
+        SectionStandardEvaluation passed = evaluation(first, SectionStandardEvaluation.STATUS_PASSED, 100);
+        SectionStandardEvaluation configured = evaluation(second, SectionStandardEvaluation.STATUS_CONFIGURED, null);
+
+        when(currentUserService.requireCurrentUser()).thenReturn(student);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(any(), any()))
+                .thenReturn(List.of(first.getDocument(), second.getDocument()));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(first.getDocument().getId()))
+                .thenReturn(List.of(first));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(second.getDocument().getId()))
+                .thenReturn(List.of(second));
+        when(sectionStandardEvaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(first.getId()))
+                .thenReturn(Optional.of(passed));
+        when(sectionStandardEvaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(second.getId()))
+                .thenReturn(Optional.of(configured));
+        when(sectionStandardService.matchesCurrentInput(passed, first)).thenReturn(true);
+
+        assertThatThrownBy(() -> service().submitForReview(project.getId(), null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("STANDARD_CHECK_REQUIRED")
+                .hasMessageContaining(second.getId().toString());
+
+        verify(feedbackRequestRepository, never()).save(any());
+        verify(projectRepository, never()).save(any());
+    }
+
+    @Test
+    void submitForReviewRejectsEvaluationForStaleContent() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(instructor, student);
+        PaperSection section = section(project, "Introduction");
+        section.setActive(true);
+        SectionStandardEvaluation passed = evaluation(section, SectionStandardEvaluation.STATUS_PASSED, 100);
+
+        when(currentUserService.requireCurrentUser()).thenReturn(student);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(any(), any()))
+                .thenReturn(List.of(section.getDocument()));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(section.getDocument().getId()))
+                .thenReturn(List.of(section));
+        when(sectionStandardEvaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId()))
+                .thenReturn(Optional.of(passed));
+        when(sectionStandardService.matchesCurrentInput(passed, section)).thenReturn(false);
+
+        assertThatThrownBy(() -> service().submitForReview(project.getId(), null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("STANDARD_CHECK_REQUIRED")
+                .hasMessageContaining(section.getId().toString());
+
+        verify(feedbackRequestRepository, never()).save(any());
+        verify(projectRepository, never()).save(any());
+    }
+
     private InstructorFeedback feedback(User instructor, FeedbackRequest request, PaperSection section) {
         InstructorFeedback feedback = new InstructorFeedback();
         feedback.setId(UUID.randomUUID());
@@ -604,10 +672,18 @@ class FeedbackServiceImplTest {
         return feedback;
     }
 
-    @SuppressWarnings("unchecked")
+    private SectionStandardEvaluation evaluation(PaperSection section, String status, Integer score) {
+        SectionStandardEvaluation evaluation = new SectionStandardEvaluation();
+        evaluation.setSectionId(section.getId());
+        evaluation.setDocumentId(section.getDocument().getId());
+        evaluation.setProjectId(section.getDocument().getProject().getId());
+        evaluation.setStatus(status);
+        evaluation.setScorePercent(score);
+        evaluation.setPassThreshold(70);
+        return evaluation;
+    }
+
     private FeedbackServiceImpl service() {
-        org.springframework.beans.factory.ObjectProvider<com.evidencepilot.repository.SectionStandardEvaluationRepository> provider = org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
-        org.mockito.Mockito.lenient().when(provider.getIfAvailable()).thenReturn(null);
         return new FeedbackServiceImpl(
                 feedbackRequestRepository,
                 instructorFeedbackRepository,
@@ -619,7 +695,8 @@ class FeedbackServiceImplTest {
                 paperProcessingService,
                 checkpointService,
                 projectCollectionService,
-                provider);
+                sectionStandardEvaluationRepository,
+                sectionStandardService);
     }
 
     private User user(UserRole role) {

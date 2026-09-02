@@ -22,10 +22,12 @@ import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
+import com.evidencepilot.repository.SectionStandardEvaluationRepository;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.CheckpointService;
 import com.evidencepilot.service.FeedbackService;
 import com.evidencepilot.service.PaperProcessingService;
+import com.evidencepilot.service.SectionStandardService;
 import com.evidencepilot.service.SystemNotificationService;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -56,12 +58,8 @@ public class FeedbackServiceImpl implements FeedbackService {
     private final PaperProcessingService paperProcessingService;
     private final CheckpointService checkpointService;
     private final ProjectCollectionService projectCollectionService;
-    // Optional: may be absent in tests without the bean
-    private final org.springframework.beans.factory.ObjectProvider<com.evidencepilot.repository.SectionStandardEvaluationRepository> sectionStandardEvaluationRepositoryProvider;
-
-    private com.evidencepilot.repository.SectionStandardEvaluationRepository getSectionStandardEvaluationRepository() {
-        return sectionStandardEvaluationRepositoryProvider.getIfAvailable();
-    }
+    private final SectionStandardEvaluationRepository sectionStandardEvaluationRepository;
+    private final SectionStandardService sectionStandardService;
 
     @Override
     public List<FeedbackRequestResponseDto> findAllForCurrentUser() {
@@ -129,48 +127,36 @@ public class FeedbackServiceImpl implements FeedbackService {
             }
         }
 
-        // Absolute submission gate: STALE/UNTESTED/SYSTEM_ERROR block entirely; FAILED requires flagged=true
-        if (!papers.isEmpty()) {
+        List<SectionStandardEvaluation> standardEvaluations = new java.util.ArrayList<>();
+        boolean hasFailed = false;
+        for (Document paper : papers) {
             List<PaperSection> sectionsForGate = paperSectionRepository
-                    .findByDocumentIdOrderBySectionOrderAsc(papers.get(0).getId())
-                    .stream().filter(PaperSection::isActive).toList();
-            if (!sectionsForGate.isEmpty()) {
-                var evalRepo = getSectionStandardEvaluationRepository();
-                if (evalRepo != null) {
-                    boolean hasStaleOrUntested = false;
-                    boolean hasSystemError = false;
-                    boolean hasFailed = false;
-                    String staleDetail = null;
-                    for (PaperSection s : sectionsForGate) {
-                        var opt = evalRepo.findTopBySectionIdOrderByUpdatedAtDesc(s.getId());
-                        if (opt.isEmpty()) {
-                            hasStaleOrUntested = true;
-                            staleDetail = s.getId().toString();
-                            break;
-                        }
-                        String status = opt.get().getStatus();
-                        if (SectionStandardEvaluation.STATUS_STALE.equals(status)
-                                || SectionStandardEvaluation.STATUS_SYSTEM_ERROR.equals(status)) {
-                            if (SectionStandardEvaluation.STATUS_SYSTEM_ERROR.equals(status)) hasSystemError = true;
-                            hasStaleOrUntested = true;
-                            staleDetail = s.getId().toString();
-                            break;
-                        }
-                        if (SectionStandardEvaluation.STATUS_FAILED.equals(status)) {
-                            hasFailed = true;
-                        }
-                    }
-                    if (hasStaleOrUntested) {
-                        // STALE/UNTESTED/SYSTEM_ERROR cannot be bypassed with flagged
-                        throw new ResponseStatusException(HttpStatus.CONFLICT,
-                                "STALE_SECTIONS: section " + staleDetail + " requires a fresh Standard Check. Run evaluation before submit. flagged does not bypass stale/system_error.");
-                    }
-                    if (hasFailed && !Boolean.TRUE.equals(request != null ? request.flagged() : null)) {
-                        throw new ResponseStatusException(HttpStatus.CONFLICT,
-                                "FAILED_SECTIONS: one or more sections below passThreshold — submit with flagged=true to force (flagged submission).");
-                    }
+                    .findByDocumentIdOrderBySectionOrderAsc(paper.getId()).stream()
+                    .filter(PaperSection::isActive)
+                    .toList();
+            for (PaperSection section : sectionsForGate) {
+                var evaluation = sectionStandardEvaluationRepository
+                        .findTopBySectionIdOrderByUpdatedAtDesc(section.getId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                                "STANDARD_CHECK_REQUIRED: section " + section.getId()
+                                        + " has no configured evaluation"));
+                String status = evaluation.getStatus();
+                if ((!SectionStandardEvaluation.STATUS_PASSED.equals(status)
+                        && !SectionStandardEvaluation.STATUS_FAILED.equals(status))
+                        || evaluation.getScorePercent() == null
+                        || evaluation.getPassThreshold() == null
+                        || !sectionStandardService.matchesCurrentInput(evaluation, section)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "STANDARD_CHECK_REQUIRED: section " + section.getId()
+                                    + " has status " + status + " and requires a fresh Standard Check");
                 }
+                hasFailed |= SectionStandardEvaluation.STATUS_FAILED.equals(status);
+                standardEvaluations.add(evaluation);
             }
+        }
+        if (hasFailed && !Boolean.TRUE.equals(request != null ? request.flagged() : null)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "FAILED_SECTIONS: one or more sections are below passThreshold; submit with flagged=true to confirm");
         }
 
         FeedbackRequest feedbackRequest = new FeedbackRequest();
@@ -183,23 +169,18 @@ public class FeedbackServiceImpl implements FeedbackService {
         feedbackRequest.setUpdatedAt(now);
         feedbackRequest.setSectionValidation(validationJson);
         feedbackRequest.setFlagged(Boolean.TRUE.equals(request != null ? request.flagged() : null));
-        // Snapshot evaluations for audit
-        try {
-            if (!papers.isEmpty()) {
-                var evalRepo = getSectionStandardEvaluationRepository();
-                if (evalRepo != null) {
-                    var evals = evalRepo.findByDocumentId(papers.get(0).getId());
-                    feedbackRequest.setStandardSnapshotJson(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(
-                            evals.stream().map(e -> Map.of(
-                                    "sectionId", e.getSectionId().toString(),
-                                    "status", e.getStatus(),
-                                    "scorePercent", e.getScorePercent() == null ? 0 : e.getScorePercent(),
-                                    "passThreshold", e.getPassThreshold()
-                            )).toList()));
-                }
+        if (!standardEvaluations.isEmpty()) {
+            try {
+                feedbackRequest.setStandardSnapshotJson(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(
+                        standardEvaluations.stream().map(e -> Map.of(
+                                "sectionId", e.getSectionId().toString(),
+                                "status", e.getStatus(),
+                                "scorePercent", e.getScorePercent(),
+                                "passThreshold", e.getPassThreshold()
+                        )).toList()));
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                throw new IllegalStateException("Could not snapshot section standard evaluations", e);
             }
-        } catch (Exception e) {
-            log.warn("Could not snapshot standard evaluations for project {}", project.getId());
         }
 
         project.setStatus(ProjectStatus.SUBMITTED_FOR_REVIEW);

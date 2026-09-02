@@ -103,7 +103,6 @@ export default function ProjectDetail() {
   const [editingSectionId, setEditingSectionId] = useState(null);
   const [editingSectionTitle, setEditingSectionTitle] = useState('');
   const [sectionStructureSaving, setSectionStructureSaving] = useState(false);
-  const [orderDirty, setOrderDirty] = useState(false);
   const [uploadState, setUploadState] = useState(null);
   const [standardSuggestion, setStandardSuggestion] = useState(null);
   const [standardSuggestionLoading, setStandardSuggestionLoading] = useState(false);
@@ -124,13 +123,9 @@ export default function ProjectDetail() {
   const [viewerFile, setViewerFile] = useState(null);
   // Section Standard AI pipeline — per-section checklist + passThreshold + strict evaluation
   const [sectionEvals, setSectionEvals] = useState({}); // sectionId -> {status, scorePercent, resultJson, errorMessage}
-  const [pendingStandards, setPendingStandards] = useState({}); // sectionId -> {requirements, passThreshold} pending Save
-  const [stdRequirements, setStdRequirements] = useState(['Abstract ≤250 words', 'IEEE citations [1] style', 'At least 2 external sources']);
-  const [stdThreshold, setStdThreshold] = useState(70);
   const [evaluatingSectionId, setEvaluatingSectionId] = useState(null);
-  const standardsDirty = useMemo(() => Object.keys(pendingStandards).length > 0, [pendingStandards]);
-  const sectionsDirty = draftDirty || orderDirty;
-  const anyDirty = sectionsDirty || standardsDirty;
+  const sectionLoadRequestRef = useRef(0);
+  const anyDirty = draftDirty;
 
   const collectionSources = useMemo(
     () => Object.values(collectionSourcePages).flat(),
@@ -160,36 +155,57 @@ export default function ProjectDetail() {
   }, [id]);
 
   const loadSections = useCallback(async (paperId) => {
+    const requestId = ++sectionLoadRequestRef.current;
     try {
       const res = await api.get(`/api/papers/${paperId}/sections`);
+      if (requestId !== sectionLoadRequestRef.current) return;
       const data = res.data || [];
       setSections(data);
       setDraftSections(data);
       setConflictSectionId(null);
-      setOrderDirty(false);
-      // Fetch standard evaluations per section (structured output, system vs user isolation)
-      data.forEach(async (sec) => {
+      setSectionEvals({});
+      const evaluations = await Promise.all(data.map(async (sec) => {
         try {
           const r = await api.get(`/api/papers/${paperId}/sections/${sec.id}/standard-evaluation`);
-          if (r.data) setSectionEvals(prev => ({ ...prev, [String(sec.id)]: r.data }));
-        } catch {}
-      });
-    } catch { setSections([]); setDraftSections([]); setOrderDirty(false); }
+          return r.data ? [String(sec.id), r.data] : null;
+        } catch { return null; }
+      }));
+      if (requestId === sectionLoadRequestRef.current) {
+        setSectionEvals(Object.fromEntries(evaluations.filter(Boolean)));
+      }
+    } catch {
+      if (requestId === sectionLoadRequestRef.current) {
+        setSections([]);
+        setDraftSections([]);
+        setSectionEvals({});
+      }
+    }
   }, []);
 
   const runStandardCheck = async (sectionId) => {
     if (!selectedPaper) return;
     setEvaluatingSectionId(sectionId);
     try {
-      const { data } = await api.post(`/api/papers/${selectedPaper.id}/sections/${sectionId}/standard-evaluation`, {
-        requirements: stdRequirements,
-        passThreshold: stdThreshold
-      });
+      const { data } = await api.post(`/api/papers/${selectedPaper.id}/sections/${sectionId}/standard-evaluation`);
       setSectionEvals(prev => ({ ...prev, [String(sectionId)]: data }));
     } catch (err) {
-      const msg = err?.response?.data?.message || 'Evaluation failed';
-      setSectionEvals(prev => ({ ...prev, [String(sectionId)]: { status: 'SYSTEM_ERROR', errorMessage: msg } }));
+      alert(err?.response?.data?.message || t.standardEvaluationFailed);
     } finally { setEvaluatingSectionId(null); }
+  };
+
+  const saveSectionStandard = async (sectionId, config) => {
+    if (!selectedPaper) return false;
+    try {
+      const { data } = await api.put(
+        `/api/papers/${selectedPaper.id}/sections/${sectionId}/standard-evaluation/config`,
+        config,
+      );
+      setSectionEvals(prev => ({ ...prev, [String(sectionId)]: data }));
+      return true;
+    } catch (err) {
+      alert(err?.response?.data?.message || t.standardSaveFailed);
+      return false;
+    }
   };
 
   const loadFeedback = useCallback(async () => {
@@ -608,63 +624,38 @@ export default function ProjectDetail() {
     // reindex order in draft for display
     const reindexed = reordered.map((s, idx) => ({ ...s, sectionOrder: idx }));
     setDraftSections(reindexed);
-    setOrderDirty(true);
   };
 
-  // Single batch endpoint — replaces Promise.all N-transaction trap (Mandate 1) + also persists pending standards atomically
+  // Single batch endpoint — replaces Promise.all N-transaction trap.
   const handleSaveAllSections = async () => {
-    if (!selectedPaper || !anyDirty) return;
+    if (!selectedPaper || !anyDirty || pendingDelete) return;
     setSectionStructureSaving(true);
     setConflictSectionId(null);
     try {
-      if (sectionsDirty) {
-        const payload = {
-          sections: draftSections.map((s, idx) => ({
-            id: s.id,
-            sectionOrder: idx,
-            sectionTitle: s.sectionTitle,
-            assignedUserId: s.assignedUserId || null,
-            contentTex: s.contentTex,
-            expectedRevision: s.revision ?? s.optVersion ?? 0,
-          }))
-        };
-        const { data } = await api.put(`/api/papers/${selectedPaper.id}/sections/batch`, payload);
-        setSections(data || []);
-        setDraftSections(data || []);
-        setOrderDirty(false);
-      }
-      if (standardsDirty) {
-        // Persist each pending standard via config endpoint (no LLM, no SYSTEM_ERROR) — Save Changes also saves standard
-        for (const [secId, cfg] of Object.entries(pendingStandards)) {
-          try {
-            const { data } = await api.put(`/api/papers/${selectedPaper.id}/sections/${secId}/standard-evaluation/config`, {
-              requirements: cfg.requirements,
-              passThreshold: cfg.passThreshold,
-            });
-            setSectionEvals(prev => ({ ...prev, [String(secId)]: data }));
-          } catch (e) {
-            console.warn('Failed to save standard for', secId, e);
-          }
-        }
-        setPendingStandards({});
-      }
+      const payload = {
+        sections: draftSections.map((s, idx) => ({
+          id: s.id,
+          sectionOrder: idx,
+          sectionTitle: s.sectionTitle,
+          assignedUserId: s.assignedUserId || null,
+          contentTex: s.contentTex,
+          expectedRevision: s.revision ?? s.optVersion ?? null,
+        }))
+      };
+      const { data } = await api.put(`/api/papers/${selectedPaper.id}/sections/batch`, payload);
+      setSections(data || []);
+      setDraftSections(data || []);
     } catch (err) {
       const fieldErrors = err?.response?.data?.fieldErrors;
       const sid = fieldErrors?.sectionId || err?.response?.data?.details?.sectionId;
       if (err?.response?.status === 409 && sid) {
         setConflictSectionId(String(sid));
-        alert(`Conflict on section ${sid}: This section was modified by another user. Please refresh this specific section (Reload button). Your draft is preserved.`);
       } else {
         alert(err?.response?.data?.message || t.reorderSectionsFailed);
       }
     } finally {
       setSectionStructureSaving(false);
     }
-  };
-
-  const handleSaveSectionOrder = async () => {
-    // Deprecated path — now delegates to batch
-    return handleSaveAllSections();
   };
 
   const handleAddSection = async () => {
@@ -696,21 +687,33 @@ export default function ProjectDetail() {
 
   const handleDeleteSection = async (sectionId) => {
     if (!selectedPaper) return;
-    const section = sections.find(s => String(s.id) === String(sectionId));
+    const serverIndex = sections.findIndex(s => String(s.id) === String(sectionId));
+    const draftIndex = draftSections.findIndex(s => String(s.id) === String(sectionId));
+    const section = sections[serverIndex] || draftSections[draftIndex];
+    const draftSection = draftSections[draftIndex];
+    const restoreAt = (items, item, index) => {
+      if (!item || items.some(s => String(s.id) === String(item.id))) return items;
+      const next = [...items];
+      next.splice(Math.max(0, index), 0, item);
+      return next;
+    };
     setSections(prev => prev.filter(s => String(s.id) !== String(sectionId)));
+    setDraftSections(prev => prev.filter(s => String(s.id) !== String(sectionId)));
     startDelete({
       ...undoStrings,
-      entityName: section?.title || section?.type || sectionId,
+      entityName: section?.sectionTitle || sectionId,
       entityDetails: sectionId,
     }, async () => {
       try {
         await api.delete(`/api/papers/${selectedPaper.id}/sections/${sectionId}`);
       } catch (err) {
+        setSections(prev => restoreAt(prev, section, serverIndex));
+        setDraftSections(prev => restoreAt(prev, draftSection || section, draftIndex));
         alert(err?.response?.data?.message || t.deleteSectionFailed);
       }
-      await loadSections(selectedPaper.id);
     }, async () => {
-      await loadSections(selectedPaper.id);
+      setSections(prev => restoreAt(prev, section, serverIndex));
+      setDraftSections(prev => restoreAt(prev, draftSection || section, draftIndex));
     });
   };
 
@@ -753,7 +756,9 @@ export default function ProjectDetail() {
   const handleReloadConflictSection = async (sectionId) => {
     try {
       const { data } = await api.get(`/api/papers/${selectedPaper.id}/sections/${sectionId}/history`);
-      setDraftSections(prev => prev.map(s => String(s.id) === String(sectionId) ? { ...s, ...data, revision: data.revision ?? data.optVersion } : s));
+      const fresh = { ...data, revision: data.revision ?? data.optVersion };
+      setSections(prev => prev.map(s => String(s.id) === String(sectionId) ? { ...s, ...fresh } : s));
+      setDraftSections(prev => prev.map(s => String(s.id) === String(sectionId) ? { ...s, ...fresh } : s));
       setConflictSectionId(null);
     } catch { alert(t.operationFailed); }
   };
@@ -1147,20 +1152,21 @@ export default function ProjectDetail() {
                   )}
                   {selectedPaper && anyDirty && (
                     <button
+                      data-testid="save-section-changes"
                       onClick={handleSaveAllSections}
-                      disabled={sectionStructureSaving}
-                      title={sectionStructureLocked ? 'Structure locked — only unassign is allowed; other changes will be rejected' : undefined}
+                      disabled={sectionStructureSaving || !!pendingDelete}
+                      title={sectionStructureLocked ? t.sectionStructureLocked : undefined}
                       className="px-3 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Save Changes
+                      {t.saveSectionChanges}
                     </button>
                   )}
                   {selectedPaper && anyDirty && (
                     <button
-                      onClick={() => { setDraftSections(sections); setOrderDirty(false); setConflictSectionId(null); setPendingStandards({}); }}
+                      onClick={() => { setDraftSections(sections); setConflictSectionId(null); }}
                       className="px-3 py-1.5 bg-[var(--surface-tertiary)] text-[var(--text-secondary)] text-xs font-bold rounded-lg hover:opacity-80"
                     >
-                      Discard
+                      {t.discardSectionChanges}
                     </button>
                   )}
                 </div>
@@ -1211,7 +1217,6 @@ export default function ProjectDetail() {
                   projectReadOnly={projectReadOnly}
                   sectionStructureSaving={sectionStructureSaving}
                   sectionEvals={sectionEvals}
-                  pendingStandards={pendingStandards}
                   t={t}
                   ct={ct}
                   users={users}
@@ -1225,14 +1230,10 @@ export default function ProjectDetail() {
                   onDelete={handleDeleteSection}
                   onAssign={handleAssignSection}
                   onReloadConflict={handleReloadConflictSection}
-                  onAddSection={handleAddSection}
                   onDragEnd={handleDragEnd}
-                  onSaveAll={handleSaveAllSections}
-                  onDiscard={()=>{ setDraftSections(sections); setOrderDirty(false); setConflictSectionId(null); setPendingStandards({}); }}
-                  onConfigSave={(sid,cfg)=> {
-                    setSectionEvals(prev=>({...prev, [String(sid)]: {status:'STALE', requirements: cfg.requirements, passThreshold: cfg.passThreshold}}));
-                    setPendingStandards(prev=>({...prev, [String(sid)]: cfg}));
-                  }}
+                  onConfigSave={saveSectionStandard}
+                  onEvaluateStandard={runStandardCheck}
+                  evaluatingSectionId={evaluatingSectionId}
                 />
               )}
             </div>
@@ -1387,9 +1388,9 @@ export default function ProjectDetail() {
               )}
             </div>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-1 h-full overflow-y-auto">
-              <h2 className="mb-3 text-sm font-bold text-[var(--brand-foreground)]">Contribution Graph</h2>
-              <p className="mb-3 text-[10px] text-[var(--text-tertiary)]">Dynamic contribution graph</p>
-              <ContributionGraph buckets={contributionBuckets} />
+              <h2 className="mb-3 text-sm font-bold text-[var(--brand-foreground)]">{t.dailyEditHistory}</h2>
+              <p className="mb-3 text-[10px] text-[var(--text-tertiary)]">{t.contributionEvidenceNote}</p>
+              <ContributionGraph buckets={contributionBuckets} emptyLabel={t.noContributionData} ariaLabel={t.dailyEditHistory} />
             </div>
           </div>
         )}

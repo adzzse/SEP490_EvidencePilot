@@ -17,6 +17,7 @@ import java.util.UUID;
 @Getter
 @Setter
 public class SectionStandardEvaluation {
+    public static final String STATUS_CONFIGURED = "CONFIGURED";
     public static final String STATUS_PASSED = "PASSED";
     public static final String STATUS_FAILED = "FAILED";
     public static final String STATUS_SYSTEM_ERROR = "SYSTEM_ERROR";

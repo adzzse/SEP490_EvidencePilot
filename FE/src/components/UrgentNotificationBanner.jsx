@@ -1,33 +1,14 @@
-import { useEffect, useState } from 'react';
-import api from '../api.js';
-import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNotification } from '../context/NotificationContext';
 
 const URGENT_ACTION = 'ADMIN_BROADCAST_URGENT';
 
 export default function UrgentNotificationBanner() {
-  const { token } = useAuth();
   const { language } = useLanguage();
-  const [notification, setNotification] = useState(null);
-
-  const { notifications } = useNotification();
-  useEffect(() => {
-    const latest = (notifications || []).find(item => !item.read && item.actionType === URGENT_ACTION);
-    if (latest) {
-      setNotification(current => !current || latest.createdAt > current.createdAt ? latest : current);
-    } else {
-      setNotification(null);
-    }
-  }, [notifications]);
+  const { notifications, markRead } = useNotification();
+  const notification = notifications.find(item => !item.read && item.actionType === URGENT_ACTION);
 
   if (!notification) return null;
-
-  const dismiss = () => {
-    const id = notification.id;
-    setNotification(null);
-    api.patch(`/api/notifications/${id}/read`).catch(() => {});
-  };
 
   return (
     <div role="alert" className="fixed inset-x-0 top-0 z-[100] flex items-center justify-between gap-4 bg-rose-600 px-4 py-3 text-white shadow-lg sm:px-6">
@@ -37,7 +18,7 @@ export default function UrgentNotificationBanner() {
         </span>
         {notification.message}
       </p>
-      <button type="button" onClick={dismiss} className="shrink-0 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-bold hover:bg-white/25" aria-label={language === 'vi' ? 'Đóng thông báo khẩn' : 'Dismiss urgent notification'}>
+      <button type="button" onClick={() => markRead(notification.id)} className="shrink-0 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-bold hover:bg-white/25" aria-label={language === 'vi' ? 'Đóng thông báo khẩn' : 'Dismiss urgent notification'}>
         {language === 'vi' ? 'Đóng' : 'Dismiss'}
       </button>
     </div>

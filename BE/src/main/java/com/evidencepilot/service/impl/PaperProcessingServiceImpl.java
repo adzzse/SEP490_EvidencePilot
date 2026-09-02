@@ -17,6 +17,7 @@ import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
+import com.evidencepilot.repository.SectionStandardEvaluationRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.AuditService;
@@ -40,6 +41,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -103,7 +105,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
     private final TexArchiveBuilder texArchiveBuilder;
     private final EvidenceTraceService evidenceTraceService;
     private final AuditService auditService;
-    private final org.springframework.beans.factory.ObjectProvider<com.evidencepilot.repository.SectionStandardEvaluationRepository> sectionStandardEvaluationRepositoryProvider;
+    private final SectionStandardEvaluationRepository sectionStandardEvaluationRepository;
 
     @Override
     public List<PaperSectionResponse> getPaperSections(UUID documentId) {
@@ -758,20 +760,17 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         recordContentEdit(
                 section.getDocument().getProject(), saved, editor,
                 previousContent, saved.getContentTex());
-        // Any content change invalidates prior Standard evaluation → STALE
-        try {
-            var repo = sectionStandardEvaluationRepositoryProvider.getIfAvailable();
-            if (repo != null) {
-                var opt = repo.findTopBySectionIdOrderByUpdatedAtDesc(saved.getId());
-                if (opt.isPresent()) {
-                    var eval = opt.get();
+        markSectionStandardStale(saved.getId());
+        return saved;
+    }
+
+    private void markSectionStandardStale(UUID sectionId) {
+        sectionStandardEvaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(sectionId)
+                .ifPresent(eval -> {
                     eval.setStatus(com.evidencepilot.model.SectionStandardEvaluation.STATUS_STALE);
                     eval.setUpdatedAt(LocalDateTime.now());
-                    repo.save(eval);
-                }
-            }
-        } catch (Exception ignored) {}
-        return saved;
+                    sectionStandardEvaluationRepository.save(eval);
+                });
     }
 
     private void requireExpectedRevision(PaperSection section, Long expectedRevision) {
@@ -920,99 +919,135 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         }
         Document document = requireDocumentAccess(documentId);
         Project project = document.getProject();
-        // Single transactional boundary for entire draft — replaces Promise.all N-transaction trap.
-        // Validate all items first (fail-fast, no partial writes).
-        Map<UUID, PaperSection> persistedById = new java.util.HashMap<>();
-        for (PaperSection s : paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId)) {
-            persistedById.put(s.getId(), s);
-        }
-        // Check for unknown ids
+        List<PaperSection> persisted = paperSectionRepository
+                .findByDocumentIdOrderBySectionOrderAsc(documentId).stream()
+                .filter(PaperSection::isActive)
+                .toList();
+        Map<UUID, PaperSection> persistedById = new HashMap<>();
+        persisted.forEach(section -> persistedById.put(section.getId(), section));
+        Set<UUID> requestedIds = new HashSet<>();
+        boolean[] requestedOrders = new boolean[items.size()];
         for (var item : items) {
             if (!persistedById.containsKey(item.id())) {
                 throw new ResourceNotFoundException(item.id(), "PaperSection");
             }
+            if (!requestedIds.add(item.id())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Batch contains duplicate section id: " + item.id());
+            }
+            if (item.sectionOrder() == null || item.sectionOrder() < 0
+                    || item.sectionOrder() >= items.size() || requestedOrders[item.sectionOrder()]) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Section orders must be unique and contiguous from 0");
+            }
+            requestedOrders[item.sectionOrder()] = true;
+            if (item.sectionTitle() == null || item.sectionTitle().isBlank()
+                    || item.sectionTitle().trim().length() > 255) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Section title must contain 1 to 255 characters");
+            }
+            if (item.expectedRevision() == null || item.expectedRevision() < 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "SECTION_REVISION_REQUIRED: expectedRevision must be zero or greater for " + item.id());
+            }
         }
-        // Detect structural vs assign vs content — sensitive lock handling
-        // Structural (order/title) must be blocked when any section assigned; assign/unassign must be allowed to unlock
+        if (requestedIds.size() != persistedById.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Batch must contain every active section exactly once");
+        }
+
         boolean hasStructuralChange = false;
         boolean hasAssignChange = false;
         for (var item : items) {
             PaperSection cur = persistedById.get(item.id());
-            if (item.sectionOrder() != null && !item.sectionOrder().equals(cur.getSectionOrder())) hasStructuralChange = true;
-            if (item.sectionTitle() != null && !item.sectionTitle().trim().isEmpty() && !item.sectionTitle().trim().equals(cur.getSectionTitle())) hasStructuralChange = true;
+            if (!item.sectionOrder().equals(cur.getSectionOrder())) hasStructuralChange = true;
+            if (!item.sectionTitle().trim().equals(cur.getSectionTitle())) hasStructuralChange = true;
             UUID curAssigned = cur.getAssignedUser() != null ? cur.getAssignedUser().getId() : null;
             if (!java.util.Objects.equals(item.assignedUserId(), curAssigned)) hasAssignChange = true;
         }
         if (hasStructuralChange) {
             requireInstructorDocumentWriteAccess(documentId);
-            requireSectionStructureUnlocked(documentId);
+            boolean currentlyLocked = persisted.stream().anyMatch(s -> s.getAssignedUser() != null);
+            boolean remainsLocked = items.stream().anyMatch(item -> item.assignedUserId() != null);
+            if (currentlyLocked && remainsLocked) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Section structure is locked while one or more sections are assigned. "
+                                + "Unassign all sections before making structural changes.");
+            }
         } else if (hasAssignChange) {
-            // Assign/unassign is allowed even when locked — it's the unlock operation itself (sensitive lock careful)
             requireInstructorDocumentWriteAccess(documentId);
         } else {
             requireDocumentWriteAccess(documentId);
         }
-        // Validate optimistic locking for every item before mutating
+
         for (var item : items) {
             PaperSection cur = persistedById.get(item.id());
-            if (item.expectedRevision() == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SECTION_REVISION_REQUIRED: expectedRevision missing for " + item.id());
-            }
             if (!java.util.Objects.equals(cur.getOptVersion(), item.expectedRevision())) {
                 throw new com.evidencepilot.exception.SectionConflictException(item.id(), item.expectedRevision(), cur.getOptVersion());
             }
         }
-        // Validate assignment targets exist and are students in project
+
+        Map<UUID, User> assignees = new HashMap<>();
         for (var item : items) {
-            if (item.assignedUserId() != null) {
+            PaperSection section = persistedById.get(item.id());
+            UUID currentAssigneeId = section.getAssignedUser() != null ? section.getAssignedUser().getId() : null;
+            if (item.assignedUserId() != null
+                    && !Objects.equals(item.assignedUserId(), currentAssigneeId)
+                    && !assignees.containsKey(item.assignedUserId())) {
                 User assignee = userRepository.findById(item.assignedUserId())
                         .orElseThrow(() -> new ResourceNotFoundException(item.assignedUserId(), "User"));
                 if (assignee.getRole() != com.evidencepilot.model.enums.UserRole.STUDENT) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sections can only be assigned to students.");
                 }
                 currentUserService.requireProjectAccess(assignee, project);
+                assignees.put(assignee.getId(), assignee);
             }
         }
         User currentUser = currentUserService.requireCurrentUser();
-        List<PaperSection> toSave = new java.util.ArrayList<>();
         for (var item : items) {
             PaperSection section = persistedById.get(item.id());
-            // content change
-            if (item.contentTex() != null && !java.util.Objects.equals(section.getContentTex(), item.contentTex())) {
+            if (item.contentTex() != null && !Objects.equals(section.getContentTex(), item.contentTex())) {
                 currentUserService.requireSectionContentWriteAccess(currentUser, section);
+            }
+        }
+
+        List<PaperSection> toSave = new ArrayList<>();
+        for (var item : items) {
+            PaperSection section = persistedById.get(item.id());
+            boolean changed = false;
+            if (item.contentTex() != null && !Objects.equals(section.getContentTex(), item.contentTex())) {
                 section.setPreviousContentTex(section.getContentTex());
                 section.setContentTex(item.contentTex());
                 section.setContentMdCache(null);
                 section.setVersion(section.getVersion() == null ? 1 : section.getVersion() + 1);
-                section.setUpdatedAt(LocalDateTime.now());
                 advanceProjectStatusOnStudentContent(project, section, currentUser);
                 recordContentEdit(project, section, currentUser, section.getPreviousContentTex(), section.getContentTex());
                 evidenceTraceService.stampStaleOnContentChanged(section.getId(), section.getContentTex(), section.getVersion());
+                markSectionStandardStale(section.getId());
+                changed = true;
             }
-            if (item.sectionTitle() != null && !item.sectionTitle().trim().isEmpty()) {
+            if (!item.sectionTitle().trim().equals(section.getSectionTitle())) {
                 section.setSectionTitle(item.sectionTitle().trim());
+                changed = true;
             }
-            if (item.sectionOrder() != null) {
+            if (!item.sectionOrder().equals(section.getSectionOrder())) {
                 section.setSectionOrder(item.sectionOrder());
+                changed = true;
             }
-            if (item.assignedUserId() != null) {
-                User u = userRepository.findById(item.assignedUserId()).orElse(null);
-                section.setAssignedUser(u);
-            } else if (item.assignedUserId() == null && persistedById.get(item.id()).getAssignedUser() != null) {
-                // explicit unassign only if caller sent null and original had value — distinguish via presence check:
-                // For batch we treat null as unassign if it differs from current
-                PaperSection cur = persistedById.get(item.id());
-                // Only unassign when the batch item explicitly has null and caller intended it — we check via item.assignedUserId()==null and item had been non-null before batch detection above handled it.
-                // To keep API simple, null means unassign.
-                section.setAssignedUser(null);
+            UUID currentAssigneeId = section.getAssignedUser() != null ? section.getAssignedUser().getId() : null;
+            if (!Objects.equals(item.assignedUserId(), currentAssigneeId)) {
+                section.setAssignedUser(item.assignedUserId() == null ? null : assignees.get(item.assignedUserId()));
+                changed = true;
             }
-            section.setUpdatedAt(LocalDateTime.now());
-            toSave.add(section);
+            if (changed) {
+                section.setUpdatedAt(LocalDateTime.now());
+                toSave.add(section);
+            }
         }
-        // Single flush — one transaction
-        paperSectionRepository.saveAll(toSave);
-        paperSectionRepository.flush();
-        // Return fresh sorted list
+        if (!toSave.isEmpty()) {
+            paperSectionRepository.saveAll(toSave);
+            paperSectionRepository.flush();
+        }
         return paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId).stream()
                 .filter(PaperSection::isActive)
                 .map(PaperSectionResponse::from)

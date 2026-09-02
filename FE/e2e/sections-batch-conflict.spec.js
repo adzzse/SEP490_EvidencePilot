@@ -1,45 +1,34 @@
 import { test, expect } from '@playwright/test';
 
-/**
- * E2E: 409 Conflict race in Sections batch update
- * - User A holds draft (rename + reorder) -> Save Changes is single PUT /papers/{docId}/sections/batch
- * - User B bumps opt_version on same section -> A save should 409 with fieldErrors.sectionId
- * - UI must highlight row ring-amber-400 and preserve draftSections (no wipe)
- */
-test('batch 409 preserves draft and highlights conflict', async ({ page, request }) => {
-  // Assumes seeded project; use API to get real ids if available
-  // Intercept batch endpoint
+const instructorEmail = process.env.E2E_INSTRUCTOR_EMAIL;
+const instructorPassword = process.env.E2E_INSTRUCTOR_PASSWORD;
+const projectId = process.env.E2E_PROJECT_ID;
+
+test.skip(!instructorEmail || !instructorPassword || !projectId,
+  'Set E2E_INSTRUCTOR_EMAIL, E2E_INSTRUCTOR_PASSWORD, and E2E_PROJECT_ID for a project with an unlocked section.');
+
+test('batch 409 preserves draft and highlights conflict', async ({ page }) => {
   await page.goto('/login');
-  // Login as instructor (adjust credentials to seed)
-  await page.getByPlaceholder('Email').fill('instructor@example.com');
-  await page.getByPlaceholder('Password').fill('password');
+  await page.locator('input[name="email"]').fill(instructorEmail);
+  await page.locator('input[name="passwordHash"]').fill(instructorPassword);
   await page.getByRole('button', { name: /sign in/i }).click();
-  await expect(page).toHaveURL(/instructor\/projects/);
+  await expect(page).toHaveURL(/instructor\//);
+  await page.goto(`/instructor/projects/${projectId}`);
+  await page.locator('#tab-sections').click();
 
-  // Open first project -> Sections tab
-  await page.getByRole('link', { name: /Project/ }).first().click();
-  await page.getByRole('button', { name: 'Sections' }).click();
+  const firstRow = page.locator('[data-testid^="section-row-"]').first();
+  await expect(firstRow).toBeVisible({ timeout: 10_000 });
+  const firstId = (await firstRow.getAttribute('data-testid')).replace('section-row-', '');
 
-  // Capture first section row and its id
-  const firstRow = page.locator('[data-testid^="section-row-"]').first().or(page.locator('.ring-amber-400').first());
-  // Fallback: get draggable rows
-  const rows = page.locator('[data-draggable-id]');
-  await expect(rows.first()).toBeVisible({ timeout: 10000 });
-  const firstId = await rows.first().getAttribute('data-draggable-id');
-
-  // Hold draft: rename first section via draft (click rename)
-  await page.getByRole('button', { name: 'Rename' }).first().click();
-  const input = page.locator('input').first();
-  await input.fill('Draft Title ' + Date.now());
-  await page.keyboard.press('Enter');
-  // Save Changes should become enabled
-  const saveBtn = page.getByRole('button', { name: 'Save Changes' });
+  const draftTitle = `Draft Title ${Date.now()}`;
+  await page.getByTestId(`rename-section-${firstId}`).click();
+  const input = page.getByTestId(`section-title-input-${firstId}`);
+  await input.fill(draftTitle);
+  await input.press('Enter');
+  const saveBtn = page.getByTestId('save-section-changes');
   await expect(saveBtn).toBeEnabled();
 
-  // Intercept batch to inject 409 on next call
   await page.route('**/api/papers/*/sections/batch', async route => {
-    const body = await route.request().postDataJSON().catch(() => null);
-    // Return 409 with fieldErrors.sectionId for first section
     await route.fulfill({
       status: 409,
       contentType: 'application/json',
@@ -53,24 +42,11 @@ test('batch 409 preserves draft and highlights conflict', async ({ page, request
     });
   });
 
-  // Capture draft title before save
-  const draftTitle = await input.inputValue().catch(() => 'Draft Title');
-
   await saveBtn.click();
 
-  // Assert conflict highlight and preserved draft
-  const conflictRow = page.locator('.ring-amber-400');
-  await expect(conflictRow).toBeVisible();
-  // Draft should still contain our rename (not reverted)
-  await expect(page.locator('text=' + draftTitle.slice(0, 10))).toBeVisible();
-
-  // Reload button should appear on conflict row
-  const reloadBtn = page.getByRole('button', { name: 'Reload' });
-  await expect(reloadBtn).toBeVisible();
-
-  // Banner
-  await expect(page.getByText(/modified by another user/)).toBeVisible();
-
-  // Ensure we did NOT reload page or wipe draft (Save Changes still visible)
+  await expect(firstRow).toHaveClass(/ring-amber-400/);
+  await expect(firstRow).toContainText(draftTitle);
+  await expect(page.getByTestId(`reload-section-${firstId}`)).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText(/modified by another user|đã được người khác sửa/i);
   await expect(saveBtn).toBeVisible();
 });

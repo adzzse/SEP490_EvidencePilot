@@ -11,6 +11,7 @@
     "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.3.1",
     "@vitejs/plugin-react": "^6.0.2",
     "tailwindcss": "^4.3.1",

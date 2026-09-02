@@ -1,11 +1,13 @@
 package com.evidencepilot.controller;
 
+import com.evidencepilot.client.openalex.DoiUtils;
 import com.evidencepilot.dto.request.DoiBatchIngestionRequest;
 import com.evidencepilot.dto.request.DoiIngestionRequest;
 import com.evidencepilot.dto.request.DoiLookupRequest;
 import com.evidencepilot.dto.response.BatchIngestResponse;
 import com.evidencepilot.dto.response.DocumentResponse;
 import com.evidencepilot.dto.response.OpenAlexPreview;
+import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.service.OpenAlexIngestionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -20,9 +22,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.web.server.ResponseStatusException;
+
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/documents")
@@ -58,19 +64,36 @@ public class OpenAlexController {
     }
 
     @Operation(summary = "Batch ingest by DOIs",
-               description = "Single-request batch: dedupes DOIs and processes each sequentially in a transactional loop. "
+               description = "Single-request batch: dedupes DOIs and processes each sequentially. "
                        + "Frontend sends exactly ONE request; backend iterates (no Promise.allSettled spam). "
                        + "Partial failures return 207 multi-status.")
-    @ApiResponse(responseCode = "200", description = "All DOIs accepted")
-    @ApiResponse(responseCode = "207", description = "Partial failure — succeeded list size < requested, failed DOIs omitted")
+    @ApiResponse(responseCode = "202", description = "All DOIs accepted")
+    @ApiResponse(responseCode = "207", description = "Partial failure with succeeded documents and structured failed DOI entries")
     @PostMapping("/ingest/doi/batch")
     public ResponseEntity<BatchIngestResponse> ingestBatch(@Valid @RequestBody DoiBatchIngestionRequest request) {
-        List<String> deduped = new ArrayList<>(new LinkedHashSet<>(request.dois().stream().map(String::trim).filter(s -> !s.isEmpty()).toList()));
         List<DocumentResponse> succeeded = new ArrayList<>();
         List<BatchIngestResponse.BatchFailure> failed = new ArrayList<>();
-        for (String doi : deduped) {
+        Map<String, String> deduped = new LinkedHashMap<>();
+        for (String rawDoi : request.dois()) {
+            String doi = DoiUtils.normalize(rawDoi);
+            if (!DoiUtils.isValid(doi)) {
+                failed.add(new BatchIngestResponse.BatchFailure(rawDoi, "Invalid DOI", "FORMAT"));
+            } else {
+                deduped.putIfAbsent(doi.toLowerCase(Locale.ROOT), doi);
+            }
+        }
+        for (String doi : deduped.values()) {
             try {
                 succeeded.add(ingestionService.ingestByDoi(request.projectId(), request.collectionId(), doi));
+            } catch (ResourceNotFoundException e) {
+                throw e;
+            } catch (ResponseStatusException e) {
+                if (e.getStatusCode().value() == 401
+                        || e.getStatusCode().value() == 403
+                        || e.getStatusCode().value() == 409) {
+                    throw e;
+                }
+                failed.add(new BatchIngestResponse.BatchFailure(doi, e.getReason(), resolveCode(e)));
             } catch (Exception e) {
                 failed.add(new BatchIngestResponse.BatchFailure(doi, e.getMessage(), resolveCode(e)));
             }
@@ -78,14 +101,16 @@ public class OpenAlexController {
         if (!failed.isEmpty()) {
             return ResponseEntity.status(HttpStatus.MULTI_STATUS).body(new BatchIngestResponse(succeeded, failed));
         }
-        return ResponseEntity.ok(new BatchIngestResponse(succeeded, List.of()));
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(new BatchIngestResponse(succeeded, List.of()));
     }
 
     private String resolveCode(Exception e) {
-        String message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-        if (message.contains("format") || message.contains("invalid DOI")) return "FORMAT";
+        String message = (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())
+                .toLowerCase(Locale.ROOT);
+        if (message.contains("format") || message.contains("invalid doi")) return "FORMAT";
         if (message.contains("not found") || message.contains("404")) return "NOT_FOUND";
-        if (message.contains("no PDF") || message.contains("PDF")) return "NO_PDF";
+        if (message.contains("no pdf") || message.contains("pdf")) return "NO_PDF";
         if (message.contains("rate limit") || message.contains("429")) return "RATE_LIMIT";
         if (message.contains("network") || message.contains("timeout") || message.contains("connect")) return "NETWORK";
         return "UNKNOWN";

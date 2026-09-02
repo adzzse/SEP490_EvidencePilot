@@ -13,7 +13,6 @@ export default function SectionManager({
   projectReadOnly,
   sectionStructureSaving,
   sectionEvals,
-  pendingStandards,
   t,
   ct,
   users,
@@ -27,17 +26,13 @@ export default function SectionManager({
   onDelete,
   onAssign,
   onReloadConflict,
-  onAddSection,
   onDragEnd,
-  onSaveAll,
-  onDiscard,
-  onConfigSave, // (sectionId, {requirements, passThreshold}) => void
+  onConfigSave,
+  onEvaluateStandard,
+  evaluatingSectionId,
 }) {
   const [configSectionId, setConfigSectionId] = useState(null);
-  const draftDirty = JSON.stringify(sections) !== JSON.stringify(draftSections);
-  const orderDirty = draftDirty;
-  const standardsDirty = Object.keys(pendingStandards || {}).length > 0;
-  const anyDirty = draftDirty || standardsDirty;
+  const anyDirty = JSON.stringify(sections) !== JSON.stringify(draftSections);
   const configSection = displaySections.find(s => String(s.id) === String(configSectionId)) || null;
   const configEval = configSection ? sectionEvals[String(configSection.id)] : null;
 
@@ -49,12 +44,11 @@ export default function SectionManager({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 space-y-3 h-full">
-      {/* Global banners — SYSTEM_ERROR / FAILED flagged (STALE removed for instructor) */}
-      {(Object.values(sectionEvals).some(v=>v.status==='SYSTEM_ERROR') || Object.values(sectionEvals).some(v=>v.status==='FAILED')) && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">This submission contains sections that bypassed automated checks due to system errors or failures. Manual review required.</div>
+      {displaySections.some(section => sectionEvals[String(section.id)]?.status !== 'PASSED') && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">{t.standardAttentionRequired}</div>
       )}
       {conflictSectionId && (
-        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 shrink-0">Conflict: section {conflictSectionId} was modified by another user. Your draft is preserved — click “Reload this section” on the highlighted row.</div>
+        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 shrink-0" role="alert">{t.sectionConflict}</div>
       )}
 
       {displaySections.length === 0 ? (
@@ -84,6 +78,8 @@ export default function SectionManager({
                     onReloadConflict={onReloadConflict}
                     evaluation={sectionEvals[String(s.id)]}
                     onConfigStandard={(sid)=> setConfigSectionId(sid)}
+                    onEvaluateStandard={onEvaluateStandard}
+                    isEvaluating={String(s.id) === String(evaluatingSectionId)}
                     projectMembers={projectMembers}
                     users={users}
                     t={t}
@@ -96,7 +92,7 @@ export default function SectionManager({
           </Droppable>
         </DragDropContext>
       )}
-      {anyDirty && <p className="mt-1 text-[10px] italic text-amber-700 shrink-0">You have unsaved changes — click Save Changes to persist (single atomic batch).</p>}
+      {anyDirty && <p className="mt-1 text-[10px] italic text-amber-700 shrink-0">{t.sectionsUnsaved}</p>}
 
       <StandardConfigModal
         open={!!configSection}
@@ -105,7 +101,9 @@ export default function SectionManager({
         initialThreshold={configEval?.passThreshold ?? 70}
         isLocked={sectionStructureLocked}
         onClose={()=> setConfigSectionId(null)}
-        onSave={(cfg)=> { onConfigSave(configSection.id, cfg); setConfigSectionId(null); }}
+        onSave={async (cfg)=> {
+          if (await onConfigSave(configSection.id, cfg)) setConfigSectionId(null);
+        }}
         t={t}
         ct={ct}
       />

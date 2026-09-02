@@ -192,8 +192,6 @@ export default function WorkspaceLayout() {
   const [selectedSectionId, setSelectedSectionId] = useState('');
   const [loadErrors, setLoadErrors] = useState([]);
   const [submittingReview, setSubmittingReview] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [sectionTraces, setSectionTraces] = useState([]);
   const [updatingTraceIds, setUpdatingTraceIds] = useState([]);
@@ -650,29 +648,21 @@ export default function WorkspaceLayout() {
       .catch(() => setSections([]));
   }, [selectedPaper, user]);
 
-  const { notifications: ctxNotifications, unreadCount: ctxUnreadCount } = useNotification();
-  useEffect(() => {
-    setNotifications(ctxNotifications);
-    setUnreadCount(ctxUnreadCount);
-  }, [ctxNotifications, ctxUnreadCount]);
+  const { notifications, unreadCount, markRead } = useNotification();
 
   useEffect(() => {
     // Gated via NotificationContext — 503 will not spam, WS uses exponential backoff
     // Local handling for EXPORT_READY toast remains
-    if (ctxNotifications.length === 0) return;
-    const latest = ctxNotifications[0];
+    if (notifications.length === 0) return;
+    const latest = notifications[0];
     if (latest?.actionType === 'EXPORT_READY' && project) {
       showToast(t('exportReady'));
       fetchExports();
     }
-  }, [ctxNotifications]);
+  }, [notifications]);
 
   const handleMarkNotificationRead = async (id) => {
-    try {
-      await api.patch(`/api/notifications/${id}/read`);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-      setUnreadCount(c => Math.max(0, c - 1));
-    } catch { showToast(t('markNotificationFailed')); }
+    if (!await markRead(id)) showToast(t('markNotificationFailed'));
   };
 
   const handleExportTexArchive = async () => {

@@ -5,6 +5,7 @@ const subscribers = new Set();
 let client = null;
 let activeToken = null;
 let subscription = null;
+let reconnectAttempts = 0;
 
 function disconnect() {
   subscription?.unsubscribe();
@@ -12,10 +13,10 @@ function disconnect() {
   const current = client;
   client = null;
   activeToken = null;
+  reconnectAttempts = 0;
   current?.deactivate();
 }
 
-let reconnectAttempts = 0;
 function getReconnectDelay() {
   return Math.min(30000, 5000 * Math.pow(2, reconnectAttempts));
 }
@@ -32,6 +33,7 @@ function connect(token) {
     onConnect: () => {
       reconnectAttempts = 0;
       if (client !== nextClient) return;
+      nextClient.reconnectDelay = getReconnectDelay();
       subscription = nextClient.subscribe('/user/queue/notifications', message => {
         try {
           const notification = JSON.parse(message.body);
@@ -41,10 +43,9 @@ function connect(token) {
         }
       });
     },
-    onStompError: () => {
-      reconnectAttempts++;
-    },
     onWebSocketClose: () => {
+      if (client !== nextClient) return;
+      nextClient.reconnectDelay = getReconnectDelay();
       reconnectAttempts++;
     },
     reconnectDelay: delay,

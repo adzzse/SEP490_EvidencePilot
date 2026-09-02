@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppHeader from '../../components/AppHeader.jsx';
 import api from '../../api.js';
@@ -26,38 +26,26 @@ export default function ProjectManagement() {
   const [deletingId, setDeletingId] = useState(null);
 
   const [search, setSearch] = useState('');
-  const abortControllerRef = useRef(null);
-  const debounceRef = useRef(null);
 
-  const fetchProjects = useCallback(async () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
+  const fetchProjects = useCallback(async (signal) => {
     setLoading(true);
-    try { 
-      const r = await api.get(`/api/projects?page=${page}&size=10${search ? `&search=${encodeURIComponent(search)}` : ''}`, {
-        signal: abortControllerRef.current.signal
-      }); 
-      setProjects(r.data.content || []); 
-      setTotal(r.data.totalElements || 0); 
-    } catch (err) { 
+    try {
+      const r = await api.get('/api/projects', { params: { page, size: 10, q: search || undefined }, signal });
+      setProjects(r.data.content || []);
+      setTotal(r.data.totalElements || 0);
+    } catch (err) {
       if (err?.name !== 'CanceledError' && err?.code !== 'ERR_CANCELED') {
-        setProjects([]); 
+        setProjects([]);
       }
-    } finally { 
-      if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
-        setLoading(false); 
-      }
+    } finally {
+      if (!signal?.aborted) setLoading(false);
     }
   }, [page, search]);
 
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      fetchProjects();
-    }, 300);
-    return () => clearTimeout(debounceRef.current);
+    const controller = new AbortController();
+    const timer = setTimeout(() => fetchProjects(controller.signal), 300);
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [fetchProjects]);
 
   const handleCreate = async () => {
@@ -93,15 +81,16 @@ export default function ProjectManagement() {
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary) font-sans">
       <AppHeader />
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-        <div className="flex justify-between items-center gap-4 mb-6">
+        <div className="flex flex-col justify-between gap-4 mb-6 sm:flex-row sm:items-center">
           <h1 className="text-2xl font-black text-(--brand-foreground)">{t.projects} ({total})</h1>
-          <div className="flex items-center gap-3">
+          <div className="flex w-full items-center gap-3 sm:w-auto">
             <input
               type="text"
               placeholder={ct.search || 'Search...'}
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-              className="border border-(--border) bg-(--surface) text-(--text-primary) rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-(--focus)"
+              aria-label={ct.search || 'Search'}
+              className="min-w-0 flex-1 border border-(--border) bg-(--surface) text-(--text-primary) rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-(--focus) sm:w-64"
             />
             <button onClick={() => setShowCreate(true)} className="px-4 py-2 bg-(--brand) text-(--on-brand) font-bold text-xs rounded-xl hover:bg-(--brand-hover) transition-colors flex items-center gap-1 shrink-0">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
@@ -135,7 +124,9 @@ export default function ProjectManagement() {
                             {p.memberCount || 0} {t.members || 'Members'}
                           </p>
                           <p className="text-[10px] text-(--text-tertiary)">
-                            {t.lastUpdated || 'Last updated'}: {new Date(p.updatedAt || p.createdAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US')}
+                            {t.lastUpdated}: {p.updatedAt || p.createdAt
+                              ? new Date(p.updatedAt || p.createdAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US')
+                              : '—'}
                           </p>
                         </div>
                       </div>
@@ -144,10 +135,10 @@ export default function ProjectManagement() {
                   <StatusBadge status={p.status} />
                   <div className="flex flex-wrap gap-1 sm:justify-end" onClick={e => e.stopPropagation()}>
                     <button onClick={() => navigate(`/instructor/projects/${p.id}`)} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t.detail}</button>
-                    <button onClick={() => { setEditId(p.id); setEditTitle(p.title); }} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{ct.edit}</button>
-                    {p.status === 'ACTIVE' && <button onClick={() => handlePatch(p.id, 'archive')} className="text-xs text-amber-600 hover:text-amber-800 font-bold px-2 py-1.5">{t.archive}</button>}
+                    {!['APPROVED', 'ARCHIVED'].includes(p.status) && <button onClick={() => { setEditId(p.id); setEditTitle(p.title); }} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{ct.edit}</button>}
+                    {p.status === 'APPROVED' && <button onClick={() => handlePatch(p.id, 'archive')} className="text-xs text-amber-600 hover:text-amber-800 font-bold px-2 py-1.5">{t.archive}</button>}
                     {p.status === 'ARCHIVED' && <button onClick={() => handlePatch(p.id, 'unarchive')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t.unarchive}</button>}
-                    {p.status === 'ACTIVE' && <button onClick={() => handlePatch(p.id, 'complete')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t.complete}</button>}
+                    {['IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'RETURNED'].includes(p.status) && <button onClick={() => handlePatch(p.id, 'complete')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t.complete}</button>}
                     <DeleteConfirm
                       message={t.deleteProjectConfirm}
                       onConfirm={() => handleDelete(p.id)}

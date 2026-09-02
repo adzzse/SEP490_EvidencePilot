@@ -20,10 +20,8 @@ public class SectionStandardController {
     @PostMapping
     public ResponseEntity<SectionStandardEvaluationResponse> evaluate(
             @PathVariable UUID documentId,
-            @PathVariable UUID sectionId,
-            @Valid @RequestBody SectionStandardEvaluateRequest request) {
-        var res = sectionStandardService.evaluate(documentId, sectionId,
-                request.requirements(), request.passThreshold() == null ? 70 : request.passThreshold());
+            @PathVariable UUID sectionId) {
+        var res = sectionStandardService.evaluate(documentId, sectionId);
         return ResponseEntity.ok(res);
     }
 
@@ -41,7 +39,7 @@ public class SectionStandardController {
     public ResponseEntity<SectionStandardEvaluationResponse> latest(
             @PathVariable UUID documentId,
             @PathVariable UUID sectionId) {
-        return sectionStandardService.latest(sectionId)
+        return sectionStandardService.latest(documentId, sectionId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.noContent().build());
     }

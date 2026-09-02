@@ -20,6 +20,8 @@ export default function SectionRow({
   onReloadConflict,
   evaluation,
   onConfigStandard,
+  onEvaluateStandard,
+  isEvaluating,
   projectMembers,
   users,
   t,
@@ -31,10 +33,11 @@ export default function SectionRow({
         <div
           ref={dragProvided.innerRef}
           {...dragProvided.draggableProps}
-          className={`flex items-center justify-between gap-3 rounded-lg px-3 py-3 text-xs sm:px-4 ${isConflict ? 'ring-2 ring-amber-400 bg-amber-50 border border-amber-300' : snapshot.isDragging ? 'border border-indigo-200 bg-[var(--brand-soft)] shadow-lg' : 'bg-[var(--surface-secondary)]'
+          data-testid={`section-row-${s.id}`}
+          className={`flex flex-col items-stretch justify-between gap-3 rounded-lg px-3 py-3 text-xs sm:flex-row sm:items-center sm:px-4 ${isConflict ? 'ring-2 ring-amber-400 bg-amber-50 border border-amber-300' : snapshot.isDragging ? 'border border-indigo-200 bg-[var(--brand-soft)] shadow-lg' : 'bg-[var(--surface-secondary)]'
             }`}
         >
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
             <span
               {...dragProvided.dragHandleProps}
               className={`text-[var(--text-tertiary)] ${isLocked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}`}
@@ -46,6 +49,7 @@ export default function SectionRow({
               <div className="flex items-center gap-1">
                 <input
                   autoFocus
+                  data-testid={`section-title-input-${s.id}`}
                   value={editingTitle}
                   onChange={e => onEditingChange(e.target.value)}
                   onKeyDown={e => {
@@ -61,6 +65,18 @@ export default function SectionRow({
               <span className="font-medium truncate">{s.sectionTitle}</span>
             )}
             {s.version > 1 && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">v{s.version}</span>}
+            {evaluation?.status && (
+              <span
+                className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
+                  evaluation.status === 'PASSED' ? 'bg-emerald-100 text-emerald-700'
+                    : evaluation.status === 'FAILED' || evaluation.status === 'SYSTEM_ERROR' ? 'bg-rose-100 text-rose-700'
+                      : 'bg-amber-100 text-amber-700'
+                }`}
+                title={evaluation.errorMessage || undefined}
+              >
+                {evaluation.status}{evaluation.scorePercent != null ? ` · ${evaluation.scorePercent}%` : ''}
+              </span>
+            )}
             {s.assignedUserId && (
               <span className="flex items-center gap-1 rounded bg-[var(--surface-tertiary)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--text-secondary)]">
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3 w-3 fill-none stroke-current" strokeWidth="2"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
@@ -81,16 +97,16 @@ export default function SectionRow({
               </button>
             )}
           </div>
-          <div className="flex flex-col items-end gap-1">
+          <div className="flex w-full flex-col items-stretch gap-1 sm:w-auto sm:items-end">
             <div className="flex items-center gap-1">
               {!isLocked && !isEditing && (
-                <button onClick={() => onStartRename(s)} disabled={isSaving} className="rounded p-1 text-[var(--text-tertiary)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-foreground)] disabled:opacity-50" title={t.rename} aria-label={t.rename}><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z" /><path d="m13 7 4 4" /></svg></button>
+                <button data-testid={`rename-section-${s.id}`} onClick={() => onStartRename(s)} disabled={isSaving} className="rounded p-1 text-[var(--text-tertiary)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-foreground)] disabled:opacity-50" title={t.rename} aria-label={t.rename}><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z" /><path d="m13 7 4 4" /></svg></button>
               )}
               {!isLocked && (
                 <DeleteConfirm message={t.deleteSectionConfirm} onConfirm={() => onDelete(s.id)} triggerLabel={ct.delete} confirmLabel={ct.delete} cancelLabel={ct.cancel} disabled={isSaving} className="rounded p-1 text-[var(--text-tertiary)] hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 10v6M14 10v6" /></svg></DeleteConfirm>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {!isLocked && (
                 <button
                   type="button"
@@ -98,14 +114,24 @@ export default function SectionRow({
                   disabled={isSaving}
                   className="rounded border border-indigo-200 bg-white px-2 py-1 text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
                 >
-                  Config Standard
+                  {t.configStandard}
+                </button>
+              )}
+              {evaluation && (
+                <button
+                  type="button"
+                  onClick={() => onEvaluateStandard(s.id)}
+                  disabled={isReadOnly || isSaving || isEvaluating}
+                  className="rounded border border-emerald-200 bg-white px-2 py-1 text-[10px] font-bold text-emerald-700 transition-colors hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isEvaluating ? t.evaluatingStandard : t.evaluateStandard}
                 </button>
               )}
               <select
                 value={s.assignedUserId || ''}
                 onChange={e => { const v = e.target.value; onAssign(s.id, v ? v : null); }}
                 disabled={isReadOnly || isSaving}
-                className="max-w-36 max-h-60 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs outline-none overflow-y-auto disabled:bg-[var(--surface-tertiary)] disabled:text-[var(--text-tertiary)] sm:max-w-none"
+                className="min-w-0 flex-1 max-h-60 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs outline-none overflow-y-auto disabled:bg-[var(--surface-tertiary)] disabled:text-[var(--text-tertiary)] sm:flex-none"
               >
                 <option value="">{t.unassigned}</option>
                 {projectMembers
@@ -115,7 +141,7 @@ export default function SectionRow({
                   ))}
               </select>
               {isConflict && (
-                <button onClick={() => onReloadConflict(s.id)} className="rounded bg-amber-500 px-2 py-1 text-[10px] font-bold text-white hover:bg-amber-600">Reload</button>
+                <button data-testid={`reload-section-${s.id}`} onClick={() => onReloadConflict(s.id)} className="rounded bg-amber-500 px-2 py-1 text-[10px] font-bold text-white hover:bg-amber-600">{t.reloadSection}</button>
               )}
             </div>
           </div>

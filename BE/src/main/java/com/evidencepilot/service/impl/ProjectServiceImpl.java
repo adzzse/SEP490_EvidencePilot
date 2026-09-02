@@ -21,14 +21,10 @@ import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.ProjectService;
 import com.evidencepilot.service.SystemNotificationService;
 import com.evidencepilot.dto.request.PagingRequest;
-import jakarta.persistence.criteria.Join;
-import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -80,7 +76,9 @@ public class ProjectServiceImpl implements ProjectService {
                 pageable);
         List<Project> projects = results.getContent();
         List<UUID> projectIds = projects.stream().map(Project::getId).toList();
-        List<Object[]> memberCountsRaw = projectMemberRepository.countByProjectIds(projectIds);
+        List<Object[]> memberCountsRaw = projectIds.isEmpty()
+                ? List.of()
+                : projectMemberRepository.countByProjectIds(projectIds);
         Map<UUID, Long> memberCounts = new java.util.HashMap<>();
         for (Object[] row : memberCountsRaw) {
             memberCounts.put((UUID) row[0], ((Number) row[1]).longValue());

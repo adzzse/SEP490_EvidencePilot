@@ -25,6 +25,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -69,6 +70,8 @@ class ProjectServiceImplPagingTest {
                         List.of(project),
                         PageRequest.of(1, 2, Sort.by(Sort.Direction.ASC, "title")),
                         3));
+        when(projectMemberRepository.countByProjectIds(List.of(project.getId())))
+                .thenReturn(List.<Object[]>of(new Object[]{project.getId(), 2L}));
 
         ProjectServiceImpl service = new ProjectServiceImpl(
                 projectRepository,
@@ -92,11 +95,34 @@ class ProjectServiceImplPagingTest {
         assertThat(response.size()).isEqualTo(2);
         assertThat(response.totalElements()).isEqualTo(3);
         assertThat(response.totalPages()).isEqualTo(2);
+        assertThat(response.content().getFirst().memberCount()).isEqualTo(2L);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
         verify(projectRepository).findAll(any(Specification.class), pageableCaptor.capture());
         assertThat(pageableCaptor.getValue().getSort().getOrderFor("title"))
                 .extracting(Sort.Order::getDirection)
                 .isEqualTo(Sort.Direction.ASC);
+    }
+
+    @Test
+    void getAllProjectsSkipsMemberCountQueryForEmptyPage() {
+        User admin = new User();
+        admin.setId(UUID.randomUUID());
+        admin.setRole(UserRole.ADMIN);
+        when(currentUserService.requireCurrentUser()).thenReturn(admin);
+        when(projectRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
+        ProjectServiceImpl service = new ProjectServiceImpl(
+                projectRepository,
+                projectMemberRepository,
+                userRepository,
+                currentUserService,
+                systemNotificationService,
+                auditService);
+
+        var response = service.getAllProjects(0, 10, "createdAt,desc", null, null, null);
+
+        assertThat(response.content()).isEmpty();
+        verify(projectMemberRepository, never()).countByProjectIds(any());
     }
 }

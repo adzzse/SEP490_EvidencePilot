@@ -1,9 +1,11 @@
 package com.evidencepilot.service.impl;
 
+import com.evidencepilot.dto.request.SectionBatchItem;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentText;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
+import com.evidencepilot.model.SectionStandardEvaluation;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.ProjectStatus;
@@ -12,6 +14,7 @@ import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
+import com.evidencepilot.repository.SectionStandardEvaluationRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.CurrentUserService;
@@ -58,6 +61,8 @@ class PaperProcessingServiceImplTest {
     private AuditService auditService;
     @Mock
     private EvidenceTraceService evidenceTraceService;
+    @Mock
+    private SectionStandardEvaluationRepository sectionStandardEvaluationRepository;
 
     @Test
     void detectsLatexSections() {
@@ -516,10 +521,109 @@ class PaperProcessingServiceImplTest {
         verify(projectRepository, never()).save(project);
     }
 
-    @SuppressWarnings("unchecked")
+    @Test
+    void batchRejectsDuplicateSectionIdsBeforeMutatingRows() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paper = paper(project);
+        PaperSection section = section(paper);
+        section.setSectionOrder(0);
+        section.setContentTex("Draft");
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paper.getId()))
+                .thenReturn(List.of(section));
+        List<SectionBatchItem> duplicated = List.of(
+                new SectionBatchItem(section.getId(), 0, "Intro", null, "Draft", 0L),
+                new SectionBatchItem(section.getId(), 1, "Intro", null, "Draft", 0L));
+
+        assertThatThrownBy(() -> service().batchUpdateSections(paper.getId(), duplicated))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode())
+                        .isEqualTo(HttpStatus.BAD_REQUEST))
+                .hasMessageContaining("duplicate section id");
+
+        verify(paperSectionRepository, never()).saveAll(anyList());
+        verify(paperSectionRepository, never()).flush();
+    }
+
+    @Test
+    void unchangedBatchDoesNotIncrementSectionRevision() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paper = paper(project);
+        PaperSection section = section(paper);
+        section.setSectionOrder(0);
+        section.setContentTex("Draft");
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paper.getId()))
+                .thenReturn(List.of(section));
+
+        var result = service().batchUpdateSections(paper.getId(), List.of(
+                new SectionBatchItem(section.getId(), 0, "Intro", null, "Draft", 0L)));
+
+        assertThat(result).singleElement().extracting("revision").isEqualTo(0L);
+        verify(paperSectionRepository, never()).saveAll(anyList());
+        verify(paperSectionRepository, never()).flush();
+        verifyNoInteractions(sectionStandardEvaluationRepository);
+    }
+
+    @Test
+    void batchContentChangeMarksConfiguredStandardStale() {
+        User student = user(UserRole.STUDENT);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paper = paper(project);
+        PaperSection section = section(paper);
+        section.setSectionOrder(0);
+        section.setContentTex("Before");
+        section.setAssignedUser(student);
+        SectionStandardEvaluation evaluation = new SectionStandardEvaluation();
+        evaluation.setStatus(SectionStandardEvaluation.STATUS_PASSED);
+        when(currentUserService.requireCurrentUser()).thenReturn(student);
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paper.getId()))
+                .thenReturn(List.of(section));
+        when(sectionStandardEvaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId()))
+                .thenReturn(Optional.of(evaluation));
+
+        service().batchUpdateSections(paper.getId(), List.of(
+                new SectionBatchItem(section.getId(), 0, "Intro", student.getId(), "After", 0L)));
+
+        assertThat(evaluation.getStatus()).isEqualTo(SectionStandardEvaluation.STATUS_STALE);
+        verify(sectionStandardEvaluationRepository).save(evaluation);
+        verify(paperSectionRepository).saveAll(anyList());
+        verify(paperSectionRepository).flush();
+    }
+
+    @Test
+    void batchCanUnassignAllAndRenameInOneAtomicRequest() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paper = paper(project);
+        PaperSection section = section(paper);
+        section.setSectionOrder(0);
+        section.setContentTex("Draft");
+        section.setAssignedUser(student);
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paper.getId()))
+                .thenReturn(List.of(section));
+
+        var result = service().batchUpdateSections(paper.getId(), List.of(
+                new SectionBatchItem(section.getId(), 0, "Renamed", null, "Draft", 0L)));
+
+        assertThat(result).singleElement().satisfies(updated -> {
+            assertThat(updated.sectionTitle()).isEqualTo("Renamed");
+            assertThat(updated.assignedUserId()).isNull();
+        });
+        verify(paperSectionRepository).saveAll(anyList());
+        verify(paperSectionRepository).flush();
+    }
+
     private PaperProcessingServiceImpl service() {
-        org.springframework.beans.factory.ObjectProvider<com.evidencepilot.repository.SectionStandardEvaluationRepository> provider = org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
-        org.mockito.Mockito.lenient().when(provider.getIfAvailable()).thenReturn(null);
         return new PaperProcessingServiceImpl(
                 paperSectionRepository,
                 mock(InstructorFeedbackRepository.class),
@@ -532,7 +636,7 @@ class PaperProcessingServiceImplTest {
                 mock(TexArchiveBuilder.class),
                 evidenceTraceService,
                 auditService,
-                provider);
+                sectionStandardEvaluationRepository);
     }
 
     private User user(UserRole role) {

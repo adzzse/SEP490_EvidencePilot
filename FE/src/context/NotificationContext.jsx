@@ -10,21 +10,30 @@ export function NotificationProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState(null);
-  const restFailedRef = useRef(false);
+  const [restReadyToken, setRestReadyToken] = useState(null);
+  const requestIdRef = useRef(0);
 
   const reload = useCallback(async () => {
-    if (!token) return;
+    const requestId = ++requestIdRef.current;
     setError(null);
-    restFailedRef.current = false;
+    setRestReadyToken(null);
+    if (!token) {
+      setNotifications([]);
+      setUnreadCount(0);
+      return false;
+    }
     try {
       const [notifRes, unreadRes] = await Promise.all([
         api.get('/api/notifications'),
         api.get('/api/notifications/unread-count'),
       ]);
+      if (requestId !== requestIdRef.current) return false;
       setNotifications(notifRes.data || []);
       setUnreadCount(unreadRes.data?.count || 0);
-      restFailedRef.current = false;
+      setRestReadyToken(token);
+      return true;
     } catch (e) {
+      if (requestId !== requestIdRef.current) return false;
       const status = e?.response?.status;
       if (status === 503) {
         console.warn('Notifications degraded: 503 — WS will not connect');
@@ -34,49 +43,19 @@ export function NotificationProvider({ children }) {
       setError(e);
       setNotifications([]);
       setUnreadCount(0);
-      restFailedRef.current = true;
+      return false;
     }
   }, [token]);
 
   // Isolated REST fetch — never touches AuthContext isLoading, never forces logout
   useEffect(() => {
-    setNotifications([]);
-    setUnreadCount(0);
-    setError(null);
-    restFailedRef.current = false;
-    if (!token) return undefined;
-    let cancelled = false;
-    // Fire degraded fetch
-    api.get('/api/notifications')
-      .then(({ data }) => { if (!cancelled) { setNotifications(data || []); restFailedRef.current = false; } })
-      .catch((e) => {
-        if (cancelled) return;
-        const status = e?.response?.status;
-        if (status === 503) console.warn('Notifications degraded: 503');
-        else console.warn('Failed to load notifications', e);
-        setError(e);
-        setNotifications([]);
-        restFailedRef.current = true;
-      });
-    api.get('/api/notifications/unread-count')
-      .then(({ data }) => { if (!cancelled) { setUnreadCount(data?.count || 0); } })
-      .catch((e) => {
-        if (cancelled) return;
-        if (e?.response?.status !== 503) console.warn('Failed to load unread count', e);
-        setUnreadCount(0);
-      });
-    return () => { cancelled = true; };
-  }, [token]);
+    reload();
+    return () => { requestIdRef.current += 1; };
+  }, [reload]);
 
   // Isolated WS subscribe — gated by REST 503
   useEffect(() => {
-    if (!token) return undefined;
-    if (restFailedRef.current) {
-      console.warn('WS gated: REST failed, skip connect');
-      return undefined;
-    }
-    // Check current error state before connecting
-    if (error && error?.response?.status === 503) return undefined;
+    if (!token || restReadyToken !== token) return undefined;
     let cancelled = false;
     const unsubscribe = subscribeToNotifications(token, incoming => {
       if (cancelled) return;
@@ -84,20 +63,22 @@ export function NotificationProvider({ children }) {
       setUnreadCount(current => current + 1);
     });
     return () => { cancelled = true; unsubscribe(); };
-  }, [token, error]);
+  }, [token, restReadyToken]);
 
   const markRead = useCallback(async (id) => {
     try {
       await api.patch(`/api/notifications/${id}/read`);
       setNotifications(current => current.map(item => item.id === id ? { ...item, read: true } : item));
       setUnreadCount(current => Math.max(0, current - 1));
+      return true;
     } catch {
       console.warn('markNotificationFailed');
+      return false;
     }
   }, []);
 
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, error, reload, setNotifications, setUnreadCount, markRead }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, error, reload, markRead }}>
       {children}
     </NotificationContext.Provider>
   );
