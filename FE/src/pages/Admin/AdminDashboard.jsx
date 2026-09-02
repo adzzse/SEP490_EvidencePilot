@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
-import api from '../../api.js';
+import api from '../../services/api.js';
 import { t, SectionBoundary } from './components/shared.jsx';
 import { DashboardSection } from './components/DashboardMetricsTab.jsx';
 import { UsersSection } from './components/UsersTab.jsx';
@@ -16,7 +16,7 @@ import { QueueSection } from './components/ExtractionQueueTab.jsx';
 import { CollectionsSection } from './components/CollectionsTab.jsx';
 import { NotificationsSection } from './components/NotificationsTab.jsx';
 import { SettingsSection } from './components/SettingsTab.jsx';
-import NotificationBell from '../../components/NotificationBell.jsx';
+import NotificationBell from '../../components/ui/NotificationBell.jsx';
 const NAV_ITEMS = [
   { key: 'dashboard', labelEn: 'Dashboard', labelVi: 'Bảng điều khiển' },
   { key: 'users', labelEn: 'Users', labelVi: 'Người dùng' },

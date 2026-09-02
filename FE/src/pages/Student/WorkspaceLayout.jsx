@@ -2,19 +2,19 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTranslation } from 'react-i18next';
-import TourLauncher from '../../components/TourLauncher';
-import FileViewerModal from '../../components/FileViewerModal';
-import InlineCitationCard from '../../components/InlineCitationCard.jsx';
-import { hasNoEvidence, wrapFindingIndex } from '../../components/citationReviewPopover.js';
-import api from '../../api.js';
+import TourLauncher from '../../components/ui/TourLauncher';
+import FileViewerModal from '../../components/features/FileViewerModal';
+import InlineCitationCard from '../../components/features/InlineCitationCard.jsx';
+import { hasNoEvidence, wrapFindingIndex } from '../../utils/citationReviewPopover.js';
+import api from '../../services/api.js';
 import { useNotification } from '../../context/NotificationContext';
-import WorkspaceHeader from './WorkspaceHeader.jsx';
-import FilePanel from './FilePanel.jsx';
-import EditorPanel from './EditorPanel.jsx';
-import ContextPanel from './ContextPanel.jsx';
-import FullPaperPreview from './FullPaperPreview.jsx';
-import { hasActiveExtraction } from './extractionPolling.js';
-import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
+import WorkspaceHeader from '../../components/Student/WorkspaceHeader.jsx';
+import FilePanel from '../../components/Student/FilePanel.jsx';
+import EditorPanel from '../../components/Student/EditorPanel.jsx';
+import ContextPanel from '../../components/Student/ContextPanel.jsx';
+import FullPaperPreview from '../../components/Student/FullPaperPreview.jsx';
+import { hasActiveExtraction } from '../../utils/student/extractionPolling.js';
+import useUndoDelete, { UndoToast } from '../../components/ui/UndoDelete.jsx';
 
 const SOURCE_MATCH_BATCH_SIZE = 10;
 

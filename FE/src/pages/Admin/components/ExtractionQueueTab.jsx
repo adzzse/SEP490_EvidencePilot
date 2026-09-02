@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import Modal from '../../../components/Modal.jsx';
+import Modal from '../../../components/ui/Modal.jsx';
 import { PageSkeleton, JsonTree } from './shared.jsx';
 function QueueSection({ lang, api }) {
   const [queue, setQueue] = useState(null);

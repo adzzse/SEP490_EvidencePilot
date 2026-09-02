@@ -4,7 +4,9 @@ import { AppHeader, EmptyState, LoadingSkeleton, TourLauncher, StatusBadge, Moda
 import { commonText, studentText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
-import api from '../../api';
+import { PAGINATION_LIMIT } from '../../utils/constants';
+import { formatDate } from '../../utils/formatters/date';
+import api from '../../services/api';
 function getPaginationRange(currentPage, totalPages) {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, i) => i);
@@ -41,7 +43,7 @@ export default function Projects() {
 
   // Filters & Pagination
   const [page, setPage] = useState(0);
-  const [pageSize] = useState(9);
+  const [pageSize] = useState(PAGINATION_LIMIT);
   const [activeTab, setActiveTab] = useState('ALL'); // ALL, IN_PROGRESS, ASSIGNED, COMPLETED
   const [searchQuery, setSearchQuery] = useState('');
   const [isGridView, setIsGridView] = useState(true);
@@ -273,7 +275,7 @@ export default function Projects() {
               <div
                 key={project.id}
                 onClick={() => navigate(`/student/projects/${project.id}`)}
-                className="project-card bg-(--surface) border border-(--border) hover:border-indigo-400 dark:hover:border-indigo-600 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group cursor-pointer"
+                className="project-card bg-(--surface) border border-(--border) hover:border-indigo-400 dark:hover:border-indigo-600 rounded-2xl p-5 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between group cursor-pointer"
               >
                 <div className="space-y-3">
                   {/* Top Bar with Badge */}
@@ -301,7 +303,7 @@ export default function Projects() {
                 <div className="pt-4 mt-4 border-t border-(--border-light) space-y-3">
                   <div className="flex items-center justify-between text-[11px] text-(--text-tertiary)">
                     <span>
-                      {t.lastUpdated.replace('{{date}}', project.updatedAt ? new Date(project.updatedAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US') : project.createdAt ? new Date(project.createdAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US') : '—')}
+                      {t.lastUpdated.replace('{{date}}', formatDate(project.updatedAt || project.createdAt, language))}
                     </span>
                     {project.currentUserRole && (
                       <span className="font-semibold text-slate-500 dark:text-slate-400">

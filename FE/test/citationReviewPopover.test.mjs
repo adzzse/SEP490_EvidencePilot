@@ -7,7 +7,7 @@ import {
   hasNoEvidence,
   splitPassageQuote,
   wrapFindingIndex,
-} from '../src/components/citationReviewPopover.js';
+} from '../src/utils/citationReviewPopover.js';
 
 test('citation review popover derives evidence and navigation state', () => {
   assert.equal(hasNoEvidence({ evidence: [] }), true);

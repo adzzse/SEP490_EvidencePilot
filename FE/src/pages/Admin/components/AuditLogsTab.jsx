@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { driver } from 'driver.js';
-import Modal from '../../../components/Modal.jsx';
+import Modal from '../../../components/ui/Modal.jsx';
 import { ErrorBlock, JsonTree } from './shared.jsx';
 function AuditLogsSection({ lang, api }) {
   const [logs, setLogs] = useState({ content: [], page: 0, totalElements: 0, totalPages: 0 });

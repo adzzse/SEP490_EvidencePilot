@@ -1,7 +1,7 @@
 import { useLanguage } from '../context/LanguageContext';
 import { homeText } from '../locales/home';
-import StaticPageLayout from '../components/StaticPageLayout';
-import AnimateIn from '../components/AnimateIn';
+import StaticPageLayout from '../components/layout/StaticPageLayout';
+import AnimateIn from '../components/ui/AnimateIn';
 
 export default function Terms() {
   const { language } = useLanguage();

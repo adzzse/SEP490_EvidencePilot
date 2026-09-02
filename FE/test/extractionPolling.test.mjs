@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hasActiveExtraction } from '../src/pages/Student/extractionPolling.js';
+import { hasActiveExtraction } from '../src/utils/student/extractionPolling.js';
 
 test('polls only for non-terminal extraction states', () => {
   assert.equal(hasActiveExtraction([{ processingStatus: 'QUEUED' }]), true);

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
-import AnimateIn from '../../components/AnimateIn';
+import AnimateIn from '../../components/ui/AnimateIn';
 
 export default function HeroSection({ t }) {
   const { isAuthenticated, role } = useAuth();

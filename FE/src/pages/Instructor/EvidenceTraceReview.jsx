@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AppHeader, LoadingSkeleton, Modal } from '../../components';
+import { AppHeader, LoadingSkeleton, Modal, Breadcrumb } from '../../components';
 import { instructorText, commonText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
-import api from '../../api';
+import api from '../../services/api';
 
 const JUDGMENTS = ['EFFECTIVE', 'PARTIAL', 'INEFFECTIVE'];
 
@@ -92,7 +92,14 @@ export default function EvidenceTraceReview() {
     <div className="min-h-screen overflow-x-hidden bg-[var(--page-bg)] text-[var(--text-primary)] font-sans">
       <AppHeader />
       <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
-        <Link to={`/instructor/projects/${id}`} className="text-xs font-bold text-[var(--text-secondary)] transition-colors hover:text-[var(--brand-foreground)]">&larr; {ct.back}</Link>
+        <Breadcrumb
+          items={[
+            { label: t.dashboard, path: '/instructor/dashboard' },
+            { label: t.projects, path: '/instructor/projects' },
+            { label: project?.title || t.project, path: `/instructor/projects/${id}` },
+            { label: t.evidenceTraceReview }
+          ]}
+        />
         <div className="mt-2 mb-6 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl font-black text-[var(--brand-foreground)]">{t.evidenceTraceReview}</h1>

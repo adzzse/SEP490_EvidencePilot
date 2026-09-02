@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import AnimateIn from '../../components/AnimateIn';
+import AnimateIn from '../../components/ui/AnimateIn';
 
 export default function CtaSection({ t }) {
   const { isAuthenticated } = useAuth();

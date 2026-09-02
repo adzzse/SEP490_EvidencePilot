@@ -1,16 +1,16 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { AppHeader, LoadingSkeleton, EmptyState, Modal, UploadZone } from '../../components';
-import TourLauncher from '../../components/TourLauncher';
+import { AppHeader, LoadingSkeleton, EmptyState, Modal, UploadZone, Breadcrumb } from '../../components';
+import TourLauncher from '../../components/ui/TourLauncher';
 import { instructorText, commonText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useCollectionSources } from '../../hooks/useCollections';
-import api from '../../api';
+import api from '../../services/api';
 import { Network } from 'vis-network';
 import { DataSet } from 'vis-data';
-import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
-import DeleteConfirm from '../../components/DeleteConfirm.jsx';
+import useUndoDelete, { UndoToast } from '../../components/ui/UndoDelete.jsx';
+import DeleteConfirm from '../../components/ui/DeleteConfirm.jsx';
 
 const TABS = ['documents', 'connectedMap', 'visualizeMap', 'analyzeCollection'];
 const TAB_IDS = ['documents-tab', 'connected-map-tab', 'visualize-map-tab', 'analyze-tab'];
@@ -1050,9 +1050,13 @@ export default function CollectionDetail() {
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary)">
       <AppHeader />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-2">
-          <Link to="/instructor/collections" className="text-xs font-bold text-(--text-tertiary) hover:text-(--brand-foreground) transition-colors">&larr; {ct.back}</Link>
-        </div>
+        <Breadcrumb
+          items={[
+            { label: t.dashboard, path: '/instructor/dashboard' },
+            { label: t.collections, path: '/instructor/collections' },
+            { label: collection?.name || t.collections }
+          ]}
+        />
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-(--border) pb-4">
           <div className="min-w-0">

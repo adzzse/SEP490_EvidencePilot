@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { driver } from 'driver.js';
-import Modal from '../../../components/Modal.jsx';
+import Modal from '../../../components/ui/Modal.jsx';
 import { ErrorBlock } from './shared.jsx';
-import DeleteConfirm from '../../../components/DeleteConfirm.jsx';
-import useUndoDelete, { UndoToast } from '../../../components/UndoDelete.jsx';
+import DeleteConfirm from '../../../components/ui/DeleteConfirm.jsx';
+import useUndoDelete, { UndoToast } from '../../../components/ui/UndoDelete.jsx';
 function ProjectsSection({ lang, api }) {
   const [projects, setProjects] = useState({ content: [], page: 0, totalElements: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);

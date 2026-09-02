@@ -1,24 +1,23 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { AppHeader, LoadingSkeleton, StatusBadge, Modal, TourLauncher, Spinner } from '../../components';
-import FileViewerModal from '../../components/FileViewerModal';
-import { Marker, MarkerIcon, MarkerContent } from '../../components/Marker';
+import { AppHeader, LoadingSkeleton, StatusBadge, Modal, TourLauncher, Spinner, Breadcrumb } from '../../components';
+import FileViewerModal from '../../components/features/FileViewerModal';
+import { Marker, MarkerIcon, MarkerContent } from '../../components/ui/Marker';
 import { instructorText, commonText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
-import api from '../../api';
+import api from '../../services/api';
 import {
   getSourceShareChanges,
   getBlockedSources,
   isSourceShareable,
   isSourceSharedWithProject,
-} from './sourceShareSelection';
-import { getStudentSuggestions, studentDisplayName } from './studentSearch';
-import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
-import DeleteConfirm from '../../components/DeleteConfirm.jsx';
-import ActionExpandHeader from './components/ActionExpandHeader.jsx';
-import ContributionGraph from './components/ContributionGraph.jsx';
-import SectionManager from './components/sections/SectionManager.jsx';
+} from '../../utils/instructor/sourceShareSelection';
+import { getStudentSuggestions, studentDisplayName } from '../../utils/instructor/studentSearch';
+import useUndoDelete, { UndoToast } from '../../components/ui/UndoDelete.jsx';
+import DeleteConfirm from '../../components/ui/DeleteConfirm.jsx';
+import ActionExpandHeader from '../../components/Instructor/ActionExpandHeader.jsx';
+import ContributionGraph from '../../components/Instructor/ContributionGraph.jsx';
+import SectionManager from '../../components/Instructor/sections/SectionManager.jsx';
 import { useAuth } from '../../context/AuthContext';
 
 const STANDARDS = ['IEEE', 'ACM', 'SPRINGER_LNCS', 'APA', 'MLA', 'CUSTOM'];
@@ -922,7 +921,13 @@ export default function ProjectDetail() {
       <AppHeader />
       <main className="flex-1 min-h-0 overflow-hidden flex flex-col mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8">
         <div id="project-header" className="mb-6 shrink-0">
-          <Link to="/instructor/projects" className="text-xs font-bold text-[var(--text-secondary)] transition-colors hover:text-[var(--brand-foreground)]">&larr; {ct.back}</Link>
+          <Breadcrumb
+            items={[
+              { label: t.dashboard, path: '/instructor/dashboard' },
+              { label: t.projects, path: '/instructor/projects' },
+              { label: project.title }
+            ]}
+          />
           <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <h1 className="break-words text-2xl font-black text-[var(--brand-foreground)]">{project.title}</h1>
@@ -977,14 +982,14 @@ export default function ProjectDetail() {
         {/* Tab: Setup */}
         {activeTab === 'setup' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full overflow-hidden">
-            <div id="source-documents" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 h-full overflow-y-auto">
-              <div className="mb-3">
+            <div id="source-documents" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 h-full min-h-0 overflow-hidden flex flex-col">
+              <div className="mb-3 shrink-0">
                 <ActionExpandHeader title={t.sourceDocuments} placeholder={t.searchSource || 'Search sources...'} searchValue={sourceSearch} onSearch={setSourceSearch} onAdd={() => setShowAddSource(true)} addLabel={t.addSource} />
               </div>
               {filteredSources.length === 0 ? (
                 <p className="text-xs italic text-[var(--text-tertiary)]">{sourceSearch ? t.noStudentsFound || 'No matches' : t.noSourceDocuments}</p>
               ) : (
-                <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+                <div className="space-y-1 flex-1 min-h-0 overflow-y-auto">
                   {filteredSources.map(s => (
                     <div key={s.id} data-testid={`source-${s.id}`} className="flex items-center gap-2 rounded-lg bg-[var(--surface-secondary)] px-3 py-2 text-xs transition hover:bg-[var(--surface-tertiary)]">
                       <button onClick={() => { setSourceDetail(s); setShowSourceDetail(true); }} className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left">
@@ -1006,7 +1011,7 @@ export default function ProjectDetail() {
                 </div>
               )}
             </div>
-            <div id="set-up-paper" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 h-full overflow-y-auto">
+            <div id="set-up-paper" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 h-full min-h-0 overflow-y-auto flex flex-col">
               <h2 className="mb-4 text-sm font-bold text-[var(--brand-foreground)]">{t.setUpPaper}</h2>
               {standard && (
                 <div className="mb-3 flex items-center justify-between gap-2 rounded-lg bg-[var(--brand-soft)] px-3 py-2 text-xs">
@@ -1232,8 +1237,6 @@ export default function ProjectDetail() {
                   onReloadConflict={handleReloadConflictSection}
                   onDragEnd={handleDragEnd}
                   onConfigSave={saveSectionStandard}
-                  onEvaluateStandard={runStandardCheck}
-                  evaluatingSectionId={evaluatingSectionId}
                 />
               )}
             </div>

@@ -1,4 +1,4 @@
-import AnimateIn from '../../components/AnimateIn';
+import AnimateIn from '../../components/ui/AnimateIn';
 
 const featuresList = [
   'structuredData', 'citationReview', 'feedback', 'documentExtraction', 'vectorSearch', 'realtime'

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import api from '../../api';
+import api from '../../services/api';
 
 const formatCount = (value) => (
   Number.isFinite(Number(value)) ? Intl.NumberFormat().format(Number(value)) : '—'

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import useUndoDelete, { UndoToast } from '../../../components/UndoDelete.jsx';
-import DeleteConfirm from '../../../components/DeleteConfirm.jsx';
+import useUndoDelete, { UndoToast } from '../../../components/ui/UndoDelete.jsx';
+import DeleteConfirm from '../../../components/ui/DeleteConfirm.jsx';
 function SettingsSection({ lang, api }) {
   const [cats, setCats] = useState([]);
   const [catsLoading, setCatsLoading] = useState(true);

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import api, { armProactiveRefresh } from '../api.js';
+import api, { armProactiveRefresh } from '../services/api.js';
 
 const AuthContext = createContext(null);
 

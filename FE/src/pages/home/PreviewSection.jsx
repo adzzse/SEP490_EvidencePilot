@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import AnimateIn from '../../components/AnimateIn';
-import SvgIcon from '../../components/SvgIcon';
+import AnimateIn from '../../components/ui/AnimateIn';
+import SvgIcon from '../../components/ui/SvgIcon';
 
 const stepColors = ['#1e3a8a', '#4f46e5', '#0284c7', '#d97706', '#7c3aed', '#059669'];
 const stepIcons = [

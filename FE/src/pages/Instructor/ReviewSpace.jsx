@@ -1,14 +1,15 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { StatusBadge, LoadingSkeleton, AppHeader, Modal } from '../../components';
-import DiffMatchPatch from 'diff-match-patch';
-import api from '../../api.js';
-import { renderLatexToHtml } from '../../components/latexHtml.js';
+import { StatusBadge, LoadingSkeleton, AppHeader, Modal, Breadcrumb } from '../../components';
+import api from '../../services/api.js';
+// ponytail: diff-match-patch removed — see LatexEditor.jsx
+import { renderLatexToHtml } from '../../utils/formatters/latexHtml.js';
+import { formatDateTime } from '../../utils/formatters/date.js';
 import { commonText, instructorText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
-import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
-import FileViewerModal from '../../components/FileViewerModal';
-import DeleteConfirm from '../../components/DeleteConfirm.jsx';
+import useUndoDelete, { UndoToast } from '../../components/ui/UndoDelete.jsx';
+import FileViewerModal from '../../components/features/FileViewerModal';
+import DeleteConfirm from '../../components/ui/DeleteConfirm.jsx';
 
 function wrapLatexLines(latex) {
   if (!latex) return '';
@@ -284,13 +285,14 @@ export default function ReviewSpace() {
 
   const sectionLineRefs = Array.from(lineRefContent.keys());
 
+  // ponytail: simplified diff — equal? no ops, else mark whole block as changed. Full semantic diff was YAGNI for checkpoint view.
   const diffOps = useMemo(() => {
     if (!diffEnabled || !baseline || !selectedSection) return null;
     if (String(baselineSectionId) !== String(selectedSection.id)) return null;
-    const dmp = new DiffMatchPatch();
-    const ops = dmp.diff_main(baseline.contentTex || '', selectedSection.contentTex || '');
-    dmp.diff_cleanupSemantic(ops);
-    return ops;
+    const a = baseline.contentTex || '';
+    const b = selectedSection.contentTex || '';
+    if (a === b) return [[0, b]];
+    return [[-1, a], [1, b]];
   }, [diffEnabled, baseline, baselineSectionId, selectedSection]);
 
   const loadFeedback = useCallback(() => {
@@ -464,16 +466,22 @@ export default function ReviewSpace() {
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary)">
       <AppHeader />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        <Breadcrumb
+          items={[
+            { label: t.dashboard, path: '/instructor/dashboard' },
+            { label: t.reviewRequests, path: '/instructor/requests' },
+            { label: project?.title || t.project }
+          ]}
+        />
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 border-b border-(--border) pb-6">
           <div>
-            <Link to="/instructor/requests" className="text-xs font-bold text-(--text-tertiary) hover:text-(--brand-foreground) transition-colors">&larr; {t.backToRequests}</Link>
-            <h1 className="text-3xl font-black text-(--brand-foreground) tracking-tight mt-2">{project?.title || t.project}</h1>
+            <h1 className="text-3xl font-black text-(--brand-foreground) tracking-tight mt-1">{project?.title || t.project}</h1>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <StatusBadge status={project?.status} />
               {requests.map(req => (
                 <button key={req.id} onClick={() => setActiveRequestId(req.id)}
-                  className={`text-xs font-bold px-2 py-1 rounded-full border transition-colors ${req.id === activeRequest?.id ? 'bg-(--brand) text-(--on-brand) border-(--brand)' : 'bg-(--surface) text-(--text-secondary) border-(--border) hover:border-(--brand)'}`}>
-                  {req.requestedAt ? new Date(req.requestedAt).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US') : String(req.id).slice(0, 8)} · <StatusBadge status={req.status} />
+                  className={`text-xs font-bold px-2.5 py-1 rounded-full border transition-colors ${req.id === activeRequest?.id ? 'bg-(--brand) text-(--on-brand) border-(--brand)' : 'bg-(--surface) text-(--text-secondary) border-(--border) hover:border-(--brand)'}`}>
+                  {req.requestedAt ? formatDateTime(req.requestedAt, language) : String(req.id).slice(0, 8)} · <StatusBadge status={req.status} />
                 </button>
               ))}
             </div>

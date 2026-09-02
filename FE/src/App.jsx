@@ -3,10 +3,10 @@ import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { ThemeProvider } from './context/ThemeContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import ErrorBoundary from './components/ErrorBoundary';
-import ScrollToTop from './components/ScrollToTop';
-import UrgentNotificationBanner from './components/UrgentNotificationBanner';
+import ProtectedRoute from './routes/ProtectedRoute';
+import ErrorBoundary from './components/layout/ErrorBoundary';
+import ScrollToTop from './components/layout/ScrollToTop';
+import UrgentNotificationBanner from './components/features/UrgentNotificationBanner';
 
 import Home from './pages/home/index.jsx';
 import Terms from './pages/Terms.jsx';
@@ -27,6 +27,7 @@ import InstructorDashboard from './pages/Instructor/Dashboard.jsx';
 import ProjectManagement from './pages/Instructor/ProjectManagement.jsx';
 import ProjectDetail from './pages/Instructor/ProjectDetail.jsx';
 import EvidenceTraceReview from './pages/Instructor/EvidenceTraceReview.jsx';
+import SourceLibrary from './pages/Instructor/SourceLibrary.jsx';
 
 // STUDENT SUB-SYSTEM IMPORTS
 import StudentProjects from './pages/Student/Projects.jsx';
@@ -87,6 +88,9 @@ function App() {
             } />
             <Route path="/instructor/collections/:id" element={
               <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><CollectionDetail /></ProtectedRoute>
+            } />
+            <Route path="/instructor/source-library" element={
+              <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><ErrorBoundary><SourceLibrary /></ErrorBoundary></ProtectedRoute>
             } />
             <Route path="/admin/dashboard" element={
               <ProtectedRoute allowedRoles={['ADMIN']}><AdminDashboard /></ProtectedRoute>

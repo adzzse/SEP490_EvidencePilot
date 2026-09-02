@@ -31,8 +31,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                         "http://127.0.0.1:5173",
                         "http://127.0.0.1:3000",
                         "https://*.ngrok-free.app",
+                        "https://*.ngrok-free.dev",
                         "https://*.ngrok.app",
                         "https://*.ngrok.dev",
+                        "https://*.ngrok.io",
                         "https://sep-490-prototype.vercel.app",
                         "https://evidence-pilot.vercel.app"
                     );

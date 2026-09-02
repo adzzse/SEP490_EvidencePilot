@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { StatusBadge, LoadingSkeleton, EmptyState, TourLauncher, AppHeader } from '../../components';
+import { StatusBadge, LoadingSkeleton, EmptyState, TourLauncher, AppHeader, Breadcrumb } from '../../components';
 import { instructorText, commonText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
-import api from '../../api.js';
+import api from '../../services/api.js';
 
 export default function ReviewRequests() {
   const { language } = useLanguage();
@@ -38,10 +38,13 @@ export default function ReviewRequests() {
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary)">
       <AppHeader />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Breadcrumb
+          items={[
+            { label: t.dashboard, path: '/instructor/dashboard' },
+            { label: t.reviewRequests }
+          ]}
+        />
         <div className="mb-8 border-b border-(--border) pb-6">
-          <div className="mb-2">
-            <Link to="/instructor/dashboard" className="text-xs font-bold text-(--text-tertiary) hover:text-(--brand-foreground) transition-colors">&larr; {ct.back}</Link>
-          </div>
           <h1 className="text-3xl font-black text-(--brand-foreground) tracking-tight">{t.reviewRequests}</h1>
           <p className="text-xs text-(--text-tertiary) mt-1">{t.pendingRequests}</p>
         </div>

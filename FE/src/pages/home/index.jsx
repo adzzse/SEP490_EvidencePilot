@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useLanguage } from '../../context/LanguageContext';
 import { homeText } from '../../locales/home';
-import AppHeader from '../../components/AppHeader';
-import LoadingScreen from '../../components/LoadingScreen';
+import AppHeader from '../../components/layout/AppHeader';
+import LoadingScreen from '../../components/ui/LoadingScreen';
 import HeroSection from './HeroSection';
 import StatsSection from './StatsSection';
 import RolesSection from './RolesSection';

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import api from '../api';
+import api from '../services/api';
 
 export function useCollections(page = 0, size = 20, sort, q, categoryId) {
   const [data, setData] = useState({ content: [], totalElements: 0, totalPages: 0, last: true });

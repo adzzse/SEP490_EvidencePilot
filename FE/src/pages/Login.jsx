@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import api from '../api.js';
+import { useLanguage } from '../context/LanguageContext';
+import { commonText } from '../locales';
+import api from '../services/api.js';
 import { getPostLoginDestination } from './loginOrigin.js';
 
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const { language } = useLanguage();
+  const t = commonText[language];
 
   const [form, setForm] = useState({ email: '', passwordHash: '' });
   const [error, setError] = useState('');
@@ -52,7 +56,7 @@ export default function Login() {
       const msg = err.response?.data?.message
         ?? err.response?.data?.error
         ?? err.message
-        ?? 'Login failed. Please check your credentials.';
+        ?? (language === 'vi' ? 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.' : 'Login failed. Please check your credentials.');
       setError(msg);
     } finally {
       setLoading(false);
@@ -60,7 +64,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex border-t-4 border-indigo-600">
+    <div className="min-h-screen bg-gray-50 flex border-t-4 border-indigo-600 font-sans">
       {/* Left Column: Form */}
       <div className="flex-1 flex items-center justify-center p-8 sm:p-12 lg:p-24 bg-white">
         <div className="w-full max-w-md relative">
@@ -71,19 +75,19 @@ export default function Login() {
               <svg className="w-4 h-4 transform group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
-              Quay lại Trang chủ
+              {t.backToHome || (language === 'vi' ? 'Quay lại Trang chủ' : 'Back to Home')}
             </Link>
           </div>
 
           <div className="mb-10 text-center sm:text-left">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome back</h1>
-            <p className="text-gray-500">Sign in to Evidence Pilot to manage your projects.</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">{t.welcomeBack || 'Welcome back'}</h1>
+            <p className="text-gray-500">{t.signInSubtitle || 'Sign in to Evidence Pilot to manage your projects.'}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
+                {t.email}
               </label>
               <input
                 type="email"
@@ -98,7 +102,7 @@ export default function Login() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password
+                {t.password || (language === 'vi' ? 'Mật khẩu' : 'Password')}
               </label>
               <input
                 type="password"
@@ -128,12 +132,12 @@ export default function Login() {
               disabled={loading}
               className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? (t.signingIn || 'Signing in...') : (t.signIn || 'Sign In')}
             </button>
           </form>
 
           <p className="text-center text-sm text-gray-500 mt-8">
-            Need an account? Contact your administrator.
+            {t.needAccountHelp || 'Need an account? Contact your administrator.'}
           </p>
         </div>
       </div>
@@ -151,9 +155,11 @@ export default function Login() {
         <div className="absolute inset-0 bg-gradient-to-t from-blue-900/80 via-blue-900/20 to-transparent"></div>
         
         <div className="relative z-10 text-center px-12 max-w-lg flex flex-col items-center">
-          <h2 className="text-4xl font-bold text-white mb-6 leading-tight drop-shadow-md">Manage Research Collaboratively</h2>
+          <h2 className="text-4xl font-bold text-white mb-6 leading-tight drop-shadow-md">
+            {t.heroTagline || 'Manage Research Collaboratively'}
+          </h2>
           <p className="text-blue-50 text-lg drop-shadow-md">
-            Evidence Pilot provides a collaborative workspace for paper authoring, source management, citation review, and instructor feedback.
+            {t.heroDescription || 'Evidence Pilot provides a collaborative workspace for paper authoring, source management, citation review, and instructor feedback.'}
           </p>
         </div>
       </div>
