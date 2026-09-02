@@ -205,6 +205,23 @@ public class PaperController {
         return citationValidationService.validateCitations(id);
     }
 
+    @Operation(summary = "Batch update paper sections — single transaction replaces Promise.all",
+            description = "Accepts the entire draftSections array. Processes order/title/content/assignment diff in one DB transaction. Returns 409 with fieldErrors.sectionId on opt_version conflict; frontend must preserve draft and highlight that row, not reload.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "All sections updated atomically"),
+            @ApiResponse(responseCode = "400", description = "Invalid payload or missing expectedRevision"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Access denied"),
+            @ApiResponse(responseCode = "404", description = "Section not found"),
+            @ApiResponse(responseCode = "409", description = "Section revision conflict — fieldErrors.sectionId identifies the row")
+    })
+    @PutMapping("/papers/{documentId}/sections/batch")
+    public List<PaperSectionResponse> batchUpdateSections(
+            @Parameter(description = "Paper document UUID") @PathVariable UUID documentId,
+            @Valid @RequestBody com.evidencepilot.dto.request.SectionBatchUpdateRequest request) {
+        return paperProcessingService.batchUpdateSections(documentId, request.sections());
+    }
+
     @Operation(summary = "Update a paper section",
             description = "Assigned students may update content. Instructors may rename, reorder, "
                     + "or merge sections only while every section is unassigned. "

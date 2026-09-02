@@ -15,16 +15,22 @@ function disconnect() {
   current?.deactivate();
 }
 
+let reconnectAttempts = 0;
+function getReconnectDelay() {
+  return Math.min(30000, 5000 * Math.pow(2, reconnectAttempts));
+}
 function connect(token) {
   if (!token || subscribers.size === 0) return;
   if (client && activeToken === token) return;
 
   disconnect();
   activeToken = token;
+  const delay = getReconnectDelay();
   const nextClient = new Client({
     brokerURL: baseURL.replace(/^http/, 'ws') + '/ws',
     connectHeaders: { Authorization: `Bearer ${token}` },
     onConnect: () => {
+      reconnectAttempts = 0;
       if (client !== nextClient) return;
       subscription = nextClient.subscribe('/user/queue/notifications', message => {
         try {
@@ -35,14 +41,23 @@ function connect(token) {
         }
       });
     },
-    reconnectDelay: 5000,
+    onStompError: () => {
+      reconnectAttempts++;
+    },
+    onWebSocketClose: () => {
+      reconnectAttempts++;
+    },
+    reconnectDelay: delay,
   });
   client = nextClient;
   nextClient.activate();
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('auth:refreshed', () => connect(localStorage.getItem('token')));
+  window.addEventListener('auth:refreshed', () => {
+    reconnectAttempts = 0;
+    connect(localStorage.getItem('token'));
+  });
 }
 
 export function subscribeToNotifications(token, handler) {

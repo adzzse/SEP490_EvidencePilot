@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../api.js';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { subscribeToNotifications } from '../notificationSocket.js';
+import { useNotification } from '../context/NotificationContext';
 
 const URGENT_ACTION = 'ADMIN_BROADCAST_URGENT';
 
@@ -11,27 +11,15 @@ export default function UrgentNotificationBanner() {
   const { language } = useLanguage();
   const [notification, setNotification] = useState(null);
 
+  const { notifications } = useNotification();
   useEffect(() => {
-    setNotification(null);
-    if (!token) return undefined;
-
-    let cancelled = false;
-    api.get('/api/notifications').then(({ data }) => {
-      const latest = (data || []).find(item => !item.read && item.actionType === URGENT_ACTION);
-      if (!cancelled && latest) {
-        setNotification(current => !current || latest.createdAt > current.createdAt ? latest : current);
-      }
-    }).catch(() => {});
-
-    const unsubscribe = subscribeToNotifications(token, incoming => {
-      if (!cancelled && incoming.actionType === URGENT_ACTION) setNotification(incoming);
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [token]);
+    const latest = (notifications || []).find(item => !item.read && item.actionType === URGENT_ACTION);
+    if (latest) {
+      setNotification(current => !current || latest.createdAt > current.createdAt ? latest : current);
+    } else {
+      setNotification(null);
+    }
+  }, [notifications]);
 
   if (!notification) return null;
 

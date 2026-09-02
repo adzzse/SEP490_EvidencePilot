@@ -55,7 +55,7 @@ class FlywayMigrationMySqlTest {
         Integer successfulMigrations = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
                 Integer.class);
-        assertThat(successfulMigrations).isEqualTo(14);
+        assertThat(successfulMigrations).isEqualTo(17);
 
         assertThat(jdbcTemplate.queryForList("""
                         SELECT constraint_name
@@ -220,10 +220,10 @@ class FlywayMigrationMySqlTest {
                 .migrate()
                 .migrationsExecuted;
 
-        assertThat(migrationsExecuted).isEqualTo(13);
+        assertThat(migrationsExecuted).isEqualTo(16);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
-                Integer.class)).isEqualTo(14);
+                Integer.class)).isEqualTo(17);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT type FROM flyway_schema_history WHERE installed_rank = 1",
                 String.class)).isEqualTo("BASELINE");

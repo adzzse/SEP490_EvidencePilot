@@ -11,6 +11,8 @@ public interface AiModelClient {
 
     GenerationResult generateForReview(String system, String prompt);
 
+    GenerationResult generateStrict(String system, String prompt, Map<String, Object> jsonSchema);
+
     ExtractionBundle extractDocument(String filename, String downloadUrl);
 
     List<Float> generateEmbedding(String text);

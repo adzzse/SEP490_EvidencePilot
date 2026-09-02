@@ -18,6 +18,7 @@ import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
 import DeleteConfirm from '../../components/DeleteConfirm.jsx';
 import ActionExpandHeader from './components/ActionExpandHeader.jsx';
 import ContributionGraph from './components/ContributionGraph.jsx';
+import SectionManager from './components/sections/SectionManager.jsx';
 import { useAuth } from '../../context/AuthContext';
 
 const STANDARDS = ['IEEE', 'ACM', 'SPRINGER_LNCS', 'APA', 'MLA', 'CUSTOM'];
@@ -51,6 +52,11 @@ export default function ProjectDetail() {
   const [members, setMembers] = useState([]);
   const [papers, setPapers] = useState([]);
   const [sections, setSections] = useState([]);
+  // Draft buffer — decouples UI from server (Mandate 1). All edits mutate draftSections; API fires only on Save Changes.
+  const [draftSections, setDraftSections] = useState([]);
+  const [conflictSectionId, setConflictSectionId] = useState(null);
+  const draftDirty = useMemo(() => JSON.stringify(sections) !== JSON.stringify(draftSections), [sections, draftSections]);
+  const displaySections = draftDirty ? draftSections : sections;
   const [selectedPaper, setSelectedPaper] = useState(null);
   const [feedbackRequests, setFeedbackRequests] = useState([]);
   const [progressReport, setProgressReport] = useState(null);
@@ -116,6 +122,15 @@ export default function ProjectDetail() {
   const [advancedSearch, setAdvancedSearch] = useState('');
   // Phase 4: document preview (reuse FileViewerModal from Student Workspace / SourceLibraryPanel)
   const [viewerFile, setViewerFile] = useState(null);
+  // Section Standard AI pipeline — per-section checklist + passThreshold + strict evaluation
+  const [sectionEvals, setSectionEvals] = useState({}); // sectionId -> {status, scorePercent, resultJson, errorMessage}
+  const [pendingStandards, setPendingStandards] = useState({}); // sectionId -> {requirements, passThreshold} pending Save
+  const [stdRequirements, setStdRequirements] = useState(['Abstract ≤250 words', 'IEEE citations [1] style', 'At least 2 external sources']);
+  const [stdThreshold, setStdThreshold] = useState(70);
+  const [evaluatingSectionId, setEvaluatingSectionId] = useState(null);
+  const standardsDirty = useMemo(() => Object.keys(pendingStandards).length > 0, [pendingStandards]);
+  const sectionsDirty = draftDirty || orderDirty;
+  const anyDirty = sectionsDirty || standardsDirty;
 
   const collectionSources = useMemo(
     () => Object.values(collectionSourcePages).flat(),
@@ -147,10 +162,35 @@ export default function ProjectDetail() {
   const loadSections = useCallback(async (paperId) => {
     try {
       const res = await api.get(`/api/papers/${paperId}/sections`);
-      setSections(res.data || []);
+      const data = res.data || [];
+      setSections(data);
+      setDraftSections(data);
+      setConflictSectionId(null);
       setOrderDirty(false);
-    } catch { setSections([]); setOrderDirty(false); }
+      // Fetch standard evaluations per section (structured output, system vs user isolation)
+      data.forEach(async (sec) => {
+        try {
+          const r = await api.get(`/api/papers/${paperId}/sections/${sec.id}/standard-evaluation`);
+          if (r.data) setSectionEvals(prev => ({ ...prev, [String(sec.id)]: r.data }));
+        } catch {}
+      });
+    } catch { setSections([]); setDraftSections([]); setOrderDirty(false); }
   }, []);
+
+  const runStandardCheck = async (sectionId) => {
+    if (!selectedPaper) return;
+    setEvaluatingSectionId(sectionId);
+    try {
+      const { data } = await api.post(`/api/papers/${selectedPaper.id}/sections/${sectionId}/standard-evaluation`, {
+        requirements: stdRequirements,
+        passThreshold: stdThreshold
+      });
+      setSectionEvals(prev => ({ ...prev, [String(sectionId)]: data }));
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Evaluation failed';
+      setSectionEvals(prev => ({ ...prev, [String(sectionId)]: { status: 'SYSTEM_ERROR', errorMessage: msg } }));
+    } finally { setEvaluatingSectionId(null); }
+  };
 
   const loadFeedback = useCallback(async () => {
     try {
@@ -561,27 +601,70 @@ export default function ProjectDetail() {
 
   const handleDragEnd = (result) => {
     if (!result.destination || result.destination.index === result.source.index || !selectedPaper) return;
-    const reordered = Array.from(sections);
+    // Mutate draft only — no API call (Mandate 1)
+    const reordered = Array.from(draftSections);
     const [moved] = reordered.splice(result.source.index, 1);
     reordered.splice(result.destination.index, 0, moved);
-    setSections(reordered);
+    // reindex order in draft for display
+    const reindexed = reordered.map((s, idx) => ({ ...s, sectionOrder: idx }));
+    setDraftSections(reindexed);
     setOrderDirty(true);
   };
 
-  const handleSaveSectionOrder = async () => {
-    if (!selectedPaper || !orderDirty) return;
+  // Single batch endpoint — replaces Promise.all N-transaction trap (Mandate 1) + also persists pending standards atomically
+  const handleSaveAllSections = async () => {
+    if (!selectedPaper || !anyDirty) return;
     setSectionStructureSaving(true);
+    setConflictSectionId(null);
     try {
-      await Promise.all(sections.map((section, index) =>
-        api.put(`/api/papers/${selectedPaper.id}/sections/${section.id}`, null, { params: { order: index } })
-      ));
-      await loadSections(selectedPaper.id);
+      if (sectionsDirty) {
+        const payload = {
+          sections: draftSections.map((s, idx) => ({
+            id: s.id,
+            sectionOrder: idx,
+            sectionTitle: s.sectionTitle,
+            assignedUserId: s.assignedUserId || null,
+            contentTex: s.contentTex,
+            expectedRevision: s.revision ?? s.optVersion ?? 0,
+          }))
+        };
+        const { data } = await api.put(`/api/papers/${selectedPaper.id}/sections/batch`, payload);
+        setSections(data || []);
+        setDraftSections(data || []);
+        setOrderDirty(false);
+      }
+      if (standardsDirty) {
+        // Persist each pending standard via config endpoint (no LLM, no SYSTEM_ERROR) — Save Changes also saves standard
+        for (const [secId, cfg] of Object.entries(pendingStandards)) {
+          try {
+            const { data } = await api.put(`/api/papers/${selectedPaper.id}/sections/${secId}/standard-evaluation/config`, {
+              requirements: cfg.requirements,
+              passThreshold: cfg.passThreshold,
+            });
+            setSectionEvals(prev => ({ ...prev, [String(secId)]: data }));
+          } catch (e) {
+            console.warn('Failed to save standard for', secId, e);
+          }
+        }
+        setPendingStandards({});
+      }
     } catch (err) {
-      alert(err?.response?.data?.message || t.reorderSectionsFailed);
-      await loadSections(selectedPaper.id);
+      const fieldErrors = err?.response?.data?.fieldErrors;
+      const sid = fieldErrors?.sectionId || err?.response?.data?.details?.sectionId;
+      if (err?.response?.status === 409 && sid) {
+        setConflictSectionId(String(sid));
+        alert(`Conflict on section ${sid}: This section was modified by another user. Please refresh this specific section (Reload button). Your draft is preserved.`);
+      } else {
+        alert(err?.response?.data?.message || t.reorderSectionsFailed);
+      }
     } finally {
       setSectionStructureSaving(false);
     }
+  };
+
+  const handleSaveSectionOrder = async () => {
+    // Deprecated path — now delegates to batch
+    return handleSaveAllSections();
   };
 
   const handleAddSection = async () => {
@@ -606,18 +689,9 @@ export default function ProjectDetail() {
 
   const handleSaveSectionRename = async (sectionId) => {
     if (!editingSectionTitle.trim() || !selectedPaper) return;
-    setSectionStructureSaving(true);
-    try {
-      await api.put(`/api/papers/${selectedPaper.id}/sections/${sectionId}`, null, {
-        params: { title: editingSectionTitle.trim() },
-      });
-      setEditingSectionId(null);
-      await loadSections(selectedPaper.id);
-    } catch (err) {
-      alert(err?.response?.data?.message || t.renameSectionFailed);
-    } finally {
-      setSectionStructureSaving(false);
-    }
+    // Draft-only — no API (Mandate 1)
+    setDraftSections(prev => prev.map(s => String(s.id) === String(sectionId) ? { ...s, sectionTitle: editingSectionTitle.trim() } : s));
+    setEditingSectionId(null);
   };
 
   const handleDeleteSection = async (sectionId) => {
@@ -660,7 +734,7 @@ export default function ProjectDetail() {
   };
 
   const handleAssignSection = async (sectionId, userId) => {
-    const section = sections.find(s => s.id === sectionId);
+    const section = displaySections.find(s => String(s.id) === String(sectionId));
     if (!userId) return handleConfirmAssign(null, sectionId);
     if (!section?.assignedUserId) {
       const member = projectMembers.find(m => String(m.userId) === String(userId));
@@ -672,10 +746,16 @@ export default function ProjectDetail() {
 
   const handleConfirmAssign = async (userId, sectionId) => {
     setPendingAssign(null);
+    // Draft-only for assignment too (Mandate 1) — persists on Save Changes batch
+    setDraftSections(prev => prev.map(s => String(s.id) === String(sectionId) ? { ...s, assignedUserId: userId || null } : s));
+  };
+
+  const handleReloadConflictSection = async (sectionId) => {
     try {
-      await api.put(`/api/papers/${selectedPaper.id}/sections/${sectionId}/assign`, null, { params: { assignedUserId: userId || undefined } });
-      await Promise.all([loadProject(), loadSections(selectedPaper.id)]);
-    } catch { alert(t.assignmentFailed); }
+      const { data } = await api.get(`/api/papers/${selectedPaper.id}/sections/${sectionId}/history`);
+      setDraftSections(prev => prev.map(s => String(s.id) === String(sectionId) ? { ...s, ...data, revision: data.revision ?? data.optVersion } : s));
+      setConflictSectionId(null);
+    } catch { alert(t.operationFailed); }
   };
 
   const closeAddMemberModal = () => {
@@ -1011,7 +1091,7 @@ export default function ProjectDetail() {
         {/* Tab: Sections */}
         {activeTab === 'sections' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full overflow-hidden">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-1 h-full overflow-y-auto">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-1 h-full flex flex-col min-h-0">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t.papers}</h2>
               </div>
@@ -1043,8 +1123,8 @@ export default function ProjectDetail() {
                 </div>
               )}
             </div>
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-2 h-full overflow-y-auto">
-              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-2 h-full flex flex-col min-h-0 overflow-hidden">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3 shrink-0">
                 <div>
                   <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t.projectSections}</h2>
                   {selectedPaper && sectionStructureLocked && (
@@ -1065,13 +1145,22 @@ export default function ProjectDetail() {
                       + {t.addSection}
                     </button>
                   )}
-                  {selectedPaper && orderDirty && (
+                  {selectedPaper && anyDirty && (
                     <button
-                      onClick={handleSaveSectionOrder}
-                      disabled={sectionStructureLocked || sectionStructureSaving}
+                      onClick={handleSaveAllSections}
+                      disabled={sectionStructureSaving}
+                      title={sectionStructureLocked ? 'Structure locked — only unassign is allowed; other changes will be rejected' : undefined}
                       className="px-3 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Save Change
+                      Save Changes
+                    </button>
+                  )}
+                  {selectedPaper && anyDirty && (
+                    <button
+                      onClick={() => { setDraftSections(sections); setOrderDirty(false); setConflictSectionId(null); setPendingStandards({}); }}
+                      className="px-3 py-1.5 bg-[var(--surface-tertiary)] text-[var(--text-secondary)] text-xs font-bold rounded-lg hover:opacity-80"
+                    >
+                      Discard
                     </button>
                   )}
                 </div>
@@ -1107,94 +1196,44 @@ export default function ProjectDetail() {
                     </div>
                   );
                 })()
-              ) : sections.length === 0 ? (
+              ) : displaySections.length === 0 ? (
                 <div className="text-xs italic text-[var(--text-tertiary)]">
                   <p>{t.noSectionsHelp}</p>
                 </div>
               ) : (
-                <DragDropContext onDragEnd={handleDragEnd}>
-                  <Droppable droppableId="sections">
-                    {(provided) => (
-                      <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 pr-1">
-                        {sections.map((s, index) => (
-                          <Draggable
-                            key={s.id}
-                            draggableId={String(s.id)}
-                            index={index}
-                            isDragDisabled={sectionStructureLocked || sectionStructureSaving}
-                          >
-                            {(dragProvided, snapshot) => (
-                              <div
-                                ref={dragProvided.innerRef}
-                                {...dragProvided.draggableProps}
-                                className={`flex items-center justify-between gap-3 rounded-lg px-3 py-3 text-xs sm:px-4 ${
-                                  snapshot.isDragging ? 'border border-indigo-200 bg-[var(--brand-soft)] shadow-lg' : 'bg-[var(--surface-secondary)]'
-                                }`}
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <span
-                                    {...dragProvided.dragHandleProps}
-                                    className={`text-[var(--text-tertiary)] ${sectionStructureLocked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}`}
-                                    title={sectionStructureLocked ? t.unassignToReorder : t.dragToReorder}
-                                  >
-                                    {'\u283F'}
-                                  </span>
-                                  {editingSectionId === s.id ? (
-                                    <div className="flex items-center gap-1">
-                                      <input
-                                        autoFocus
-                                        value={editingSectionTitle}
-                                        onChange={e => setEditingSectionTitle(e.target.value)}
-                                        onKeyDown={e => {
-                                          if (e.key === 'Enter') handleSaveSectionRename(s.id);
-                                          if (e.key === 'Escape') setEditingSectionId(null);
-                                        }}
-                                        className="bg-transparent outline-none border-b border-indigo-300 text-xs"
-                                      />
-                                      <button onClick={() => handleSaveSectionRename(s.id)} disabled={sectionStructureSaving} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-50" title={ct.save} aria-label={ct.save}><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="m5 12 4 4L19 6" /></svg></button>
-                                      <button onClick={() => setEditingSectionId(null)} className="rounded p-1 text-[var(--text-tertiary)] hover:bg-[var(--surface-tertiary)] hover:text-[var(--text-primary)]" title={ct.cancel} aria-label={ct.cancel}><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
-                                    </div>
-                                  ) : (
-                                    <span className="font-medium truncate">{s.sectionTitle}</span>
-                                  )}
-                                  {s.version > 1 && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">v{s.version}</span>}
-                                  {s.assignedUserId && (
-                                    <span className="flex items-center gap-1 rounded bg-[var(--surface-tertiary)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--text-secondary)]">
-                                      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3 w-3 fill-none stroke-current" strokeWidth="2"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
-                                      {studentDisplayName(projectMembers.find(m => String(m.userId) === String(s.assignedUserId)) ?? {})}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {!sectionStructureLocked && editingSectionId !== s.id && (
-                                    <button onClick={() => handleStartSectionRename(s)} disabled={sectionStructureSaving} className="rounded p-1 text-[var(--text-tertiary)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-foreground)] disabled:opacity-50" title={t.rename} aria-label={t.rename}><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z" /><path d="m13 7 4 4" /></svg></button>
-                                  )}
-                                  {!sectionStructureLocked && (
-                                    <DeleteConfirm message={t.deleteSectionConfirm} onConfirm={() => handleDeleteSection(s.id)} triggerLabel={ct.delete} confirmLabel={ct.delete} cancelLabel={ct.cancel} disabled={sectionStructureSaving} className="rounded p-1 text-[var(--text-tertiary)] hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 10v6M14 10v6" /></svg></DeleteConfirm>
-                                  )}
-                                  <select
-                                    value={s.assignedUserId || ''}
-                                    onChange={e => handleAssignSection(s.id, e.target.value)}
-                                    disabled={projectReadOnly || sectionStructureSaving}
-                                    className="max-w-36 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs outline-none disabled:bg-[var(--surface-tertiary)] disabled:text-[var(--text-tertiary)] sm:max-w-none"
-                                  >
-                                    <option value="">{t.unassigned}</option>
-                                    {projectMembers
-                                      .filter(member => users.some(user => String(user.id) === String(member.userId)))
-                                      .map(member => (
-                                        <option key={member.userId} value={member.userId}>{studentDisplayName(member ?? {})}</option>
-                                      ))}
-                                  </select>
-                                </div>
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                        {provided.placeholder}
-                      </div>
-                    )}
-                  </Droppable>
-                </DragDropContext>
+                <SectionManager
+                  selectedPaper={selectedPaper}
+                  sections={sections}
+                  draftSections={draftSections}
+                  displaySections={displaySections}
+                  conflictSectionId={conflictSectionId}
+                  sectionStructureLocked={sectionStructureLocked}
+                  projectReadOnly={projectReadOnly}
+                  sectionStructureSaving={sectionStructureSaving}
+                  sectionEvals={sectionEvals}
+                  pendingStandards={pendingStandards}
+                  t={t}
+                  ct={ct}
+                  users={users}
+                  projectMembers={projectMembers}
+                  editingSectionId={editingSectionId}
+                  editingSectionTitle={editingSectionTitle}
+                  onStartRename={handleStartSectionRename}
+                  onSaveRename={handleSaveSectionRename}
+                  onCancelRename={()=>setEditingSectionId(null)}
+                  onEditingChange={setEditingSectionTitle}
+                  onDelete={handleDeleteSection}
+                  onAssign={handleAssignSection}
+                  onReloadConflict={handleReloadConflictSection}
+                  onAddSection={handleAddSection}
+                  onDragEnd={handleDragEnd}
+                  onSaveAll={handleSaveAllSections}
+                  onDiscard={()=>{ setDraftSections(sections); setOrderDirty(false); setConflictSectionId(null); setPendingStandards({}); }}
+                  onConfigSave={(sid,cfg)=> {
+                    setSectionEvals(prev=>({...prev, [String(sid)]: {status:'STALE', requirements: cfg.requirements, passThreshold: cfg.passThreshold}}));
+                    setPendingStandards(prev=>({...prev, [String(sid)]: cfg}));
+                  }}
+                />
               )}
             </div>
           </div>

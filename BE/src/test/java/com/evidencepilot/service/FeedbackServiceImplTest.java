@@ -604,7 +604,10 @@ class FeedbackServiceImplTest {
         return feedback;
     }
 
+    @SuppressWarnings("unchecked")
     private FeedbackServiceImpl service() {
+        org.springframework.beans.factory.ObjectProvider<com.evidencepilot.repository.SectionStandardEvaluationRepository> provider = org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
+        org.mockito.Mockito.lenient().when(provider.getIfAvailable()).thenReturn(null);
         return new FeedbackServiceImpl(
                 feedbackRequestRepository,
                 instructorFeedbackRepository,
@@ -615,7 +618,8 @@ class FeedbackServiceImplTest {
                 systemNotificationService,
                 paperProcessingService,
                 checkpointService,
-                projectCollectionService);
+                projectCollectionService,
+                provider);
     }
 
     private User user(UserRole role) {

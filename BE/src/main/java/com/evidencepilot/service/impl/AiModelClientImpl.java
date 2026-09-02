@@ -94,6 +94,37 @@ public class AiModelClientImpl implements AiModelClient {
         return generate(reviewRestClient, 1, system, prompt);
     }
 
+    @Override
+    public GenerationResult generateStrict(String system, String prompt, Map<String, Object> jsonSchema) {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("system", system == null ? "" : system);
+        body.put("prompt", prompt);
+        if (jsonSchema != null && !jsonSchema.isEmpty()) {
+            body.put("response_format", Map.of(
+                    "type", "json_schema",
+                    "json_schema", Map.of("name", "section_standard", "strict", true, "schema", jsonSchema)));
+        }
+        return generate(restClient, maxRetries, body);
+    }
+
+    private GenerationResult generate(RestClient client, int retryLimit, Map<String, Object> body) {
+        Map<String, Object> response = call("/ai/generate", retryLimit, () -> client.post()
+                .uri(baseUrl + "/ai/generate")
+                .body(body)
+                .retrieve()
+                .body(Map.class));
+        if (response == null
+                || !hasText(response.get("provider"))
+                || !hasText(response.get("model"))
+                || !hasText(response.get("response"))) {
+            throw new AiApiException("/ai/generate", "returned null or empty response", null);
+        }
+        return new GenerationResult(
+                String.valueOf(response.get("provider")),
+                String.valueOf(response.get("model")),
+                String.valueOf(response.get("response")));
+    }
+
     private GenerationResult generate(
             RestClient client, int retryLimit, String system, String prompt) {
         Map<String, Object> response = call("/ai/generate", retryLimit, () -> client.post()

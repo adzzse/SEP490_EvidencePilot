@@ -54,5 +54,7 @@ public interface PaperProcessingService {
 
     void deleteSection(UUID documentId, UUID sectionId);
 
+    List<PaperSectionResponse> batchUpdateSections(UUID documentId, List<com.evidencepilot.dto.request.SectionBatchItem> items);
+
     Path exportTexArchive(UUID projectId);
 }

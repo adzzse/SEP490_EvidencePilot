@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { ThemeProvider } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -36,6 +37,7 @@ function App() {
     <BrowserRouter>
       <ScrollToTop />
       <AuthProvider>
+        <NotificationProvider>
         <LanguageProvider>
           <ThemeProvider>
           <UrgentNotificationBanner />
@@ -100,6 +102,7 @@ function App() {
           </Routes>
           </ThemeProvider>
         </LanguageProvider>
+        </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>
   );

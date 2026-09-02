@@ -40,7 +40,8 @@ class ProjectRouteMappingTest {
             TraceabilityExportController.class,
             UserController.class,
             JobController.class,
-            TraceTelemetryController.class
+            TraceTelemetryController.class,
+            SectionStandardController.class
     };
 
     @Test
@@ -107,6 +108,7 @@ class ProjectRouteMappingTest {
                 "GET /api/papers/{id}/sections",
                 "GET /api/papers/{documentId}/sections/{sectionId}/history",
                 "PUT /api/papers/{documentId}/sections/{sectionId}",
+                "PUT /api/papers/{documentId}/sections/batch",
                 "POST /api/papers/{documentId}/sections/create",
                 "GET /api/papers/{id}/validate",
                 "GET /api/papers/{id}/validate-citations",
@@ -175,8 +177,11 @@ class ProjectRouteMappingTest {
                 "GET /api/papers/{documentId}/sections/{sectionId}/traces",
                 "GET /api/projects/{projectId}/evidence-traces",
                 "GET /api/projects/{projectId}/telemetry",
-                "PATCH /api/projects/{projectId}/evidence-traces/{traceId}/review"));
-        assertThat(routes).hasSize(126);
+                "PATCH /api/projects/{projectId}/evidence-traces/{traceId}/review",
+                "POST /api/papers/{documentId}/sections/{sectionId}/standard-evaluation",
+                "GET /api/papers/{documentId}/sections/{sectionId}/standard-evaluation",
+                "PUT /api/papers/{documentId}/sections/{sectionId}/standard-evaluation/config"));
+        assertThat(routes).hasSize(130);
     }
 
     @Test

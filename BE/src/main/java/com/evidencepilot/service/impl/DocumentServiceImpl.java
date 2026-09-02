@@ -457,39 +457,57 @@ public class DocumentServiceImpl implements DocumentService {
         var currentUser = currentUserService.requireCurrentUser();
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException(projectId, "Project"));
-        currentUserService.requireProjectWriteAccess(currentUser, project);
+        // Instructor fix: explicit instructor bypass — instructors may unlink ANY source from their project,
+        // including student-imported. Only students need strict write check.
+        if (currentUserService.isInstructor(currentUser) || currentUserService.isAdmin(currentUser)) {
+            currentUserService.requireProjectAccess(currentUser, project);
+        } else {
+            currentUserService.requireProjectWriteAccess(currentUser, project);
+        }
 
-        ProjectDocument pd = projectDocumentRepository.findByProjectIdAndDocumentId(projectId, sourceId)
-                .orElseThrow(() -> new ResourceNotFoundException("Shared document not found"));
-        if (pd.getProjectCollection() != null) {
+        var pdOpt = projectDocumentRepository.findByProjectIdAndDocumentId(projectId, sourceId);
+        if (pdOpt.isPresent()) {
+            ProjectDocument pd = pdOpt.get();
+            if (pd.getProjectCollection() != null) {
+                projectCollectionService.unshare(pd);
+                return;
+            }
+            // Guard: only allow unshare if sections are clean (pinned student scope)
+            List<Document> papers = documentRepository
+                    .findByProjectIdAndDocTypeAndActiveTrue(projectId, DocumentType.PAPER);
+            for (Document paper : papers) {
+                var sections = paperSectionRepository
+                        .findByDocumentIdOrderBySectionOrderAsc(paper.getId());
+                if (project.getTargetStandard() != null) {
+                    boolean hasContent = sections.stream()
+                            .anyMatch(s -> s.getContentTex() != null && !s.getContentTex().isBlank());
+                    if (hasContent) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                "Sections contain content — cannot remove shared source");
+                    }
+                } else {
+                    boolean hasAssigned = sections.stream()
+                            .anyMatch(s -> s.getAssignedUser() != null);
+                    if (hasAssigned) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                "Sections have assigned students — cannot remove shared source");
+                    }
+                }
+            }
             projectCollectionService.unshare(pd);
             return;
         }
 
-        // Guard: only allow unshare if sections are clean
-        List<Document> papers = documentRepository
-                .findByProjectIdAndDocTypeAndActiveTrue(projectId, DocumentType.PAPER);
-        for (Document paper : papers) {
-            var sections = paperSectionRepository
-                    .findByDocumentIdOrderBySectionOrderAsc(paper.getId());
-            if (project.getTargetStandard() != null) {
-                boolean hasContent = sections.stream()
-                        .anyMatch(s -> s.getContentTex() != null && !s.getContentTex().isBlank());
-                if (hasContent) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT,
-                            "Sections contain content — cannot remove shared source");
-                }
-            } else {
-                boolean hasAssigned = sections.stream()
-                        .anyMatch(s -> s.getAssignedUser() != null);
-                if (hasAssigned) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT,
-                            "Sections have assigned students — cannot remove shared source");
-                }
-            }
-        }
-
-        projectCollectionService.unshare(pd);
+        // Direct-uploaded source (document.project_id == projectId, no ProjectDocument row) — audit says this was 404 source.
+        //covers: instructor-uploaded via POST /api/sources?projectId=, and student-imported via same path.
+        Document direct = documentRepository.findById(sourceId)
+                .filter(d -> d.getDocType() == DocumentType.SOURCE && d.isActive())
+                .filter(d -> d.getProject() != null && projectId.equals(d.getProject().getId()))
+                .orElseThrow(() -> new ResourceNotFoundException("Shared document not found"));
+        // Data retention: unlink only — never hard-delete library row (document.active stays true, uploadedBy retained)
+        // Student retains ownership in personal workspace (sourceLibrarySpec where uploadedBy = studentId still matches)
+        direct.setProject(null);
+        documentRepository.save(direct);
     }
 
     @Override

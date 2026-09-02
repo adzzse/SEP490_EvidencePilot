@@ -11,6 +11,7 @@ import com.evidencepilot.model.FeedbackStatus;
 import com.evidencepilot.model.InstructorFeedback;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
+import com.evidencepilot.model.SectionStandardEvaluation;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.ProjectRole;
@@ -55,6 +56,12 @@ public class FeedbackServiceImpl implements FeedbackService {
     private final PaperProcessingService paperProcessingService;
     private final CheckpointService checkpointService;
     private final ProjectCollectionService projectCollectionService;
+    // Optional: may be absent in tests without the bean
+    private final org.springframework.beans.factory.ObjectProvider<com.evidencepilot.repository.SectionStandardEvaluationRepository> sectionStandardEvaluationRepositoryProvider;
+
+    private com.evidencepilot.repository.SectionStandardEvaluationRepository getSectionStandardEvaluationRepository() {
+        return sectionStandardEvaluationRepositoryProvider.getIfAvailable();
+    }
 
     @Override
     public List<FeedbackRequestResponseDto> findAllForCurrentUser() {
@@ -122,6 +129,50 @@ public class FeedbackServiceImpl implements FeedbackService {
             }
         }
 
+        // Absolute submission gate: STALE/UNTESTED/SYSTEM_ERROR block entirely; FAILED requires flagged=true
+        if (!papers.isEmpty()) {
+            List<PaperSection> sectionsForGate = paperSectionRepository
+                    .findByDocumentIdOrderBySectionOrderAsc(papers.get(0).getId())
+                    .stream().filter(PaperSection::isActive).toList();
+            if (!sectionsForGate.isEmpty()) {
+                var evalRepo = getSectionStandardEvaluationRepository();
+                if (evalRepo != null) {
+                    boolean hasStaleOrUntested = false;
+                    boolean hasSystemError = false;
+                    boolean hasFailed = false;
+                    String staleDetail = null;
+                    for (PaperSection s : sectionsForGate) {
+                        var opt = evalRepo.findTopBySectionIdOrderByUpdatedAtDesc(s.getId());
+                        if (opt.isEmpty()) {
+                            hasStaleOrUntested = true;
+                            staleDetail = s.getId().toString();
+                            break;
+                        }
+                        String status = opt.get().getStatus();
+                        if (SectionStandardEvaluation.STATUS_STALE.equals(status)
+                                || SectionStandardEvaluation.STATUS_SYSTEM_ERROR.equals(status)) {
+                            if (SectionStandardEvaluation.STATUS_SYSTEM_ERROR.equals(status)) hasSystemError = true;
+                            hasStaleOrUntested = true;
+                            staleDetail = s.getId().toString();
+                            break;
+                        }
+                        if (SectionStandardEvaluation.STATUS_FAILED.equals(status)) {
+                            hasFailed = true;
+                        }
+                    }
+                    if (hasStaleOrUntested) {
+                        // STALE/UNTESTED/SYSTEM_ERROR cannot be bypassed with flagged
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                "STALE_SECTIONS: section " + staleDetail + " requires a fresh Standard Check. Run evaluation before submit. flagged does not bypass stale/system_error.");
+                    }
+                    if (hasFailed && !Boolean.TRUE.equals(request != null ? request.flagged() : null)) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                "FAILED_SECTIONS: one or more sections below passThreshold — submit with flagged=true to force (flagged submission).");
+                    }
+                }
+            }
+        }
+
         FeedbackRequest feedbackRequest = new FeedbackRequest();
         feedbackRequest.setProject(project);
         feedbackRequest.setStudent(student);
@@ -131,6 +182,25 @@ public class FeedbackServiceImpl implements FeedbackService {
         feedbackRequest.setRequestedAt(now);
         feedbackRequest.setUpdatedAt(now);
         feedbackRequest.setSectionValidation(validationJson);
+        feedbackRequest.setFlagged(Boolean.TRUE.equals(request != null ? request.flagged() : null));
+        // Snapshot evaluations for audit
+        try {
+            if (!papers.isEmpty()) {
+                var evalRepo = getSectionStandardEvaluationRepository();
+                if (evalRepo != null) {
+                    var evals = evalRepo.findByDocumentId(papers.get(0).getId());
+                    feedbackRequest.setStandardSnapshotJson(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(
+                            evals.stream().map(e -> Map.of(
+                                    "sectionId", e.getSectionId().toString(),
+                                    "status", e.getStatus(),
+                                    "scorePercent", e.getScorePercent() == null ? 0 : e.getScorePercent(),
+                                    "passThreshold", e.getPassThreshold()
+                            )).toList()));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not snapshot standard evaluations for project {}", project.getId());
+        }
 
         project.setStatus(ProjectStatus.SUBMITTED_FOR_REVIEW);
         projectRepository.save(project);

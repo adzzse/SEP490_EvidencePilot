@@ -1,44 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import api from '../api.js';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { subscribeToNotifications } from '../notificationSocket.js';
+import { useNotification } from '../context/NotificationContext';
 
 export default function NotificationBell({ onOpen }) {
   const { token } = useAuth();
   const { language } = useLanguage();
   const { t } = useTranslation();
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { notifications, unreadCount, markRead } = useNotification();
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    setNotifications([]);
-    setUnreadCount(0);
-    setOpen(false);
-    if (!token) return undefined;
-
-    let cancelled = false;
-    api.get('/api/notifications')
-      .then(({ data }) => { if (!cancelled) setNotifications(data || []); })
-      .catch(() => console.warn('Failed to load notifications'));
-    api.get('/api/notifications/unread-count')
-      .then(({ data }) => { if (!cancelled) setUnreadCount(data?.count || 0); })
-      .catch(() => console.warn('Failed to load unread count'));
-
-    const unsubscribe = subscribeToNotifications(token, incoming => {
-      if (!cancelled) {
-        setNotifications(current => [incoming, ...current]);
-        setUnreadCount(current => current + 1);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [token]);
 
   if (!token) return null;
 
@@ -47,16 +18,6 @@ export default function NotificationBell({ onOpen }) {
       if (!current) onOpen?.();
       return !current;
     });
-  };
-
-  const markRead = async (id) => {
-    try {
-      await api.patch(`/api/notifications/${id}/read`);
-      setNotifications(current => current.map(item => item.id === id ? { ...item, read: true } : item));
-      setUnreadCount(current => Math.max(0, current - 1));
-    } catch {
-      console.warn(t('markNotificationFailed'));
-    }
   };
 
   const iconButton = 'p-2 text-(--text-secondary) hover:text-(--brand-foreground) hover:bg-(--surface-secondary) rounded-lg transition-colors';

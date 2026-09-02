@@ -49,6 +49,12 @@ public class FeedbackRequest {
     @Column(name = "section_validation", columnDefinition = "TEXT")
     private String sectionValidation;
 
+    @Column(name = "flagged", nullable = false)
+    private boolean flagged = false;
+
+    @Column(name = "standard_snapshot_json", columnDefinition = "LONGTEXT")
+    private String standardSnapshotJson;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

@@ -516,7 +516,10 @@ class PaperProcessingServiceImplTest {
         verify(projectRepository, never()).save(project);
     }
 
+    @SuppressWarnings("unchecked")
     private PaperProcessingServiceImpl service() {
+        org.springframework.beans.factory.ObjectProvider<com.evidencepilot.repository.SectionStandardEvaluationRepository> provider = org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
+        org.mockito.Mockito.lenient().when(provider.getIfAvailable()).thenReturn(null);
         return new PaperProcessingServiceImpl(
                 paperSectionRepository,
                 mock(InstructorFeedbackRepository.class),
@@ -528,7 +531,8 @@ class PaperProcessingServiceImplTest {
                 mock(SystemNotificationService.class),
                 mock(TexArchiveBuilder.class),
                 evidenceTraceService,
-                auditService);
+                auditService,
+                provider);
     }
 
     private User user(UserRole role) {

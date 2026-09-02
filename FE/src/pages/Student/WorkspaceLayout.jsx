@@ -7,7 +7,7 @@ import FileViewerModal from '../../components/FileViewerModal';
 import InlineCitationCard from '../../components/InlineCitationCard.jsx';
 import { hasNoEvidence, wrapFindingIndex } from '../../components/citationReviewPopover.js';
 import api from '../../api.js';
-import { subscribeToNotifications } from '../../notificationSocket.js';
+import { useNotification } from '../../context/NotificationContext';
 import WorkspaceHeader from './WorkspaceHeader.jsx';
 import FilePanel from './FilePanel.jsx';
 import EditorPanel from './EditorPanel.jsx';
@@ -650,24 +650,22 @@ export default function WorkspaceLayout() {
       .catch(() => setSections([]));
   }, [selectedPaper, user]);
 
+  const { notifications: ctxNotifications, unreadCount: ctxUnreadCount } = useNotification();
   useEffect(() => {
-    const unsubscribe = subscribeToNotifications(localStorage.getItem('token'), n => {
-      setNotifications(prev => [n, ...prev]);
-      setUnreadCount(c => c + 1);
-      if (n.actionType === 'EXPORT_READY') {
-        showToast(t('exportReady'));
-        if (project) fetchExports();
-      } else {
-        showToast(n.message || t('newNotification'));
-      }
-    });
-    return unsubscribe;
-  }, []);
+    setNotifications(ctxNotifications);
+    setUnreadCount(ctxUnreadCount);
+  }, [ctxNotifications, ctxUnreadCount]);
 
   useEffect(() => {
-    api.get('/api/notifications/unread-count').then(r => setUnreadCount(r.data?.count || 0)).catch(() => console.warn('Failed to load unread count'));
-    api.get('/api/notifications').then(r => setNotifications(r.data || [])).catch(() => console.warn('Failed to load notifications'));
-  }, [projectId]);
+    // Gated via NotificationContext — 503 will not spam, WS uses exponential backoff
+    // Local handling for EXPORT_READY toast remains
+    if (ctxNotifications.length === 0) return;
+    const latest = ctxNotifications[0];
+    if (latest?.actionType === 'EXPORT_READY' && project) {
+      showToast(t('exportReady'));
+      fetchExports();
+    }
+  }, [ctxNotifications]);
 
   const handleMarkNotificationRead = async (id) => {
     try {

@@ -112,6 +112,19 @@ public class GlobalExceptionHandler {
                 "This item was modified by someone else. Reload and try again.", request);
     }
 
+    @ExceptionHandler(com.evidencepilot.exception.SectionConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleSectionConflict(
+            com.evidencepilot.exception.SectionConflictException exception,
+            HttpServletRequest request) {
+
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
+        fieldErrors.put("sectionId", exception.getSectionId().toString());
+        fieldErrors.put("code", "SECTION_REVISION_CONFLICT");
+        fieldErrors.put("expectedRevision", String.valueOf(exception.getExpectedRevision()));
+        fieldErrors.put("actualRevision", String.valueOf(exception.getActualRevision()));
+        return build(HttpStatus.CONFLICT, exception.getMessage(), request, fieldErrors);
+    }
+
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<ApiErrorResponse> handleMultipart(
             MultipartException exception,
