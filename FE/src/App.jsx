@@ -66,10 +66,10 @@ function App() {
               <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><InstructorDashboard /></ProtectedRoute>
             } />
             <Route path="/instructor/projects" element={
-              <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><ProjectManagement /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><ErrorBoundary><ProjectManagement /></ErrorBoundary></ProtectedRoute>
             } />
             <Route path="/instructor/projects/:id" element={
-              <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><ProjectDetail /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><ErrorBoundary><ProjectDetail /></ErrorBoundary></ProtectedRoute>
             } />
             <Route path="/instructor/projects/:id/evidence-traces" element={
               <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><EvidenceTraceReview /></ProtectedRoute>

@@ -35,11 +35,15 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             @Param("fromInclusive") LocalDateTime fromInclusive,
             @Param("toExclusive") LocalDateTime toExclusive);
 
-    // Phase 1.5: DB-level daily aggregation — preserves wordDelta→wordsAdded/Removed fallback for legacy rows
+// Phase 1.5: DB-level daily aggregation — preserves wordDelta→wordsAdded/Removed fallback for legacy rows
     @Query(value = """
             SELECT
               actor_id,
-              DATE(occurred_at) as d,
+              CASE :resolution
+                WHEN 'day' THEN DATE(occurred_at)
+                WHEN 'week' THEN DATE_SUB(DATE(occurred_at), INTERVAL WEEKDAY(occurred_at) DAY)
+                WHEN 'month' THEN DATE_FORMAT(occurred_at, '%Y-%m-01')
+              END as d,
               COUNT(*) as cnt,
               COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED)),0) as sum_delta,
               COALESCE(SUM(CASE WHEN JSON_EXTRACT(new_value, '$.wordsAdded') IS NOT NULL THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsAdded')) AS SIGNED) ELSE GREATEST(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED),0) END),0) as sum_added,
@@ -52,13 +56,14 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
               AND entity_id = :projectId
               AND occurred_at >= :fromInclusive
               AND occurred_at < :toExclusive
-            GROUP BY actor_id, DATE(occurred_at)
+            GROUP BY actor_id, d
             ORDER BY actor_id, d
             """, nativeQuery = true)
     List<Object[]> aggregateDailyWithin(
             @Param("projectId") byte[] projectId,
             @Param("fromInclusive") LocalDateTime fromInclusive,
-            @Param("toExclusive") LocalDateTime toExclusive);
+            @Param("toExclusive") LocalDateTime toExclusive,
+            @Param("resolution") String resolution);
 
     @Query(value = """
             SELECT

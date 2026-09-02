@@ -15,7 +15,8 @@ public record ProjectResponse(
     PaperStandard targetStandard,
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
-    String currentUserRole
+    String currentUserRole,
+    long memberCount
 ) {
     public static ProjectResponse from(Project project) {
         return new ProjectResponse(
@@ -26,7 +27,8 @@ public record ProjectResponse(
             project.getTargetStandard(),
             project.getCreatedAt(),
             project.getUpdatedAt(),
-            null
+            null,
+            project.getProjectMembers() != null ? project.getProjectMembers().size() : 0
         );
     }
 
@@ -39,7 +41,8 @@ public record ProjectResponse(
             project.getTargetStandard(),
             project.getCreatedAt(),
             project.getUpdatedAt(),
-            currentUserRole
+            currentUserRole,
+            project.getProjectMembers() != null ? project.getProjectMembers().size() : 0
         );
     }
 

@@ -119,15 +119,23 @@ public class ProgressReportServiceImpl implements ProgressReportService {
         }
         // Phase 1.5: DB-level GROUP BY DATE — single aggregated query instead of per-row JSON parse loops
         byte[] projectIdBytes = uuidToBytes(projectId);
+        String resolution = computeResolution(from, to);
         List<Object[]> rows = from == null
                 ? auditLogRepository.aggregateDailyAll(projectIdBytes)
-                : auditLogRepository.aggregateDailyWithin(projectIdBytes, from.atStartOfDay(), to.plusDays(1).atStartOfDay());
+                : auditLogRepository.aggregateDailyWithin(projectIdBytes, from.atStartOfDay(), to.plusDays(1).atStartOfDay(), resolution);
         for (Object[] row : rows) {
             // row: [0]=actor_id (byte[]), [1]=DATE (java.sql.Date/LocalDate), [2]=cnt, [3]=sum_delta, [4]=sum_added, [5]=sum_removed, [6]=max_at (Timestamp), [7]=titles (String "t1||t2")
             UUID actorId = bytesToUuid((byte[]) row[0]);
             ContributionAccumulator contribution = contributionByUser.get(actorId);
             if (contribution == null) continue;
-            LocalDate date = row[1] instanceof java.sql.Date ? ((java.sql.Date) row[1]).toLocalDate() : (LocalDate) row[1];
+            LocalDate date;
+            if (row[1] instanceof java.sql.Date) {
+                date = ((java.sql.Date) row[1]).toLocalDate();
+            } else if (row[1] instanceof String) {
+                date = LocalDate.parse((String) row[1]);
+            } else {
+                date = (LocalDate) row[1];
+            }
             long cnt = ((Number) row[2]).longValue();
             int sumDelta = row[3] == null ? 0 : ((Number) row[3]).intValue();
             int sumAdded = row[4] == null ? 0 : ((Number) row[4]).intValue();
@@ -164,6 +172,14 @@ public class ProgressReportServiceImpl implements ProgressReportService {
     private static int wordCount(String contentTex) {
         if (contentTex == null || contentTex.isBlank()) return 0;
         return contentTex.trim().split("\\s+").length;
+    }
+
+    private static String computeResolution(LocalDate from, LocalDate to) {
+        if (from == null || to == null) return "week";
+        long deltaDays = java.time.temporal.ChronoUnit.DAYS.between(from, to);
+        if (deltaDays < 14) return "day";
+        if (deltaDays <= 84) return "week";
+        return "month";
     }
 
     private static UUID parseUuid(String value) {

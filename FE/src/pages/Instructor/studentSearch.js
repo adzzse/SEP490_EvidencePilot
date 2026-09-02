@@ -10,7 +10,9 @@ function normalizeSearch(value) {
 export function studentDisplayName(student) {
   return [student?.firstName, student?.lastName].filter(Boolean).join(' ')
     || student?.email
-    || '';
+    || (student?.userId != null ? String(student.userId).slice(0, 8) : '')
+    || (student?.id != null ? String(student.id).slice(0, 8) : '')
+    || 'Unassigned';
 }
 
 export function getStudentSuggestions(users, projectMembers, query, limit = 8) {

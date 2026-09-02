@@ -18,6 +18,7 @@ import useUndoDelete, { UndoToast } from '../../components/UndoDelete.jsx';
 import DeleteConfirm from '../../components/DeleteConfirm.jsx';
 import ActionExpandHeader from './components/ActionExpandHeader.jsx';
 import ContributionGraph from './components/ContributionGraph.jsx';
+import { useAuth } from '../../context/AuthContext';
 
 const STANDARDS = ['IEEE', 'ACM', 'SPRINGER_LNCS', 'APA', 'MLA', 'CUSTOM'];
 const MODAL_PAGE_SIZE = 20;
@@ -31,6 +32,7 @@ export default function ProjectDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { language } = useLanguage();
+  const { user } = useAuth();
   const ct = commonText[language];
   const t = instructorText[language];
   const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
@@ -68,7 +70,7 @@ export default function ProjectDetail() {
 
   // Setup tab state
   const [doiInput, setDoiInput] = useState('');
-  const [doiError, setDoiError] = useState('');
+  const [doiErrors, setDoiErrors] = useState([]);
   const [standard, setStandard] = useState('');
   const [sources, setSources] = useState([]);
   const [showSourceDetail, setShowSourceDetail] = useState(false);
@@ -160,11 +162,19 @@ export default function ProjectDetail() {
 
   const loadProgressReport = useCallback(async () => {
     try {
+      let resolution = 'month';
+      if (reportFrom && reportTo) {
+        const diffDays = Math.ceil((new Date(reportTo) - new Date(reportFrom)) / (1000 * 60 * 60 * 24));
+        if (diffDays < 14) resolution = 'day';
+        else if (diffDays <= 84) resolution = 'week';
+      }
+
       const [progRes, diffRes] = await Promise.all([
         api.get(`/api/projects/${id}/progress-report`, {
           params: {
             memberFilter: reportMemberId,
             ...(reportFrom && reportTo ? { from: reportFrom, to: reportTo } : {}),
+            resolution,
           },
         }).catch(() => null),
         api.get(`/api/projects/${id}/checkpoints/diff`).catch(() => null),
@@ -215,6 +225,16 @@ export default function ProjectDetail() {
     };
   }, [checkpointDiff, reportSectionId]);
 
+  const contributionBuckets = useMemo(() => {
+    if (!progressReport?.contributions) return [];
+    
+    // Aggregate by member instead of date
+    return progressReport.contributions.map(c => ({
+      label: c.userName || 'Unknown',
+      count: c.saveCount || 0
+    }));
+  }, [progressReport]);
+
   const studentSuggestions = useMemo(
     () => getStudentSuggestions(users, members, memberQuery),
     [users, members, memberQuery],
@@ -226,10 +246,14 @@ export default function ProjectDetail() {
 
   // Phase 2 & 3: filtered members for Assign Member search + selection
   const filteredMembers = useMemo(() => {
-    if (!memberSearch.trim()) return members;
+    let filtered = members;
+    if (user?.id) {
+      filtered = filtered.filter(m => String(m.userId) !== String(user.id));
+    }
+    if (!memberSearch.trim()) return filtered;
     const q = memberSearch.toLowerCase();
-    return members.filter(m => displayName(m).toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || String(m.userRole||'').toLowerCase().includes(q));
-  }, [members, memberSearch]);
+    return filtered.filter(m => studentDisplayName(m).toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || String(m.userRole||'').toLowerCase().includes(q));
+  }, [members, memberSearch, user?.id]);
 
   const filteredSources = useMemo(() => {
     if (!sourceSearch.trim()) return sources;
@@ -241,7 +265,7 @@ export default function ProjectDetail() {
     const q = advancedSearch.trim().toLowerCase();
     const list = getStudentSuggestions(users, members, '');
     if (!q) return list;
-    return list.filter(s => studentDisplayName(s).toLowerCase().includes(q) || s.email.toLowerCase().includes(q));
+    return list.filter(s => studentDisplayName(s).toLowerCase().includes(q) || (s.email?.toLowerCase() ?? '').includes(q));
   }, [users, members, advancedSearch]);
 
   const selectedMember = useMemo(() => {
@@ -295,24 +319,55 @@ export default function ProjectDetail() {
 
   const handleUpdateStandard = () => saveStandard(standard);
 
-  const handleImportDoiUnified = async () => {
-    const raw = doiInput.trim();
+  const handleImportDoiUnified = async (specificDoi = null) => {
+    const raw = specificDoi || doiInput.trim();
     if (!raw) return;
     const dois = [...new Set(raw.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean))];
     if (dois.length === 0) return;
+    
     setAddSourceLoading(true);
-    setDoiError('');
+    if (!specificDoi) {
+      setDoiErrors([]);
+    }
+    
     try {
+      let response;
       if (dois.length === 1) {
-        await api.post('/api/documents/ingest/doi', { doi: dois[0], projectId: id });
+        response = await api.post('/api/documents/ingest/doi', { doi: dois[0], projectId: id });
       } else {
-        // Phase 3: single batch request — backend transactional loop (no Promise.allSettled spam)
-        await api.post('/api/documents/ingest/doi/batch', { projectId: id, dois });
+        response = await api.post('/api/documents/ingest/doi/batch', { projectId: id, dois });
       }
-      setDoiInput('');
+      
+      // Handle 207 Multi-Status
+      if (response && response.status === 207 && response.data && response.data.failed) {
+        if (!specificDoi) {
+          setDoiErrors(response.data.failed);
+        } else {
+          // If retry returns 207, update the error for that specific DOI
+          setDoiErrors(prev => prev.map(e => e.doi === specificDoi ? (response.data.failed.find(f => f.doi === specificDoi) || e) : e));
+        }
+      } else if (specificDoi) {
+        // Successful retry: remove from errors
+        setDoiErrors(prev => prev.filter(e => e.doi !== specificDoi));
+      }
+
+      if (!specificDoi) {
+        setDoiInput('');
+      }
+      
       await loadSources();
-      setShowAddSource(false);
-    } catch (err) { setDoiError(err?.response?.data?.message || t.doiImportFailed); }
+      
+      // Only close modal if it was a batch and there were no errors
+      if (!specificDoi && (!response || response.status !== 207)) {
+        setShowAddSource(false);
+      }
+    } catch (err) { 
+      if (specificDoi) {
+        setDoiErrors(prev => prev.map(e => e.doi === specificDoi ? { ...e, error: err?.response?.data?.message || 'Network error' } : e));
+      } else {
+        setDoiErrors([{ doi: 'batch', error: err?.response?.data?.message || 'Network/Server Error: Could not complete ingestion' }]);
+      }
+    }
     finally { setAddSourceLoading(false); }
   };
 
@@ -608,8 +663,8 @@ export default function ProjectDetail() {
     const section = sections.find(s => s.id === sectionId);
     if (!userId) return handleConfirmAssign(null, sectionId);
     if (!section?.assignedUserId) {
-      const member = projectMembers.find(m => m.userId === userId);
-      setPendingAssign({ sectionId, userId, userName: displayName(member) });
+      const member = projectMembers.find(m => String(m.userId) === String(userId));
+      setPendingAssign({ sectionId, userId, userName: studentDisplayName(member ?? {}) });
       return;
     }
     handleConfirmAssign(userId, sectionId);
@@ -773,7 +828,6 @@ export default function ProjectDetail() {
   if (!project) return null;
 
   const projectMembers = members;
-  const displayName = m => [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email || m.userId?.slice(0, 8);
   const hasAssignedSections = sections.some(s => s.assignedUserId);
   const projectReadOnly = ['SUBMITTED_FOR_REVIEW', 'APPROVED', 'ARCHIVED'].includes(project.status);
   const sectionStructureLocked = hasAssignedSections || projectReadOnly;
@@ -788,7 +842,7 @@ export default function ProjectDetail() {
             <div className="min-w-0 flex-1">
               <h1 className="break-words text-2xl font-black text-[var(--brand-foreground)]">{project.title}</h1>
               {project.description && <p className="mt-1 text-sm text-[var(--text-secondary)]">{project.description}</p>}
-              <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-[var(--text-tertiary)]">ID: {project.id} <span aria-hidden="true">&middot;</span> <StatusBadge status={project.status} /></p>
+              <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-[var(--text-tertiary)]"><StatusBadge status={project.status} /></p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {/* PHASE 1: Status Control lifted from Settings tab — replaces View Evidence Trace */}
@@ -845,11 +899,11 @@ export default function ProjectDetail() {
               {filteredSources.length === 0 ? (
                 <p className="text-xs italic text-[var(--text-tertiary)]">{sourceSearch ? t.noStudentsFound || 'No matches' : t.noSourceDocuments}</p>
               ) : (
-                <div className="space-y-1">
+                <div className="space-y-1 max-h-[50vh] overflow-y-auto">
                   {filteredSources.map(s => (
-                    <div key={s.id} className="flex items-center gap-2 rounded-lg bg-[var(--surface-secondary)] px-3 py-2 text-xs transition hover:bg-[var(--surface-tertiary)]">
+                    <div key={s.id} data-testid={`source-${s.id}`} className="flex items-center gap-2 rounded-lg bg-[var(--surface-secondary)] px-3 py-2 text-xs transition hover:bg-[var(--surface-tertiary)]">
                       <button onClick={() => { setSourceDetail(s); setShowSourceDetail(true); }} className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left">
-                        <span className="min-w-0 truncate font-medium">{s.title || s.originalFilename || s.id}</span>
+                        <span className="min-w-0 truncate font-medium">{s.title || s.originalFilename || ct.unknown || 'Unknown Source'}</span>
                         <StatusBadge status={s.processingStatus || 'READY'} />
                       </button>
                       <DeleteConfirm
@@ -1107,7 +1161,7 @@ export default function ProjectDetail() {
                                   {s.assignedUserId && (
                                     <span className="flex items-center gap-1 rounded bg-[var(--surface-tertiary)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--text-secondary)]">
                                       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3 w-3 fill-none stroke-current" strokeWidth="2"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
-                                      {displayName(projectMembers.find(m => m.userId === s.assignedUserId))}
+                                      {studentDisplayName(projectMembers.find(m => String(m.userId) === String(s.assignedUserId)) ?? {})}
                                     </span>
                                   )}
                                 </div>
@@ -1128,7 +1182,7 @@ export default function ProjectDetail() {
                                     {projectMembers
                                       .filter(member => users.some(user => String(user.id) === String(member.userId)))
                                       .map(member => (
-                                        <option key={member.id} value={member.userId}>{displayName(member)}</option>
+                                        <option key={member.userId} value={member.userId}>{studentDisplayName(member ?? {})}</option>
                                       ))}
                                   </select>
                                 </div>
@@ -1154,9 +1208,9 @@ export default function ProjectDetail() {
               {feedbackRequests.length === 0 ? (
                 <p className="text-xs italic text-[var(--text-tertiary)]">{t.noReviewRequests}</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
                   {feedbackRequests.map(fb => (
-                    <div key={fb.id} className="rounded-lg bg-[var(--surface-secondary)] px-3 py-2 text-xs">
+                    <div key={fb.id} data-testid={`feedback-${fb.id}`} className="rounded-lg bg-[var(--surface-secondary)] px-3 py-2 text-xs">
                       <div className="flex justify-between items-center">
                         <StatusBadge status={fb.status} />
                         <span className="text-[var(--text-tertiary)]">{fb.requestedAt ? new Date(fb.requestedAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US') : ''}</span>
@@ -1225,7 +1279,7 @@ export default function ProjectDetail() {
                     >
                       <option value="ALL">{t.allStudents}</option>
                       {studentMembers.map(member => (
-                        <option key={member.userId} value={member.userId}>{displayName(member)}</option>
+                        <option key={member.userId} value={member.userId}>{studentDisplayName(member ?? {})}</option>
                       ))}
                     </select>
                   </label>
@@ -1295,8 +1349,8 @@ export default function ProjectDetail() {
             </div>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-1 h-full overflow-y-auto">
               <h2 className="mb-3 text-sm font-bold text-[var(--brand-foreground)]">Contribution Graph</h2>
-              <p className="mb-3 text-[10px] text-[var(--text-tertiary)]">GitHub-style daily saves — aggregated from audit_logs (V13 index, GROUP BY DATE)</p>
-              <ContributionGraph dailyDeltas={(progressReport?.contributions || []).flatMap(c => c.dailyWordDeltas || [])} />
+              <p className="mb-3 text-[10px] text-[var(--text-tertiary)]">Dynamic contribution graph</p>
+              <ContributionGraph buckets={contributionBuckets} />
             </div>
           </div>
         )}
@@ -1312,13 +1366,13 @@ export default function ProjectDetail() {
               {filteredMembers.length === 0 ? (
                 <p className="text-xs italic text-[var(--text-tertiary)]">{memberSearch ? t.noStudentsFound || 'No matches' : t.noMembers}</p>
               ) : (
-                <div className="space-y-1">
+                <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-1">
                   {filteredMembers.map(m => {
                     const isSelected = selectedMember && String(selectedMember.userId||selectedMember.id) === String(m.userId||m.id);
                     return (
-                      <button key={m.id} onClick={()=>setSelectedMemberId(String(m.userId||m.id))} className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs transition ${isSelected ? 'border border-indigo-200 bg-[var(--brand-soft)] text-[var(--brand-foreground)]' : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)]'}`}>
+                       <button key={m.userId} data-testid={`member-${m.userId}`} onClick={()=>setSelectedMemberId(String(m.userId))} className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs transition ${isSelected ? 'border border-indigo-200 bg-[var(--brand-soft)] text-[var(--brand-foreground)]' : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)]'}`}>
                         <div className="min-w-0 flex-1">
-                          <span className="block truncate font-medium">{displayName(m)}</span>
+                          <span className="block truncate font-medium">{studentDisplayName(m ?? {})}</span>
                           <span className="block truncate text-[10px] text-[var(--text-tertiary)]">{m.email}</span>
                         </div>
                         <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">{m.userRole || m.role}</span>
@@ -1339,7 +1393,7 @@ export default function ProjectDetail() {
                   <div className="flex items-start gap-4">
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-sm font-black text-white">{(selectedMember.firstName?.[0]||selectedMember.email?.[0]||'U').toUpperCase()}</div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-sm font-bold text-[var(--brand-foreground)]">{displayName(selectedMember)}</h3>
+                      <h3 className="truncate text-sm font-bold text-[var(--brand-foreground)]">{studentDisplayName(selectedMember ?? {})}</h3>
                       <p className="truncate text-xs text-[var(--text-tertiary)]">{selectedMember.email}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">{selectedMember.userRole}</span>
@@ -1349,7 +1403,6 @@ export default function ProjectDetail() {
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div><span className="block text-[10px] font-bold uppercase text-[var(--text-tertiary)]">User ID</span><span className="break-all font-mono text-[11px]">{selectedMember.userId}</span></div>
                     <div><span className="block text-[10px] font-bold uppercase text-[var(--text-tertiary)]">Student Code</span><span className="text-[11px]">{selectedMember.studentCode || '-'}</span></div>
                   </div>
                   {selectedMember.role !== 'INSTRUCTOR' && (
@@ -1439,8 +1492,8 @@ export default function ProjectDetail() {
         </div>
       </Modal>
 
-      {/* Phase 3: Advanced Add Multiple Students — with local search */}
-      <Modal open={showAdvancedAdd} onClose={()=>{setShowAdvancedAdd(false); setAdvancedSelectedIds([]); setAdvancedSearch('');}} title="Advanced Add Multiple Students">
+      {/* Phase 3: Add Students — with local search */}
+      <Modal open={showAdvancedAdd} onClose={()=>{setShowAdvancedAdd(false); setAdvancedSelectedIds([]); setAdvancedSearch('');}} title="Add Students">
         <div className="space-y-3">
           <p className="text-xs text-[var(--text-secondary)]">Select multiple students and assign roles. Already members are hidden.</p>
           <div className="relative">
@@ -1490,7 +1543,6 @@ export default function ProjectDetail() {
             <div><span className="font-bold text-[var(--text-secondary)]">DOI:</span> <span className="font-mono">{sourceDetail.doi || '-'}</span></div>
             <div><span className="font-bold text-[var(--text-secondary)]">{ct.status}:</span> <StatusBadge status={sourceDetail.processingStatus || 'READY'} /></div>
             <div><span className="font-bold text-[var(--text-secondary)]">{t.typeLabel}</span> <span>{sourceDetail.docType || 'SOURCE'}</span></div>
-            <div><span className="font-bold text-[var(--text-secondary)]">ID:</span> <span className="font-mono text-[9px]">{sourceDetail.id}</span></div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => { setViewerFile({ fileUrl: `/api/documents/${sourceDetail.id}/download`, fileName: sourceDetail.originalFilename || sourceDetail.title }); }} className="rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)]">{t.previewSource || 'Preview'}</button>
               <button onClick={() => setShowSourceDetail(false)} className="rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:opacity-80">{ct.close}</button>
@@ -1511,7 +1563,21 @@ export default function ProjectDetail() {
               </button>
               {doiInput.trim().split(/[\n,;]+/).filter(Boolean).length > 1 && <span className="py-2 text-[10px] text-[var(--text-tertiary)]">{doiInput.trim().split(/[\n,;]+/).filter(Boolean).length} DOIs — one request</span>}
             </div>
-            {doiError && <p className="text-xs font-semibold text-rose-600">{doiError}</p>}
+            {doiErrors.length > 0 && (
+              <div className="space-y-2 mt-2">
+                {doiErrors.map((err, idx) => (
+                  <div key={idx} className="flex flex-col gap-1 rounded bg-rose-50 px-3 py-2 text-xs text-rose-700 border border-rose-200">
+                    <div className="font-semibold">{err.doi}: {err.error}</div>
+                    {err.doi !== 'batch' && (
+                      <div className="flex gap-2 mt-1">
+                        <button onClick={() => handleImportDoiUnified(err.doi)} className="rounded bg-rose-600 px-2 py-1 font-bold text-white hover:bg-rose-700">Retry</button>
+                        <button onClick={() => console.warn("TODO: Wire up manual modal")} className="rounded bg-rose-100 px-2 py-1 font-bold text-rose-700 hover:bg-rose-200">Manual Input</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             <p className="text-[10px] italic text-[var(--text-tertiary)]">{t.sourcesAutoClassified} • Batch uses single POST /api/documents/ingest/doi/batch</p>
           </div>
           <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">

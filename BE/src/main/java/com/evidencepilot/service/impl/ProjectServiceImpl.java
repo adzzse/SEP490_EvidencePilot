@@ -21,10 +21,14 @@ import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.ProjectService;
 import com.evidencepilot.service.SystemNotificationService;
 import com.evidencepilot.dto.request.PagingRequest;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -74,7 +78,27 @@ public class ProjectServiceImpl implements ProjectService {
         var results = projectRepository.findAll(
                 projectSpec(currentUser, q, status, active),
                 pageable);
-        return PagedResponse.from(results.map(ProjectResponse::from));
+        List<Project> projects = results.getContent();
+        List<UUID> projectIds = projects.stream().map(Project::getId).toList();
+        List<Object[]> memberCountsRaw = projectMemberRepository.countByProjectIds(projectIds);
+        Map<UUID, Long> memberCounts = new java.util.HashMap<>();
+        for (Object[] row : memberCountsRaw) {
+            memberCounts.put((UUID) row[0], ((Number) row[1]).longValue());
+        }
+        List<ProjectResponse> responses = projects.stream()
+                .map(p -> new ProjectResponse(
+                        p.getId(),
+                        p.getTitle(),
+                        p.getDescription(),
+                        p.getStatus(),
+                        p.getTargetStandard(),
+                        p.getCreatedAt(),
+                        p.getUpdatedAt(),
+                        null,
+                        memberCounts.getOrDefault(p.getId(), 0L)
+                ))
+                .toList();
+        return PagedResponse.from(new org.springframework.data.domain.PageImpl<>(responses, pageable, results.getTotalElements()));
     }
 
     @Override

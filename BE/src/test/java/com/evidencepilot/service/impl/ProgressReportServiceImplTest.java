@@ -110,7 +110,7 @@ class ProgressReportServiceImplTest {
         java.sql.Timestamp sqlTs = java.sql.Timestamp.valueOf(edit.getOccurredAt());
         byte[] actorBytes = uuidToBytes(previousAssignee.getId());
         Object[] row = new Object[]{actorBytes, sqlDate, 1L, 2, 2, 0, sqlTs, "Introduction"};
-        when(auditLogRepository.aggregateDailyWithin(any(byte[].class), eq(from.atStartOfDay()), eq(to.plusDays(1).atStartOfDay())))
+        when(auditLogRepository.aggregateDailyWithin(any(byte[].class), eq(from.atStartOfDay()), eq(to.plusDays(1).atStartOfDay()), eq("day")))
                 .thenReturn(List.<Object[]>of(row));
 
         var report = service.getProgressReport(project.getId(), "ALL", from, to);
@@ -150,7 +150,7 @@ class ProgressReportServiceImplTest {
                     assertThat(item.assignedSectionCount()).isZero();
                     assertThat(item.saveCount()).isZero();
                 });
-        verify(auditLogRepository).aggregateDailyWithin(any(byte[].class), eq(from.atStartOfDay()), eq(to.plusDays(1).atStartOfDay()));
+        verify(auditLogRepository).aggregateDailyWithin(any(byte[].class), eq(from.atStartOfDay()), eq(to.plusDays(1).atStartOfDay()), eq("day"));
     }
 
     @Test

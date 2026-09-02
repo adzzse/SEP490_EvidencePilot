@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppHeader from '../../components/AppHeader.jsx';
 import api from '../../api.js';
@@ -25,13 +25,40 @@ export default function ProjectManagement() {
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  const fetchProjects = async () => {
+  const [search, setSearch] = useState('');
+  const abortControllerRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  const fetchProjects = useCallback(async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
     setLoading(true);
-    try { const r = await api.get(`/api/projects?page=${page}&size=10`); setProjects(r.data.content || []); setTotal(r.data.totalElements || 0); }
-    catch { setProjects([]); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { fetchProjects(); }, [page]);
+    try { 
+      const r = await api.get(`/api/projects?page=${page}&size=10${search ? `&search=${encodeURIComponent(search)}` : ''}`, {
+        signal: abortControllerRef.current.signal
+      }); 
+      setProjects(r.data.content || []); 
+      setTotal(r.data.totalElements || 0); 
+    } catch (err) { 
+      if (err?.name !== 'CanceledError' && err?.code !== 'ERR_CANCELED') {
+        setProjects([]); 
+      }
+    } finally { 
+      if (abortControllerRef.current && !abortControllerRef.current.signal.aborted) {
+        setLoading(false); 
+      }
+    }
+  }, [page, search]);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchProjects();
+    }, 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [fetchProjects]);
 
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
@@ -68,10 +95,19 @@ export default function ProjectManagement() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         <div className="flex justify-between items-center gap-4 mb-6">
           <h1 className="text-2xl font-black text-(--brand-foreground)">{t.projects} ({total})</h1>
-          <button onClick={() => setShowCreate(true)} className="px-4 py-2 bg-(--brand) text-(--on-brand) font-bold text-xs rounded-xl hover:bg-(--brand-hover) transition-colors flex items-center gap-1 shrink-0">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-            {t.createProject}
-          </button>
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              placeholder={ct.search || 'Search...'}
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              className="border border-(--border) bg-(--surface) text-(--text-primary) rounded-lg px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-(--focus)"
+            />
+            <button onClick={() => setShowCreate(true)} className="px-4 py-2 bg-(--brand) text-(--on-brand) font-bold text-xs rounded-xl hover:bg-(--brand-hover) transition-colors flex items-center gap-1 shrink-0">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+              {t.createProject}
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -82,7 +118,7 @@ export default function ProjectManagement() {
           <div className="bg-(--surface) rounded-2xl border border-(--border) shadow-sm overflow-hidden">
             <div className="divide-y divide-(--border-light)">
               {projects.map(p => (
-                <div key={p.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 hover:bg-(--surface-secondary) transition-colors">
+                <div key={p.id} data-testid={`project-card-${p.id}`} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 hover:bg-(--surface-secondary) transition-colors">
                   <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/instructor/projects/${p.id}`)}>
                     {editId === p.id ? (
                       <div className="flex gap-2 items-center" onClick={e => e.stopPropagation()}>
@@ -93,7 +129,15 @@ export default function ProjectManagement() {
                     ) : (
                       <div>
                         <h3 className="font-bold text-(--text-primary) text-sm hover:text-(--brand) transition-colors">{p.title}</h3>
-                        <p className="text-[10px] text-(--text-tertiary) font-mono mt-0.5">{p.id}</p>
+                        <div className="flex flex-wrap items-center gap-3 mt-1">
+                          <p className="text-[10px] text-(--text-secondary) flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                            {p.memberCount || 0} {t.members || 'Members'}
+                          </p>
+                          <p className="text-[10px] text-(--text-tertiary)">
+                            {t.lastUpdated || 'Last updated'}: {new Date(p.updatedAt || p.createdAt).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US')}
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
