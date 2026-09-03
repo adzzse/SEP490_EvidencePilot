@@ -36,6 +36,12 @@ class CollectionServiceImplTest {
     @Mock
     private ProjectCollectionService projectCollectionService;
 
+    @Mock
+    private com.evidencepilot.repository.DocumentRepository documentRepository;
+
+    @Mock
+    private com.evidencepilot.repository.CollectionDocumentRepository collectionDocumentRepository;
+
     @Test
     void createCollectionRequiresInstructorRole() {
         User instructor = user(UserRole.INSTRUCTOR);
@@ -83,7 +89,8 @@ class CollectionServiceImplTest {
 
     private CollectionServiceImpl service() {
         return new CollectionServiceImpl(
-                collectionRepository, collectionCategoryRepository, currentUserService, projectCollectionService);
+                collectionRepository, collectionCategoryRepository, currentUserService, projectCollectionService,
+                documentRepository, collectionDocumentRepository);
     }
 
     private User user(UserRole role) {

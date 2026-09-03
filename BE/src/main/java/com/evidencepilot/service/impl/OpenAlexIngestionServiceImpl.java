@@ -6,6 +6,7 @@ import com.evidencepilot.dto.openalex.OpenAlexWorkResponse;
 import com.evidencepilot.dto.response.CitationGraphResponse;
 import com.evidencepilot.dto.response.DocumentResponse;
 import com.evidencepilot.dto.response.OpenAlexPreview;
+import com.evidencepilot.exception.DuplicateProjectDoiException;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.CollectionDocument;
@@ -119,6 +120,11 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
             Project project = projectRepository.findById(projectId)
                     .orElseThrow(() -> new ResourceNotFoundException(projectId, "Project"));
             currentUserService.requireProjectWriteAccess(currentUser, project);
+            if (DoiUtils.isValid(normalizedDoi)
+                    && documentRepository.countActiveProjectSourcesByDoi(
+                            projectId, DocumentType.SOURCE, normalizedDoi) > 0) {
+                throw new DuplicateProjectDoiException(normalizedDoi);
+            }
             document.setProject(project);
         } else {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Either projectId or collectionId is required");

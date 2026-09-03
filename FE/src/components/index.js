@@ -28,3 +28,4 @@ export { default as FileViewerModal } from './features/FileViewerModal';
 export { default as InlineCitationCard } from './features/InlineCitationCard';
 export { default as UrgentNotificationBanner } from './features/UrgentNotificationBanner';
 export { default as VisualSourceMap } from './features/VisualSourceMap';
+export { default as UniversalDocumentIngestionModal } from './features/UniversalDocumentIngestionModal';

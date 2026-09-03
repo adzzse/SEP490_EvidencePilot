@@ -160,4 +160,24 @@ public class SourceController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @Operation(summary = "Batch upload source files",
+            description = "Accepts multiple files (multipart/form-data) and processes each. Returns 202/207 with succeeded and failed lists.")
+    @PostMapping(value = "/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<com.evidencepilot.dto.response.BatchUploadResponse> uploadBatch(
+            @Parameter(description = "Files to upload") @RequestParam("files") MultipartFile[] files,
+            @Parameter(description = "Project UUID") @RequestParam(value = "projectId", required = false) UUID projectId,
+            @Parameter(description = "Collection UUID") @RequestParam(value = "collectionId", required = false) UUID collectionId) {
+
+        if (projectId == null && collectionId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Either projectId or collectionId must be provided");
+        }
+        var response = documentService.uploadDocumentsBatch(
+                projectId, collectionId, files, DocumentType.SOURCE);
+        if (!response.failed().isEmpty()) {
+            return ResponseEntity.status(HttpStatus.MULTI_STATUS).body(response);
+        }
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
+    }
+
 }

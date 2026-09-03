@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { EntityCard, Modal, EmptyState, TourLauncher, AppHeader, Breadcrumb } from '../../components';
+import { EntityCard, Modal, EmptyState, AppHeader, Breadcrumb } from '../../components';
 import { instructorText, commonText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
 import { useCollections } from '../../hooks/useCollections';
@@ -23,6 +23,7 @@ export default function CollectionList() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [page, setPage] = useState(0);
   const [isGridView, setIsGridView] = useState(true);
+  const [showGuide, setShowGuide] = useState(false);
 
   const { content: collections, totalPages, totalElements, loading, error, refetch } = useCollections(
     page,
@@ -40,11 +41,6 @@ export default function CollectionList() {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  const tourSteps = [
-    { element: '#collection-grid', popover: { title: t.browseCollections, description: t.browseCollectionsDesc, side: 'top', align: 'start' } },
-    { element: '#create-collection-btn', popover: { title: t.createCollection, description: t.createCollectionDesc, side: 'left', align: 'center' } },
-  ];
-
   const handleEdit = (col) => {
     setEditing(col.id);
     setName(col.name);
@@ -53,17 +49,12 @@ export default function CollectionList() {
     setModalOpen(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!id || deletingId) return;
-    setDeletingId(id);
-    try {
-      await api.delete(`/api/collections/${id}`);
-      await refetch();
-    } catch { alert(t.deleteCollectionFailed); }
-    finally { setDeletingId(null); }
+  const resetForm = () => {
+    setEditing(null);
+    setName('');
+    setDescription('');
+    setCategoryId('');
   };
-
-  const resetForm = () => { setName(''); setDescription(''); setCategoryId(''); setEditing(null); };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -81,8 +72,18 @@ export default function CollectionList() {
     finally { setSubmitting(false); }
   };
 
+  const handleDelete = async (id) => {
+    if (!id || deletingId) return;
+    setDeletingId(id);
+    try {
+      await api.delete(`/api/collections/${id}`);
+      await refetch();
+    } catch { alert(t.deleteCollectionFailed); }
+    finally { setDeletingId(null); }
+  };
+
   return (
-    <div className="min-h-screen bg-(--page-bg) text-(--text-primary) font-sans">
+    <div className="min-h-screen bg-(--background) text-(--text-primary)">
       <AppHeader />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Breadcrumb
@@ -92,7 +93,6 @@ export default function CollectionList() {
           ]}
         />
 
-        {/* Top Header & Flexbox Right Action Bar */}
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6 border-b border-(--border) pb-6">
           <div className="min-w-0 flex-1">
             <h1 className="text-3xl font-black text-(--brand-foreground) tracking-tight">{t.collections}</h1>
@@ -138,6 +138,13 @@ export default function CollectionList() {
               </button>
             </div>
             <button
+              onClick={() => setShowGuide(true)}
+              className="shrink-0 inline-flex items-center gap-2 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-bold text-(--text-secondary) hover:text-(--brand-foreground) hover:border-(--brand) transition-colors cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
+              {ct.guide || 'Guide'}
+            </button>
+            <button
               id="create-collection-btn"
               onClick={() => setModalOpen(true)}
               className="cursor-pointer whitespace-nowrap rounded-xl bg-(--brand) px-4 py-2 text-xs font-black text-(--on-brand) shadow-xs transition-colors hover:bg-(--brand-hover) focus:outline-none focus:ring-2 focus:ring-(--focus)"
@@ -175,7 +182,10 @@ export default function CollectionList() {
                   deleteConfirmMessage={t.deleteConfirm}
                   deleteCancelLabel={ct.cancel}
                   deleteDisabled={deletingId !== null}>
-                  <div className="flex items-center gap-3 text-[10px] text-(--text-tertiary) font-mono">
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] text-(--text-tertiary) font-mono">
+                    <span className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 font-bold">
+                      {col.totalSources ?? 0} {language === 'vi' ? 'tài liệu' : 'sources'}
+                    </span>
                     {col.categoryName && <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-200">{col.categoryName}</span>}
                     <span>{t.created}: {formatDate(col.createdAt, language)}</span>
                   </div>
@@ -187,7 +197,12 @@ export default function CollectionList() {
               {collections.map(col => (
                 <div key={col.id} className="p-4 flex items-center justify-between hover:bg-(--surface-secondary) transition-colors gap-4">
                   <div className="min-w-0 flex-1 cursor-pointer" onClick={() => navigate(`/instructor/collections/${col.id}`)}>
-                    <h3 className="font-bold text-sm text-(--text-primary) hover:text-(--brand-foreground) transition-colors truncate">{col.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-sm text-(--text-primary) hover:text-(--brand-foreground) transition-colors truncate">{col.name}</h3>
+                      <span className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 px-2 py-0.5 rounded text-[10px] border border-emerald-200 dark:border-emerald-800 font-bold shrink-0">
+                        {col.totalSources ?? 0} {language === 'vi' ? 'tài liệu' : 'sources'}
+                      </span>
+                    </div>
                     <p className="text-xs text-(--text-secondary) line-clamp-1 mt-0.5">{col.description || '—'}</p>
                     <div className="flex items-center gap-3 text-[10px] text-(--text-tertiary) font-mono mt-1.5">
                       {col.categoryName && <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-200">{col.categoryName}</span>}
@@ -252,7 +267,21 @@ export default function CollectionList() {
         </form>
       </Modal>
 
-      <TourLauncher steps={tourSteps} tourKey="instructor-collections" />
+      <Modal open={showGuide} onClose={() => setShowGuide(false)} title={language === 'vi' ? 'Hướng dẫn Quản lý Bộ sưu tập' : 'Collections Management Guide'} closeLabel={ct.close}>
+        <ol className="space-y-3 text-xs">
+          {[
+            language === 'vi' ? 'Tạo các bộ sưu tập tài liệu chuyên đề để quản lý và chia sẻ tài liệu với sinh viên.' : 'Create thematic document collections to organize and share research sources with students.',
+            language === 'vi' ? 'Sử dụng chức năng Thêm tài liệu để tải lên nhiều PDF, nạp hàng loạt theo DOI OpenAlex hoặc chọn từ Thư viện nguồn.' : 'Use Add Documents to batch upload PDFs, ingest OpenAlex DOIs, or import from your Source Library.',
+            language === 'vi' ? 'Chuyển sang tab Nguồn chia sẻ (Shared Source) để theo dõi các tài liệu đang được gán vào từng đồ án cụ thể.' : 'Switch to the Shared Source tab to monitor sources linked directly to specific student projects.',
+            language === 'vi' ? 'Xem đồ thị trích dẫn trực quan trong Bản đồ trực quan (Visualize Map) để khám phá mạng lưới nghiên cứu.' : 'Explore citation relationships in the Visualize Map tab powered by OpenAlex metadata.'
+          ].map((step, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <span className="shrink-0 w-5 h-5 rounded-full bg-(--brand) text-(--on-brand) text-[10px] font-black flex items-center justify-center">{i + 1}</span>
+              <span className="text-(--text-secondary) leading-relaxed">{step}</span>
+            </li>
+          ))}
+        </ol>
+      </Modal>
     </div>
   );
 }

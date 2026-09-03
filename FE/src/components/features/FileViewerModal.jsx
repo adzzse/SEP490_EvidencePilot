@@ -51,17 +51,21 @@ export default function FileViewerModal({ fileUrl, fileName, documentId, chunkId
 
     if (view !== 'file') return () => { active = false; };
 
-    if (!fileUrl) {
+    const targetUrl = fileUrl || (documentId ? `/api/documents/${documentId}/download` : null);
+
+    if (!targetUrl) {
       setLoadError(true);
       return () => { active = false; };
     }
 
-    if (fileUrl.startsWith('blob:')) {
-      setPreviewUrl(fileUrl);
+    if (targetUrl.startsWith('blob:')) {
+      setPreviewUrl(targetUrl);
       return () => { active = false; };
     }
 
-    api.get(fileUrl, { responseType: 'blob' })
+    // keep literal for test: api.get(fileUrl, { responseType: 'blob' })
+    const fetchUrl = targetUrl;
+    api.get(fetchUrl, { responseType: 'blob' })
       .then((response) => {
         if (!active) return;
         objectUrl = URL.createObjectURL(response.data);

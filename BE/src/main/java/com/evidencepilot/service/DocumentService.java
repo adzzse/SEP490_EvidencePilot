@@ -42,6 +42,7 @@ public interface DocumentService {
     PagedResponse<SourceLibraryItemResponse> getSourceLibrary(
             int page, int size, String sort, String q, ProcessingStatus processingStatus);
     DocumentResponse addSourceToCollection(UUID collectionId, UUID sourceId);
+    List<DocumentResponse> addSourcesToCollectionBatch(UUID collectionId, List<UUID> sourceIds);
     void removeSourceFromCollection(UUID collectionId, UUID sourceId);
     SourceLibraryItemResponse updateSource(UUID id, String title);
     void deleteSource(UUID id);
@@ -49,6 +50,9 @@ public interface DocumentService {
     DocumentResponse uploadDocument(UUID projectId, MultipartFile file, DocumentType docType);
 
     DocumentResponse uploadDocument(UUID projectId, UUID collectionId, MultipartFile file, DocumentType docType);
+
+    com.evidencepilot.dto.response.BatchUploadResponse uploadDocumentsBatch(
+            UUID projectId, UUID collectionId, MultipartFile[] files, DocumentType docType);
 
     DocumentResponse attachFileToDocument(UUID documentId, MultipartFile file);
     Map<String, Object> shareToProject(UUID collectionId, UUID sourceId, UUID projectId);

@@ -137,6 +137,16 @@ public class CollectionController {
         return documentService.addSourceToCollection(collectionId, sourceId);
     }
 
+    @Operation(summary = "Batch add existing sources to collection",
+            description = "Associates multiple existing source documents with this collection in one call.")
+    @PostMapping("/{collectionId}/sources/batch")
+    @ResponseStatus(HttpStatus.OK)
+    public List<DocumentResponse> addSourcesToCollectionBatch(
+            @Parameter(description = "Collection UUID") @PathVariable UUID collectionId,
+            @Valid @RequestBody com.evidencepilot.dto.request.CollectionBatchSourcesRequest request) {
+        return documentService.addSourcesToCollectionBatch(collectionId, request.sourceIds());
+    }
+
     @Operation(summary = "Remove a library source from collection",
             description = "Removes only the collection association. The original document and file remain available elsewhere.")
     @DeleteMapping("/{collectionId}/sources/{sourceId}")

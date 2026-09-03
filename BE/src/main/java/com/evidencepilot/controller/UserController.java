@@ -1,10 +1,16 @@
 package com.evidencepilot.controller;
 
+import com.evidencepilot.dto.request.EmailChangeRequest;
+import com.evidencepilot.dto.request.EmailVerificationConfirmRequest;
 import com.evidencepilot.dto.request.UserProfileUpdateRequest;
+import com.evidencepilot.dto.response.EmailChangeResponse;
 import com.evidencepilot.dto.response.UserResponse;
+import com.evidencepilot.dto.response.UserTelemetryResponse;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.EmailVerificationService;
 import com.evidencepilot.service.UserService;
+import com.evidencepilot.service.UserTelemetryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -12,16 +18,21 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -32,6 +43,8 @@ public class UserController {
 
     private final UserService userService;
     private final CurrentUserService currentUserService;
+    private final EmailVerificationService emailVerificationService;
+    private final UserTelemetryService userTelemetryService;
 
     @Operation(summary = "Get user by ID", description = "Returns a user's profile by UUID. Requires authentication.")
     @ApiResponses({
@@ -83,5 +96,40 @@ public class UserController {
             @Valid @RequestBody UserProfileUpdateRequest request) {
         UUID userId = currentUserService.requireCurrentUser().getId();
         return ResponseEntity.ok(userService.updateUserProfile(userId, request));
+    }
+
+    @Operation(summary = "Request email address change",
+            description = "Sends a verification email to the new address. The account retains its current email until confirmed.")
+    @PostMapping("/email-change/request")
+    public ResponseEntity<EmailChangeResponse> requestEmailChange(
+            @Valid @RequestBody EmailChangeRequest request) {
+        UUID userId = currentUserService.requireCurrentUser().getId();
+        return ResponseEntity.accepted().body(emailVerificationService.requestEmailChange(userId, request.newEmail()));
+    }
+
+    @Operation(summary = "Confirm email address change",
+            description = "Validates the verification token sent via email and updates the user email.")
+    @PostMapping("/email-change/confirm")
+    public ResponseEntity<Map<String, String>> confirmEmailChange(
+            @Valid @RequestBody EmailVerificationConfirmRequest request) {
+        emailVerificationService.confirmEmailChange(request.token());
+        return ResponseEntity.ok(Map.of("message", "Email address updated successfully"));
+    }
+
+    @Operation(summary = "Cancel pending email address change",
+            description = "Cancels any outstanding email change request and removes the pending verification token.")
+    @DeleteMapping("/email-change/cancel")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void cancelEmailChange() {
+        UUID userId = currentUserService.requireCurrentUser().getId();
+        emailVerificationService.cancelEmailChange(userId);
+    }
+
+    @Operation(summary = "Get current user telemetry",
+            description = "Returns self-view actionable bottleneck telemetry metrics and recent milestones.")
+    @GetMapping("/me/telemetry")
+    public ResponseEntity<UserTelemetryResponse> getMyTelemetry() {
+        UUID userId = currentUserService.requireCurrentUser().getId();
+        return ResponseEntity.ok(userTelemetryService.getMyTelemetry(userId));
     }
 }

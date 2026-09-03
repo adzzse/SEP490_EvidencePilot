@@ -46,6 +46,10 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     @Query("select user from User user where user.passwordResetTokenHash = :tokenHash")
     Optional<User> findByPasswordResetTokenHashForUpdate(@Param("tokenHash") String tokenHash);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select user from User user where user.emailVerificationTokenHash = :tokenHash")
+    Optional<User> findByEmailVerificationTokenHashForUpdate(@Param("tokenHash") String tokenHash);
+
     @Query("select case when count(user) > 0 then true else false end "
             + "from User user where lower(user.email) = lower(:email) and user.accountStatus <> 'DELETED'")
     boolean existsByEmailIgnoreCase(@Param("email") String email);

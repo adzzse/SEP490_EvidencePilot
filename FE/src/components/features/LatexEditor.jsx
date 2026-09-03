@@ -124,11 +124,12 @@ function buildCiteMask(view, citationIndexRef) {
   return Decoration.set(decorations, true);
 }
 
-const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onUserScroll, citationIndex = {} }, ref) {
+const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onLayoutChange, onUserScroll, citationIndex = {} }, ref) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
   const lastEmittedRef = useRef('');
   const onScrollRef = useRef(null);
+  const onLayoutChangeRef = useRef(null);
   const onUserScrollRef = useRef(null);
   const citationIndexRef = useRef({});
   const citationIndexVersionRef = useRef(0);
@@ -142,6 +143,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
     typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   );
   onScrollRef.current = onScroll;
+  onLayoutChangeRef.current = onLayoutChange;
   onUserScrollRef.current = onUserScroll;
   reviewClickBridge = onFindingClick; // live bridge for CM widget clicks
 
@@ -270,7 +272,16 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
         clientHeight: scroller.clientHeight,
       };
     },
-    // --- Proportional sync primitives ---
+    getSourceBounds: (from, to) => {
+      const v = viewRef.current;
+      if (!v) return { top: 0, bottom: 0 };
+      const start = Math.max(0, Math.min(from, v.state.doc.length));
+      const end = Math.max(start, Math.min(to - 1, v.state.doc.length));
+      return {
+        top: v.lineBlockAt(start).top + v.documentPadding.top,
+        bottom: v.lineBlockAt(end).bottom + v.documentPadding.top,
+      };
+    },
     scrollToTop: () => {
       const v = viewRef.current;
       if (v) v.scrollDOM.scrollTop = 0;
@@ -295,6 +306,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
     if (viewRef.current) viewRef.current.destroy();
 
     const updateListener = EditorView.updateListener.of((update) => {
+      if (update.geometryChanged) onLayoutChangeRef.current?.();
       if (update.docChanged && onChange) {
         const text = update.state.doc.toString();
         if (text === lastEmittedRef.current) return;
@@ -397,6 +409,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
     });
 
     viewRef.current = new EditorView({ state, parent: containerRef.current });
+    onLayoutChangeRef.current?.();
 
     // Scroll listener lives with the view so readOnly/fontSize/theme rebuilds re-bind it.
     const handleScroll = () => {

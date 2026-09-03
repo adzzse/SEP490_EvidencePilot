@@ -29,7 +29,7 @@ export default function InstructorDashboard() {
         const [projRes, colRes, reqRes, srcRes] = await Promise.allSettled([
           api.get('/api/projects?size=1'),
           api.get('/api/collections?size=1'),
-          api.get('/api/review-requests'),
+          api.get('/api/feedback-requests'),
           api.get('/api/sources?size=1'),
         ]);
 

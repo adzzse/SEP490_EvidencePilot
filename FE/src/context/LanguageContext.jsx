@@ -4,7 +4,7 @@ import i18n from '../i18n';
 const LanguageContext = createContext(null);
 
 export function LanguageProvider({ children }) {
-  const [language, setLanguage] = useState(() => localStorage.getItem('app_lang') || 'vi');
+  const [language, setLanguage] = useState(() => localStorage.getItem('app_lang') || 'en');
 
   useEffect(() => {
     if (i18n.language !== language) i18n.changeLanguage(language);

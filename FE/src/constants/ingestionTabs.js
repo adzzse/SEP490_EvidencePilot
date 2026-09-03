@@ -1,0 +1,19 @@
+export const INGESTION_TABS = Object.freeze({
+  DOI: 'doi',
+  UPLOAD: 'upload',
+  COLLECTION: 'collection',
+  LIBRARY: 'library',
+});
+
+export const DEFAULT_PROJECT_INGESTION_TABS = Object.freeze([
+  INGESTION_TABS.DOI,
+  INGESTION_TABS.UPLOAD,
+  INGESTION_TABS.COLLECTION,
+  INGESTION_TABS.LIBRARY,
+]);
+
+export const DEFAULT_COLLECTION_INGESTION_TABS = Object.freeze([
+  INGESTION_TABS.DOI,
+  INGESTION_TABS.UPLOAD,
+  INGESTION_TABS.LIBRARY,
+]);

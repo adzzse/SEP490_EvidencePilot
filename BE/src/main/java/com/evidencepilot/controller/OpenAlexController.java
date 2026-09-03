@@ -7,6 +7,7 @@ import com.evidencepilot.dto.request.DoiLookupRequest;
 import com.evidencepilot.dto.response.BatchIngestResponse;
 import com.evidencepilot.dto.response.DocumentResponse;
 import com.evidencepilot.dto.response.OpenAlexPreview;
+import com.evidencepilot.exception.DuplicateProjectDoiException;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.service.OpenAlexIngestionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -55,6 +56,7 @@ public class OpenAlexController {
                        + "Returns 202 Accepted — processing happens asynchronously via RabbitMQ.")
     @ApiResponse(responseCode = "202", description = "Document accepted for processing")
     @ApiResponse(responseCode = "400", description = "DOI not found, no OA PDF available, or missing project/collection")
+    @ApiResponse(responseCode = "409", description = "DOI already exists in the target project")
     @ApiResponse(responseCode = "404", description = "Project or collection not found")
     @PostMapping("/ingest/doi")
     @ResponseStatus(HttpStatus.ACCEPTED)
@@ -65,7 +67,7 @@ public class OpenAlexController {
 
     @Operation(summary = "Batch ingest by DOIs",
                description = "Single-request batch: dedupes DOIs and processes each sequentially. "
-                       + "Frontend sends exactly ONE request; backend iterates (no Promise.allSettled spam). "
+                       + "Duplicate, lookup, and download failures are isolated per DOI. "
                        + "Partial failures return 207 multi-status.")
     @ApiResponse(responseCode = "202", description = "All DOIs accepted")
     @ApiResponse(responseCode = "207", description = "Partial failure with succeeded documents and structured failed DOI entries")
@@ -84,7 +86,16 @@ public class OpenAlexController {
         }
         for (String doi : deduped.values()) {
             try {
-                succeeded.add(ingestionService.ingestByDoi(request.projectId(), request.collectionId(), doi));
+                DocumentResponse result = ingestionService.ingestByDoi(
+                        request.projectId(), request.collectionId(), doi);
+                if (result.processingError() == null || result.processingError().isBlank()) {
+                    succeeded.add(result);
+                } else {
+                    failed.add(new BatchIngestResponse.BatchFailure(
+                            doi, result.processingError(), resolveCode(result.processingError())));
+                }
+            } catch (DuplicateProjectDoiException e) {
+                failed.add(new BatchIngestResponse.BatchFailure(doi, e.getReason(), "DUPLICATE"));
             } catch (ResourceNotFoundException e) {
                 throw e;
             } catch (ResponseStatusException e) {
@@ -93,9 +104,9 @@ public class OpenAlexController {
                         || e.getStatusCode().value() == 409) {
                     throw e;
                 }
-                failed.add(new BatchIngestResponse.BatchFailure(doi, e.getReason(), resolveCode(e)));
+                failed.add(new BatchIngestResponse.BatchFailure(doi, e.getReason(), resolveCode(e.getReason())));
             } catch (Exception e) {
-                failed.add(new BatchIngestResponse.BatchFailure(doi, e.getMessage(), resolveCode(e)));
+                failed.add(new BatchIngestResponse.BatchFailure(doi, e.getMessage(), resolveCode(e.getMessage())));
             }
         }
         if (!failed.isEmpty()) {
@@ -105,9 +116,8 @@ public class OpenAlexController {
                 .body(new BatchIngestResponse(succeeded, List.of()));
     }
 
-    private String resolveCode(Exception e) {
-        String message = (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())
-                .toLowerCase(Locale.ROOT);
+    private String resolveCode(String error) {
+        String message = (error == null ? "" : error).toLowerCase(Locale.ROOT);
         if (message.contains("format") || message.contains("invalid doi")) return "FORMAT";
         if (message.contains("not found") || message.contains("404")) return "NOT_FOUND";
         if (message.contains("no pdf") || message.contains("pdf")) return "NO_PDF";

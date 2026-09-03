@@ -7,6 +7,7 @@ import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.CollectionCategory;
 import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.repository.CollectionRepository;
@@ -38,6 +39,8 @@ public class CollectionServiceImpl implements CollectionService {
     private final CollectionCategoryRepository collectionCategoryRepository;
     private final CurrentUserService currentUserService;
     private final ProjectCollectionService projectCollectionService;
+    private final com.evidencepilot.repository.DocumentRepository documentRepository;
+    private final com.evidencepilot.repository.CollectionDocumentRepository collectionDocumentRepository;
 
     @Override
     @Transactional
@@ -102,7 +105,11 @@ public class CollectionServiceImpl implements CollectionService {
     }
 
     private CollectionResponse toResponse(Collection collection) {
-        return CollectionResponse.from(collection);
+        long direct = documentRepository.countByCollectionId(collection.getId());
+        long shared = collectionDocumentRepository.findByCollectionId(collection.getId()).stream()
+                .filter(cd -> cd.getDocument() != null && cd.getDocument().isActive() && cd.getDocument().getDocType() == DocumentType.SOURCE)
+                .count();
+        return CollectionResponse.from(collection, direct + shared);
     }
 
     private Specification<Collection> myCollectionSpec(UUID instructorId, String q, UUID categoryId) {

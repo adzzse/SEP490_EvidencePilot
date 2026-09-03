@@ -214,6 +214,23 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
+    public List<DocumentResponse> addSourcesToCollectionBatch(UUID collectionId, List<UUID> sourceIds) {
+        if (sourceIds == null || sourceIds.isEmpty()) {
+            return List.of();
+        }
+        List<DocumentResponse> added = new ArrayList<>();
+        for (UUID sourceId : sourceIds) {
+            try {
+                added.add(addSourceToCollection(collectionId, sourceId));
+            } catch (Exception e) {
+                log.warn("Failed to add source {} to collection {}", sourceId, collectionId, e);
+            }
+        }
+        return added;
+    }
+
+    @Override
+    @Transactional
     public void removeSourceFromCollection(UUID collectionId, UUID sourceId) {
         var currentUser = currentUserService.requireCurrentUser();
         var collection = collectionRepository.findById(collectionId)
@@ -387,6 +404,31 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         return DocumentResponse.from(document);
+    }
+
+    @Override
+    public com.evidencepilot.dto.response.BatchUploadResponse uploadDocumentsBatch(
+            UUID projectId, UUID collectionId, MultipartFile[] files, DocumentType docType) {
+        if (files == null || files.length == 0) {
+            return new com.evidencepilot.dto.response.BatchUploadResponse(List.of(), List.of());
+        }
+        List<DocumentResponse> succeeded = new ArrayList<>();
+        List<com.evidencepilot.dto.response.BatchUploadResponse.UploadFailure> failed = new ArrayList<>();
+
+        for (MultipartFile file : files) {
+            String filename = file != null ? file.getOriginalFilename() : "unknown";
+            try {
+                DocumentResponse res = uploadDocument(projectId, collectionId, file, docType);
+                succeeded.add(res);
+            } catch (ResponseStatusException e) {
+                failed.add(new com.evidencepilot.dto.response.BatchUploadResponse.UploadFailure(
+                        filename, e.getReason() != null ? e.getReason() : e.getMessage(), "HTTP_" + e.getStatusCode().value()));
+            } catch (Exception e) {
+                failed.add(new com.evidencepilot.dto.response.BatchUploadResponse.UploadFailure(
+                        filename, e.getMessage() != null ? e.getMessage() : "Upload failed", "UPLOAD_FAILED"));
+            }
+        }
+        return new com.evidencepilot.dto.response.BatchUploadResponse(succeeded, failed);
     }
 
     @Override

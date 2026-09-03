@@ -180,8 +180,14 @@ class ProjectRouteMappingTest {
                 "PATCH /api/projects/{projectId}/evidence-traces/{traceId}/review",
                 "POST /api/papers/{documentId}/sections/{sectionId}/standard-evaluation",
                 "GET /api/papers/{documentId}/sections/{sectionId}/standard-evaluation",
-                "PUT /api/papers/{documentId}/sections/{sectionId}/standard-evaluation/config"));
-        assertThat(routes).hasSize(130);
+                "PUT /api/papers/{documentId}/sections/{sectionId}/standard-evaluation/config",
+                "POST /api/sources/batch",
+                "POST /api/collections/{collectionId}/sources/batch",
+                "POST /api/users/email-change/request",
+                "POST /api/users/email-change/confirm",
+                "DELETE /api/users/email-change/cancel",
+                "GET /api/users/me/telemetry"));
+        assertThat(routes).hasSize(136);
     }
 
     @Test

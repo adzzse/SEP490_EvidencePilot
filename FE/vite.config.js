@@ -7,18 +7,8 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  // ponytail: dedupe covers peer duplication; optimizeDeps.include was duplicate list — Vite auto-discovers these.
+  // ponytail: dedupe core peers only — Vite auto-discovers rest.
   resolve: {
-    dedupe: [
-      '@codemirror/state',
-      '@codemirror/view',
-      '@codemirror/language',
-      '@codemirror/commands',
-      '@codemirror/search',
-      '@codemirror/autocomplete',
-      '@codemirror/lint',
-      '@codemirror/theme-one-dark',
-      'codemirror-lang-latex',
-    ],
+    dedupe: ['codemirror', '@codemirror/state', '@codemirror/view'],
   },
 })

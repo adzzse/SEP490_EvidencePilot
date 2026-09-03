@@ -22,11 +22,13 @@ class UserControllerTest {
 
     private final UserService userService = mock(UserService.class);
     private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+    private final com.evidencepilot.service.EmailVerificationService emailVerificationService = mock(com.evidencepilot.service.EmailVerificationService.class);
+    private final com.evidencepilot.service.UserTelemetryService userTelemetryService = mock(com.evidencepilot.service.UserTelemetryService.class);
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = standaloneSetup(new UserController(userService, currentUserService)).build();
+        mockMvc = standaloneSetup(new UserController(userService, currentUserService, emailVerificationService, userTelemetryService)).build();
     }
 
     @Test

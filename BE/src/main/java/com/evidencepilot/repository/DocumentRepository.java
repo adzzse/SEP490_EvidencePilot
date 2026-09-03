@@ -41,6 +41,23 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
             @Param("uploadedBy") UUID uploadedBy,
             @Param("docType") DocumentType docType,
             @Param("doi") String doi);
+
+    @Query("""
+            SELECT COUNT(d) FROM Document d
+            WHERE d.docType = :docType
+              AND d.active = true
+              AND LOWER(d.doi) = LOWER(:doi)
+              AND (d.project.id = :projectId OR EXISTS (
+                    SELECT pd.id FROM ProjectDocument pd
+                    WHERE pd.project.id = :projectId
+                      AND pd.document.id = d.id
+              ))
+            """)
+    long countActiveProjectSourcesByDoi(
+            @Param("projectId") UUID projectId,
+            @Param("docType") DocumentType docType,
+            @Param("doi") String doi);
+
     @Query("SELECT d.id FROM Document d WHERE d.processingStatus IN :statuses AND d.active = true")
     List<UUID> findIdsByProcessingStatusInAndActiveTrue(
             @Param("statuses") List<ProcessingStatus> processingStatuses);

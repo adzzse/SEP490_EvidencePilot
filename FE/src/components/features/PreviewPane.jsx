@@ -10,6 +10,8 @@ export default function PreviewPane({
   generatedReferences = [],
   referencesTitle = 'References',
   onScroll,
+  scrollRef,
+  zoom = 100,
 }) {
   const [mediaUrlMap, setMediaUrlMap] = useState({});
 
@@ -46,21 +48,23 @@ export default function PreviewPane({
   const heading = sectionTitle || (generatedReferences.length > 0 ? referencesTitle : '');
 
   return (
-    <div className="h-full overflow-y-auto bg-white p-8" onScroll={onScroll}>
-      {heading && <h2 className="max-w-prose mx-auto text-lg font-bold mb-3 text-slate-800">{heading}</h2>}
-      {html && <div className="max-w-prose mx-auto whitespace-pre-wrap break-words preview-content" dangerouslySetInnerHTML={{ __html: html }} />}
-      {generatedReferences.length > 0 && (
-        <section className="max-w-prose mx-auto text-slate-700">
-          <ol className="space-y-3 text-sm">
-            {generatedReferences.map(reference => (
-              <li key={reference.key} className="flex gap-2 leading-relaxed">
-                <span className="shrink-0 text-indigo-700">[{reference.number}]</span>
-                <span>{reference.reference}</span>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
+    <div ref={scrollRef} className="h-full overflow-y-auto bg-white p-8" onScroll={onScroll}>
+      <div style={{ zoom: zoom / 100 }}>
+        {heading && <h2 className="max-w-prose mx-auto text-lg font-bold mb-3 text-slate-800">{heading}</h2>}
+        {html && <div className="max-w-prose mx-auto whitespace-pre-wrap break-words preview-content" dangerouslySetInnerHTML={{ __html: html }} />}
+        {generatedReferences.length > 0 && (
+          <section className="max-w-prose mx-auto text-slate-700">
+            <ol className="space-y-3 text-sm">
+              {generatedReferences.map(reference => (
+                <li key={reference.key} className="flex gap-2 leading-relaxed">
+                  <span className="shrink-0 text-indigo-700">[{reference.number}]</span>
+                  <span>{reference.reference}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ package com.evidencepilot.service.impl;
 import com.evidencepilot.client.openalex.OpenAlexClient;
 import com.evidencepilot.dto.openalex.OpenAlexWorkResponse;
 import com.evidencepilot.dto.response.OpenAlexPreview;
+import com.evidencepilot.exception.DuplicateProjectDoiException;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.Document;
@@ -310,6 +311,24 @@ class OpenAlexIngestionServiceImplTest {
         verify(projectCollectionService).addSource(existing, collection, currentUser);
         verify(documentRepository, never()).save(any());
         verifyNoInteractions(openAlexClient, documentObjectStorage, documentPersistenceService);
+    }
+
+    @Test
+    void ingestByDoiIntoProjectRejectsExistingProjectSourceBeforeFetch() {
+        when(currentUserService.requireCurrentUser()).thenReturn(currentUser);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(documentRepository.countActiveProjectSourcesByDoi(
+                project.getId(), DocumentType.SOURCE, "10.1000/EXISTING"))
+                .thenReturn(1L);
+
+        assertThatThrownBy(() -> service.ingestByDoi(
+                project.getId(), null, "https://doi.org/10.1000/EXISTING"))
+                .isInstanceOf(DuplicateProjectDoiException.class)
+                .hasMessageContaining("DOI already exists in this project");
+
+        verify(documentRepository, never()).save(any());
+        verifyNoInteractions(openAlexClient, documentObjectStorage, documentPersistenceService,
+                documentReferenceRepository, projectCollectionService);
     }
 
     @Test

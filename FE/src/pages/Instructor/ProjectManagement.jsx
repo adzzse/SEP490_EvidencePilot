@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppHeader from '../../components/layout/AppHeader.jsx';
 import Breadcrumb from '../../components/layout/Breadcrumb.jsx';
+import Modal from '../../components/ui/Modal.jsx';
 import api from '../../services/api.js';
 import { commonText, instructorText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
@@ -22,6 +23,7 @@ export default function ProjectManagement() {
   const [total, setTotal] = useState(0);
   const [isGridView, setIsGridView] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [editId, setEditId] = useState(null);
   const [editTitle, setEditTitle] = useState('');
@@ -109,7 +111,7 @@ export default function ProjectManagement() {
   return (
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary) font-sans">
       <AppHeader />
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Breadcrumb
           items={[
             { label: t.dashboard, path: '/instructor/dashboard' },
@@ -117,21 +119,26 @@ export default function ProjectManagement() {
           ]}
         />
 
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-          <h1 className="text-2xl font-black text-(--brand-foreground)">{t.projects} ({total})</h1>
-          <div className="flex w-full items-center gap-3 sm:w-auto">
+        {/* Master Action Header */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center w-full mb-6 gap-4 border-b border-(--border) pb-6">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-3xl font-black text-(--brand-foreground) tracking-tight">{t.projects}</h1>
+            <p className="text-xs text-(--text-tertiary) mt-1">{t.projectsManagementDesc || 'Manage and monitor your student project workspaces.'}</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
             <input
-              type="text"
+              type="search"
               placeholder={ct.search || 'Search...'}
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-              className="border border-(--border) bg-(--surface) text-(--text-primary) rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-(--focus) w-48 sm:w-56"
+              className="w-full sm:w-52 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus)"
             />
             <div className="flex items-center bg-(--surface-secondary) border border-(--border) rounded-xl p-0.5">
               <button
                 type="button"
                 onClick={() => setIsGridView(true)}
-                className={`p-1.5 rounded-lg transition-colors ${isGridView ? 'bg-(--surface) text-(--brand-foreground) shadow-xs' : 'text-(--text-tertiary) hover:text-(--text-primary)'}`}
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isGridView ? 'bg-(--surface) text-(--brand-foreground) shadow-xs' : 'text-(--text-tertiary) hover:text-(--text-primary)'}`}
                 title="Grid View"
                 aria-label="Grid View"
               >
@@ -140,14 +147,21 @@ export default function ProjectManagement() {
               <button
                 type="button"
                 onClick={() => setIsGridView(false)}
-                className={`p-1.5 rounded-lg transition-colors ${!isGridView ? 'bg-(--surface) text-(--brand-foreground) shadow-xs' : 'text-(--text-tertiary) hover:text-(--text-primary)'}`}
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${!isGridView ? 'bg-(--surface) text-(--brand-foreground) shadow-xs' : 'text-(--text-tertiary) hover:text-(--text-primary)'}`}
                 title="List View"
                 aria-label="List View"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
               </button>
             </div>
-            <button onClick={() => setShowCreate(true)} className="px-4 py-2 bg-(--brand) text-(--on-brand) font-bold text-xs rounded-xl hover:bg-(--brand-hover) transition-colors flex items-center gap-1 shrink-0 shadow-sm">
+            <button
+              onClick={() => setShowGuide(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-bold text-(--text-secondary) hover:text-(--brand-foreground) hover:border-(--brand) transition-colors cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
+              {ct.guide || 'Guide'}
+            </button>
+            <button onClick={() => setShowCreate(true)} className="px-4 py-2 bg-(--brand) text-(--on-brand) font-bold text-xs rounded-xl hover:bg-(--brand-hover) transition-colors flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
               {t.createProject}
             </button>
@@ -269,19 +283,35 @@ export default function ProjectManagement() {
           <div className="bg-(--surface) border border-(--border) rounded-2xl shadow-2xl w-full max-w-md p-6 mx-4" role="dialog" aria-modal="true">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold text-(--text-primary)">{t.createProject}</h2>
-              <button onClick={() => setShowCreate(false)} className="text-(--text-tertiary) hover:text-(--text-primary)" aria-label={ct.close}>
+              <button onClick={() => setShowCreate(false)} className="text-(--text-tertiary) hover:text-(--text-primary) cursor-pointer" aria-label={ct.close}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder={t.projectTitle} autoFocus className="w-full border border-(--border) bg-(--surface-secondary) text-(--text-primary) rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-(--focus) mb-3" />
             <textarea value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder={t.descriptionOptional} rows={3} className="w-full border border-(--border) bg-(--surface-secondary) text-(--text-primary) rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-(--focus) mb-4 resize-none" />
             <div className="flex justify-end gap-3 font-bold">
-              <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-xs font-semibold text-(--text-secondary) hover:bg-(--surface-secondary) rounded-xl transition-colors">{ct.cancel}</button>
-              <button onClick={handleCreate} disabled={creating || !newTitle.trim()} className="px-4 py-2 text-xs font-bold text-(--on-brand) bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-50 rounded-xl shadow-sm transition-colors">{creating ? ct.saving : t.createProject}</button>
+              <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-xs font-semibold text-(--text-secondary) hover:bg-(--surface-secondary) rounded-xl transition-colors cursor-pointer">{ct.cancel}</button>
+              <button onClick={handleCreate} disabled={creating || !newTitle.trim()} className="px-4 py-2 text-xs font-bold text-(--on-brand) bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-50 rounded-xl shadow-sm transition-colors cursor-pointer">{creating ? ct.saving : t.createProject}</button>
             </div>
           </div>
         </div>
       )}
+
+      <Modal open={showGuide} onClose={() => setShowGuide(false)} title={language === 'vi' ? 'Hướng dẫn Quản lý Đồ án' : 'Projects Management Guide'} closeLabel={ct.close}>
+        <ol className="space-y-3 text-xs">
+          {[
+            language === 'vi' ? 'Tạo mới đồ án để phân chia nhóm sinh viên và thiết lập không gian nghiên cứu chuyên biệt.' : 'Create new projects to organize student teams and establish dedicated research workspaces.',
+            language === 'vi' ? 'Theo dõi số lượng thành viên, trạng thái hoạt động (ACTIVE, ARCHIVED, COMPLETED), và ngày cập nhật gần nhất.' : 'Monitor team member counts, lifecycle statuses (ACTIVE, ARCHIVED, COMPLETED), and update timestamps.',
+            language === 'vi' ? 'Truy cập chi tiết từng đồ án để kiểm duyệt tuyên bố khoa học, nguồn dẫn chứng, và gửi phản hồi cho sinh viên.' : 'Navigate into project workspaces to inspect claims, evidence graphs, and provide formative review feedback.',
+            language === 'vi' ? 'Dễ dàng chuyển đổi linh hoạt giữa giao diện lưới (Grid) và danh sách (List), tìm kiếm đồ án theo tên.' : 'Seamlessly switch between Grid and List views, or quickly locate projects using the search bar.'
+          ].map((step, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <span className="shrink-0 w-5 h-5 rounded-full bg-(--brand) text-(--on-brand) text-[10px] font-black flex items-center justify-center">{i + 1}</span>
+              <span className="text-(--text-secondary) leading-relaxed">{step}</span>
+            </li>
+          ))}
+        </ol>
+      </Modal>
 
     </div>
   );

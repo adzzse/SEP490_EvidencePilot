@@ -25,6 +25,9 @@ public class User {
     @Column(nullable = false)
     private String email;
 
+    @Column(name = "pending_email")
+    private String pendingEmail;
+
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
@@ -49,6 +52,15 @@ public class User {
 
     @Column(name = "password_reset_requested_at")
     private LocalDateTime passwordResetRequestedAt;
+
+    @Column(name = "email_verification_token_hash", unique = true)
+    private String emailVerificationTokenHash;
+
+    @Column(name = "email_verification_token_expires_at")
+    private LocalDateTime emailVerificationTokenExpiresAt;
+
+    @Column(name = "email_verification_requested_at")
+    private LocalDateTime emailVerificationRequestedAt;
 
     @Column(name = "token_version", nullable = false)
     private int tokenVersion;

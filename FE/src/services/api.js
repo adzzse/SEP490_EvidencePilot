@@ -8,14 +8,10 @@ const api = axios.create({
   headers: { 'ngrok-skip-browser-warning': 'true' },
 });
 
-api.defaults.headers.common['ngrok-skip-browser-warning'] = 'true';
-
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   config._authToken = token;
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  if (!config.headers) config.headers = {};
-  config.headers['ngrok-skip-browser-warning'] = 'true';
   return config;
 });
 

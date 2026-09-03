@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api.js';
+import { prepareProjectDoiImport } from '../../utils/student/doiImport.js';
 import { getSourceDownloadUrl } from '../../utils/student/sourceDownload.js';
 
 const FUNCTIONAL_TYPES = [
@@ -123,6 +124,7 @@ export default function ContextPanel({
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [sourceMode, setSourceMode] = useState('doi');
   const [doiInput, setDoiInput] = useState('');
+  const [doiErrors, setDoiErrors] = useState([]);
   const [sourceBusy, setSourceBusy] = useState(false);
   const [attachingSourceId, setAttachingSourceId] = useState(null);
   const fileInputRef = useRef(null);
@@ -186,6 +188,63 @@ export default function ContextPanel({
     }
   };
 
+  const handleAddSource = async () => {
+    if (sourceBusy || !project) return;
+    const doiRequest = sourceMode === 'doi'
+      ? prepareProjectDoiImport(doiInput, project.id)
+      : null;
+    if (sourceMode === 'doi' && !doiRequest) return;
+
+    setSourceBusy(true);
+    try {
+      if (doiRequest) {
+        const response = await api.post(doiRequest.url, doiRequest.body);
+        const failures = (doiRequest.dois.length === 1
+          ? (response.data?.processingError
+              ? [{ doi: doiRequest.dois[0], error: response.data.processingError }]
+              : [])
+          : (response.data?.failed || []))
+          .map(item => ({ ...item, error: item.error || t('failedToAddSource') }));
+
+        if (fetchSources) await fetchSources();
+        if (failures.length > 0) {
+          const succeeded = response.data?.succeeded?.length
+            ?? Math.max(doiRequest.dois.length - failures.length, 0);
+          setDoiErrors(failures);
+          setDoiInput(failures.map(item => item.doi).filter(Boolean).join('\n'));
+          showToast(t('doiImportSummary', { succeeded, failed: failures.length }));
+          return;
+        }
+
+        setDoiErrors([]);
+        setDoiInput('');
+        setShowSourceModal(false);
+        showToast(t('sourceQueued'));
+        return;
+      }
+
+      const file = fileInputRef.current?.files?.[0];
+      if (!file) { showToast(t('selectFile')); return; }
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('projectId', project.id);
+      await api.post('/api/sources', formData);
+      showToast(t('sourceUploaded'));
+      setShowSourceModal(false);
+      if (fetchSources) await fetchSources();
+    } catch (error) {
+      const message = error?.response?.data?.message
+        || error?.response?.data?.detail
+        || t('failedToAddSource');
+      if (doiRequest) {
+        setDoiErrors(doiRequest.dois.map(doi => ({ doi, error: message })));
+      }
+      showToast(message);
+    } finally {
+      setSourceBusy(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const activeClass = (tab) =>
@@ -213,7 +272,7 @@ export default function ContextPanel({
         <div className="flex-1 overflow-y-auto bg-(--surface-secondary)/50 p-4">
           {activeTab === 'Source' && (
             <div className="p-5 flex flex-col gap-6 animate-in fade-in duration-300">
-              <button onClick={() => setShowSourceModal(true)} disabled={isLocked} className="w-full flex items-center justify-center gap-2 bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-40 text-(--on-brand) font-bold text-sm py-3 px-4 rounded-xl shadow-md transition-colors">
+              <button onClick={() => { setDoiErrors([]); setShowSourceModal(true); }} disabled={isLocked} className="w-full flex items-center justify-center gap-2 bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-40 text-(--on-brand) font-bold text-sm py-3 px-4 rounded-xl shadow-md transition-colors">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
                 {t('insertSource')}
               </button>
@@ -222,12 +281,12 @@ export default function ContextPanel({
                 <div className="bg-(--surface) border border-(--border) rounded-xl p-4 shadow-lg space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-bold text-(--text-primary)">{t('addSource')}</span>
-                    <button onClick={() => { setShowSourceModal(false); }} className="text-(--text-tertiary) hover:text-(--text-primary) cursor-pointer p-1" aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                    <button onClick={() => { setShowSourceModal(false); setDoiErrors([]); }} className="text-(--text-tertiary) hover:text-(--text-primary) cursor-pointer p-1" aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
                   </div>
 
                   <div className="flex gap-2">
                     {['doi', 'file'].map(m => (
-                      <button key={m} onClick={() => { setSourceMode(m); }}
+                      <button key={m} onClick={() => { setSourceMode(m); setDoiErrors([]); }}
                         className={`flex-1 text-xs font-bold px-2 py-1.5 rounded-lg border transition-colors cursor-pointer ${sourceMode === m ? 'bg-(--brand) text-(--on-brand) border-(--brand)' : 'bg-(--surface-secondary) text-(--text-secondary) border-(--border) hover:border-indigo-300'}`}>
                         {m === 'doi' ? t('fromDOI') : t('fromFile')}
                       </button>
@@ -237,8 +296,25 @@ export default function ContextPanel({
                   <div className="space-y-2">
                     {sourceMode === 'doi' && (
                       <div>
-                        <label className="text-xs font-bold text-(--text-secondary) block mb-1">{t('doi')}</label>
-                        <input value={doiInput} onChange={e => setDoiInput(e.target.value)} placeholder="10.1000/xyz123" className="w-full text-xs border border-(--border) rounded-lg px-2 py-1.5 bg-(--surface) outline-none focus:ring-1 focus:ring-indigo-500 text-(--text-primary)" />
+                        <label htmlFor="student-doi-input" className="text-xs font-bold text-(--text-secondary) block mb-1">{t('doi')}</label>
+                        <textarea
+                          id="student-doi-input"
+                          rows={3}
+                          value={doiInput}
+                          onChange={event => { setDoiInput(event.target.value); setDoiErrors([]); }}
+                          placeholder={t('doiBatchPlaceholder')}
+                          className="w-full resize-y text-xs border border-(--border) rounded-lg px-2 py-1.5 bg-(--surface) outline-none focus:ring-1 focus:ring-indigo-500 text-(--text-primary)"
+                        />
+                        <p className="mt-1 text-[10px] leading-relaxed text-(--text-tertiary)">{t('doiBatchHint')}</p>
+                        {doiErrors.length > 0 && (
+                          <div className="mt-2 space-y-1" role="alert">
+                            {doiErrors.map((item, index) => (
+                              <p key={`${item.doi}-${index}`} className="break-words rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-[10px] font-semibold text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300">
+                                {item.doi}: {item.error}
+                              </p>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                     {sourceMode === 'file' && (
@@ -249,29 +325,8 @@ export default function ContextPanel({
                     )}
                   </div>
 
-                  <button onClick={async () => {
-                    if (sourceBusy || !project) return;
-                    setSourceBusy(true);
-                    try {
-                      if (sourceMode === 'doi') {
-                        await api.post('/api/documents/ingest/doi', {
-                          doi: doiInput.trim(),
-                          projectId: project.id,
-                        });
-                        showToast(t('sourceQueued'));
-                      } else {
-                        const file = fileInputRef.current?.files?.[0];
-                        if (!file) { showToast(t('selectFile')); setSourceBusy(false); return; }
-                        const fd = new FormData(); fd.append('file', file); fd.append('projectId', project.id);
-                        await api.post('/api/sources', fd);
-                        showToast(t('sourceUploaded'));
-                      }
-                      setShowSourceModal(false); setDoiInput('');
-                      if (fetchSources) fetchSources();
-                    } catch { showToast(t('failedToAddSource')); }
-                    finally { setSourceBusy(false); }
-                  }} disabled={sourceBusy || (sourceMode !== 'file' && !doiInput.trim()) || (sourceMode !== 'doi' && !fileInputRef.current?.files?.[0])} className="w-full text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 py-2 rounded-lg transition-all cursor-pointer">
-                    {sourceBusy ? t('working') : t('insertSource')}
+                  <button onClick={handleAddSource} disabled={sourceBusy || (sourceMode !== 'file' && !doiInput.trim()) || (sourceMode !== 'doi' && !fileInputRef.current?.files?.[0])} className="w-full text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 py-2 rounded-lg transition-all cursor-pointer">
+                    {sourceBusy ? t('working') : sourceMode === 'doi' ? t('importDoi') : t('insertSource')}
                   </button>
                 </div>
               )}

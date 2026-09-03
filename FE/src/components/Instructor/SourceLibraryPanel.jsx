@@ -113,6 +113,7 @@ export default function SourceLibraryPanel() {
   const [deletingId, setDeletingId] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
   const [viewerFile, setViewerFile] = useState(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -381,6 +382,14 @@ export default function SourceLibraryPanel() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
           </div>
+          
+          <button
+            onClick={() => setShowGuide(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-bold text-(--text-secondary) hover:text-(--brand-foreground) hover:border-(--brand) transition-colors cursor-pointer"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
+            {ct.guide || 'Guide'}
+          </button>
         </div>
       </div>
 
@@ -396,7 +405,7 @@ export default function SourceLibraryPanel() {
       )}
 
       {loading ? (
-        <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-3"}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-36 bg-(--surface-tertiary) rounded-2xl animate-pulse" />)}
         </div>
       ) : sources.length === 0 ? (
@@ -432,7 +441,7 @@ export default function SourceLibraryPanel() {
                   <h3 className="font-bold text-(--text-primary) text-sm line-clamp-2 leading-snug hover:text-(--brand) transition-colors">
                     {displayTitle(source)}
                   </h3>
-                  <p className="text-[11px] text-(--text-secondary) truncate mt-1">{source.originalFilename || '—'}</p>
+                  <p className="text-[11px] text-(--text-tertiary) truncate mt-1">{formatDate(source.createdAt, language)}</p>
 
                   <div className="mt-3 p-2.5 rounded-xl bg-(--surface-secondary) border border-(--border-light)">
                     <span className="text-[9px] font-extrabold uppercase tracking-wider text-(--text-tertiary)">{t.usedIn}</span>
@@ -444,10 +453,6 @@ export default function SourceLibraryPanel() {
                 </div>
 
                 <div className="border-t border-(--border-light) pt-3 mt-4">
-                  <div className="flex items-center justify-between text-[10px] text-(--text-tertiary) mb-3">
-                    <span>{formatDate(source.createdAt, language)}</span>
-                  </div>
-
                   <div className="flex items-center justify-end gap-1.5 flex-wrap">
                     {previewable && (
                       <button
@@ -491,22 +496,19 @@ export default function SourceLibraryPanel() {
                     >
                       {deletingId === source.id ? t.deletingSource : ct.delete}
                     </DeleteConfirm>
-                  </div>
-
-                  {recovery && (
-                    <div className="mt-3 pt-2 border-t border-(--border-light)">
-                      {recovery.action === 'retry' ? (
+                    {recovery && (
+                      recovery.action === 'retry' ? (
                         <button
                           type="button"
                           onClick={() => retrySource(source)}
                           disabled={!!recoveringSource}
-                          className="w-full py-1.5 rounded-lg bg-(--brand) text-(--on-brand) text-[11px] font-bold shadow-xs hover:bg-(--brand-hover) transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                          className="px-2.5 py-1 rounded-lg bg-(--brand) text-(--on-brand) text-xs font-bold shadow-xs hover:bg-(--brand-hover) transition-colors cursor-pointer flex items-center gap-1"
                         >
-                          <svg className={`h-3.5 w-3.5 ${recovering ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h5M20 20v-5h-5M5.6 15A7 7 0 0 0 18 17M18.4 9A7 7 0 0 0 6 7" /></svg>
+                          <svg className={`h-3 w-3 ${recovering ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h5M20 20v-5h-5M5.6 15A7 7 0 0 0 18 17M18.4 9A7 7 0 0 0 6 7" /></svg>
                           {recovering && recoveringSource?.action === 'retry' ? t.retryingSource : t.retrySource}
                         </button>
                       ) : (
-                        <div>
+                        <div className="inline-block">
                           <input
                             id={`source-grid-pdf-${source.id}`}
                             type="file"
@@ -521,15 +523,15 @@ export default function SourceLibraryPanel() {
                           />
                           <label
                             htmlFor={`source-grid-pdf-${source.id}`}
-                            className="w-full py-1.5 rounded-lg bg-(--brand) text-(--on-brand) text-[11px] font-bold shadow-xs hover:bg-(--brand-hover) transition-colors cursor-pointer flex items-center justify-center gap-1.5 text-center"
+                            className="px-2.5 py-1 rounded-lg bg-(--brand) text-(--on-brand) text-xs font-bold shadow-xs hover:bg-(--brand-hover) transition-colors cursor-pointer flex items-center gap-1"
                           >
-                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 16V4m0 0L8 8m4-4 4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></svg>
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 16V4m0 0L8 8m4-4 4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></svg>
                             {recovering && recoveringSource?.action === 'upload' ? t.uploadingSourcePdf : t.uploadSourcePdf}
                           </label>
                         </div>
-                      )}
-                    </div>
-                  )}
+                      )
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -725,6 +727,22 @@ export default function SourceLibraryPanel() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={showGuide} onClose={() => setShowGuide(false)} title={language === 'vi' ? 'Hướng dẫn Thư viện Nguồn' : 'Source Library Guide'} closeLabel={ct.close}>
+        <ol className="space-y-3 text-xs">
+          {[
+            language === 'vi' ? 'Quản lý tập trung toàn bộ các tài liệu và bài báo đã được tải lên hoặc nạp qua DOI trong hệ thống.' : 'Centrally manage all uploaded papers and DOI-ingested documents across your collections.',
+            language === 'vi' ? 'Xem trạng thái xử lý chi tiết (READY, PROCESSING, FAILED, METADATA_FETCHED) và kích thước tệp.' : 'Track processing statuses (READY, PROCESSING, FAILED, METADATA_FETCHED) and file sizes.',
+            language === 'vi' ? 'Khôi phục nhanh: Sử dụng nút Thử lại hoặc Tải PDF trực tiếp inline trên thẻ khi gặp lỗi trích xuất hoặc bị chặn.' : 'Quick recovery: Retry extraction or upload missing PDFs directly from the action bar if downloads were blocked.',
+            language === 'vi' ? 'Xem nhanh nội dung PDF bằng trình xem trước tích hợp hoặc tải về máy tính bất cứ lúc nào.' : 'Preview PDF files directly with the built-in document viewer or download copies anytime.'
+          ].map((step, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <span className="shrink-0 w-5 h-5 rounded-full bg-(--brand) text-(--on-brand) text-[10px] font-black flex items-center justify-center">{i + 1}</span>
+              <span className="text-(--text-secondary) leading-relaxed">{step}</span>
+            </li>
+          ))}
+        </ol>
       </Modal>
 
       {viewerFile && (

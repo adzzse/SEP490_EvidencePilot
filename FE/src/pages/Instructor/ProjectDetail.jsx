@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { AppHeader, LoadingSkeleton, StatusBadge, Modal, TourLauncher, Spinner, Breadcrumb } from '../../components';
+import { AppHeader, LoadingSkeleton, StatusBadge, Modal, TourLauncher, Spinner, Breadcrumb, UniversalDocumentIngestionModal } from '../../components';
 import FileViewerModal from '../../components/features/FileViewerModal';
 import { Marker, MarkerIcon, MarkerContent } from '../../components/ui/Marker';
 import { instructorText, commonText } from '../../locales';
@@ -20,8 +20,15 @@ import ContributionGraph from '../../components/Instructor/ContributionGraph.jsx
 import SectionManager from '../../components/Instructor/sections/SectionManager.jsx';
 import { useAuth } from '../../context/AuthContext';
 
-const STANDARDS = ['IEEE', 'ACM', 'SPRINGER_LNCS', 'APA', 'MLA', 'CUSTOM'];
-const MODAL_PAGE_SIZE = 20;
+import {
+  CITATION_STANDARDS,
+  MODAL_PAGE_SIZE,
+  ENTITY_TYPES,
+  DEFAULT_PROJECT_INGESTION_TABS,
+  API_ROUTES,
+} from '../../constants';
+
+const STANDARDS = CITATION_STANDARDS;
 const reportDate = (daysAgo) => {
   const date = new Date();
   date.setDate(date.getDate() - daysAgo);
@@ -420,7 +427,7 @@ export default function ProjectDetail() {
       if (specificDoi) {
         setDoiErrors(prev => prev.map(e => e.doi === specificDoi ? { ...e, error: err?.response?.data?.message || 'Network error' } : e));
       } else {
-        setDoiErrors([{ doi: 'batch', error: err?.response?.data?.message || 'Network/Server Error: Could not complete ingestion' }]);
+        setDoiErrors([{ doi: dois.length === 1 ? dois[0] : 'batch', error: err?.response?.data?.message || 'Network/Server Error: Could not complete ingestion' }]);
       }
     }
     finally { setAddSourceLoading(false); }
@@ -1587,7 +1594,7 @@ export default function ProjectDetail() {
             <div><span className="font-bold text-[var(--text-secondary)]">{ct.status}:</span> <StatusBadge status={sourceDetail.processingStatus || 'READY'} /></div>
             <div><span className="font-bold text-[var(--text-secondary)]">{t.typeLabel}</span> <span>{sourceDetail.docType || 'SOURCE'}</span></div>
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => { setViewerFile({ fileUrl: `/api/documents/${sourceDetail.id}/download`, fileName: sourceDetail.originalFilename || sourceDetail.title }); }} className="rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)]">{t.previewSource || 'Preview'}</button>
+              <button onClick={() => { setViewerFile({ fileUrl: API_ROUTES.DOCUMENTS.DOWNLOAD(sourceDetail.id), fileName: sourceDetail.originalFilename || sourceDetail.title }); }} className="rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)]">{t.previewSource || 'Preview'}</button>
               <button onClick={() => setShowSourceDetail(false)} className="rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:opacity-80">{ct.close}</button>
             </div>
           </div>
@@ -1595,65 +1602,18 @@ export default function ProjectDetail() {
       </Modal>
       {viewerFile && <FileViewerModal fileUrl={viewerFile.fileUrl} fileName={viewerFile.fileName} onClose={() => setViewerFile(null)} />}
 
-      <Modal open={showAddSource} onClose={() => { setShowAddSource(false); setDoiInput(''); setPendingSourceFile(null); setPendingSourceFiles([]); }} title={t.addSource}>
-        <div className="space-y-5 text-xs">
-          <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
-            <h3 className="font-bold text-[var(--brand-foreground)]">{t.importByDoi}</h3>
-            <textarea value={doiInput} onChange={e => setDoiInput(e.target.value)} placeholder="10.1000/xyz123, 10.1001/abc&#10;One per line or comma/semicolon separated" rows={3} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none" />
-            <div className="flex gap-2">
-              <button onClick={() => handleImportDoiUnified()} disabled={addSourceLoading || !doiInput.trim()} className="rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-50">
-                {addSourceLoading ? '...' : t.import}
-              </button>
-              {doiInput.trim().split(/[\n,;]+/).filter(Boolean).length > 1 && <span className="py-2 text-[10px] text-[var(--text-tertiary)]">{doiInput.trim().split(/[\n,;]+/).filter(Boolean).length} DOIs — one request</span>}
-            </div>
-            {doiErrors.length > 0 && (
-              <div className="space-y-2 mt-2">
-                {doiErrors.map((err, idx) => (
-                  <div key={idx} className="flex flex-col gap-1 rounded bg-rose-50 px-3 py-2 text-xs text-rose-700 border border-rose-200">
-                    <div className="font-semibold">{err.doi}: {err.error}</div>
-                    {err.doi !== 'batch' && (
-                      <div className="flex gap-2 mt-1">
-                        <button onClick={() => handleImportDoiUnified(err.doi)} className="rounded bg-rose-600 px-2 py-1 font-bold text-white hover:bg-rose-700">Retry</button>
-                        <button onClick={() => console.warn("TODO: Wire up manual modal")} className="rounded bg-rose-100 px-2 py-1 font-bold text-rose-700 hover:bg-rose-200">Manual Input</button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-            <p className="text-[10px] italic text-[var(--text-tertiary)]">{t.sourcesAutoClassified} • Batch uses single POST /api/documents/ingest/doi/batch</p>
-          </div>
-          <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
-            <h3 className="font-bold text-[var(--text-primary)]">{t.uploadSourceFile} — Multiple allowed (concurrency 3)</h3>
-            <input type="file" multiple accept=".pdf,.docx" onChange={(e) => { const files = [...(e.target.files||[])]; setPendingSourceFiles(files); setPendingSourceFile(files[0]||null); e.target.value = ''; }} className="text-xs" />
-            {pendingSourceFile && pendingSourceFiles.length === 1 && (
-              <div className="flex items-center justify-between gap-2 rounded-lg bg-[var(--surface-secondary)] px-3 py-2">
-                <span className="truncate font-semibold">{pendingSourceFile.name}</span>
-                <button onClick={async () => { if (await handleUploadSource(pendingSourceFile)) { setPendingSourceFile(null); setPendingSourceFiles([]); setShowAddSource(false); } }} disabled={addSourceLoading} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-50">
-                  {addSourceLoading ? '...' : ct.save}
-                </button>
-              </div>
-            )}
-            {pendingSourceFiles.length > 1 && (
-              <div className="space-y-2">
-                <div className="max-h-32 space-y-1 overflow-y-auto pr-1">
-                  {pendingSourceFiles.map(f => <div key={f.name+f.size} className="truncate rounded bg-[var(--surface-secondary)] px-2 py-1 text-[10px]">{f.name} — {(f.size/1024).toFixed(0)}KB</div>)}
-                </div>
-                <button onClick={async () => { await handleUploadSourcesBatch(pendingSourceFiles); setPendingSourceFile(null); setPendingSourceFiles([]); setShowAddSource(false); }} disabled={addSourceLoading} className="w-full rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-50">
-                  {addSourceLoading ? 'Uploading...' : `Upload ${pendingSourceFiles.length} files (max 3 concurrent)`}
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
-            <h3 className="font-bold text-[var(--text-primary)]">{t.shareFromCollection}</h3>
-            <button onClick={() => { setShowShareCollection(true); loadCollections(); setShowAddSource(false); }} className="rounded-lg bg-[var(--brand)] px-3 py-2 font-bold text-white hover:bg-[var(--brand-hover)]">{t.browseCollections}</button>
-          </div>
-          <div className="flex justify-end gap-2">
-            <button onClick={() => setShowAddSource(false)} className="rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:opacity-80">{ct.cancel}</button>
-          </div>
-        </div>
-      </Modal>
+      <UniversalDocumentIngestionModal
+        open={showAddSource}
+        onClose={() => setShowAddSource(false)}
+        entityType={ENTITY_TYPES.PROJECT}
+        entityId={id}
+        existingSourceIds={sources.map(s => s.id)}
+        onSuccess={() => {
+          loadSources();
+          loadPapers();
+        }}
+        allowedTabs={DEFAULT_PROJECT_INGESTION_TABS}
+      />
 
       <Modal open={showSetUpPaper} onClose={() => setShowSetUpPaper(false)} title={t.setUpPaper}>
         {sectionStructureLocked ? (
@@ -1710,105 +1670,6 @@ export default function ProjectDetail() {
         )}
       </Modal>
 
-      <Modal open={showShareCollection} onClose={() => { setShowShareCollection(false); resetSourceSharing(); }} title={t.shareFromCollection}>
-        <div className="space-y-4 text-xs">
-          {collections.length === 0 ? (
-            <p className="italic text-[var(--text-tertiary)]">{t.noCollectionsFound}</p>
-          ) : (
-            <>
-              <select value={selectedCollectionId} onChange={e => handleCollectionSelection(e.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none">
-                <option value="">{t.selectCollection}</option>
-                {collections.map(c => {
-                  const linked = linkedCollections.some(item => String(item.id) === String(c.id));
-                  return <option key={c.id} value={c.id}>{c.name || c.title || c.id}{linked ? ` — ${t.collectionLinked}` : ''}</option>;
-                })}
-              </select>
-              {collectionTotalPages > 1 && (
-                <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-tertiary)]">
-                  <button
-                    type="button"
-                    disabled={collectionPage === 0}
-                    onClick={() => { resetSourceSharing(); loadCollections(collectionPage - 1); }}
-                    className="rounded border border-[var(--border)] px-2 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-                  >{t.prev}</button>
-                  <span>{t.page} {collectionPage + 1} / {collectionTotalPages}</span>
-                  <button
-                    type="button"
-                    disabled={collectionPage + 1 >= collectionTotalPages}
-                    onClick={() => { resetSourceSharing(); loadCollections(collectionPage + 1); }}
-                    className="rounded border border-[var(--border)] px-2 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-                  >{t.next}</button>
-                </div>
-              )}
-            </>
-          )}
-          {selectedCollectionId && linkedCollections.some(c => String(c.id) === String(selectedCollectionId)) && (
-            <div className="space-y-3 rounded-lg bg-[var(--surface-secondary)] px-3 py-3 text-[var(--text-secondary)]">
-              <p>{t.collectionLinked}</p>
-              <DeleteConfirm message={t.stopCollectionSyncConfirm} onConfirm={handleStopCollectionSync} triggerLabel={t.stopCollectionSync} confirmLabel={t.stopCollectionSync} cancelLabel={ct.cancel} disabled={projectReadOnly || shareLoadingId !== null} className="w-full rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:cursor-not-allowed disabled:opacity-50">
-                {shareLoadingId === selectedCollectionId ? ct.saving : t.stopCollectionSync}
-              </DeleteConfirm>
-            </div>
-          )}
-          {selectedCollectionId && projectReadOnly && (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">{t.collectionSyncPaused}</p>
-          )}
-          {selectedCollectionId && collectionSourcesLoading && (
-            <p className="italic text-[var(--text-tertiary)]">{ct.loading}</p>
-          )}
-          {selectedCollectionId && !collectionSourcesLoading
-            && !linkedCollections.some(c => String(c.id) === String(selectedCollectionId))
-            && visibleCollectionSources.length === 0 && (
-            <p className="italic text-[var(--text-tertiary)]">{t.noCollectionSources}</p>
-          )}
-          {!collectionSourcesLoading
-            && !linkedCollections.some(c => String(c.id) === String(selectedCollectionId))
-            && visibleCollectionSources.length > 0 && (
-            <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-[var(--border-light)] p-1">
-              {visibleCollectionSources.map(source => {
-                const shareable = isSourceShareable(source);
-                const canToggle = shareable || isSourceSharedWithProject(source, id);
-                return (
-                  <label key={source.id} className={`flex items-center gap-2 rounded-lg bg-[var(--surface-secondary)] px-3 py-2 ${canToggle ? 'cursor-pointer hover:bg-[var(--surface-tertiary)]' : 'cursor-not-allowed opacity-60'}`}>
-                    <input type="checkbox" checked={selectedSourceIds.includes(String(source.id))} onChange={() => toggleSourceSelection(source.id)} disabled={projectReadOnly || shareLoadingId !== null || !canToggle} className="accent-indigo-600" />
-                    <span className="flex-1 text-xs font-medium">{source.title || source.originalFilename || source.id}</span>
-                    {!shareable && <span className="text-[10px] font-semibold text-amber-600">{t.sourceNotReady}</span>}
-                  </label>
-                );
-              })}
-            </div>
-          )}
-          {!collectionSourcesLoading
-            && !linkedCollections.some(c => String(c.id) === String(selectedCollectionId))
-            && collectionSourceTotalPages > 1 && (
-            <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-tertiary)]">
-              <button
-                type="button"
-                disabled={collectionSourcePage === 0 || shareLoadingId !== null}
-                onClick={() => loadCollectionSources(selectedCollectionId, collectionSourcePage - 1)}
-                className="rounded border border-[var(--border)] px-2 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-              >{t.prev}</button>
-              <span>{t.page} {collectionSourcePage + 1} / {collectionSourceTotalPages}</span>
-              <button
-                type="button"
-                disabled={collectionSourcePage + 1 >= collectionSourceTotalPages || shareLoadingId !== null}
-                onClick={() => loadCollectionSources(selectedCollectionId, collectionSourcePage + 1)}
-                className="rounded border border-[var(--border)] px-2 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-              >{t.next}</button>
-            </div>
-          )}
-          {!collectionSourcesLoading
-            && !linkedCollections.some(c => String(c.id) === String(selectedCollectionId))
-            && visibleCollectionSources.length > 0 && (
-            <button onClick={handleShareSources} disabled={projectReadOnly || shareLoadingId !== null} className="w-full rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:cursor-not-allowed disabled:opacity-50">
-              {shareLoadingId === selectedCollectionId ? ct.saving : t.applyChanges}
-            </button>
-          )}
-          <div className="flex justify-end gap-2">
-            <button onClick={() => { setShowShareCollection(false); resetSourceSharing(); }} className="rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:opacity-80">{ct.close}</button>
-          </div>
-        </div>
-      </Modal>
 
       <Modal open={showExportModal} onClose={() => setShowExportModal(false)} title={t.export}>
         <div className="space-y-3 text-xs">

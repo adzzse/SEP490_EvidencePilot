@@ -1,6 +1,8 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.request.DoiBatchIngestionRequest;
+import com.evidencepilot.dto.response.DocumentResponse;
+import com.evidencepilot.exception.DuplicateProjectDoiException;
 import com.evidencepilot.service.OpenAlexIngestionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -24,6 +26,8 @@ class OpenAlexControllerBatchTest {
     @Test
     void batchNormalizesDeduplicatesAndReportsInvalidDoi() {
         UUID projectId = UUID.randomUUID();
+        when(ingestionService.ingestByDoi(projectId, null, "10.1000/ABC"))
+                .thenReturn(mock(DocumentResponse.class));
 
         var response = controller.ingestBatch(new DoiBatchIngestionRequest(
                 List.of("https://doi.org/10.1000/ABC", "10.1000/abc", "not-a-doi"),
@@ -43,6 +47,8 @@ class OpenAlexControllerBatchTest {
     @Test
     void allAcceptedDoiReturnAcceptedStatus() {
         UUID projectId = UUID.randomUUID();
+        when(ingestionService.ingestByDoi(projectId, null, "10.1000/abc"))
+                .thenReturn(mock(DocumentResponse.class));
 
         var response = controller.ingestBatch(new DoiBatchIngestionRequest(
                 List.of("10.1000/abc"), projectId, null));
@@ -62,5 +68,40 @@ class OpenAlexControllerBatchTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode())
                         .isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
+    @Test
+    void batchContinuesAfterDuplicateLookupAndDownloadFailures() {
+        UUID projectId = UUID.randomUUID();
+        DocumentResponse noPdf = mock(DocumentResponse.class);
+        DocumentResponse accepted = mock(DocumentResponse.class);
+        when(noPdf.processingError()).thenReturn("No open-access PDF available for this DOI");
+        when(ingestionService.ingestByDoi(projectId, null, "10.1000/duplicate"))
+                .thenThrow(new DuplicateProjectDoiException("10.1000/duplicate"));
+        when(ingestionService.ingestByDoi(projectId, null, "10.1000/network"))
+                .thenThrow(new IllegalStateException("Network timeout"));
+        when(ingestionService.ingestByDoi(projectId, null, "10.1000/no-pdf"))
+                .thenReturn(noPdf);
+        when(ingestionService.ingestByDoi(projectId, null, "10.1000/accepted"))
+                .thenReturn(accepted);
+
+        var response = controller.ingestBatch(new DoiBatchIngestionRequest(
+                List.of(
+                        "10.1000/duplicate",
+                        "10.1000/network",
+                        "10.1000/no-pdf",
+                        "10.1000/accepted"),
+                projectId,
+                null));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.MULTI_STATUS);
+        assertThat(response.getBody().succeeded()).containsExactly(accepted);
+        assertThat(response.getBody().failed())
+                .extracting(failure -> failure.doi() + ":" + failure.code())
+                .containsExactly(
+                        "10.1000/duplicate:DUPLICATE",
+                        "10.1000/network:NETWORK",
+                        "10.1000/no-pdf:NO_PDF");
+        verify(ingestionService).ingestByDoi(projectId, null, "10.1000/accepted");
     }
 }
