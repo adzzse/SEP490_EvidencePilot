@@ -1036,8 +1036,17 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
             }
             UUID currentAssigneeId = section.getAssignedUser() != null ? section.getAssignedUser().getId() : null;
             if (!Objects.equals(item.assignedUserId(), currentAssigneeId)) {
-                section.setAssignedUser(item.assignedUserId() == null ? null : assignees.get(item.assignedUserId()));
+                User newAssignee = item.assignedUserId() == null ? null : assignees.get(item.assignedUserId());
+                section.setAssignedUser(newAssignee);
                 changed = true;
+                if (newAssignee != null) {
+                    systemNotificationService.createNotification(
+                            newAssignee,
+                            currentUser,
+                            "SECTION_ASSIGNED",
+                            section.getId(),
+                            currentUser.getEmail() + " assigned you to section \"" + section.getSectionTitle() + "\".");
+                }
             }
             if (changed) {
                 section.setUpdatedAt(LocalDateTime.now());
@@ -1047,6 +1056,13 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         if (!toSave.isEmpty()) {
             paperSectionRepository.saveAll(toSave);
             paperSectionRepository.flush();
+        }
+        boolean hasAssignedSection = items.stream().anyMatch(i -> i.assignedUserId() != null)
+                || persistedById.values().stream().anyMatch(s -> s.getAssignedUser() != null);
+        if (hasAssignedSection && project.getStatus() == ProjectStatus.CREATED) {
+            project.setStatus(ProjectStatus.ASSIGNED);
+            project.setUpdatedAt(LocalDateTime.now());
+            projectRepository.save(project);
         }
         return paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId).stream()
                 .filter(PaperSection::isActive)

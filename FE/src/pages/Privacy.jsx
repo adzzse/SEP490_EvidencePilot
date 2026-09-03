@@ -23,16 +23,18 @@ export default function Privacy() {
     <StaticPageLayout t={homeText[language]}>
       <div className="max-w-3xl mx-auto px-6">
         <AnimateIn>
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">{t.metaTitle}</h1>
-          <p className="text-sm text-gray-500 mb-10">{t.lastUpdated}</p>
-          <p className="text-gray-600 leading-relaxed mb-10">{t.intro}</p>
+          <h1 className="text-3xl md:text-4xl font-black text-(--brand-foreground) tracking-tight mb-2">{t.metaTitle}</h1>
+          <p className="text-xs font-semibold text-(--text-tertiary) mb-8">{t.lastUpdated}</p>
+          <div className="bg-(--surface) border border-(--border) rounded-2xl p-6 sm:p-8 mb-8 shadow-xs">
+            <p className="text-(--text-secondary) leading-relaxed">{t.intro}</p>
+          </div>
         </AnimateIn>
 
         {sections.map((s, i) => (
           <AnimateIn key={i} delay={i * 60}>
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-3">{s.title}</h2>
-              <p className="text-gray-600 leading-relaxed">{s.body}</p>
+            <section className="mb-6 bg-(--surface) border border-(--border) rounded-2xl p-6 shadow-xs">
+              <h2 className="text-lg font-bold text-(--text-primary) mb-3">{s.title}</h2>
+              <p className="text-(--text-secondary) text-sm leading-relaxed">{s.body}</p>
             </section>
           </AnimateIn>
         ))}

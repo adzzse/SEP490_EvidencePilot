@@ -7,9 +7,11 @@ public record BatchUploadResponse(
         List<UploadFailure> failed
 ) {
     public record UploadFailure(
+            int index,
             String filename,
+            String errorCode,
             String errorMessage,
-            String errorCode
+            boolean retryable
     ) {
     }
 }

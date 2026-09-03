@@ -383,7 +383,7 @@ public class DocumentServiceImpl implements DocumentService {
             RuntimeException failure = new RuntimeException("Failed to upload file to MinIO", e);
             deleteObjectAfterFailure(objectKey, failure);
             try {
-                documentPersistenceService.markFailed(document.getId(), "File upload to storage failed");
+                documentPersistenceService.hardDeletePending(document.getId());
             } catch (RuntimeException statusFailure) {
                 failure.addSuppressed(statusFailure);
             }
@@ -415,20 +415,47 @@ public class DocumentServiceImpl implements DocumentService {
         List<DocumentResponse> succeeded = new ArrayList<>();
         List<com.evidencepilot.dto.response.BatchUploadResponse.UploadFailure> failed = new ArrayList<>();
 
-        for (MultipartFile file : files) {
+        for (int index = 0; index < files.length; index++) {
+            MultipartFile file = files[index];
             String filename = file != null ? file.getOriginalFilename() : "unknown";
+            if (filename == null || filename.isBlank()) filename = "unknown";
             try {
                 DocumentResponse res = uploadDocument(projectId, collectionId, file, docType);
                 succeeded.add(res);
             } catch (ResponseStatusException e) {
+                String raw = e.getReason() != null ? e.getReason() : e.getMessage();
+                String code = mapHttpErrorCode(e.getStatusCode().value(), raw);
+                boolean retryable = isBatchRetryable(code);
                 failed.add(new com.evidencepilot.dto.response.BatchUploadResponse.UploadFailure(
-                        filename, e.getReason() != null ? e.getReason() : e.getMessage(), "HTTP_" + e.getStatusCode().value()));
+                        index, filename, code, raw != null ? raw : "Upload failed", retryable));
             } catch (Exception e) {
+                String msg = e.getMessage() != null ? e.getMessage() : "Upload failed";
+                boolean isStorage = e.getMessage() != null && e.getMessage().toLowerCase().contains("minio");
+                String code = isStorage ? "STORAGE_UNAVAILABLE" : "FILE_CORRUPTED";
+                boolean retryable = "STORAGE_UNAVAILABLE".equals(code);
                 failed.add(new com.evidencepilot.dto.response.BatchUploadResponse.UploadFailure(
-                        filename, e.getMessage() != null ? e.getMessage() : "Upload failed", "UPLOAD_FAILED"));
+                        index, filename, code, msg, retryable));
             }
         }
         return new com.evidencepilot.dto.response.BatchUploadResponse(succeeded, failed);
+    }
+
+    private static String mapHttpErrorCode(int status, String reason) {
+        if (status == 415) return "FILE_CORRUPTED";
+        if (status == 400) {
+            String r = reason == null ? "" : reason.toLowerCase(Locale.ROOT);
+            if (r.contains("empty")) return "FILE_EMPTY";
+            if (r.contains("too large") || r.contains("exceed")) return "FILE_TOO_LARGE";
+            return "INVALID_FILE";
+        }
+        if (status == 404) return "NOT_FOUND";
+        if (status == 403) return "FORBIDDEN";
+        if (status == 409) return "CONFLICT";
+        return "HTTP_" + status;
+    }
+
+    private static boolean isBatchRetryable(String code) {
+        return "STORAGE_UNAVAILABLE".equals(code);
     }
 
     @Override

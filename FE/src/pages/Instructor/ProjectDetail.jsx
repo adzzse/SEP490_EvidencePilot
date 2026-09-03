@@ -651,6 +651,7 @@ export default function ProjectDetail() {
       const { data } = await api.put(`/api/papers/${selectedPaper.id}/sections/batch`, payload);
       setSections(data || []);
       setDraftSections(data || []);
+      await loadProject();
     } catch (err) {
       const fieldErrors = err?.response?.data?.fieldErrors;
       const sid = fieldErrors?.sectionId || err?.response?.data?.details?.sectionId;

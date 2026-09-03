@@ -57,6 +57,8 @@ export default function UniversalDocumentIngestionModal({
   // Upload Tab State
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [pendingBatchFiles, setPendingBatchFiles] = useState(null);
+  const [batchFailedDetails, setBatchFailedDetails] = useState(null);
 
   // Choose from Collection Tab State (for Projects)
   const [collections, setCollections] = useState([]);
@@ -120,6 +122,8 @@ export default function UniversalDocumentIngestionModal({
       setUploadError('');
       setCollectionError('');
       setLibraryError('');
+      setPendingBatchFiles(null);
+      setBatchFailedDetails(null);
     }
   }, [open, effectiveTabs, activeOption]);
 
@@ -254,33 +258,57 @@ export default function UniversalDocumentIngestionModal({
     }
   };
 
-  // Handle Multi-file Upload
+  // Handle Multi-file Upload — re-batch failed-only slice on 207
   const handleUploadFiles = async (files) => {
-    if (!files || files.length === 0) return;
+    const fileList = Array.from(files || []);
+    if (fileList.length === 0) return;
     setUploadingFiles(true);
     setUploadError('');
+    setPendingBatchFiles(fileList);
+    setBatchFailedDetails(null);
 
-    const fd = new FormData();
-    Array.from(files).forEach(f => fd.append('files', f));
-
-    if (entityType === ENTITY_TYPES.PROJECT) {
-      fd.append('projectId', entityId);
-    } else {
-      fd.append('collectionId', entityId);
-    }
+    const buildForm = (list) => {
+      const fd = new FormData();
+      list.forEach(f => fd.append('files', f));
+      if (entityType === ENTITY_TYPES.PROJECT) fd.append('projectId', entityId);
+      else fd.append('collectionId', entityId);
+      return fd;
+    };
 
     try {
-      const res = await api.post(API_ROUTES.SOURCES.BATCH, fd);
-      if (res.data?.failed && res.data.failed.length > 0) {
-        alert(`${res.data.succeeded?.length || 0} uploaded, ${res.data.failed.length} failed.`);
+      const res = await api.post(API_ROUTES.SOURCES.BATCH, buildForm(fileList));
+      const failed = res.data?.failed || [];
+      if (failed.length > 0) {
+        setBatchFailedDetails(failed);
+        const failedIdx = new Set(failed.map(f => f.index));
+        const remaining = fileList.filter((_, idx) => failedIdx.has(idx));
+        setPendingBatchFiles(remaining);
+        if (onSuccess && res.data?.succeeded?.length > 0) await onSuccess();
+      } else {
+        setPendingBatchFiles(null);
+        setBatchFailedDetails(null);
+        if (onSuccess) await onSuccess();
+        onClose();
       }
-      if (onSuccess) await onSuccess();
-      onClose();
     } catch (err) {
-      setUploadError(err.response?.data?.message || t.uploadFailed);
+      const failed = err.response?.data?.failed;
+      if (failed && failed.length > 0) {
+        setBatchFailedDetails(failed);
+        const failedIdx = new Set(failed.map(f => f.index));
+        const remaining = fileList.filter((_, idx) => failedIdx.has(idx));
+        setPendingBatchFiles(remaining);
+        if (err.response?.data?.succeeded?.length > 0 && onSuccess) await onSuccess();
+      } else {
+        setUploadError(err.response?.data?.message || t.uploadFailed);
+      }
     } finally {
       setUploadingFiles(false);
     }
+  };
+
+  const handleRetryBatch = async () => {
+    if (!pendingBatchFiles || pendingBatchFiles.length === 0 || !batchFailedDetails) return;
+    await handleUploadFiles(pendingBatchFiles);
   };
 
   // Handle Adding Sources from Collection to Project
@@ -535,6 +563,20 @@ export default function UniversalDocumentIngestionModal({
             {uploadingFiles && (
               <div className="p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl text-xs font-bold text-center animate-pulse">
                 {language === 'vi' ? 'Đang tải lên các tệp...' : 'Uploading files...'}
+              </div>
+            )}
+            {batchFailedDetails && batchFailedDetails.length > 0 && (
+              <div className="space-y-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+                <p className="font-bold">{batchFailedDetails.length} file(s) failed — {pendingBatchFiles?.length || 0} remaining in queue</p>
+                <ul className="list-disc pl-4 space-y-1 text-[11px]">
+                  {batchFailedDetails.map((f) => (
+                    <li key={f.index}><span className="font-mono">{f.filename}</span> [{f.errorCode}] {f.errorMessage} {f.retryable ? '' : '(not retryable)'}</li>
+                  ))}
+                </ul>
+                <div className="flex gap-2">
+                  <button type="button" onClick={handleRetryBatch} disabled={uploadingFiles || !batchFailedDetails.some(f=>f.retryable)} className="px-3 py-1.5 bg-(--brand) text-(--on-brand) rounded-lg text-xs font-bold disabled:opacity-50">Retry Failed</button>
+                  <button type="button" onClick={() => { setBatchFailedDetails(null); setPendingBatchFiles(null); }} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg text-xs font-bold">Dismiss</button>
+                </div>
               </div>
             )}
             {uploadError && (

@@ -12,6 +12,7 @@ export { default as TourLauncher } from './ui/TourLauncher';
 export { default as AnimateIn } from './ui/AnimateIn';
 export { default as DeleteConfirm } from './ui/DeleteConfirm';
 export { default as UndoDelete } from './ui/UndoDelete';
+export { AuroraBackground } from './ui/aurora-background';
 
 // Layout
 export { default as AppHeader } from './layout/AppHeader';

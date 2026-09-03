@@ -1,8 +1,49 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  --animate-aurora: aurora 20s linear infinite;
+
+  @keyframes aurora {
+    from {
+      background-position: 50% 50%, 50% 50%;
+    }
+    to {
+      background-position: 350% 50%, 350% 50%;
+    }
+  }
+}
+
+@keyframes aurora {
+  0% {
+    background-position: 50% 50%, 50% 50%;
+  }
+  50% {
+    background-position: 200% 50%, 150% 50%;
+  }
+  100% {
+    background-position: 350% 50%, 350% 50%;
+  }
+}
+
+.animate-aurora::after,
+.after\:animate-aurora::after,
+[class*="after:animate-aurora"]::after {
+  animation: aurora 20s linear infinite !important;
+  will-change: background-position;
+}
+
 :root {
   color-scheme: light;
+  --white: #ffffff;
+  --black: #000000;
+  --transparent: transparent;
+  --blue-300: #93c5fd;
+  --blue-400: #60a5fa;
+  --blue-500: #3b82f6;
+  --indigo-300: #a5b4fc;
+  --violet-200: #ddd6fe;
+
   --page-bg: #f8fafc;
   --surface: #ffffff;
   --surface-secondary: #f8fafc;
@@ -26,6 +67,15 @@
 
 .dark {
   color-scheme: dark;
+  --white: #ffffff;
+  --black: #000000;
+  --transparent: transparent;
+  --blue-300: #93c5fd;
+  --blue-400: #60a5fa;
+  --blue-500: #3b82f6;
+  --indigo-300: #a5b4fc;
+  --violet-200: #ddd6fe;
+
   --page-bg: #020617;
   --surface: #0f172a;
   --surface-secondary: #1e293b;
@@ -94,17 +144,6 @@ body {
   background-clip: text;
   color: transparent;
   animation: shimmer 2s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-  }
 }
 
 .custom-scrollbar::-webkit-scrollbar {

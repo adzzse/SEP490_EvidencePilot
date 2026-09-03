@@ -5,6 +5,8 @@ import { useLanguage } from '../context/LanguageContext';
 import { commonText } from '../locales';
 import api from '../services/api.js';
 import { getPostLoginDestination } from './loginOrigin.js';
+import { AuroraBackground } from '../components/ui/aurora-background';
+import WordRotate from '../components/ui/WordRotate.jsx';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -64,14 +66,16 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex border-t-4 border-indigo-600 font-sans">
-      {/* Left Column: Form */}
-      <div className="flex-1 flex items-center justify-center p-8 sm:p-12 lg:p-24 bg-white">
-        <div className="w-full max-w-md relative">
-          
-          {/* Back to Home Button */}
-          <div className="mb-8">
-            <Link to="/" className="inline-flex items-center text-xs font-semibold text-gray-500 hover:text-indigo-600 transition-colors gap-1.5 group">
+    <AuroraBackground className="min-h-screen w-full flex items-center justify-center p-4 sm:p-6 lg:p-8">
+      <div className="flex w-full max-w-6xl mx-auto gap-8 lg:gap-12 items-center justify-between">
+        {/* Left 50% — Login Card */}
+        <div className="w-full max-w-md lg:w-1/2 lg:max-w-md bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-slate-200/80 dark:border-zinc-800 rounded-3xl p-8 sm:p-10 shadow-2xl relative z-10 transition-colors">
+          {/* Back to Home Link */}
+          <div className="mb-6">
+            <Link
+              to="/"
+              className="inline-flex items-center text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors gap-1.5 group"
+            >
               <svg className="w-4 h-4 transform group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
@@ -79,14 +83,28 @@ export default function Login() {
             </Link>
           </div>
 
-          <div className="mb-10 text-center sm:text-left">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">{t.welcomeBack || 'Welcome back'}</h1>
-            <p className="text-gray-500">{t.signInSubtitle || 'Sign in to Evidence Pilot to manage your projects.'}</p>
+          {/* Brand Header */}
+          <div className="mb-8 text-left">
+            <div className="inline-flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center text-white font-black text-sm shadow-md">
+                EP
+              </div>
+              <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-slate-100">
+                Evidence Pilot
+              </span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
+              {t.welcomeBack || 'Welcome back'}
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+              {t.signInSubtitle || 'Sign in to Evidence Pilot to manage your projects.'}
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                 {t.email}
               </label>
               <input
@@ -96,14 +114,16 @@ export default function Login() {
                 onChange={handleChange}
                 required
                 placeholder="you@example.com"
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all shadow-sm"
+                className="w-full bg-slate-50/70 dark:bg-zinc-800/80 border border-slate-300 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all shadow-2xs"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t.password || (language === 'vi' ? 'Mật khẩu' : 'Password')}
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                  {t.password || (language === 'vi' ? 'Mật khẩu' : 'Password')}
+                </label>
+              </div>
               <input
                 type="password"
                 name="passwordHash"
@@ -111,18 +131,18 @@ export default function Login() {
                 onChange={handleChange}
                 required
                 placeholder="••••••••"
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all shadow-sm"
+                className="w-full bg-slate-50/70 dark:bg-zinc-800/80 border border-slate-300 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all shadow-2xs"
               />
             </div>
 
             {notice && !error && (
-              <div className="p-3 bg-amber-50 text-amber-700 rounded-lg text-sm border border-amber-200">
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-200 rounded-xl text-xs font-medium border border-amber-200 dark:border-amber-800">
                 {notice}
               </div>
             )}
 
             {error && (
-              <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm border border-red-100">
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-200 rounded-xl text-xs font-medium border border-rose-200 dark:border-rose-800">
                 {error}
               </div>
             )}
@@ -130,40 +150,22 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-lg hover:shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3 mt-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg hover:shadow-indigo-500/25 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {loading ? (t.signingIn || 'Signing in...') : (t.signIn || 'Sign In')}
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-500 mt-8">
+          <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6">
             {t.needAccountHelp || 'Need an account? Contact your administrator.'}
           </p>
         </div>
-      </div>
 
-      {/* Right Column: Decorative */}
-      <div className="hidden lg:flex flex-1 relative overflow-hidden items-center justify-center">
-        {/* Full screen background image */}
-        <img 
-          src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=1600&auto=format&fit=crop" 
-          alt="Evidence Network" 
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        {/* Dark overlay for text readability */}
-        <div className="absolute inset-0 bg-blue-900/60 mix-blend-multiply"></div>
-        <div className="absolute inset-0 bg-gradient-to-t from-blue-900/80 via-blue-900/20 to-transparent"></div>
-        
-        <div className="relative z-10 text-center px-12 max-w-lg flex flex-col items-center">
-          <h2 className="text-4xl font-bold text-white mb-6 leading-tight drop-shadow-md">
-            {t.heroTagline || 'Manage Research Collaboratively'}
-          </h2>
-          <p className="text-blue-50 text-lg drop-shadow-md">
-            {t.heroDescription || 'Evidence Pilot provides a collaborative workspace for paper authoring, source management, citation review, and instructor feedback.'}
-          </p>
+        {/* Right 50% — WordRotate (hidden on small) */}
+        <div className="hidden lg:flex flex-1 lg:w-1/2 items-center justify-center">
+          <WordRotate />
         </div>
       </div>
-    </div>
+    </AuroraBackground>
   );
 }
-

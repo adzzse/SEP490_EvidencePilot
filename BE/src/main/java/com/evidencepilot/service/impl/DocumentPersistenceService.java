@@ -145,6 +145,17 @@ public class DocumentPersistenceService {
         documentRepository.save(document);
     }
 
+    @Transactional
+    public void hardDeletePending(UUID documentId) {
+        Document document = documentRepository.findById(documentId).orElse(null);
+        if (document == null) return;
+        if (document.getProcessingStatus() != ProcessingStatus.PENDING_UPLOAD) {
+            markFailed(documentId, "File upload to storage failed");
+            return;
+        }
+        documentRepository.delete(document);
+    }
+
     private Document requireDocument(UUID documentId) {
         return documentRepository.findById(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException(documentId, "Document"));

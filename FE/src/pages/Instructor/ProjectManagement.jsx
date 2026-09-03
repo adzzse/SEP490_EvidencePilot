@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppHeader from '../../components/layout/AppHeader.jsx';
 import Breadcrumb from '../../components/layout/Breadcrumb.jsx';
@@ -6,7 +6,11 @@ import Modal from '../../components/ui/Modal.jsx';
 import api from '../../services/api.js';
 import { commonText, instructorText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
-import { PAGINATION_LIMIT } from '../../utils/constants.js';
+import {
+  PAGINATION_LIMIT,
+  API_ROUTES,
+  PROJECT_STATUSES,
+} from '../../constants';
 import { formatDate } from '../../utils/formatters/date.js';
 import StatusBadge from '../../components/ui/StatusBadge.jsx';
 import DeleteConfirm from '../../components/ui/DeleteConfirm.jsx';
@@ -32,35 +36,66 @@ export default function ProjectManagement() {
   const [deletingId, setDeletingId] = useState(null);
 
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPage(0);
+      setDebouncedSearch(search.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const fetchProjects = useCallback(async (signal) => {
     setLoading(true);
     try {
-      const r = await api.get(`/api/projects?page=${page}&size=${PAGINATION_LIMIT}${search ? `&search=${encodeURIComponent(search)}` : ''}`, {
-        signal
+      const params = {
+        page,
+        size: PAGINATION_LIMIT,
+        sort: 'createdAt,desc',
+      };
+      if (debouncedSearch) {
+        params.q = debouncedSearch;
+        params.search = debouncedSearch;
+      }
+      if (statusFilter) {
+        params.status = statusFilter;
+      }
+      const r = await api.get(API_ROUTES.PROJECTS.BASE, {
+        params,
+        signal,
       });
-      setProjects(r.data.content || []);
-      setTotal(r.data.totalElements || 0);
+      setProjects(r.data?.content || r.data || []);
+      setTotal(r.data?.totalElements || 0);
     } catch (err) {
       if (err?.name !== 'CanceledError' && err?.code !== 'ERR_CANCELED') {
         setProjects([]);
+        setTotal(0);
       }
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [page, search]);
+  }, [page, debouncedSearch, statusFilter]);
 
   useEffect(() => {
     const controller = new AbortController();
-    const timer = setTimeout(() => fetchProjects(controller.signal), 300);
-    return () => { clearTimeout(timer); controller.abort(); };
+    fetchProjects(controller.signal);
+    return () => controller.abort();
   }, [fetchProjects]);
+
+  const statusOptions = useMemo(() => (
+    PROJECT_STATUSES.map(st => ({
+      value: st,
+      label: ct.statusLabels?.[st] || st.replaceAll('_', ' '),
+    }))
+  ), [ct.statusLabels]);
 
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
     setCreating(true);
     try {
-      await api.post('/api/projects', { title: newTitle, description: newDescription });
+      await api.post(API_ROUTES.PROJECTS.BASE, { title: newTitle, description: newDescription });
       setShowCreate(false);
       setNewTitle('');
       setNewDescription('');
@@ -75,7 +110,7 @@ export default function ProjectManagement() {
   const handleUpdate = async (id) => {
     if (!editTitle.trim()) return;
     try {
-      await api.put(`/api/projects/${id}`, { title: editTitle });
+      await api.put(API_ROUTES.PROJECTS.BY_ID(id), { title: editTitle });
       setEditId(null);
       setEditTitle('');
       fetchProjects();
@@ -88,7 +123,7 @@ export default function ProjectManagement() {
     if (!id || deletingId) return;
     setDeletingId(id);
     try {
-      await api.delete(`/api/projects/${id}`);
+      await api.delete(API_ROUTES.PROJECTS.BY_ID(id));
       await fetchProjects();
     } catch {
       alert(t.deleteProjectFailed);
@@ -127,13 +162,29 @@ export default function ProjectManagement() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
+            <label className="sr-only" htmlFor="project-search">{t.searchProjects || ct.search || 'Search projects...'}</label>
             <input
+              id="project-search"
               type="search"
-              placeholder={ct.search || 'Search...'}
+              placeholder={t.searchProjects || ct.search || 'Search projects...'}
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              onChange={(e) => setSearch(e.target.value)}
               className="w-full sm:w-52 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus)"
             />
+
+            <label className="sr-only" htmlFor="project-status-filter">{ct.status || 'Status'}</label>
+            <select
+              id="project-status-filter"
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
+              className="w-full sm:w-44 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus) [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              <option value="">{t.allProjectStatuses || 'All statuses'}</option>
+              {statusOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+
             <div className="flex items-center bg-(--surface-secondary) border border-(--border) rounded-xl p-0.5">
               <button
                 type="button"
@@ -154,6 +205,7 @@ export default function ProjectManagement() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
               </button>
             </div>
+
             <button
               onClick={() => setShowGuide(true)}
               className="inline-flex items-center gap-2 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-bold text-(--text-secondary) hover:text-(--brand-foreground) hover:border-(--brand) transition-colors cursor-pointer"
