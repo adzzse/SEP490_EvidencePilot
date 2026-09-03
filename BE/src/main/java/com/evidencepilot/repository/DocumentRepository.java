@@ -29,6 +29,18 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     List<Document> findByCollectionId(UUID collectionId);
     List<Document> findByCollectionIdAndDocTypeAndActiveTrue(UUID collectionId, DocumentType docType);
     List<Document> findByProcessingStatusAndActiveTrue(ProcessingStatus processingStatus);
+    @Query("""
+            SELECT d FROM Document d
+            WHERE d.uploadedBy.id = :uploadedBy
+              AND d.docType = :docType
+              AND d.active = true
+              AND LOWER(d.doi) = LOWER(:doi)
+            ORDER BY d.createdAt ASC
+            """)
+    List<Document> findOwnedActiveSourcesByDoi(
+            @Param("uploadedBy") UUID uploadedBy,
+            @Param("docType") DocumentType docType,
+            @Param("doi") String doi);
     @Query("SELECT d.id FROM Document d WHERE d.processingStatus IN :statuses AND d.active = true")
     List<UUID> findIdsByProcessingStatusInAndActiveTrue(
             @Param("statuses") List<ProcessingStatus> processingStatuses);

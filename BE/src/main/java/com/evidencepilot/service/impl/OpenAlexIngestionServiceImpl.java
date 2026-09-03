@@ -88,6 +88,7 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
     @Transactional
     public DocumentResponse ingestByDoi(UUID projectId, UUID collectionId, String doi) {
         User currentUser = currentUserService.requireCurrentUser();
+        String normalizedDoi = DoiUtils.normalize(doi);
 
         Document document = new Document();
         document.setUploadedBy(currentUser);
@@ -103,6 +104,16 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
             Collection collection = collectionRepository.findById(collectionId)
                     .orElseThrow(() -> new ResourceNotFoundException(collectionId, "Collection"));
             currentUserService.requireCollectionAccess(currentUser, collection);
+            if (DoiUtils.isValid(normalizedDoi)) {
+                Document existing = documentRepository.findOwnedActiveSourcesByDoi(
+                                currentUser.getId(), DocumentType.SOURCE, normalizedDoi).stream()
+                        .findFirst()
+                        .orElse(null);
+                if (existing != null) {
+                    return DocumentResponse.from(projectCollectionService.addSource(
+                            existing, collection, currentUser));
+                }
+            }
             document.setCollection(collection);
         } else if (projectId != null) {
             Project project = projectRepository.findById(projectId)
@@ -113,11 +124,11 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Either projectId or collectionId is required");
         }
 
-        OpenAlexWorkResponse work = openAlexClient.fetchWork(doi);
+        OpenAlexWorkResponse work = openAlexClient.fetchWork(normalizedDoi);
         String oaUrl = work.oaUrl();
 
-        document.setOriginalFilename(work.title() != null ? work.title() + ".pdf" : DoiUtils.normalize(doi) + ".pdf");
-        document.setDoi(DoiUtils.normalize(doi));
+        document.setOriginalFilename(work.title() != null ? work.title() + ".pdf" : normalizedDoi + ".pdf");
+        document.setDoi(normalizedDoi);
         document.setTitle(work.title());
         document.setAuthors(toJson(work.authorNames()));
         document.setPublicationYear(work.publicationYear());

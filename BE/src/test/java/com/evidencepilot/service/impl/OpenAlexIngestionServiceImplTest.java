@@ -9,6 +9,7 @@ import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentReference;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.EdgeType;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.ProjectStatus;
@@ -279,6 +280,36 @@ class OpenAlexIngestionServiceImplTest {
 
         verify(projectCollectionService).syncSource(
                 org.mockito.ArgumentMatchers.argThat(document -> document.getCollection() == collection));
+    }
+
+    @Test
+    void ingestByDoiIntoCollectionReusesOwnedLibrarySource() {
+        Collection collection = new Collection();
+        collection.setId(UUID.randomUUID());
+        collection.setActive(true);
+        Document existing = new Document();
+        existing.setId(UUID.randomUUID());
+        existing.setUploadedBy(currentUser);
+        existing.setDocType(DocumentType.SOURCE);
+        existing.setFileUrl("sources/raw/existing.pdf");
+        existing.setActive(true);
+        existing.setDoi("10.1000/EXISTING");
+        existing.setProcessingStatus(ProcessingStatus.READY);
+        existing.setCreatedAt(LocalDateTime.now());
+        when(currentUserService.requireCurrentUser()).thenReturn(currentUser);
+        when(collectionRepository.findById(collection.getId())).thenReturn(Optional.of(collection));
+        when(documentRepository.findOwnedActiveSourcesByDoi(
+                currentUser.getId(), DocumentType.SOURCE, "10.1000/existing"))
+                .thenReturn(List.of(existing));
+        when(projectCollectionService.addSource(existing, collection, currentUser)).thenReturn(existing);
+
+        var result = service.ingestByDoi(
+                null, collection.getId(), "https://doi.org/10.1000/existing");
+
+        assertThat(result.id()).isEqualTo(existing.getId());
+        verify(projectCollectionService).addSource(existing, collection, currentUser);
+        verify(documentRepository, never()).save(any());
+        verifyNoInteractions(openAlexClient, documentObjectStorage, documentPersistenceService);
     }
 
     @Test

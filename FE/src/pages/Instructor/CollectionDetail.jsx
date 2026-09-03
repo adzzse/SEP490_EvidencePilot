@@ -118,26 +118,15 @@ export default function CollectionDetail() {
 
   const handleRemoveSource = async (sourceId) => {
     const sid = String(sourceId);
-    const src = sources.find(s => String(s.id) === sid);
     setRemovedIds(prev => new Set(prev).add(sid));
-    startDelete({
-      ...undoStrings,
-      entityName: src?.title || src?.originalFilename || sourceId,
-      entityDetails: sourceId,
-    }, async () => {
-      try {
-        await api.delete(`/api/collections/${id}/sources/${sourceId}`);
-        refetchSources();
-      }
-      catch {
-        alert(t.deleteFailed);
-        setRemovedIds(prev => { const n = new Set(prev); n.delete(sid); return n; });
-      }
-      if (selectedSource?.id === sourceId) setSelectedSource(null);
-    }, () => {
+    try {
+      await api.delete(`/api/collections/${id}/sources/${sourceId}`);
+      if (String(selectedSource?.id) === sid) setSelectedSource(null);
+      await refetchSources();
+    } catch {
+      alert(t.deleteFailed);
       setRemovedIds(prev => { const n = new Set(prev); n.delete(sid); return n; });
-      refetchSources();
-    });
+    }
   };
 
   const handleDownloadSource = async (source) => {
