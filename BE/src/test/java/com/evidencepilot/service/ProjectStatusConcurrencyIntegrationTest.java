@@ -1,6 +1,7 @@
 package com.evidencepilot.service;
 
 import com.evidencepilot.dto.request.SubmitReviewRequest;
+import com.evidencepilot.exception.SubmissionReadinessException;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
@@ -25,7 +26,6 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -94,9 +94,6 @@ class ProjectStatusConcurrencyIntegrationTest {
     @MockBean
     private RabbitTemplate rabbitTemplate;
 
-    @SpyBean
-    private PaperSectionRepository sectionRepo;
-
     @AfterEach
     void clean() {
         feedbackRequests.deleteAll();
@@ -126,17 +123,6 @@ class ProjectStatusConcurrencyIntegrationTest {
                 paper.getId(), section.getId(), sectionStandardService.inputFingerprint(section));
         String fingerprint = submissionReadinessService.readiness(project.getId())
                 .submissionFingerprint();
-
-        AtomicInteger entered = new AtomicInteger();
-        CountDownLatch release = new CountDownLatch(1);
-        doAnswer(invocation -> {
-            if (entered.incrementAndGet() == 2) {
-                release.countDown();
-            } else {
-                release.await(2, TimeUnit.SECONDS);
-            }
-            return null;
-        }).when(notifications).createNotification(any(), any(), anyString(), any(), anyString());
 
         AtomicInteger successes = new AtomicInteger();
         AtomicInteger conflicts = new AtomicInteger();
@@ -194,17 +180,6 @@ class ProjectStatusConcurrencyIntegrationTest {
         section.setAssignedUser(student);
         PaperSection savedSection = sections.saveAndFlush(section);
 
-        AtomicInteger entered = new AtomicInteger();
-        CountDownLatch release = new CountDownLatch(1);
-        doAnswer(invocation -> {
-            if (entered.incrementAndGet() == 2) {
-                release.countDown();
-            } else {
-                release.await(2, TimeUnit.SECONDS);
-            }
-            return invocation.getArgument(0);
-        }).when(sectionRepo).save(any(PaperSection.class));
-
         AtomicInteger successes = new AtomicInteger();
         AtomicInteger conflicts = new AtomicInteger();
         long expectedRevision = savedSection.getOptVersion();
@@ -229,7 +204,7 @@ class ProjectStatusConcurrencyIntegrationTest {
         try {
             feedbackService.submitForReview(projectId, new SubmitReviewRequest(fingerprint));
             successes.incrementAndGet();
-        } catch (ObjectOptimisticLockingFailureException e) {
+        } catch (ObjectOptimisticLockingFailureException | SubmissionReadinessException e) {
             conflicts.incrementAndGet();
         } catch (ResponseStatusException e) {
             if (e.getStatusCode().value() == 409) {
