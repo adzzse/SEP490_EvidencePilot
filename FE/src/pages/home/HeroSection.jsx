@@ -1,12 +1,10 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useLanguage } from '../../context/LanguageContext';
 import AnimateIn from '../../components/ui/AnimateIn';
 import { AuroraBackground } from '../../components/ui/aurora-background';
 
 export default function HeroSection({ t }) {
   const { isAuthenticated, role } = useAuth();
-  const { language } = useLanguage();
 
   const wsLink = !isAuthenticated ? '/login'
     : role === 'ADMIN' ? '/admin/dashboard'
@@ -17,16 +15,9 @@ export default function HeroSection({ t }) {
     <section className="relative overflow-hidden">
       <AuroraBackground className="pt-28 pb-16 md:pt-36 md:pb-24 min-h-[80vh]">
         <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
-          <AnimateIn>
-            <div className="inline-flex items-center gap-2 bg-(--brand-soft) border border-indigo-100 dark:border-indigo-800 rounded-full px-4 py-1.5 mb-8 shadow-xs">
-              <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-              <span className="text-xs font-semibold text-(--brand-foreground)">{t.hero.stats}</span>
-            </div>
-          </AnimateIn>
-
           <AnimateIn delay={100}>
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-light text-(--text-primary) leading-tight mb-6 tracking-tight">
-              {t.hero.titleStart}{language === 'vi' && <br />}{' '}
+              {t.hero.titleStart}{' '}
               <span className="font-extrabold bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-400 dark:from-indigo-400 dark:via-blue-300 dark:to-indigo-200 bg-clip-text text-transparent">
                 {t.hero.titleHighlight}
               </span>

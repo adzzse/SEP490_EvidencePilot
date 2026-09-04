@@ -28,7 +28,7 @@ export default function StatsSection({ t }) {
       <dl className="grid grid-cols-3 max-w-4xl mx-auto px-3 sm:px-6" aria-live="polite" aria-busy={!stats}>
         {items.map((item, index) => (
           <div
-            key={item.label}
+            key={index}
             className={`min-w-0 px-2 sm:px-8 py-1 text-center ${index ? 'border-l border-(--border-light)' : ''}`}
           >
             <dd className="text-2xl sm:text-3xl font-extrabold tracking-tight text-(--brand-foreground)">

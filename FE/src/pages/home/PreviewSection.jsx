@@ -50,7 +50,7 @@ export default function PreviewSection({ t }) {
                   <div className="space-y-2" role="tablist" aria-label={t.preview.heading}>
                     {steps.map((item, index) => (
                       <button
-                        key={item.title}
+                        key={index}
                         type="button"
                         role="tab"
                         aria-selected={index === step}

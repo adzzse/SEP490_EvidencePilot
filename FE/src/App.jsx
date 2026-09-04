@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
@@ -8,30 +9,30 @@ import ErrorBoundary from './components/layout/ErrorBoundary';
 import ScrollToTop from './components/layout/ScrollToTop';
 import UrgentNotificationBanner from './components/features/UrgentNotificationBanner';
 
-import Home from './pages/home/index.jsx';
-import Terms from './pages/Terms.jsx';
-import Privacy from './pages/Privacy.jsx';
-import About from './pages/About.jsx';
-import Login from './pages/Login.jsx';
-import ResetPassword from './pages/ResetPassword.jsx';
-import Profile from './pages/Profile.jsx';
-import AdminDashboard from './pages/Admin/AdminDashboard.jsx';
-import NotFound from './pages/NotFound.jsx';
+const Home = lazy(() => import('./pages/home/index.jsx'));
+const Terms = lazy(() => import('./pages/Terms.jsx'));
+const Privacy = lazy(() => import('./pages/Privacy.jsx'));
+const About = lazy(() => import('./pages/About.jsx'));
+const Login = lazy(() => import('./pages/Login.jsx'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'));
+const Profile = lazy(() => import('./pages/Profile.jsx'));
+const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard.jsx'));
+const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 
 // INSTRUCTOR SUB-SYSTEM IMPORTS
-import CollectionList from './pages/Instructor/CollectionList.jsx';
-import CollectionDetail from './pages/Instructor/CollectionDetail.jsx';
-import ReviewRequests from './pages/Instructor/ReviewRequests.jsx';
-import ReviewSpace from './pages/Instructor/ReviewSpace.jsx';
-import InstructorDashboard from './pages/Instructor/Dashboard.jsx';
-import ProjectManagement from './pages/Instructor/ProjectManagement.jsx';
-import ProjectDetail from './pages/Instructor/ProjectDetail.jsx';
-import EvidenceTraceReview from './pages/Instructor/EvidenceTraceReview.jsx';
-import SourceLibrary from './pages/Instructor/SourceLibrary.jsx';
+const CollectionList = lazy(() => import('./pages/Instructor/CollectionList.jsx'));
+const CollectionDetail = lazy(() => import('./pages/Instructor/CollectionDetail.jsx'));
+const ReviewRequests = lazy(() => import('./pages/Instructor/ReviewRequests.jsx'));
+const ReviewSpace = lazy(() => import('./pages/Instructor/ReviewSpace.jsx'));
+const InstructorDashboard = lazy(() => import('./pages/Instructor/Dashboard.jsx'));
+const ProjectManagement = lazy(() => import('./pages/Instructor/ProjectManagement.jsx'));
+const ProjectDetail = lazy(() => import('./pages/Instructor/ProjectDetail.jsx'));
+const EvidenceTraceReview = lazy(() => import('./pages/Instructor/EvidenceTraceReview.jsx'));
+const SourceLibrary = lazy(() => import('./pages/Instructor/SourceLibrary.jsx'));
 
 // STUDENT SUB-SYSTEM IMPORTS
-import StudentProjects from './pages/Student/Projects.jsx';
-import WorkspaceLayout from './pages/Student/WorkspaceLayout.jsx';
+const StudentProjects = lazy(() => import('./pages/Student/Projects.jsx'));
+const WorkspaceLayout = lazy(() => import('./pages/Student/WorkspaceLayout.jsx'));
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
         <LanguageProvider>
           <ThemeProvider>
           <UrgentNotificationBanner />
+          <Suspense fallback={<div className="min-h-screen grid place-items-center" role="status">Loading...</div>}>
           <Routes>
             {/* Public Entry Nodes */}
             <Route path="/" element={<Home />} />
@@ -104,6 +106,7 @@ function App() {
             <Route path="*" element={<NotFound />} />
             
           </Routes>
+          </Suspense>
           </ThemeProvider>
         </LanguageProvider>
         </NotificationProvider>

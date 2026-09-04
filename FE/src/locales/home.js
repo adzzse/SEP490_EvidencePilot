@@ -8,7 +8,6 @@ export const homeText = {
       subtitle: 'Evidence Pilot supports instructor-led research projects: students author papers, manage sources, run Citation Review, and submit their work for structured feedback and export.',
       cta: 'Sign In',
       ctaSub: '',
-      stats: 'Structured Research Workspace',
     },
     stats: {
       heading: 'Platform Activity',
@@ -137,7 +136,6 @@ export const homeText = {
       subtitle: 'Evidence Pilot hỗ trợ dự án nghiên cứu do giảng viên quản lý: sinh viên biên soạn bài viết, quản lý nguồn, chạy Citation Review, sau đó gửi để nhận phản hồi có cấu trúc và xuất kết quả.',
       cta: 'Đăng nhập',
       ctaSub: '',
-      stats: 'Không gian nghiên cứu có cấu trúc',
     },
     stats: {
       heading: 'Hoạt động trên nền tảng',
