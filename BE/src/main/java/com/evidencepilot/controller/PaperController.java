@@ -8,9 +8,11 @@ import com.evidencepilot.dto.response.PaperValidationResponse;
 import com.evidencepilot.dto.response.JobSubmitResponse;
 import com.evidencepilot.dto.response.SectionUpdateResponse;
 import com.evidencepilot.dto.request.SectionContentUpdateRequest;
+import com.evidencepilot.dto.request.SectionHandoffRequest;
 import com.evidencepilot.dto.request.SectionReviewSourceMatchRequest;
 import com.evidencepilot.dto.request.SectionSuggestionRequest;
 import com.evidencepilot.dto.response.SectionCitationReviewResponse;
+import com.evidencepilot.dto.response.SectionHandoffResponse;
 
 import com.evidencepilot.dto.response.EvidenceTraceResponse;
 import com.evidencepilot.dto.request.TraceDecisionRequest;
@@ -35,6 +37,7 @@ import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.DocumentService;
 import com.evidencepilot.service.AiEvaluationService;
 import com.evidencepilot.service.PaperProcessingService;
+import com.evidencepilot.service.SubmissionReadinessService;
 import com.evidencepilot.service.impl.EvidenceTraceService;
 import com.evidencepilot.service.impl.SectionCitationReviewService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -86,6 +89,7 @@ public class PaperController {
     private final AiEvaluationService aiEvaluationService;
     private final SectionCitationReviewService sectionCitationReviewService;
     private final EvidenceTraceService evidenceTraceService;
+    private final SubmissionReadinessService submissionReadinessService;
 
     @Operation(summary = "List all papers",
             description = "Returns all active paper documents. "
@@ -97,6 +101,22 @@ public class PaperController {
     @GetMapping("/papers")
     public List<DocumentResponse> findAll() {
         return documentService.getAllPapersForCurrentUser();
+    }
+
+    @PostMapping("/papers/{documentId}/sections/{sectionId}/handoff")
+    public SectionHandoffResponse confirmSectionHandoff(
+            @PathVariable UUID documentId,
+            @PathVariable UUID sectionId,
+            @Valid @RequestBody SectionHandoffRequest request) {
+        return submissionReadinessService.confirm(
+                documentId, sectionId, request.expectedInputFingerprint());
+    }
+
+    @DeleteMapping("/papers/{documentId}/sections/{sectionId}/handoff")
+    public SectionHandoffResponse revokeSectionHandoff(
+            @PathVariable UUID documentId,
+            @PathVariable UUID sectionId) {
+        return submissionReadinessService.revoke(documentId, sectionId);
     }
 
     @Operation(summary = "Get paper by ID",

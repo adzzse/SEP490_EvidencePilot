@@ -18,6 +18,8 @@ import java.util.UUID;
 @Setter
 public class SectionStandardEvaluation {
     public static final String STATUS_CONFIGURED = "CONFIGURED";
+    public static final String STATUS_COMPLETED = "COMPLETED";
+    // Legacy values are retained so existing rows remain readable after V19.
     public static final String STATUS_PASSED = "PASSED";
     public static final String STATUS_FAILED = "FAILED";
     public static final String STATUS_SYSTEM_ERROR = "SYSTEM_ERROR";
@@ -44,7 +46,7 @@ public class SectionStandardEvaluation {
     @Column(name = "input_fingerprint", nullable = false, length = 64)
     private String inputFingerprint;
 
-    @Column(name = "pass_threshold", nullable = false)
+    @Column(name = "pass_threshold")
     private Integer passThreshold;
 
     @Column(name = "requirements_json", columnDefinition = "LONGTEXT")

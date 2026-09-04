@@ -1,20 +1,18 @@
 import { useState, useEffect } from 'react';
 import Modal from '../../ui/Modal.jsx';
 
-export default function StandardConfigModal({ open, section, initialRequirements = [], initialThreshold = 70, isLocked, onSave, onClose, t, ct }) {
+export default function StandardConfigModal({ open, section, initialRequirements = [], isLocked, onSave, onClose, t, ct }) {
   const [requirements, setRequirements] = useState(initialRequirements);
-  const [threshold, setThreshold] = useState(initialThreshold);
   const [input, setInput] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       setRequirements(initialRequirements || []);
-      setThreshold(initialThreshold ?? 70);
       setInput('');
       setSaving(false);
     }
-  }, [open, initialRequirements, initialThreshold]);
+  }, [open, initialRequirements]);
 
   const addReq = () => {
     const trimmed = input.trim();
@@ -28,17 +26,12 @@ export default function StandardConfigModal({ open, section, initialRequirements
     if (isLocked) return;
     setRequirements(prev => prev.filter((_, i) => i !== idx));
   };
-  const numericThreshold = Number(threshold);
-  const thresholdValid = String(threshold).trim() !== ''
-    && Number.isInteger(numericThreshold)
-    && numericThreshold >= 0
-    && numericThreshold <= 100;
   const handleSave = async () => {
     if (isLocked) { onClose(); return; }
-    if (requirements.length === 0 || requirements.length > 15 || !thresholdValid) return;
+    if (requirements.length === 0 || requirements.length > 15) return;
     setSaving(true);
     try {
-      await onSave({ requirements, passThreshold: numericThreshold });
+      await onSave({ requirements });
     } finally {
       setSaving(false);
     }
@@ -66,13 +59,9 @@ export default function StandardConfigModal({ open, section, initialRequirements
             <button type="button" onClick={addReq} disabled={isLocked || saving || !input.trim() || requirements.length >= 15} className="rounded bg-[var(--brand)] px-3 py-1 font-bold text-white disabled:opacity-50">{ct?.add || 'Add'}</button>
           </div>
         </div>
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{t.standardThreshold}</p>
-          <input type="number" min={0} max={100} step={1} value={threshold} onChange={e=>setThreshold(e.target.value)} disabled={isLocked || saving} aria-invalid={!thresholdValid} className="mt-1 w-24 rounded border border-[var(--border)] px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)] disabled:opacity-50" />
-        </div>
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} disabled={saving} className="rounded bg-slate-100 px-3 py-1.5 font-semibold disabled:opacity-50">{ct?.cancel || 'Cancel'}</button>
-          {!isLocked && <button type="button" onClick={handleSave} disabled={saving || requirements.length === 0 || !thresholdValid} className="rounded bg-indigo-600 px-3 py-1.5 font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{saving ? ct?.saving : ct?.save}</button>}
+          {!isLocked && <button type="button" onClick={handleSave} disabled={saving || requirements.length === 0} className="rounded bg-indigo-600 px-3 py-1.5 font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{saving ? ct?.saving : ct?.save}</button>}
         </div>
       </div>
     </Modal>

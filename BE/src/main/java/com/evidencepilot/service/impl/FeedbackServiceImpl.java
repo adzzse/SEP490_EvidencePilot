@@ -4,34 +4,29 @@ import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.dto.response.FeedbackRequestResponseDto;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
+import com.evidencepilot.dto.response.ReviewSubmissionSnapshotResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
-import com.evidencepilot.model.Document;
 import com.evidencepilot.model.FeedbackRequest;
 import com.evidencepilot.model.FeedbackStatus;
 import com.evidencepilot.model.InstructorFeedback;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
-import com.evidencepilot.model.SectionStandardEvaluation;
 import com.evidencepilot.model.User;
-import com.evidencepilot.model.enums.DocumentType;
-import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
-import com.evidencepilot.model.enums.UserRole;
-import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.repository.SectionStandardEvaluationRepository;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.CheckpointService;
 import com.evidencepilot.service.FeedbackService;
-import com.evidencepilot.service.PaperProcessingService;
-import com.evidencepilot.service.SectionStandardService;
+import com.evidencepilot.service.SubmissionReadinessService;
 import com.evidencepilot.service.SystemNotificationService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -45,21 +40,18 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class FeedbackServiceImpl implements FeedbackService {
 
     private final FeedbackRequestRepository feedbackRequestRepository;
     private final InstructorFeedbackRepository instructorFeedbackRepository;
     private final PaperSectionRepository paperSectionRepository;
-    private final DocumentRepository documentRepository;
     private final ProjectRepository projectRepository;
     private final CurrentUserService currentUserService;
     private final SystemNotificationService systemNotificationService;
-    private final PaperProcessingService paperProcessingService;
     private final CheckpointService checkpointService;
     private final ProjectCollectionService projectCollectionService;
-    private final SectionStandardEvaluationRepository sectionStandardEvaluationRepository;
-    private final SectionStandardService sectionStandardService;
+    private final SubmissionReadinessService submissionReadinessService;
+    private final ObjectMapper objectMapper;
 
     @Override
     public List<FeedbackRequestResponseDto> findAllForCurrentUser() {
@@ -76,112 +68,52 @@ public class FeedbackServiceImpl implements FeedbackService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public ReviewSubmissionSnapshotResponse getSubmissionSnapshot(UUID feedbackRequestId) {
+        User currentUser = currentUserService.requireCurrentUser();
+        FeedbackRequest request = requireFeedbackAccess(feedbackRequestId, currentUser, false);
+        if (request.getSubmissionSnapshotJson() == null
+                || request.getSubmissionSnapshotJson().isBlank()) {
+            return new ReviewSubmissionSnapshotResponse("LEGACY_NO_SNAPSHOT", null);
+        }
+        try {
+            return new ReviewSubmissionSnapshotResponse(
+                    "AVAILABLE", objectMapper.readTree(request.getSubmissionSnapshotJson()));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Stored review snapshot is invalid", exception);
+        }
+    }
+
+    @Override
     @Transactional
     public FeedbackRequestResponseDto submitForReview(UUID projectId, SubmitReviewRequest request) {
         User currentUser = currentUserService.requireCurrentUser();
-        Project project = projectRepository.findById(projectId)
+        Project project = projectRepository.findByIdForUpdate(projectId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Project not found: " + projectId));
         currentUserService.requireProjectWriteAccess(currentUser, project);
-        if (project.getStatus() == ProjectStatus.SUBMITTED_FOR_REVIEW) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Project is already in review.");
-        }
-        if (project.getStatus() != ProjectStatus.ASSIGNED
-                && project.getStatus() != ProjectStatus.IN_PROGRESS
-                && project.getStatus() != ProjectStatus.RETURNED) {
+        if (request == null || request.expectedSubmissionFingerprint() == null) {
             throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "Only ACTIVE or RETURNED projects can be submitted for review.");
+                    HttpStatus.BAD_REQUEST, "expectedSubmissionFingerprint is required.");
         }
-
-        UUID instructorId = request != null ? request.instructorId() : null;
         User instructor = project.getInstructor();
-        if (instructorId != null
-                && (instructor == null || !instructorId.equals(instructor.getId()))) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Instructor does not match the project's assigned instructor.");
-        }
-        if (instructor == null || instructor.getRole() != UserRole.INSTRUCTOR) {
+        if (instructor == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Project has no instructor.");
         }
-        boolean isStudentMember = project.getProjectMembers() != null
-                && project.getProjectMembers().stream()
-                .anyMatch(pm -> pm.getUser() != null
-                        && currentUser.getId().equals(pm.getUser().getId())
-                        && pm.getRole() != ProjectRole.INSTRUCTOR);
-        User student = currentUser.getRole() == UserRole.STUDENT && isStudentMember
-                ? currentUser : project.getStudent();
-        if (student == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Project has no student.");
-        }
-
-        List<Document> papers = documentRepository
-                .findByProjectIdAndDocTypeAndActiveTrue(project.getId(), DocumentType.PAPER);
-        String validationJson = null;
-        if (!papers.isEmpty()) {
-            try {
-                var validation = paperProcessingService.validateSections(papers.get(0).getId());
-                validationJson = new com.fasterxml.jackson.databind.ObjectMapper()
-                        .writeValueAsString(validation);
-            } catch (Exception e) {
-                log.warn("Section validation failed for project {}: {}", project.getId(), e.getMessage());
-            }
-        }
-
-        List<SectionStandardEvaluation> standardEvaluations = new java.util.ArrayList<>();
-        boolean hasFailed = false;
-        for (Document paper : papers) {
-            List<PaperSection> sectionsForGate = paperSectionRepository
-                    .findByDocumentIdOrderBySectionOrderAsc(paper.getId()).stream()
-                    .filter(PaperSection::isActive)
-                    .toList();
-            for (PaperSection section : sectionsForGate) {
-                var evaluation = sectionStandardEvaluationRepository
-                        .findTopBySectionIdOrderByUpdatedAtDesc(section.getId())
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
-                                "STANDARD_CHECK_REQUIRED: section " + section.getId()
-                                        + " has no configured evaluation"));
-                String status = evaluation.getStatus();
-                if ((!SectionStandardEvaluation.STATUS_PASSED.equals(status)
-                        && !SectionStandardEvaluation.STATUS_FAILED.equals(status))
-                        || evaluation.getScorePercent() == null
-                        || evaluation.getPassThreshold() == null
-                        || !sectionStandardService.matchesCurrentInput(evaluation, section)) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT,
-                            "STANDARD_CHECK_REQUIRED: section " + section.getId()
-                                    + " has status " + status + " and requires a fresh Standard Check");
-                }
-                hasFailed |= SectionStandardEvaluation.STATUS_FAILED.equals(status);
-                standardEvaluations.add(evaluation);
-            }
-        }
-        if (hasFailed && !Boolean.TRUE.equals(request != null ? request.flagged() : null)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "FAILED_SECTIONS: one or more sections are below passThreshold; submit with flagged=true to confirm");
-        }
+        SubmissionReadinessService.Assessment assessment = submissionReadinessService
+                .requireReadyForSubmit(project, currentUser, request.expectedSubmissionFingerprint());
 
         FeedbackRequest feedbackRequest = new FeedbackRequest();
         feedbackRequest.setProject(project);
-        feedbackRequest.setStudent(student);
+        feedbackRequest.setStudent(currentUser);
         feedbackRequest.setInstructor(instructor);
         feedbackRequest.setStatus(FeedbackStatus.PENDING);
         LocalDateTime now = LocalDateTime.now();
         feedbackRequest.setRequestedAt(now);
         feedbackRequest.setUpdatedAt(now);
-        feedbackRequest.setSectionValidation(validationJson);
-        feedbackRequest.setFlagged(Boolean.TRUE.equals(request != null ? request.flagged() : null));
-        if (!standardEvaluations.isEmpty()) {
-            try {
-                feedbackRequest.setStandardSnapshotJson(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(
-                        standardEvaluations.stream().map(e -> Map.of(
-                                "sectionId", e.getSectionId().toString(),
-                                "status", e.getStatus(),
-                                "scorePercent", e.getScorePercent(),
-                                "passThreshold", e.getPassThreshold()
-                        )).toList()));
-            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-                throw new IllegalStateException("Could not snapshot section standard evaluations", e);
-            }
-        }
+        feedbackRequest.setFlagged(false);
+        feedbackRequest.setSubmissionSnapshotJson(submissionReadinessService.snapshot(
+                assessment, project, currentUser, instructor, now));
 
         project.setStatus(ProjectStatus.SUBMITTED_FOR_REVIEW);
         projectRepository.save(project);
@@ -209,6 +141,15 @@ public class FeedbackServiceImpl implements FeedbackService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Project is read-only.");
         }
         PaperSection section = requireSectionInProject(request.sectionId(), feedbackRequest.getProject());
+        Map<UUID, Integer> submittedVersions = submittedSectionVersions(feedbackRequest);
+        if (feedbackRequest.getSubmissionSnapshotJson() != null
+                && !feedbackRequest.getSubmissionSnapshotJson().isBlank()
+                && !submittedVersions.containsKey(section.getId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Section was not part of this review submission.");
+        }
+        Integer reviewedVersion = submittedVersions.getOrDefault(
+                section.getId(), section.getVersion());
 
         InstructorFeedback feedback = new InstructorFeedback();
         feedback.setRequest(feedbackRequest);
@@ -218,7 +159,7 @@ public class FeedbackServiceImpl implements FeedbackService {
                 : currentUser);
         feedback.setLineReference(request.lineReference());
         feedback.setContent(request.content());
-        feedback.setSectionVersion(section.getVersion());
+        feedback.setSectionVersion(reviewedVersion);
         LocalDateTime now = LocalDateTime.now();
         feedback.setCreatedAt(now);
         feedback.setUpdatedAt(now);
@@ -231,14 +172,15 @@ public class FeedbackServiceImpl implements FeedbackService {
                 feedbackRequest.getId(),
                 currentUser.getEmail() + " added feedback to project \""
                         + feedbackRequest.getProject().getTitle() + "\".");
-        return InstructorFeedbackResponseDto.fromEntity(saved, section, section.getVersion());
+        return InstructorFeedbackResponseDto.fromEntity(saved, section, reviewedVersion);
     }
 
     @Override
     @Transactional
     public List<InstructorFeedbackResponseDto> getFeedbackItems(UUID feedbackRequestId) {
         User currentUser = currentUserService.requireCurrentUser();
-        requireFeedbackAccess(feedbackRequestId, currentUser, false);
+        FeedbackRequest request = requireFeedbackAccess(feedbackRequestId, currentUser, false);
+        Map<UUID, Integer> submittedVersions = submittedSectionVersions(request);
         List<InstructorFeedback> items = instructorFeedbackRepository.findByRequestId(feedbackRequestId);
         List<PaperSection> sections = paperSectionRepository.findAllById(
                 items.stream().map(f -> f.getSection().getId()).distinct().toList());
@@ -248,7 +190,8 @@ public class FeedbackServiceImpl implements FeedbackService {
                 .map(f -> {
                     PaperSection section = sectionsById.get(f.getSection().getId());
                     return InstructorFeedbackResponseDto.fromEntity(f, section,
-                            section != null ? section.getVersion() : null);
+                            submittedVersions.getOrDefault(
+                                    f.getSection().getId(), section != null ? section.getVersion() : null));
                 })
                 .toList();
     }
@@ -264,7 +207,9 @@ public class FeedbackServiceImpl implements FeedbackService {
         feedback.setUpdatedAt(LocalDateTime.now());
         feedback.setUpdatedBy(currentUser);
         InstructorFeedback saved = instructorFeedbackRepository.save(feedback);
-        return InstructorFeedbackResponseDto.fromEntity(saved, feedback.getSection(), feedback.getSection().getVersion());
+        Integer reviewedVersion = submittedSectionVersions(feedback.getRequest())
+                .getOrDefault(feedback.getSection().getId(), feedback.getSection().getVersion());
+        return InstructorFeedbackResponseDto.fromEntity(saved, feedback.getSection(), reviewedVersion);
     }
 
     @Override
@@ -403,17 +348,27 @@ public class FeedbackServiceImpl implements FeedbackService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Illegal transition from " + from + " to " + status + ".");
         }
+        Project project = projectRepository.findByIdForUpdate(feedbackRequest.getProject().getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Project not found: " + feedbackRequest.getProject().getId()));
+        feedbackRequest.setProject(project);
+        List<FeedbackRequest> projectRequests = feedbackRequestRepository
+                .findByProjectIdOrderByRequestedAtDesc(project.getId());
+        if (projectRequests.isEmpty()
+                || !projectRequests.getFirst().getId().equals(feedbackRequest.getId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only the latest review request can be updated.");
+        }
         if (feedbackRequest.getProject().getStatus().isReadOnly()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Project is read-only.");
         }
-        ProjectStatus currentProjectStatus = feedbackRequest.getProject().getStatus();
+        ProjectStatus currentProjectStatus = project.getStatus();
         if (currentProjectStatus != projectStatus && !currentProjectStatus.canTransitionTo(projectStatus)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Illegal project transition from " + currentProjectStatus + " to " + projectStatus + ".");
         }
         feedbackRequest.setStatus(status);
         feedbackRequest.setUpdatedAt(LocalDateTime.now());
-        Project project = feedbackRequest.getProject();
         project.setStatus(projectStatus);
         project.setUpdatedAt(LocalDateTime.now());
         projectRepository.save(project);
@@ -440,6 +395,38 @@ public class FeedbackServiceImpl implements FeedbackService {
             return feedbackRequest;
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Feedback access denied.");
+    }
+
+    private Map<UUID, Integer> submittedSectionVersions(FeedbackRequest request) {
+        if (request.getSubmissionSnapshotJson() == null
+                || request.getSubmissionSnapshotJson().isBlank()) {
+            return Map.of();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(request.getSubmissionSnapshotJson());
+            JsonNode papers = root.get("papers");
+            if (papers == null || !papers.isArray()) {
+                throw new IllegalStateException("Stored review snapshot has no papers array");
+            }
+            Map<UUID, Integer> versions = new HashMap<>();
+            for (JsonNode paper : papers) {
+                JsonNode sections = paper.get("sections");
+                if (sections == null || !sections.isArray()) {
+                    throw new IllegalStateException("Stored review snapshot has invalid sections");
+                }
+                for (JsonNode section : sections) {
+                    UUID sectionId = UUID.fromString(section.path("id").asText());
+                    JsonNode version = section.get("contentVersion");
+                    if (version == null || !version.canConvertToInt()
+                            || versions.putIfAbsent(sectionId, version.asInt()) != null) {
+                        throw new IllegalStateException("Stored review snapshot has invalid section versions");
+                    }
+                }
+            }
+            return versions;
+        } catch (JsonProcessingException | IllegalArgumentException exception) {
+            throw new IllegalStateException("Stored review snapshot is invalid", exception);
+        }
     }
 
     private PaperSection requireSectionInProject(UUID sectionId, Project project) {

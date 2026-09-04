@@ -115,6 +115,7 @@ export default function ReviewSpace() {
   };
   const [project, setProject] = useState(null);
   const [papers, setPapers] = useState([]);
+  const [livePapers, setLivePapers] = useState([]);
   const [sections, setSections] = useState([]);
   const [selectedPaperId, setSelectedPaperId] = useState(null);
   const [selectedSectionId, setSelectedSectionId] = useState(null);
@@ -145,6 +146,9 @@ export default function ReviewSpace() {
   const [suggestionRan, setSuggestionRan] = useState(false);
   const [viewerFile, setViewerFile] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [submissionSnapshot, setSubmissionSnapshot] = useState(null);
+  const [snapshotState, setSnapshotState] = useState('LOADING');
+  const [snapshotRetry, setSnapshotRetry] = useState(0);
   const suggestionRequestRef = useRef(0);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -182,6 +186,7 @@ export default function ReviewSpace() {
         if (cancelled) return;
         setProject(proj.data);
         setPapers(papersRes.data || []);
+        setLivePapers(papersRes.data || []);
         setRequests((reqs.data || []).filter(r => String(r.projectId) === String(projectId)));
         setSources(srcs);
         if ((papersRes.data || []).length > 0) setSelectedPaperId(papersRes.data[0].id);
@@ -195,8 +200,12 @@ export default function ReviewSpace() {
   }, [projectId]);
 
   const activeRequest = requests.find(r => r.id === activeRequestId) || requests[0] || null;
-
-  const requestLocked = !activeRequest || (activeRequest.status !== 'PENDING' && activeRequest.status !== 'RETURNED');
+  const latestRequest = requests[0] || null;
+  const requestLocked = !activeRequest
+    || activeRequest.id !== latestRequest?.id
+    || (activeRequest.status !== 'PENDING' && activeRequest.status !== 'RETURNED')
+    || project?.status === 'APPROVED'
+    || project?.status === 'ARCHIVED';
 
   useEffect(() => {
     let cancelled = false;
@@ -236,13 +245,75 @@ export default function ReviewSpace() {
   }, [activeRequestId]);
 
   useEffect(() => {
+    if (!activeRequestId) {
+      setSubmissionSnapshot(null);
+      setSnapshotState('NONE');
+      setPapers(livePapers);
+      return;
+    }
+    let cancelled = false;
+    setSnapshotState('LOADING');
+    setSubmissionSnapshot(null);
+    setPapers([]);
+    setSections([]);
+    setSelectedPaperId(null);
+    setSelectedSectionId(null);
+    api.get(`/api/feedback-requests/${activeRequestId}/submission-snapshot`)
+      .then(response => {
+        if (cancelled) return;
+        const available = response.data?.state === 'AVAILABLE' && response.data?.snapshot;
+        const snapshot = available ? response.data.snapshot : null;
+        const nextPapers = snapshot
+          ? (snapshot.papers || []).map(paper => ({ ...paper, originalFilename: paper.title }))
+          : livePapers;
+        setSubmissionSnapshot(snapshot);
+        setSnapshotState(available ? 'AVAILABLE' : 'LEGACY_NO_SNAPSHOT');
+        setPapers(nextPapers);
+        setSelectedPaperId(previous => nextPapers.some(paper => String(paper.id) === String(previous))
+          ? previous : nextPapers[0]?.id || null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSubmissionSnapshot(null);
+        setSnapshotState('LOAD_ERROR');
+        setPapers([]);
+      });
+    return () => { cancelled = true; };
+  }, [activeRequestId, livePapers, snapshotRetry]);
+
+  useEffect(() => {
     if (!selectedPaperId) { setSections([]); setSelectedSectionId(null); return; }
+    if (snapshotState === 'LOADING' || snapshotState === 'LOAD_ERROR') return;
+    if (snapshotState === 'AVAILABLE') {
+      const paper = (submissionSnapshot?.papers || [])
+        .find(candidate => String(candidate.id) === String(selectedPaperId));
+      const snapshotSections = (paper?.sections || []).map(section => ({
+        ...section,
+        documentId: paper.id,
+        sectionTitle: section.title,
+        sectionOrder: section.order,
+        version: section.contentVersion,
+        handoffConfirmedById: section.confirmedById,
+        handoffConfirmedByName: section.confirmedByName,
+        handoffConfirmedAt: section.confirmedAt,
+        handoffContentVersion: section.confirmedContentVersion,
+      }));
+      setSections(snapshotSections);
+      setSelectedSectionId(previous => snapshotSections.some(section => String(section.id) === String(previous))
+        ? previous : snapshotSections[0]?.id || null);
+      return;
+    }
     let cancelled = false;
     api.get(`/api/papers/${selectedPaperId}/sections`)
-      .then(r => { if (!cancelled) { setSections(r.data || []); setSelectedSectionId(prev => prev || (r.data || [])[0]?.id || null); } })
+      .then(r => { if (!cancelled) {
+        const liveSections = r.data || [];
+        setSections(liveSections);
+        setSelectedSectionId(previous => liveSections.some(section => String(section.id) === String(previous))
+          ? previous : liveSections[0]?.id || null);
+      } })
       .catch(() => { if (!cancelled) setSections([]); });
     return () => { cancelled = true; };
-  }, [selectedPaperId]);
+  }, [selectedPaperId, snapshotState, submissionSnapshot]);
 
   useEffect(() => {
     if (!diffEnabled || !projectId || !selectedSectionId) { setBaseline(null); setBaselineSectionId(null); return; }
@@ -408,7 +479,8 @@ export default function ReviewSpace() {
   };
 
   const handleGenerateSuggestions = async () => {
-    if (!selectedPaperId || !selectedSection || !activeGuide || suggestionLoading) return;
+    if (!selectedPaperId || !selectedSection || !activeGuide || suggestionLoading
+      || requestLocked || activeRequest?.status !== 'PENDING') return;
     const requestId = ++suggestionRequestRef.current;
     setSuggestionLoading(true);
     setSuggestionError('');
@@ -491,7 +563,7 @@ export default function ReviewSpace() {
               className="px-3 py-2 text-xs font-bold text-(--brand-foreground) rounded-xl transition border border-(--border) bg-(--surface) hover:bg-(--surface-secondary)">
               {t.reviewGuide}
             </button>
-            {activeRequest && (activeRequest.status === 'PENDING' || activeRequest.status === 'RETURNED') && (
+            {activeRequest && !requestLocked && (
               <>
                 <button onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'RETURNED' })} disabled={transitioningRequestId === activeRequest.id}
                   className={`px-3 py-2 text-xs font-bold text-white rounded-xl transition ${ACTION_LABELS.RETURNED.cls} disabled:opacity-50`}>
@@ -511,6 +583,22 @@ export default function ReviewSpace() {
         )}
         {successMessage && (
           <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-bold">{successMessage}</div>
+        )}
+        {activeRequest && snapshotState === 'AVAILABLE' && (
+          <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-800 text-xs font-semibold dark:bg-indigo-950/30 dark:border-indigo-900 dark:text-indigo-200">
+            {t.submittedSnapshotNotice}
+          </div>
+        )}
+        {activeRequest && snapshotState === 'LEGACY_NO_SNAPSHOT' && (
+          <div className="p-4 rounded-xl bg-amber-50 border border-amber-100 text-amber-800 text-xs font-semibold dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-200">
+            {t.legacySnapshotNotice}
+          </div>
+        )}
+        {activeRequest && snapshotState === 'LOAD_ERROR' && (
+          <div role="alert" className="flex items-center justify-between gap-3 p-4 rounded-xl bg-rose-50 border border-rose-100 text-rose-700 text-xs font-semibold dark:bg-rose-950/30 dark:border-rose-900 dark:text-rose-200">
+            <span>{t.snapshotLoadError}</span>
+            <button type="button" onClick={() => setSnapshotRetry(value => value + 1)} className="shrink-0 rounded-lg border border-current px-3 py-1.5 font-bold hover:bg-rose-100 dark:hover:bg-rose-900/40">{ct.retry}</button>
+          </div>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -578,7 +666,7 @@ export default function ReviewSpace() {
                         <div>
                           {baseline && (
                             <p className="text-[10px] text-(--text-tertiary) mb-2">
-                              {t.baseline}: {baseline.trigger || t.checkpoint} · {baseline.createdAt ? new Date(baseline.createdAt).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US') : ''}
+                              {t.baseline}: {baseline.trigger || t.checkpoint} · {baseline.createdAt ? formatDateTime(baseline.createdAt, language) : ''}
                             </p>
                           )}
                           <DiffView ops={diffOps} />
@@ -686,7 +774,7 @@ export default function ReviewSpace() {
                 {panelTab === 'ai' && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
-                      <button onClick={handleGenerateSuggestions} disabled={!activeGuide || suggestionLoading}
+                      <button onClick={handleGenerateSuggestions} disabled={!activeGuide || suggestionLoading || requestLocked || activeRequest?.status !== 'PENDING'}
                         className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50">
                         {suggestionLoading ? t.generatingSuggestions : t.generateSuggestions}
                       </button>
@@ -732,7 +820,7 @@ export default function ReviewSpace() {
                       <div key={fb.id} className="bg-(--surface-secondary) border border-(--border-light) rounded-xl p-3 text-xs space-y-1">
                         <div className="flex items-center justify-between gap-2">
                           {fb.sectionTitle && <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">{fb.sectionTitle}</span>}
-                          {fb.createdAt && <span className="text-[9px] text-(--text-tertiary)">{new Date(fb.createdAt).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US')}</span>}
+                          {fb.createdAt && <span className="text-[9px] text-(--text-tertiary)">{formatDateTime(fb.createdAt, language)}</span>}
                         </div>
                         {fb.lineReference && <p className="text-[10px] text-gray-400 font-mono">{t.line}: {fb.lineReference}</p>}
                         <p className="text-(--text-primary) leading-relaxed">{fb.content}</p>

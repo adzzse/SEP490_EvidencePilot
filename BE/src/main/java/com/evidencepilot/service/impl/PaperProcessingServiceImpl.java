@@ -129,6 +129,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
             List<AiModelClient.ExtractionBlock> blocks) {
         Document document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException(documentId, "Document"));
+        serializeProjectWrite(document.getProject());
         List<PaperSection> existing = paperSectionRepository
                 .findByDocumentIdOrderBySectionOrderAsc(documentId);
         if (!existing.isEmpty()) {
@@ -468,6 +469,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                     + "\n\n" + (source.getContentTex() != null ? source.getContentTex() : "");
             PaperSection saved = persistContentRevision(target, mergedContent, currentUser);
             source.setActive(false);
+            clearHandoff(source);
             paperSectionRepository.save(source);
             return PaperSectionResponse.from(saved);
         }
@@ -485,12 +487,17 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         if (!structureChange) {
             return PaperSectionResponse.from(section);
         }
-        if (title != null && !title.isBlank()) {
+        boolean changed = false;
+        if (title != null && !title.isBlank() && !title.equals(section.getSectionTitle())) {
             section.setSectionTitle(title);
+            changed = true;
         }
-        if (order != null) {
+        if (order != null && !order.equals(section.getSectionOrder())) {
             section.setSectionOrder(order);
+            changed = true;
         }
+        if (!changed) return PaperSectionResponse.from(section);
+        clearHandoff(section);
         section.setUpdatedAt(LocalDateTime.now());
         PaperSection saved = paperSectionRepository.save(section);
         paperSectionRepository.flush();
@@ -503,6 +510,8 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         Document document = requireInstructorDocumentWriteAccess(documentId);
         User currentUser = currentUserService.requireCurrentUser();
         PaperSection section = requireSectionInDocument(sectionId, documentId);
+        UUID previousAssigneeId = section.getAssignedUser() == null
+                ? null : section.getAssignedUser().getId();
         if (assignedUserId != null) {
             User user = userRepository.findById(assignedUserId)
                     .orElseThrow(() -> new ResourceNotFoundException(assignedUserId, "User"));
@@ -515,6 +524,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         } else {
             section.setAssignedUser(null);
         }
+        if (!Objects.equals(previousAssigneeId, assignedUserId)) clearHandoff(section);
         section.setUpdatedAt(LocalDateTime.now());
         PaperSectionResponse response = PaperSectionResponse.from(paperSectionRepository.save(section));
         if (assignedUserId != null) {
@@ -569,6 +579,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                     "Section has feedback.");
         }
         section.setActive(false);
+        clearHandoff(section);
         section.setUpdatedAt(LocalDateTime.now());
         paperSectionRepository.save(section);
     }
@@ -667,6 +678,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                     "Only instructors can reset paper templates.");
         }
         currentUserService.requireProjectWriteAccess(currentUser, project);
+        serializeProjectWrite(project);
 
         // 3. Find the project's single active Paper (1 Project : 1 Paper invariant).
         List<Document> papers = documentRepository
@@ -750,6 +762,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         section.setContentTex(content);
         section.setContentMdCache(null);
         section.setVersion(section.getVersion() == null ? 1 : section.getVersion() + 1);
+        clearHandoff(section);
         section.setUpdatedAt(LocalDateTime.now());
         PaperSection saved = paperSectionRepository.save(section);
         paperSectionRepository.flush();
@@ -771,6 +784,13 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                     eval.setUpdatedAt(LocalDateTime.now());
                     sectionStandardEvaluationRepository.save(eval);
                 });
+    }
+
+    private static void clearHandoff(PaperSection section) {
+        section.setHandoffConfirmedBy(null);
+        section.setHandoffConfirmedAt(null);
+        section.setHandoffContentVersion(null);
+        section.setHandoffInputFingerprint(null);
     }
 
     private void requireExpectedRevision(PaperSection section, Long expectedRevision) {
@@ -895,6 +915,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         if (document.getProject() != null) {
             currentUserService.requireProjectWriteAccess(
                     currentUserService.requireCurrentUser(), document.getProject());
+            serializeProjectWrite(document.getProject());
         }
         return document;
     }
@@ -908,7 +929,14 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                     "Only instructors can manage section structure, assignment, and templates.");
         }
         currentUserService.requireProjectWriteAccess(currentUser, document.getProject());
+        serializeProjectWrite(document.getProject());
         return document;
+    }
+
+    private void serializeProjectWrite(Project project) {
+        if (project == null) return;
+        project.setUpdatedAt(LocalDateTime.now());
+        projectRepository.saveAndFlush(project);
     }
 
     @Override
@@ -1049,6 +1077,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                 }
             }
             if (changed) {
+                clearHandoff(section);
                 section.setUpdatedAt(LocalDateTime.now());
                 toSave.add(section);
             }

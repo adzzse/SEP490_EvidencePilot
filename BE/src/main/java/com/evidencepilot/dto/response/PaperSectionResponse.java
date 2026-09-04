@@ -18,7 +18,12 @@ public record PaperSectionResponse(
         Integer version,
         Long revision,
         String contentMdCache,
-        LocalDateTime updatedAt) {
+        LocalDateTime updatedAt,
+        UUID handoffConfirmedById,
+        String handoffConfirmedByName,
+        LocalDateTime handoffConfirmedAt,
+        Integer handoffContentVersion,
+        String handoffInputFingerprint) {
     public static PaperSectionResponse from(PaperSection section) {
         User assignedUser = section.getAssignedUser();
         String first = assignedUser == null || assignedUser.getFirstName() == null
@@ -39,6 +44,19 @@ public record PaperSectionResponse(
                 section.getVersion(),
                 section.getOptVersion(),
                 section.getContentMdCache(),
-                section.getUpdatedAt());
+                section.getUpdatedAt(),
+                section.getHandoffConfirmedBy() != null ? section.getHandoffConfirmedBy().getId() : null,
+                displayName(section.getHandoffConfirmedBy()),
+                section.getHandoffConfirmedAt(),
+                section.getHandoffContentVersion(),
+                section.getHandoffInputFingerprint());
+    }
+
+    private static String displayName(User user) {
+        if (user == null) return null;
+        String first = user.getFirstName() == null ? "" : user.getFirstName().trim();
+        String last = user.getLastName() == null ? "" : user.getLastName().trim();
+        String name = (first + " " + last).trim();
+        return name.isEmpty() ? user.getEmail() : name;
     }
 }

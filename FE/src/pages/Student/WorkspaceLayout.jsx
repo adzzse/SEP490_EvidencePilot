@@ -13,6 +13,7 @@ import FilePanel from '../../components/Student/FilePanel.jsx';
 import EditorPanel from '../../components/Student/EditorPanel.jsx';
 import ContextPanel from '../../components/Student/ContextPanel.jsx';
 import FullPaperPreview from '../../components/Student/FullPaperPreview.jsx';
+import SubmissionReadinessModal from '../../components/Student/SubmissionReadinessModal.jsx';
 import { hasActiveExtraction } from '../../utils/student/extractionPolling.js';
 import useUndoDelete, { UndoToast } from '../../components/ui/UndoDelete.jsx';
 
@@ -93,7 +94,9 @@ function withSavedContent(section, sectionId, content, update) {
   const contentChanged = section.contentTex !== content;
   return {
     ...section,
-    previousContentTex: contentChanged ? section.contentTex : section.previousContentTex,
+    ...update,
+    previousContentTex: update?.previousContentTex
+      ?? (contentChanged ? section.contentTex : section.previousContentTex),
     contentTex: content,
     contentMdCache: null,
     version: update?.version ?? section.version,
@@ -119,8 +122,7 @@ export default function WorkspaceLayout() {
   };
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem('student_workspace_active_tab') || 'Source';
-    // Legacy tabs (incl. the removed AI Review tab) collapse to Source.
-    return ['Graph', 'Claims', 'AI Review'].includes(stored) ? 'Source' : stored;
+    return ['Source', 'Requirements', 'Feedback'].includes(stored) ? stored : 'Source';
   });
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [sectionsExpanded, setSectionsExpanded] = useState(true);
@@ -191,7 +193,6 @@ export default function WorkspaceLayout() {
   const [sections, setSections] = useState([]);
   const [selectedSectionId, setSelectedSectionId] = useState('');
   const [loadErrors, setLoadErrors] = useState([]);
-  const [submittingReview, setSubmittingReview] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [sectionTraces, setSectionTraces] = useState([]);
   const [updatingTraceIds, setUpdatingTraceIds] = useState([]);
@@ -205,7 +206,6 @@ export default function WorkspaceLayout() {
   const saveInFlightRef = useRef(new Map());
   const saveStatusTimerRef = useRef(null);
   const sectionRevisionRef = useRef(new Map());
-  const submittingReviewRef = useRef(false);
   const aiReviewJobRef = useRef(null);
   const aiReviewRequestRef = useRef(0);
   const aiSourceRequestRef = useRef(0);
@@ -423,7 +423,6 @@ export default function WorkspaceLayout() {
         if (!stale()) {
           setProjectLoadError('forbidden');
           setProject(null);
-          navigate('/unauthorized', { replace: true });
         }
         return;
       }
@@ -485,7 +484,6 @@ export default function WorkspaceLayout() {
         const status = err?.response?.status;
         if (status === 403) {
           setProjectLoadError('forbidden');
-          navigate('/unauthorized', { replace: true });
         }
         console.error(err);
       } finally {
@@ -533,6 +531,19 @@ export default function WorkspaceLayout() {
   };
   const currentSection = sections.find(section =>
     String(section.id) === String(selectedSectionId));
+  const handleHandoffChanged = useCallback((handoff) => {
+    const sectionId = String(handoff.sectionId);
+    sectionRevisionRef.current.set(sectionId, handoff.revision);
+    setSections(previous => previous.map(section => String(section.id) !== sectionId ? section : ({
+      ...section,
+      revision: handoff.revision,
+      handoffConfirmedById: handoff.confirmedById,
+      handoffConfirmedByName: handoff.confirmedByName,
+      handoffConfirmedAt: handoff.confirmedAt,
+      handoffContentVersion: handoff.confirmedContentVersion,
+      handoffInputFingerprint: handoff.state === 'CONFIRMED' ? handoff.currentInputFingerprint : null,
+    })));
+  }, []);
   useEffect(() => {
     sections.forEach(section => {
       if (section.revision != null) {
@@ -1108,24 +1119,6 @@ export default function WorkspaceLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPaper?.id, selectedSectionId]);
 
-  const handleSubmitReview = async () => {
-    if (!project) return;
-    if (submittingReviewRef.current) return;
-    setShowSubmitReviewModal(false);
-    if (canEditSection(sections.find(section => String(section.id) === String(selectedSectionId)))) {
-      const saved = await handleSaveDraft();
-      if (!saved) { showToast(t('saveSubmissionCancelled')); return; }
-    }
-    submittingReviewRef.current = true;
-    setSubmittingReview(true);
-    try {
-      await api.post(`/api/projects/${project.id}/reviews`);
-      showToast(t('submittedForReview'));
-      await loadProjectData(project.id);
-    } catch { showToast(t('submitFailed')); }
-    finally { submittingReviewRef.current = false; setSubmittingReview(false); }
-  };
-
   const handleDownloadTex = () => {
     const blob = new Blob([displayContent], { type: 'text/plain;charset=utf-8' });
     const a = document.createElement('a');
@@ -1321,6 +1314,8 @@ export default function WorkspaceLayout() {
 
         <ContextPanel compact={isCompactWorkspace} isOpen={isDrawerOpen} width={rightDrawerWidth} activeTab={activeTab} setActiveTab={(tab) => { setActiveTab(tab); localStorage.setItem('student_workspace_active_tab', tab); }} showToast={showToast}
           sources={sources} isUploading={isUploading} setIsUploading={setIsUploading} project={project} setViewerFile={setViewerFile} fetchSources={fetchSources} isLocked={isLocked}
+          selectedPaper={selectedPaper} selectedSection={currentSection} isAssignedSection={Boolean(currentSection && String(currentSection.assignedUserId) === String(user?.id))}
+          isSectionDirty={dirtySectionsRef.current.has(selectedSectionId)} onHandoffChanged={handleHandoffChanged}
           feedbacks={feedbacks} assignedSections={assignedSections} setShowSubmitReviewModal={setShowSubmitReviewModal} userProjectRole={project?.currentUserRole} />
       </div>
 
@@ -1419,26 +1414,17 @@ export default function WorkspaceLayout() {
         </div>
       )}
 
-      {/* Submit Review Modal */}
-      {showSubmitReviewModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-(--surface) rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold text-(--text-primary)">{t('submitReview')}</h2>
-              <button onClick={() => setShowSubmitReviewModal(false)} className="text-(--text-tertiary) hover:text-(--text-secondary) transition-colors">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <p className="text-sm text-(--text-secondary) mb-6 leading-relaxed">
-              {t('submitReviewDescription')}
-            </p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setShowSubmitReviewModal(false)} className="px-4 py-2 text-sm font-semibold text-(--text-secondary) hover:bg-(--surface-tertiary) rounded-lg transition-colors">{t('cancel')}</button>
-              <button onClick={handleSubmitReview} className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm shadow-indigo-200 transition-colors cursor-pointer">{t('submitReview')}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SubmissionReadinessModal
+        open={showSubmitReviewModal}
+        onClose={() => setShowSubmitReviewModal(false)}
+        projectId={project?.id}
+        dirtySectionIds={Array.from(dirtySectionsRef.current)}
+        onSubmitted={async () => {
+          setShowSubmitReviewModal(false);
+          showToast(t('submittedForReview'));
+          await loadProjectData(project.id);
+        }}
+      />
 
       {viewerFile && <FileViewerModal {...viewerFile} onClose={() => setViewerFile(null)} />}
 

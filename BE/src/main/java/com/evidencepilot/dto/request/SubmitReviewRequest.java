@@ -1,12 +1,10 @@
 package com.evidencepilot.dto.request;
 
-import java.util.UUID;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 
 public record SubmitReviewRequest(
-    UUID instructorId,
-    Boolean flagged
-) {
-    public SubmitReviewRequest(UUID instructorId) {
-        this(instructorId, null);
-    }
-}
+    @NotBlank
+    @Pattern(regexp = "[0-9a-f]{64}", message = "expectedSubmissionFingerprint must be a SHA-256 fingerprint")
+    String expectedSubmissionFingerprint
+) {}

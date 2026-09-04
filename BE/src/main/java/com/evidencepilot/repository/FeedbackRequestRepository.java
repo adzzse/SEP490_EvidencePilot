@@ -22,4 +22,6 @@ public interface FeedbackRequestRepository extends JpaRepository<FeedbackRequest
     long countByInstructorIdAndStatus(UUID instructorId, FeedbackStatus status);
 
     boolean existsByProjectIdAndInstructorId(UUID projectId, UUID instructorId);
+
+    boolean existsByProjectIdAndStatus(UUID projectId, FeedbackStatus status);
 }

@@ -31,7 +31,7 @@ public class SectionStandardController {
             @PathVariable UUID sectionId,
             @Valid @RequestBody SectionStandardEvaluateRequest request) {
         var res = sectionStandardService.saveConfig(documentId, sectionId,
-                request.requirements(), request.passThreshold() == null ? 70 : request.passThreshold());
+                request.requirements());
         return ResponseEntity.ok(res);
     }
 

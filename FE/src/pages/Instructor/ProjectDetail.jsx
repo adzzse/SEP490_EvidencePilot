@@ -127,9 +127,8 @@ export default function ProjectDetail() {
   const [advancedSearch, setAdvancedSearch] = useState('');
   // Phase 4: document preview (reuse FileViewerModal from Student Workspace / SourceLibraryPanel)
   const [viewerFile, setViewerFile] = useState(null);
-  // Section Standard AI pipeline — per-section checklist + passThreshold + strict evaluation
-  const [sectionEvals, setSectionEvals] = useState({}); // sectionId -> {status, scorePercent, resultJson, errorMessage}
-  const [evaluatingSectionId, setEvaluatingSectionId] = useState(null);
+  // Section standards are configured here and checked by the assigned student.
+  const [sectionEvals, setSectionEvals] = useState({});
   const sectionLoadRequestRef = useRef(0);
   const anyDirty = draftDirty;
 
@@ -187,17 +186,6 @@ export default function ProjectDetail() {
       }
     }
   }, []);
-
-  const runStandardCheck = async (sectionId) => {
-    if (!selectedPaper) return;
-    setEvaluatingSectionId(sectionId);
-    try {
-      const { data } = await api.post(`/api/papers/${selectedPaper.id}/sections/${sectionId}/standard-evaluation`);
-      setSectionEvals(prev => ({ ...prev, [String(sectionId)]: data }));
-    } catch (err) {
-      alert(err?.response?.data?.message || t.standardEvaluationFailed);
-    } finally { setEvaluatingSectionId(null); }
-  };
 
   const saveSectionStandard = async (sectionId, config) => {
     if (!selectedPaper) return false;

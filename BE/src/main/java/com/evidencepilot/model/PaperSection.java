@@ -56,6 +56,19 @@ public class PaperSection {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "handoff_confirmed_by", columnDefinition = "BINARY(16)", referencedColumnName = "id")
+    private User handoffConfirmedBy;
+
+    @Column(name = "handoff_confirmed_at")
+    private LocalDateTime handoffConfirmedAt;
+
+    @Column(name = "handoff_content_version")
+    private Integer handoffContentVersion;
+
+    @Column(name = "handoff_input_fingerprint", length = 64)
+    private String handoffInputFingerprint;
+
     @Override
     public boolean equals(Object o) {
         if (this == o)

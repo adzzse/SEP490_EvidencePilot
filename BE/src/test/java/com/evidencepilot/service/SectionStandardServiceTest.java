@@ -25,6 +25,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -66,10 +67,12 @@ class SectionStandardServiceTest {
         when(currentUserService.isInstructor(instructor)).thenReturn(true);
         when(evaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId()))
                 .thenReturn(Optional.of(evaluation));
+        when(evaluationRepository.save(any(SectionStandardEvaluation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(aiModelClient.generateStrict(anyString(), anyString(), anyMap())).thenReturn(
                 new AiModelClient.GenerationResult("provider", "model", """
-                        {"passed":true,"scorePercent":100,"items":[
-                          {"requirement":"Has thesis","passed":true,"evidence":"Present","reason":"Clear"}
+                        {"summary":"The thesis is present.","limitations":[],"items":[
+                          {"requirement":"Has thesis","verdict":"MET","evidence":"clear thesis","reason":"Clear","missing":"","suggestion":""}
                         ]}
                         """));
 
@@ -78,12 +81,17 @@ class SectionStandardServiceTest {
         ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
         verify(aiModelClient).generateStrict(anyString(), prompt.capture(), anyMap());
         assertThat(prompt.getValue()).contains("\"requirements\":[\"Has thesis\"]");
-        assertThat(response.status()).isEqualTo(SectionStandardEvaluation.STATUS_PASSED);
-        assertThat(response.scorePercent()).isEqualTo(100);
+        assertThat(response.status()).isEqualTo(SectionStandardEvaluation.STATUS_COMPLETED);
+        assertThat(response.result().get("items").get(0).get("verdict").asText()).isEqualTo("MET");
         assertThat(service.matchesCurrentInput(evaluation, section)).isTrue();
 
         section.setContentTex("The thesis changed after evaluation.");
         assertThat(service.matchesCurrentInput(evaluation, section)).isFalse();
+
+        evaluation.setStatus(SectionStandardEvaluation.STATUS_STALE);
+        var stale = service.latest(section.getDocument().getId(), section.getId()).orElseThrow();
+        assertThat(stale.status()).isEqualTo(SectionStandardEvaluation.STATUS_STALE);
+        assertThat(stale.stale()).isTrue();
     }
 
     @Test
@@ -92,8 +100,8 @@ class SectionStandardServiceTest {
         User instructor = user(UserRole.INSTRUCTOR);
         SectionStandardEvaluation evaluation = configured(section);
         String raw = """
-                {"passed":true,"scorePercent":100,"items":[
-                  {"requirement":"Has thesis","passed":true,"evidence":"Present","reason":"Clear","extra":true}
+                {"summary":"The thesis is present.","limitations":[],"items":[
+                  {"requirement":"Has thesis","verdict":"MET","evidence":"clear thesis","reason":"Clear","missing":"","suggestion":"","extra":true}
                 ]}
                 """;
         when(paperSectionRepository.findByIdWithDocument(section.getId())).thenReturn(Optional.of(section));
@@ -101,13 +109,16 @@ class SectionStandardServiceTest {
         when(currentUserService.isInstructor(instructor)).thenReturn(true);
         when(evaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId()))
                 .thenReturn(Optional.of(evaluation));
+        when(evaluationRepository.save(any(SectionStandardEvaluation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(aiModelClient.generateStrict(anyString(), anyString(), anyMap())).thenReturn(
                 new AiModelClient.GenerationResult("provider", "model", raw));
 
         var response = service.evaluate(section.getDocument().getId(), section.getId());
 
         assertThat(response.status()).isEqualTo(SectionStandardEvaluation.STATUS_SYSTEM_ERROR);
-        assertThat(response.resultJson()).isNull();
+        assertThat(response.result()).isNull();
+        assertThat(response.errorCode()).isEqualTo("INVALID_AI_RESPONSE");
         assertThat(evaluation.getRawOutput()).isEqualTo(raw);
         verify(evaluationRepository).save(evaluation);
     }
@@ -120,7 +131,7 @@ class SectionStandardServiceTest {
         when(currentUserService.requireCurrentUser()).thenReturn(student);
 
         assertThatThrownBy(() -> service.saveConfig(
-                section.getDocument().getId(), section.getId(), List.of("Has thesis"), 70))
+                section.getDocument().getId(), section.getId(), List.of("Has thesis")))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode())
                         .isEqualTo(HttpStatus.FORBIDDEN));
@@ -168,7 +179,6 @@ class SectionStandardServiceTest {
         evaluation.setProjectId(section.getDocument().getProject().getId());
         evaluation.setStatus(SectionStandardEvaluation.STATUS_CONFIGURED);
         evaluation.setRequirements(List.of("Has thesis"));
-        evaluation.setPassThreshold(70);
         return evaluation;
     }
 

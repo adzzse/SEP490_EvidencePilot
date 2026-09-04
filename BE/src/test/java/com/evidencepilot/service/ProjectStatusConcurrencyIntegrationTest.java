@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
@@ -55,6 +56,12 @@ class ProjectStatusConcurrencyIntegrationTest {
     private PaperProcessingService paperProcessingService;
 
     @Autowired
+    private SubmissionReadinessService submissionReadinessService;
+
+    @Autowired
+    private SectionStandardService sectionStandardService;
+
+    @Autowired
     private UserRepository users;
 
     @Autowired
@@ -106,6 +113,19 @@ class ProjectStatusConcurrencyIntegrationTest {
         User instructor = saveUser(UserRole.INSTRUCTOR);
         User student = saveUser(UserRole.STUDENT);
         Project project = saveProject(ProjectStatus.ASSIGNED, instructor, student);
+        Document paper = savePaper(project, student);
+        PaperSection section = new PaperSection();
+        section.setDocument(paper);
+        section.setSectionTitle("Introduction");
+        section.setSectionOrder(0);
+        section.setContentTex("Ready for review");
+        section.setAssignedUser(student);
+        section = sections.saveAndFlush(section);
+        authenticate(student);
+        submissionReadinessService.confirm(
+                paper.getId(), section.getId(), sectionStandardService.inputFingerprint(section));
+        String fingerprint = submissionReadinessService.readiness(project.getId())
+                .submissionFingerprint();
 
         AtomicInteger entered = new AtomicInteger();
         CountDownLatch release = new CountDownLatch(1);
@@ -121,8 +141,8 @@ class ProjectStatusConcurrencyIntegrationTest {
         AtomicInteger successes = new AtomicInteger();
         AtomicInteger conflicts = new AtomicInteger();
         runTogether(
-                () -> submitForReview(student, project.getId(), successes, conflicts),
-                () -> submitForReview(student, project.getId(), successes, conflicts));
+                () -> submitForReview(student, project.getId(), fingerprint, successes, conflicts),
+                () -> submitForReview(student, project.getId(), fingerprint, successes, conflicts));
 
         assertThat(successes).hasValue(1);
         assertThat(conflicts).hasValue(1);
@@ -203,11 +223,11 @@ class ProjectStatusConcurrencyIntegrationTest {
         assertThat(stored.getOptVersion()).isEqualTo(expectedRevision + 1);
     }
 
-    private void submitForReview(User student, UUID projectId,
+    private void submitForReview(User student, UUID projectId, String fingerprint,
             AtomicInteger successes, AtomicInteger conflicts) {
         authenticate(student);
         try {
-            feedbackService.submitForReview(projectId, null);
+            feedbackService.submitForReview(projectId, new SubmitReviewRequest(fingerprint));
             successes.incrementAndGet();
         } catch (ObjectOptimisticLockingFailureException e) {
             conflicts.incrementAndGet();

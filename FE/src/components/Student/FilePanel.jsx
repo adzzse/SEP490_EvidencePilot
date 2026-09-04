@@ -68,9 +68,18 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
                     <span className="truncate max-w-[120px]" title={sec.sectionTitle}>{sec.sectionTitle || t('untitled')}</span>
                     <span className="text-[9px] text-(--text-tertiary) font-mono">#{(sec.sectionOrder ?? 0) + 1}</span>
                   </div>
+                  {isAssigned && (
+                    <span
+                      title={t(sec.handoffConfirmedById ? 'handoffStateConfirmed' : 'handoffStateUnconfirmed')}
+                      aria-label={t(sec.handoffConfirmedById ? 'handoffStateConfirmed' : 'handoffStateUnconfirmed')}
+                      className={`shrink-0 text-[10px] font-black ${sec.handoffConfirmedById ? 'text-emerald-600' : 'text-amber-600'}`}
+                    >
+                      {sec.handoffConfirmedById ? '✓' : '○'}
+                    </span>
+                  )}
                   <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1 py-0.5 rounded shrink-0">v{sec.version || 1}</span>
-                  {isSelected && onSaveDraft && (
-                    <button onClick={(e) => { e.stopPropagation(); onSaveDraft(); }} disabled={saveStatus === 'saving'} className="text-xs font-bold text-white bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-50 px-2 py-1 rounded shrink-0 cursor-pointer" title={t('saveSection')}>{t('save')}</button>
+                  {isSelected && isAssigned && onSaveDraft && (
+                    <button onClick={(e) => { e.stopPropagation(); onSaveDraft(); }} disabled={isLocked || saveStatus === 'saving'} className="text-xs font-bold text-white bg-(--brand) hover:bg-(--brand-hover) disabled:cursor-not-allowed disabled:opacity-50 px-2 py-1 rounded shrink-0 cursor-pointer" title={isLocked ? t('saveReadOnly') : t('saveSection')}>{t('save')}</button>
                   )}
                 </div>
               );

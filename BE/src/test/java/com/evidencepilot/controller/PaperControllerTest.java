@@ -23,6 +23,7 @@ import com.evidencepilot.service.CheckpointService;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.DocumentService;
 import com.evidencepilot.service.PaperProcessingService;
+import com.evidencepilot.service.SubmissionReadinessService;
 import com.evidencepilot.service.impl.SectionCitationReviewService;
 import com.evidencepilot.service.impl.EvidenceTraceService;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,11 +62,12 @@ class PaperControllerTest {
     private final AiEvaluationService aiEvaluationService = mock(AiEvaluationService.class);
     private final SectionCitationReviewService sectionCitationReviewService = mock(SectionCitationReviewService.class);
     private final EvidenceTraceService evidenceTraceService = mock(EvidenceTraceService.class);
+    private final SubmissionReadinessService submissionReadinessService = mock(SubmissionReadinessService.class);
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = standaloneSetup(new PaperController(documentService, paperService, citationValidationService, projectRepository, documentRepository, paperSectionRepository, instructorFeedbackRepository, feedbackRequestRepository, currentUserService, checkpointService, aiEvaluationService, sectionCitationReviewService, evidenceTraceService))
+        mockMvc = standaloneSetup(new PaperController(documentService, paperService, citationValidationService, projectRepository, documentRepository, paperSectionRepository, instructorFeedbackRepository, feedbackRequestRepository, currentUserService, checkpointService, aiEvaluationService, sectionCitationReviewService, evidenceTraceService, submissionReadinessService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -470,7 +472,12 @@ class PaperControllerTest {
                 2,
                 8L,
                 null,
-                LocalDateTime.of(2026, 8, 17, 10, 0));
+                LocalDateTime.of(2026, 8, 17, 10, 0),
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     private static DocumentResponse document(DocumentType type, boolean active) {

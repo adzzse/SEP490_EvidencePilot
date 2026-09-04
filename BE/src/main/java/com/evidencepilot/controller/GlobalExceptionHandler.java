@@ -5,6 +5,7 @@ import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.dto.response.ApiErrorResponse;
 import com.evidencepilot.exception.AiValidationException;
 import com.evidencepilot.exception.ResourceNotFoundException;
+import com.evidencepilot.exception.SubmissionReadinessException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -122,6 +123,15 @@ public class GlobalExceptionHandler {
         fieldErrors.put("code", "SECTION_REVISION_CONFLICT");
         fieldErrors.put("expectedRevision", String.valueOf(exception.getExpectedRevision()));
         fieldErrors.put("actualRevision", String.valueOf(exception.getActualRevision()));
+        return build(HttpStatus.CONFLICT, exception.getMessage(), request, fieldErrors);
+    }
+
+    @ExceptionHandler(SubmissionReadinessException.class)
+    public ResponseEntity<ApiErrorResponse> handleSubmissionReadiness(
+            SubmissionReadinessException exception,
+            HttpServletRequest request) {
+        Map<String, String> fieldErrors = new LinkedHashMap<>(exception.getDetails());
+        fieldErrors.put("code", exception.getCode());
         return build(HttpStatus.CONFLICT, exception.getMessage(), request, fieldErrors);
     }
 

@@ -20,3 +20,14 @@ test('formatDateTime returns hours and minutes along with date', () => {
   assert.match(result, /\d{2}:\d{2}/);
   assert.match(result, /\d{2}\/\d{2}\/\d{4}/);
 });
+
+test('formatDateTime treats timezone-less API datetimes as UTC', () => {
+  const previousTimezone = process.env.TZ;
+  process.env.TZ = 'Asia/Bangkok';
+  try {
+    assert.match(formatDateTime('2026-09-02T15:30:00', 'vi'), /22:30/);
+  } finally {
+    if (previousTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTimezone;
+  }
+});

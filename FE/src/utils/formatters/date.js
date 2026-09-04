@@ -1,5 +1,15 @@
 import { DATE_FORMATS } from '../constants.js';
 
+function toDate(dateInput) {
+  if (dateInput instanceof Date) return dateInput;
+  // Backend LocalDateTime values are UTC but have no offset in JSON.
+  const normalized = typeof dateInput === 'string'
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(dateInput)
+    ? `${dateInput}Z`
+    : dateInput;
+  return new Date(normalized);
+}
+
 /**
  * Formats an ISO string or Date object to DD/MM/YYYY (default vi-VN).
  * @param {string|number|Date|null|undefined} dateInput 
@@ -8,7 +18,7 @@ import { DATE_FORMATS } from '../constants.js';
  */
 export function formatDate(dateInput, lang = 'vi') {
   if (!dateInput) return '—';
-  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  const d = toDate(dateInput);
   if (isNaN(d.getTime())) return '—';
 
   const locale = lang === 'en' ? DATE_FORMATS.LOCALE_EN : DATE_FORMATS.LOCALE_VI;
@@ -27,7 +37,7 @@ export function formatDate(dateInput, lang = 'vi') {
  */
 export function formatDateTime(dateInput, lang = 'vi') {
   if (!dateInput) return '—';
-  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  const d = toDate(dateInput);
   if (isNaN(d.getTime())) return '—';
 
   const locale = lang === 'en' ? DATE_FORMATS.LOCALE_EN : DATE_FORMATS.LOCALE_VI;

@@ -3,6 +3,7 @@ package com.evidencepilot.controller;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.service.FeedbackService;
+import com.evidencepilot.service.SubmissionReadinessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -19,11 +20,12 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 class FeedbackControllerTest {
 
     private final FeedbackService service = mock(FeedbackService.class);
+    private final SubmissionReadinessService submissionReadinessService = mock(SubmissionReadinessService.class);
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = standaloneSetup(new FeedbackController(service)).build();
+        mockMvc = standaloneSetup(new FeedbackController(service, submissionReadinessService)).build();
     }
 
     @Test
@@ -35,10 +37,10 @@ class FeedbackControllerTest {
     @Test
     void submitForReview_returns201() throws Exception {
         UUID projectId = UUID.randomUUID();
-        UUID instructorId = UUID.randomUUID();
+        String fingerprint = "a".repeat(64);
         mockMvc.perform(post("/api/projects/{id}/reviews", projectId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"instructorId\":\"" + instructorId + "\"}"))
+                        .content("{\"expectedSubmissionFingerprint\":\"" + fingerprint + "\"}"))
                 .andExpect(status().isCreated());
         verify(service).submitForReview(eq(projectId), any(SubmitReviewRequest.class));
     }

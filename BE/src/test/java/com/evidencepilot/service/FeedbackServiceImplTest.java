@@ -1,27 +1,28 @@
 package com.evidencepilot.service;
 
 import com.evidencepilot.dto.response.FeedbackRequestResponseDto;
+import com.evidencepilot.dto.response.ReviewReadinessResponse;
 import com.evidencepilot.model.FeedbackRequest;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
+import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.InstructorFeedback;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
-import com.evidencepilot.model.SectionStandardEvaluation;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.FeedbackStatus;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
-import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.repository.SectionStandardEvaluationRepository;
 import com.evidencepilot.service.impl.FeedbackServiceImpl;
 import com.evidencepilot.service.impl.ProjectCollectionService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.HttpStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -30,6 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -55,9 +57,6 @@ class FeedbackServiceImplTest {
     private PaperSectionRepository paperSectionRepository;
 
     @Mock
-    private DocumentRepository documentRepository;
-
-    @Mock
     private ProjectRepository projectRepository;
 
     @Mock
@@ -67,39 +66,38 @@ class FeedbackServiceImplTest {
     private SystemNotificationService systemNotificationService;
 
     @Mock
-    private PaperProcessingService paperProcessingService;
-
-    @Mock
     private CheckpointService checkpointService;
 
     @Mock
     private ProjectCollectionService projectCollectionService;
     @Mock
-    private SectionStandardEvaluationRepository sectionStandardEvaluationRepository;
-    @Mock
-    private SectionStandardService sectionStandardService;
+    private SubmissionReadinessService submissionReadinessService;
 
     @Test
     void submitForReviewUsesProjectInstructorAndStudent() {
         User instructor = user(UserRole.INSTRUCTOR);
         User student = user(UserRole.STUDENT);
         Project project = project(instructor, student);
+        String fingerprint = "a".repeat(64);
 
         when(currentUserService.requireCurrentUser()).thenReturn(student);
-        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
+        stubReady(project, student, fingerprint);
         when(feedbackRequestRepository.save(any(FeedbackRequest.class))).thenAnswer(invocation -> {
             FeedbackRequest request = invocation.getArgument(0);
             request.setId(UUID.randomUUID());
             return request;
         });
 
-        FeedbackRequestResponseDto response = service().submitForReview(project.getId(), null);
+        FeedbackRequestResponseDto response = service().submitForReview(
+                project.getId(), new SubmitReviewRequest(fingerprint));
 
         verify(currentUserService).requireProjectWriteAccess(student, project);
         ArgumentCaptor<FeedbackRequest> requestCaptor = ArgumentCaptor.forClass(FeedbackRequest.class);
         verify(feedbackRequestRepository).save(requestCaptor.capture());
         assertThat(requestCaptor.getValue().getInstructor()).isEqualTo(instructor);
         assertThat(requestCaptor.getValue().getStudent()).isEqualTo(student);
+        assertThat(requestCaptor.getValue().getSubmissionSnapshotJson()).isEqualTo("{}");
         assertThat(response.instructorId()).isEqualTo(instructor.getId());
         assertThat(response.studentId()).isEqualTo(student.getId());
     }
@@ -166,9 +164,12 @@ class FeedbackServiceImplTest {
         project.setStatus(ProjectStatus.SUBMITTED_FOR_REVIEW);
 
         when(currentUserService.requireCurrentUser()).thenReturn(student);
-        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
+        doThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Project is already in review."))
+                .when(currentUserService).requireProjectWriteAccess(student, project);
 
-        assertThatThrownBy(() -> service().submitForReview(project.getId(), null))
+        assertThatThrownBy(() -> service().submitForReview(
+                project.getId(), new SubmitReviewRequest("a".repeat(64))))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Project is already in review.");
     }
@@ -181,9 +182,13 @@ class FeedbackServiceImplTest {
         project.setStatus(ProjectStatus.APPROVED);
 
         when(currentUserService.requireCurrentUser()).thenReturn(student);
-        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
+        doThrow(new ResponseStatusException(HttpStatus.CONFLICT,
+                "Only ACTIVE or RETURNED projects can be submitted for review."))
+                .when(currentUserService).requireProjectWriteAccess(student, project);
 
-        assertThatThrownBy(() -> service().submitForReview(project.getId(), null))
+        assertThatThrownBy(() -> service().submitForReview(
+                project.getId(), new SubmitReviewRequest("a".repeat(64))))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Only ACTIVE or RETURNED projects can be submitted for review.");
     }
@@ -254,19 +259,17 @@ class FeedbackServiceImplTest {
     }
 
     @Test
-    void submitForReviewRejectsMismatchedInstructor() {
+    void submitForReviewRequiresFingerprint() {
         User instructor = user(UserRole.INSTRUCTOR);
-        User other = user(UserRole.INSTRUCTOR);
         User student = user(UserRole.STUDENT);
         Project project = project(instructor, student);
 
         when(currentUserService.requireCurrentUser()).thenReturn(student);
-        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
 
-        assertThatThrownBy(() -> service().submitForReview(
-                project.getId(), new com.evidencepilot.dto.request.SubmitReviewRequest(other.getId())))
+        assertThatThrownBy(() -> service().submitForReview(project.getId(), null))
                 .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("Instructor does not match");
+                .hasMessageContaining("expectedSubmissionFingerprint");
     }
 
     @Test
@@ -278,6 +281,7 @@ class FeedbackServiceImplTest {
         request.setStatus(FeedbackStatus.PENDING);
         when(currentUserService.requireCurrentUser()).thenReturn(instructor);
         when(feedbackRequestRepository.findById(request.getId())).thenReturn(Optional.of(request));
+        stubLatestRequest(request);
         when(feedbackRequestRepository.save(request)).thenReturn(request);
 
         service().updateStatus(request.getId(), "REVIEWED");
@@ -306,6 +310,7 @@ class FeedbackServiceImplTest {
         request.setStatus(FeedbackStatus.PENDING);
         when(currentUserService.requireCurrentUser()).thenReturn(instructor);
         when(feedbackRequestRepository.findById(request.getId())).thenReturn(Optional.of(request));
+        stubLatestRequest(request);
         when(feedbackRequestRepository.save(request)).thenReturn(request);
 
         service().updateStatus(request.getId(), "REJECTED");
@@ -324,12 +329,39 @@ class FeedbackServiceImplTest {
         request.setStatus(FeedbackStatus.RETURNED);
         when(currentUserService.requireCurrentUser()).thenReturn(instructor);
         when(feedbackRequestRepository.findById(request.getId())).thenReturn(Optional.of(request));
+        stubLatestRequest(request);
         when(feedbackRequestRepository.save(request)).thenReturn(request);
 
         service().updateStatus(request.getId(), "REVIEWED");
 
         assertThat(request.getStatus()).isEqualTo(FeedbackStatus.REVIEWED);
         assertThat(project.getStatus()).isEqualTo(ProjectStatus.APPROVED);
+    }
+
+    @Test
+    void updateStatusRejectsSupersededReturnedRequest() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(instructor, student);
+        project.setStatus(ProjectStatus.SUBMITTED_FOR_REVIEW);
+        FeedbackRequest returned = feedbackRequest(project, instructor, student);
+        returned.setStatus(FeedbackStatus.RETURNED);
+        FeedbackRequest latest = feedbackRequest(project, instructor, student);
+        latest.setStatus(FeedbackStatus.PENDING);
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(feedbackRequestRepository.findById(returned.getId())).thenReturn(Optional.of(returned));
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
+        when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(project.getId()))
+                .thenReturn(List.of(latest, returned));
+
+        assertThatThrownBy(() -> service().updateStatus(returned.getId(), "REVIEWED"))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Only the latest review request can be updated.");
+
+        assertThat(project.getStatus()).isEqualTo(ProjectStatus.SUBMITTED_FOR_REVIEW);
+        assertThat(returned.getStatus()).isEqualTo(FeedbackStatus.RETURNED);
+        verify(projectRepository, never()).save(any());
+        verify(feedbackRequestRepository, never()).save(any());
     }
 
     @Test
@@ -584,81 +616,20 @@ class FeedbackServiceImplTest {
         User student = user(UserRole.STUDENT);
         Project project = project(instructor, student);
         project.setStatus(ProjectStatus.RETURNED);
+        String fingerprint = "b".repeat(64);
 
         when(currentUserService.requireCurrentUser()).thenReturn(student);
-        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
+        stubReady(project, student, fingerprint);
         when(feedbackRequestRepository.save(any(FeedbackRequest.class))).thenAnswer(invocation -> {
             FeedbackRequest saved = invocation.getArgument(0);
             saved.setId(UUID.randomUUID());
             return saved;
         });
 
-        service().submitForReview(project.getId(), null);
+        service().submitForReview(project.getId(), new SubmitReviewRequest(fingerprint));
 
         assertThat(project.getStatus()).isEqualTo(ProjectStatus.SUBMITTED_FOR_REVIEW);
-    }
-
-    @Test
-    void submitForReviewChecksEveryPaperAndRejectsConfiguredOnlyStandard() {
-        User instructor = user(UserRole.INSTRUCTOR);
-        User student = user(UserRole.STUDENT);
-        Project project = project(instructor, student);
-        PaperSection first = section(project, "Introduction");
-        PaperSection second = section(project, "Method");
-        first.setActive(true);
-        second.setActive(true);
-        SectionStandardEvaluation passed = evaluation(first, SectionStandardEvaluation.STATUS_PASSED, 100);
-        SectionStandardEvaluation configured = evaluation(second, SectionStandardEvaluation.STATUS_CONFIGURED, null);
-
-        when(currentUserService.requireCurrentUser()).thenReturn(student);
-        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
-        when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(any(), any()))
-                .thenReturn(List.of(first.getDocument(), second.getDocument()));
-        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(first.getDocument().getId()))
-                .thenReturn(List.of(first));
-        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(second.getDocument().getId()))
-                .thenReturn(List.of(second));
-        when(sectionStandardEvaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(first.getId()))
-                .thenReturn(Optional.of(passed));
-        when(sectionStandardEvaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(second.getId()))
-                .thenReturn(Optional.of(configured));
-        when(sectionStandardService.matchesCurrentInput(passed, first)).thenReturn(true);
-
-        assertThatThrownBy(() -> service().submitForReview(project.getId(), null))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("STANDARD_CHECK_REQUIRED")
-                .hasMessageContaining(second.getId().toString());
-
-        verify(feedbackRequestRepository, never()).save(any());
-        verify(projectRepository, never()).save(any());
-    }
-
-    @Test
-    void submitForReviewRejectsEvaluationForStaleContent() {
-        User instructor = user(UserRole.INSTRUCTOR);
-        User student = user(UserRole.STUDENT);
-        Project project = project(instructor, student);
-        PaperSection section = section(project, "Introduction");
-        section.setActive(true);
-        SectionStandardEvaluation passed = evaluation(section, SectionStandardEvaluation.STATUS_PASSED, 100);
-
-        when(currentUserService.requireCurrentUser()).thenReturn(student);
-        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
-        when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(any(), any()))
-                .thenReturn(List.of(section.getDocument()));
-        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(section.getDocument().getId()))
-                .thenReturn(List.of(section));
-        when(sectionStandardEvaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId()))
-                .thenReturn(Optional.of(passed));
-        when(sectionStandardService.matchesCurrentInput(passed, section)).thenReturn(false);
-
-        assertThatThrownBy(() -> service().submitForReview(project.getId(), null))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("STANDARD_CHECK_REQUIRED")
-                .hasMessageContaining(section.getId().toString());
-
-        verify(feedbackRequestRepository, never()).save(any());
-        verify(projectRepository, never()).save(any());
     }
 
     private InstructorFeedback feedback(User instructor, FeedbackRequest request, PaperSection section) {
@@ -672,31 +643,41 @@ class FeedbackServiceImplTest {
         return feedback;
     }
 
-    private SectionStandardEvaluation evaluation(PaperSection section, String status, Integer score) {
-        SectionStandardEvaluation evaluation = new SectionStandardEvaluation();
-        evaluation.setSectionId(section.getId());
-        evaluation.setDocumentId(section.getDocument().getId());
-        evaluation.setProjectId(section.getDocument().getProject().getId());
-        evaluation.setStatus(status);
-        evaluation.setScorePercent(score);
-        evaluation.setPassThreshold(70);
-        return evaluation;
-    }
-
     private FeedbackServiceImpl service() {
         return new FeedbackServiceImpl(
                 feedbackRequestRepository,
                 instructorFeedbackRepository,
                 paperSectionRepository,
-                documentRepository,
                 projectRepository,
                 currentUserService,
                 systemNotificationService,
-                paperProcessingService,
                 checkpointService,
                 projectCollectionService,
-                sectionStandardEvaluationRepository,
-                sectionStandardService);
+                submissionReadinessService,
+                new ObjectMapper());
+    }
+
+    private void stubLatestRequest(FeedbackRequest request) {
+        when(projectRepository.findByIdForUpdate(request.getProject().getId()))
+                .thenReturn(Optional.of(request.getProject()));
+        when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(request.getProject().getId()))
+                .thenReturn(List.of(request));
+    }
+
+    private void stubReady(Project project, User student, String fingerprint) {
+        ReviewReadinessResponse readiness = new ReviewReadinessResponse(
+                "READY", true, fingerprint, List.of(), List.of());
+        SubmissionReadinessService.Assessment assessment =
+                new SubmissionReadinessService.Assessment(readiness, List.of(), Map.of());
+        when(submissionReadinessService.requireReadyForSubmit(project, student, fingerprint))
+                .thenReturn(assessment);
+        when(submissionReadinessService.snapshot(
+                org.mockito.ArgumentMatchers.eq(assessment),
+                org.mockito.ArgumentMatchers.eq(project),
+                org.mockito.ArgumentMatchers.eq(student),
+                org.mockito.ArgumentMatchers.any(User.class),
+                org.mockito.ArgumentMatchers.any()))
+                .thenReturn("{}");
     }
 
     private User user(UserRole role) {

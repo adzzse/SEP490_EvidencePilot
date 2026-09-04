@@ -708,6 +708,9 @@ public class DocumentServiceImpl implements DocumentService {
         var currentUser = currentUserService.requireCurrentUser();
         Document doc = findDocument(id);
         requireDocumentWriteAccess(currentUser, doc);
+        if (doc.getProject() != null) {
+            projectRepository.findByIdForUpdate(doc.getProject().getId());
+        }
         projectCollectionService.removeSource(doc);
         mediaAssetService.deleteExtractedForDocument(doc);
         doc.setActive(false);

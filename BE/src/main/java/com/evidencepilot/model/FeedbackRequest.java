@@ -55,6 +55,9 @@ public class FeedbackRequest {
     @Column(name = "standard_snapshot_json", columnDefinition = "LONGTEXT")
     private String standardSnapshotJson;
 
+    @Column(name = "submission_snapshot_json", columnDefinition = "LONGTEXT")
+    private String submissionSnapshotJson;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

@@ -5,7 +5,10 @@ import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.dto.response.FeedbackRequestResponseDto;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
+import com.evidencepilot.dto.response.ReviewReadinessResponse;
+import com.evidencepilot.dto.response.ReviewSubmissionSnapshotResponse;
 import com.evidencepilot.service.FeedbackService;
+import com.evidencepilot.service.SubmissionReadinessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -35,6 +38,7 @@ import java.util.UUID;
 public class FeedbackController {
 
     private final FeedbackService feedbackService;
+    private final SubmissionReadinessService submissionReadinessService;
 
     @Operation(summary = "List feedback requests",
             description = "Returns all feedback requests scoped to the current user. "
@@ -61,9 +65,19 @@ public class FeedbackController {
     @PostMapping("/projects/{projectId}/reviews")
     public ResponseEntity<FeedbackRequestResponseDto> submitForReview(
             @Parameter(description = "Project UUID") @PathVariable UUID projectId,
-            @Valid @RequestBody(required = false) SubmitReviewRequest request) {
+            @Valid @RequestBody SubmitReviewRequest request) {
         FeedbackRequestResponseDto response = feedbackService.submitForReview(projectId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/projects/{projectId}/review-readiness")
+    public ReviewReadinessResponse getReviewReadiness(@PathVariable UUID projectId) {
+        return submissionReadinessService.readiness(projectId);
+    }
+
+    @GetMapping("/feedback-requests/{id}/submission-snapshot")
+    public ReviewSubmissionSnapshotResponse getSubmissionSnapshot(@PathVariable UUID id) {
+        return feedbackService.getSubmissionSnapshot(id);
     }
 
     @Operation(summary = "Submit instructor feedback",

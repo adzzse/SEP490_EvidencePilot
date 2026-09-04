@@ -55,7 +55,7 @@ class FlywayMigrationMySqlTest {
         Integer successfulMigrations = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
                 Integer.class);
-        assertThat(successfulMigrations).isEqualTo(18);
+        assertThat(successfulMigrations).isEqualTo(19);
 
         assertThat(jdbcTemplate.queryForList("""
                         SELECT constraint_name
@@ -92,6 +92,31 @@ class FlywayMigrationMySqlTest {
                           AND table_name = 'ai_evaluation_jobs'
                         """, String.class))
                 .contains("progress_current", "progress_total");
+        assertThat(jdbcTemplate.queryForList("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'paper_sections'
+                        """, String.class))
+                .contains(
+                        "handoff_confirmed_by", "handoff_confirmed_at",
+                        "handoff_content_version", "handoff_input_fingerprint");
+        assertThat(jdbcTemplate.queryForMap("""
+                        SELECT is_nullable
+                        FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'section_standard_evaluations'
+                          AND column_name = 'pass_threshold'
+                        """))
+                .containsEntry("is_nullable", "YES");
+        assertThat(jdbcTemplate.queryForMap("""
+                        SELECT data_type
+                        FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'feedback_requests'
+                          AND column_name = 'submission_snapshot_json'
+                        """))
+                .containsEntry("data_type", "longtext");
 
         assertThat(jdbcTemplate.queryForMap(
                 "SELECT data_type FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'citation_review_rounds' AND column_name = 'generation_meta'"))
@@ -220,10 +245,10 @@ class FlywayMigrationMySqlTest {
                 .migrate()
                 .migrationsExecuted;
 
-        assertThat(migrationsExecuted).isEqualTo(17);
+        assertThat(migrationsExecuted).isEqualTo(18);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
-                Integer.class)).isEqualTo(18);
+                Integer.class)).isEqualTo(19);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT type FROM flyway_schema_history WHERE installed_rank = 1",
                 String.class)).isEqualTo("BASELINE");

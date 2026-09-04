@@ -97,7 +97,6 @@ export default function SectionManager({
         open={!!configSection}
         section={configSection}
         initialRequirements={configEval?.requirements || []}
-        initialThreshold={configEval?.passThreshold ?? 70}
         isLocked={sectionStructureLocked}
         onClose={() => setConfigSectionId(null)}
         onSave={async (cfg) => {

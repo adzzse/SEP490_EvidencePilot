@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../../services/api.js';
 import { prepareProjectDoiImport } from '../../utils/student/doiImport.js';
 import { getSourceDownloadUrl } from '../../utils/student/sourceDownload.js';
+import SectionRequirementsPanel from './SectionRequirementsPanel.jsx';
 
 const FUNCTIONAL_TYPES = [
   { value: 'EMPIRICAL', labelKey: 'functionalTypeEmpirical' },
@@ -117,6 +118,8 @@ export default function ContextPanel({
   showToast,
   // Source tab
   sources, isUploading, setIsUploading, project, setViewerFile, fetchSources,
+  // Requirements tab
+  selectedPaper, selectedSection, isAssignedSection, isSectionDirty, onHandoffChanged,
   // Feedback tab
   feedbacks, assignedSections, setShowSubmitReviewModal, userProjectRole,
   isLocked,
@@ -259,6 +262,11 @@ export default function ContextPanel({
             {t('sources')}
             {activeTab === 'Source' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 shadow-[0_-2px_8px_rgba(79,70,229,0.5)]"></div>}
           </button>
+          <button onClick={() => setActiveTab('Requirements')} className={activeClass('Requirements')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>
+            {t('requirements')}
+            {activeTab === 'Requirements' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 shadow-[0_-2px_8px_rgba(79,70,229,0.5)]"></div>}
+          </button>
           <button data-tour="context-feedback-tab" onClick={() => setActiveTab('Feedback')} className={activeClass('Feedback')}>
             <div className="relative">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
@@ -392,6 +400,19 @@ export default function ContextPanel({
                 </div>
               </div>
             </div>
+          )}
+
+          {activeTab === 'Requirements' && (
+            <SectionRequirementsPanel
+              project={project}
+              selectedPaper={selectedPaper}
+              selectedSection={selectedSection}
+              isAssigned={isAssignedSection}
+              isLocked={isLocked}
+              isDirty={isSectionDirty}
+              onHandoffChanged={onHandoffChanged}
+              showToast={showToast}
+            />
           )}
 
           {activeTab === 'Feedback' && (

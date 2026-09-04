@@ -41,8 +41,9 @@ export default function EditorPanel({
   const { t } = useTranslation();
   const isOwnSection = canEditCurrentSection
     ?? (assignedSections && assignedSections.some(s => String(s.id) === String(selectedSectionId)));
+  const readOnlyLabel = isLocked ? t('projectLocked') : !isOwnSection ? t('readOnly') : '';
   const citationReviewTitle = reviewBusy ? t('reviewing') : canRunCitationReview && !isLocked ? t('citationReviewDescription') : t('citationReviewUnavailable');
-  const saveTitle = saveStatus === 'saving' ? t('saving') : !isOwnSection ? t('noAssignedSection') : isLocked ? t('saveReadOnly') : t('saveSectionHelp');
+  const saveTitle = saveStatus === 'saving' ? t('saving') : isLocked ? t('saveReadOnly') : !isOwnSection ? t('noAssignedSection') : t('saveSectionHelp');
   const [previewZoom, setPreviewZoom] = useState(100);
   const [showVisualMap, setShowVisualMap] = useState(false);
   const generatedReferences = [];
@@ -120,8 +121,8 @@ export default function EditorPanel({
             {currentSection && <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1 py-0.5 rounded shrink-0">v{currentSection.version || 1}</span>}
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            {(isLocked || (currentSection && !isOwnSection)) && (
-              <span className="text-[9px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-md border border-amber-200 dark:border-amber-800">{t('readOnly')}</span>
+            {readOnlyLabel && (
+              <span className="text-[9px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-md border border-amber-200 dark:border-amber-800">{readOnlyLabel}</span>
             )}
             {reviewError && (
               <span className="hidden md:inline max-w-[180px] truncate text-[10px] font-semibold text-rose-600" title={reviewError}>{reviewError}</span>
@@ -270,11 +271,11 @@ export default function EditorPanel({
           )}
         </div>
         {currentSection && (
-          <div className="shrink-0 flex items-center gap-0 border-b border-(--border) bg-(--surface-secondary)/70 px-3 py-2 font-mono text-xs" title={t('readOnly')}>
+          <div className="shrink-0 flex items-center gap-0 border-b border-(--border) bg-(--surface-secondary)/70 px-3 py-2 font-mono text-xs" title={readOnlyLabel || undefined}>
             <span className="text-indigo-600">{'\\section{'}</span>
             <span className="min-w-0 truncate font-semibold text-(--text-primary)">{currentSection.sectionTitle}</span>
             <span className="text-indigo-600">{'}'}</span>
-            <span className="ml-auto pl-3 text-[9px] font-sans font-bold uppercase tracking-wide text-(--text-tertiary)">{t('readOnly')}</span>
+            {readOnlyLabel && <span className="ml-auto pl-3 text-[9px] font-sans font-bold uppercase tracking-wide text-(--text-tertiary)">{readOnlyLabel}</span>}
           </div>
         )}
         <div className="flex-1 min-h-0 overflow-hidden">
