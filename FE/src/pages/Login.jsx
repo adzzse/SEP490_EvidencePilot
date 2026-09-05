@@ -2,17 +2,37 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useTheme } from '../context/ThemeContext';
 import { commonText } from '../locales';
 import api from '../services/api.js';
 import { getPostLoginDestination } from './loginOrigin.js';
 import { AuroraBackground } from '../components/ui/aurora-background';
 import WordRotate from '../components/ui/WordRotate.jsx';
 
+function SunIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="4" />
+      <path strokeLinecap="round" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    </svg>
+  );
+}
+
+function MoonIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+    </svg>
+  );
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const { language } = useLanguage();
+  const { language, toggleLanguage } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
   const t = commonText[language];
+  const isDark = theme === 'dark';
 
   const [form, setForm] = useState({ email: '', passwordHash: '' });
   const [error, setError] = useState('');
@@ -70,8 +90,8 @@ export default function Login() {
       <div className="flex w-full max-w-6xl mx-auto gap-8 lg:gap-12 items-center justify-between">
         {/* Left 50% — Login Card */}
         <div className="w-full max-w-md lg:w-1/2 lg:max-w-md bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-slate-200/80 dark:border-zinc-800 rounded-3xl p-8 sm:p-10 shadow-2xl relative z-10 transition-colors">
-          {/* Back to Home Link */}
-          <div className="mb-6">
+          {/* Back to Home + Top-right controls */}
+          <div className="mb-6 flex items-center justify-between gap-3">
             <Link
               to="/"
               className="inline-flex items-center text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors gap-1.5 group"
@@ -81,6 +101,25 @@ export default function Login() {
               </svg>
               {t.backToHome || (language === 'vi' ? 'Quay lại Trang chủ' : 'Back to Home')}
             </Link>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleLanguage}
+                aria-label="Toggle language"
+                className="min-w-9 px-2 py-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-zinc-700 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+              >
+                {language === 'vi' ? 'EN' : 'VI'}
+              </button>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                aria-label="Toggle theme"
+                className="flex h-8 w-8 items-center justify-center text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-zinc-700 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+              >
+                {isDark ? <SunIcon /> : <MoonIcon />}
+              </button>
+            </div>
           </div>
 
           {/* Brand Header */}

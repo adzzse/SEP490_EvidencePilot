@@ -2,6 +2,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
+  --font-sans: 'Merriweather', Georgia, 'Times New Roman', serif;
+  --font-serif: 'Merriweather', Georgia, 'Times New Roman', serif;
+
   --animate-aurora: aurora 20s linear infinite;
 
   @keyframes aurora {
@@ -35,6 +38,7 @@
 
 :root {
   color-scheme: light;
+  --driver-popover-font-family: 'Merriweather', Georgia, 'Times New Roman', serif;
   --white: #ffffff;
   --black: #000000;
   --transparent: transparent;
@@ -107,6 +111,17 @@ body {
   margin: 0;
   background: var(--page-bg);
   color: var(--text-primary);
+  font-family: 'Merriweather', Georgia, 'Times New Roman', serif;
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 20s linear infinite;
+  will-change: transform;
 }
 
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {

@@ -414,11 +414,6 @@ function VisualizeMapPanel({ collectionId, isDark, t, ct }) {
 
   return (
     <div className="flex flex-col w-full h-[calc(100vh-3.5rem)] overflow-hidden bg-(--surface) rounded-2xl border border-(--border)">
-      {/* Disclaimer banner */}
-      <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-200 flex items-center gap-2 shrink-0">
-        <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-        <span>{t.openAlexDisclaimer}</span>
-      </div>
 
       <div className="flex-1 relative flex overflow-hidden">
         {graphLoading ? (
@@ -1106,11 +1101,36 @@ export default function CollectionDetail() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-1 mb-6 border-b border-(--border)">
+        <div className="flex flex-wrap items-center gap-1 mb-6 border-b border-(--border)">
           {TABS.map((tab, i) => (
-            <button key={tab} id={TAB_IDS[i]} onClick={() => setActiveTab(i)}
-              className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-colors whitespace-nowrap cursor-pointer ${activeTab === i ? 'bg-(--surface) text-(--brand-foreground) border border-b-(--surface) border-(--border) -mb-px' : 'text-(--text-tertiary) hover:text-(--text-primary)'
-                }`}>{t[tab]}</button>
+            <button
+              key={tab}
+              id={TAB_IDS[i]}
+              onClick={() => setActiveTab(i)}
+              className={`inline-flex items-center px-4 py-2 text-xs font-bold rounded-t-lg transition-colors whitespace-nowrap cursor-pointer ${
+                activeTab === i
+                  ? 'bg-(--surface) text-(--brand-foreground) border border-b-(--surface) border-(--border) -mb-px'
+                  : 'text-(--text-tertiary) hover:text-(--text-primary)'
+              }`}
+            >
+              <span>{t[tab]}</span>
+              {TAB_IDS[i] === 'visualize-map-tab' && (
+                <div className="relative group ml-1 inline-flex items-center">
+                  <span
+                    aria-label="Visualize Map help"
+                    className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-(--border) bg-(--surface) text-(--text-tertiary) group-hover:text-(--brand-foreground) group-hover:border-(--brand) transition-colors cursor-pointer"
+                  >
+                    <span className="text-[10px] font-black">?</span>
+                  </span>
+                  <div
+                    role="tooltip"
+                    className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 w-72 -translate-x-1/2 rounded-xl border border-(--border) bg-(--surface) px-3 py-2 text-[11px] font-normal leading-relaxed text-(--text-secondary) shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity whitespace-normal text-left"
+                  >
+                    Note: Some documents lack a DOI, which may cause the graph to display incorrectly.
+                  </div>
+                </div>
+              )}
+            </button>
           ))}
         </div>
 

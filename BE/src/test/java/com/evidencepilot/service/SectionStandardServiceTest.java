@@ -12,6 +12,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -29,6 +31,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -57,8 +60,9 @@ class SectionStandardServiceTest {
                 new ObjectMapper());
     }
 
-    @Test
-    void evaluateUsesPersistedConfiguration() {
+    @ParameterizedTest
+    @ValueSource(strings = {"valid", "missing_summary", "evidence_for_not_met", "malformed"})
+    void evaluateUsesPersistedConfiguration(String scenario) {
         PaperSection section = section();
         User instructor = user(UserRole.INSTRUCTOR);
         SectionStandardEvaluation evaluation = configured(section);
@@ -69,18 +73,32 @@ class SectionStandardServiceTest {
                 .thenReturn(Optional.of(evaluation));
         when(evaluationRepository.save(any(SectionStandardEvaluation.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        String valid = """
+                {"summary":"The thesis is present.","limitations":[],"items":[
+                  {"requirement":"Has thesis","verdict":"MET","evidence":"clear thesis","reason":"Clear","missing":"","suggestion":""}
+                ]}
+                """;
+        String first = switch (scenario) {
+            case "missing_summary" -> valid.replace("\"summary\"", "\"items_summary\"");
+            case "evidence_for_not_met" -> valid.replace("\"MET\"", "\"NOT_MET\"");
+            case "malformed" -> "not JSON";
+            default -> valid;
+        };
         when(aiModelClient.generateStrict(anyString(), anyString(), anyMap())).thenReturn(
-                new AiModelClient.GenerationResult("provider", "model", """
-                        {"summary":"The thesis is present.","limitations":[],"items":[
-                          {"requirement":"Has thesis","verdict":"MET","evidence":"clear thesis","reason":"Clear","missing":"","suggestion":""}
-                        ]}
-                        """));
+                new AiModelClient.GenerationResult("provider", "model", first),
+                new AiModelClient.GenerationResult("provider", "model", valid));
 
         var response = service.evaluate(section.getDocument().getId(), section.getId());
 
         ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
-        verify(aiModelClient).generateStrict(anyString(), prompt.capture(), anyMap());
+        ArgumentCaptor<String> system = ArgumentCaptor.forClass(String.class);
+        verify(aiModelClient, times(scenario.equals("valid") ? 1 : 2))
+                .generateStrict(system.capture(), prompt.capture(), anyMap());
         assertThat(prompt.getValue()).contains("\"requirements\":[\"Has thesis\"]");
+        assertThat(prompt.getAllValues()).allMatch(value -> value.equals(prompt.getValue()));
+        if (!scenario.equals("valid")) {
+            assertThat(system.getValue()).contains("previous attempt failed validation");
+        }
         assertThat(response.status()).isEqualTo(SectionStandardEvaluation.STATUS_COMPLETED);
         assertThat(response.result().get("items").get(0).get("verdict").asText()).isEqualTo("MET");
         assertThat(service.matchesCurrentInput(evaluation, section)).isTrue();
@@ -120,6 +138,7 @@ class SectionStandardServiceTest {
         assertThat(response.result()).isNull();
         assertThat(response.errorCode()).isEqualTo("INVALID_AI_RESPONSE");
         assertThat(evaluation.getRawOutput()).isEqualTo(raw);
+        verify(aiModelClient, times(2)).generateStrict(anyString(), anyString(), anyMap());
         verify(evaluationRepository).save(evaluation);
     }
 

@@ -814,15 +814,19 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
             String beforeContent, String afterContent) {
         if (project == null || Objects.equals(beforeContent, afterContent)) return;
         ContentWordDelta delta = contentWordDelta(beforeContent, afterContent);
+        // ponytail: write the section as the entity (not the project) so the activity
+        // feed can resolve the section directly via PaperSection and render a
+        // student-friendly "Section: X in Project Y" row.
         auditService.record(
                 "SECTION_CONTENT_UPDATED",
-                "PROJECT",
-                project.getId(),
+                "PaperSection",
+                section.getId(),
                 editor,
                 null,
                 Map.of(
                         "sectionId", section.getId(),
                         "sectionTitle", section.getSectionTitle(),
+                        "projectId", project.getId(),
                         "beforeWordCount", delta.beforeCount(),
                         "afterWordCount", delta.afterCount(),
                         "wordDelta", delta.afterCount() - delta.beforeCount(),

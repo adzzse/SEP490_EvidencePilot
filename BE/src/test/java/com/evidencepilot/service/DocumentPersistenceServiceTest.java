@@ -28,7 +28,8 @@ class DocumentPersistenceServiceTest {
     private final DocumentTextRepository texts = mock(DocumentTextRepository.class);
     private final DocumentChunkRepository chunks = mock(DocumentChunkRepository.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
-    private final DocumentPersistenceService service = new DocumentPersistenceService(documents, texts, chunks, events);
+    private final AuditService audit = mock(AuditService.class);
+    private final DocumentPersistenceService service = new DocumentPersistenceService(documents, texts, chunks, events, audit);
 
     @Test
     void savePendingDocument_populatesUploadMetadata() {
@@ -53,6 +54,11 @@ class DocumentPersistenceServiceTest {
         UUID id = UUID.randomUUID();
         Document document = new Document();
         document.setId(id);
+        document.setOriginalFilename("paper.pdf");
+        document.setDocType(DocumentType.SOURCE);
+        User uploader = new User();
+        uploader.setId(UUID.randomUUID());
+        document.setUploadedBy(uploader);
         when(documents.findById(id)).thenReturn(Optional.of(document));
         when(documents.save(document)).thenReturn(document);
 
@@ -62,6 +68,10 @@ class DocumentPersistenceServiceTest {
         assertThat(saved.getFileUrl()).isEqualTo("sources/raw/file.pdf");
         assertThat(saved.getFileHashSha256()).isEqualTo("abc123");
         verify(events).publishEvent(new DocumentUploadedEvent(id));
+        // ponytail: the upload also writes a DOCUMENT_UPLOADED audit row so the
+        // instructor's "My Activity" feed can render a Source Library entry.
+        verify(audit).record(eq("DOCUMENT_UPLOADED"), eq("DOCUMENT"), eq(id), eq(uploader),
+                isNull(), any());
     }
 
     @Test
@@ -69,7 +79,7 @@ class DocumentPersistenceServiceTest {
         UUID id = UUID.randomUUID();
         assertThatThrownBy(() -> service.markDocumentAsUploaded(id, "key", "hash"))
                 .hasMessageContaining(id.toString());
-        verifyNoInteractions(events);
+        verifyNoInteractions(events, audit);
     }
 
     @Test

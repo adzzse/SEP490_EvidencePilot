@@ -34,14 +34,16 @@ export default function SectionRequirementsPanel({
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
+    const requestId = ++requestRef.current;
+    setBusy('');
+    setError('');
+    setEvaluation(null);
+    setReadinessSection(null);
     if (!project?.id || !selectedPaper?.id || !selectedSection?.id) {
-      setEvaluation(null);
-      setReadinessSection(null);
+      setLoading(false);
       return;
     }
-    const requestId = ++requestRef.current;
     setLoading(true);
-    setError('');
     try {
       const [evaluationResponse, readinessResponse] = await Promise.all([
         api.get(`/api/papers/${selectedPaper.id}/sections/${selectedSection.id}/standard-evaluation`),
@@ -57,12 +59,16 @@ export default function SectionRequirementsPanel({
     } finally {
       if (requestId === requestRef.current) setLoading(false);
     }
-  }, [project?.id, selectedPaper?.id, selectedSection?.id, selectedSection?.revision, t]);
+  }, [project?.id, selectedPaper?.id, selectedSection?.id, selectedSection?.revision, isDirty, t]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    return () => { requestRef.current += 1; };
+  }, [load]);
 
   const runCheck = async () => {
     if (isDirty) return;
+    const requestId = ++requestRef.current;
     setBusy('check');
     setError('');
     try {
@@ -71,17 +77,21 @@ export default function SectionRequirementsPanel({
         null,
         { timeout: 120000 },
       );
+      if (requestId !== requestRef.current) return;
       setEvaluation(response.data);
-      showToast(t('selfCheckCompleted'));
+      if (response.data.status === 'COMPLETED') showToast(t('selfCheckCompleted'));
     } catch (checkError) {
-      setError(checkError?.response?.data?.message || t('selfCheckFailed'));
+      if (requestId === requestRef.current) {
+        setError(checkError?.response?.data?.message || t('selfCheckFailed'));
+      }
     } finally {
-      setBusy('');
+      if (requestId === requestRef.current) setBusy('');
     }
   };
 
   const updateHandoff = async (confirm) => {
     if (isDirty || !readinessSection?.currentInputFingerprint) return;
+    const requestId = ++requestRef.current;
     setBusy(confirm ? 'confirm' : 'revoke');
     setError('');
     try {
@@ -89,6 +99,7 @@ export default function SectionRequirementsPanel({
       const response = confirm
         ? await api.post(url, { expectedInputFingerprint: readinessSection.currentInputFingerprint })
         : await api.delete(url);
+      if (requestId !== requestRef.current) return;
       const handoff = response.data;
       setReadinessSection(previous => ({
         ...previous,
@@ -102,12 +113,13 @@ export default function SectionRequirementsPanel({
       onHandoffChanged?.(handoff);
       showToast(t(confirm ? 'handoffConfirmed' : 'handoffRevoked'));
     } catch (handoffError) {
+      if (requestId !== requestRef.current) return;
       const code = handoffError?.response?.data?.fieldErrors?.code;
       setError(code === 'HANDOFF_INPUT_CHANGED'
         ? t('handoffInputChanged')
         : handoffError?.response?.data?.message || t('handoffFailed'));
     } finally {
-      setBusy('');
+      if (requestId === requestRef.current) setBusy('');
     }
   };
 
@@ -117,7 +129,7 @@ export default function SectionRequirementsPanel({
 
   const requirements = evaluation?.requirements || [];
   const items = evaluation?.result?.items || [];
-  const completed = evaluation?.status === 'COMPLETED' && !evaluation?.stale;
+  const completed = evaluation?.status === 'COMPLETED' && !evaluation?.stale && !isDirty;
   const confirmed = readinessSection?.handoffState === 'CONFIRMED';
   const canAct = isAssigned && !isLocked && !isDirty;
   const handoffBlocked = readinessSection?.blockers?.some(code => code !== 'SECTION_CONFIRMED');

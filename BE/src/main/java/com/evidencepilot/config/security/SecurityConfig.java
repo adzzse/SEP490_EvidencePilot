@@ -68,6 +68,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/documents/*/download").permitAll()
                         .requestMatchers("/api/auth/update-password").authenticated()
                         .requestMatchers("/api/users/profile").authenticated()
+                        // Self-service: any authenticated user can read their own activity,
+                        // request/verify email OTP, and run the token-link email-change flow.
+                        .requestMatchers("/api/users/me/**").authenticated()
+                        .requestMatchers("/api/users/email/**").authenticated()
+                        .requestMatchers("/api/users/email-change/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users").hasAnyRole("ADMIN", "INSTRUCTOR")
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

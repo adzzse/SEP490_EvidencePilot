@@ -65,11 +65,52 @@ export default function InstructorDashboard() {
   }, []);
 
   const startTour = () => {
+    const isVi = language === 'vi';
+    const steps = isVi
+      ? [
+          {
+            element: '#metrics-grid',
+            popover: {
+              title: 'Tổng quan chỉ số',
+              description: 'Theo dõi nhanh số lượng đồ án, bộ sưu tập, nguồn tài liệu và yêu cầu đánh giá đang chờ xử lý.',
+              side: 'bottom',
+              align: 'start',
+            },
+          },
+          {
+            element: '#operational-hub',
+            popover: {
+              title: 'Trung tâm vận hành',
+              description: 'Các lối tắt trực tiếp để quản lý nghiên cứu, thực hiện đánh giá và chia sẻ tri thức.',
+              side: 'top',
+              align: 'start',
+            },
+          },
+          {
+            element: '#dashboard-tour-btn',
+            popover: {
+              title: 'Hướng dẫn sử dụng',
+              description: 'Nhấn vào đây bất kỳ lúc nào để mở lại hướng dẫn thao tác trên bảng điều khiển.',
+              side: 'bottom',
+              align: 'end',
+            },
+          },
+          {
+            element: '#review-queue-link',
+            popover: {
+              title: 'Hàng chờ đánh giá',
+              description: 'Truy cập nhanh vào danh sách các yêu cầu phản hồi từ sinh viên đang chờ bạn xử lý.',
+              side: 'left',
+              align: 'start',
+            },
+          },
+        ]
+      : [
+          { element: '#metrics-grid', popover: { title: t.metricsOverview || 'Metrics Overview', description: t.metricsOverviewDesc || 'High-level operational overview of your research projects and assets.', side: 'bottom', align: 'start' } },
+          { element: '#operational-hub', popover: { title: t.operationalHub || 'Operational Hub', description: t.operationalHubDesc || 'Direct shortcuts to manage research, conduct reviews, and share knowledge.', side: 'top', align: 'start' } },
+        ];
     const d = driver({
-      steps: [
-        { element: '#metrics-grid', popover: { title: t.metricsOverview || 'Metrics Overview', description: t.metricsOverviewDesc || 'High-level operational overview of your research projects and assets.', side: 'bottom', align: 'start' } },
-        { element: '#operational-hub', popover: { title: t.operationalHub || 'Operational Hub', description: t.operationalHubDesc || 'Direct shortcuts to manage research, conduct reviews, and share knowledge.', side: 'top', align: 'start' } },
-      ],
+      steps,
       showProgress: true,
       showButtons: ['next', 'previous', 'close'],
     });
@@ -93,6 +134,7 @@ export default function InstructorDashboard() {
           </div>
 
           <button
+            id="dashboard-tour-btn"
             type="button"
             onClick={startTour}
             className="px-4 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-bold text-(--text-secondary) hover:bg-(--brand-soft) hover:text-(--brand-foreground) transition-colors shadow-xs flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
@@ -221,7 +263,7 @@ export default function InstructorDashboard() {
                 <h3 className="text-sm font-black text-(--brand-foreground) mb-1">{t.reviewRequests}</h3>
                 <p className="text-xs text-(--text-secondary) leading-relaxed mb-3 line-clamp-2">{t.reviewRequestsDesc}</p>
               </div>
-              <Link to="/instructor/requests" className="inline-flex items-center text-xs font-bold text-(--brand) hover:underline gap-1 pt-2 border-t border-(--border-light)">
+              <Link id="review-queue-link" to="/instructor/requests" className="inline-flex items-center text-xs font-bold text-(--brand) hover:underline gap-1 pt-2 border-t border-(--border-light)">
                 {t.reviewSubmissions} &rarr;
               </Link>
             </div>

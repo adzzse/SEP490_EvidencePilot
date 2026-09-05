@@ -151,16 +151,36 @@ public class SectionStandardService {
         String resultJson = null;
         String errorCode = null;
         AiModelClient.GenerationResult generation = null;
-        try {
-            generation = aiModelClient.generateStrict(system, prompt, strictSchema());
-            rawOutput = generation.response();
-            JsonNode result = objectMapper.readTree(extractJsonObject(rawOutput));
-            validateResult(result, requirements, section.getContentTex());
-            resultJson = objectMapper.writeValueAsString(result);
-        } catch (AiModelClient.AiApiException exception) {
-            errorCode = "PROVIDER_ERROR";
-        } catch (Exception exception) {
-            errorCode = "INVALID_AI_RESPONSE";
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                generation = aiModelClient.generateStrict(system, prompt, strictSchema());
+                rawOutput = generation.response();
+                JsonNode result = objectMapper.readTree(extractJsonObject(rawOutput));
+                validateResult(result, requirements, section.getContentTex());
+                resultJson = objectMapper.writeValueAsString(result);
+                errorCode = null;
+                break;
+            } catch (AiModelClient.AiApiException exception) {
+                errorCode = "PROVIDER_ERROR";
+                break;
+            } catch (JsonProcessingException | IllegalArgumentException exception) {
+                errorCode = "INVALID_AI_RESPONSE";
+                if (attempt == 0) {
+                    log.warn("Section self-check section={} invalid result; requesting one regeneration", sectionId);
+                    system += """
+
+                            The previous attempt failed validation. Recheck every constraint before answering.
+                            Use exactly summary, limitations, items at the root; never rename or omit these fields.
+                            Every item must have exactly requirement, verdict, evidence, reason, missing, suggestion.
+                            For NOT_MET or UNVERIFIABLE, evidence must be an empty string.
+                            For MET or PARTIAL, evidence must be an exact contiguous quote from studentText.
+                            Return the complete JSON object only, without Markdown or extra fields.
+                            """;
+                }
+            } catch (Exception exception) {
+                errorCode = "INVALID_AI_RESPONSE";
+                break;
+            }
         }
 
         PaperSection currentSection = requireSection(documentId, sectionId);

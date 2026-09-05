@@ -10,6 +10,7 @@ import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.DocumentTextRepository;
+import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.event.DocumentUploadedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -32,6 +33,7 @@ public class DocumentPersistenceService {
     private final DocumentTextRepository documentTextRepository;
     private final DocumentChunkRepository documentChunkRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final AuditService auditService;
 
     @Transactional
     public Document savePendingDocument(
@@ -67,6 +69,27 @@ public class DocumentPersistenceService {
         document.setFileHashSha256(fileHashSha256);
         Document saved = documentRepository.save(document);
         eventPublisher.publishEvent(new DocumentUploadedEvent(saved.getId()));
+        // ponytail: write a "DOCUMENT_UPLOADED" row so the instructor's "My Activity"
+        // tab can render a Source Library entry. Failure here must not roll back the
+        // upload — wrap in try/catch to keep the primary write durable.
+        try {
+            java.util.LinkedHashMap<String, Object> meta = new java.util.LinkedHashMap<>();
+            meta.put("filename", saved.getOriginalFilename() != null ? saved.getOriginalFilename() : "");
+            meta.put("docType", saved.getDocType() != null ? saved.getDocType().name() : "");
+            meta.put("projectId", saved.getProject() != null ? saved.getProject().getId() : null);
+            meta.put("collectionId", saved.getCollection() != null ? saved.getCollection().getId() : null);
+            auditService.record(
+                    "DOCUMENT_UPLOADED",
+                    "DOCUMENT",
+                    saved.getId(),
+                    saved.getUploadedBy(),
+                    null,
+                    meta);
+        } catch (RuntimeException ex) {
+            // ponytail: audit is best-effort; don't break the upload on a logging failure.
+            org.slf4j.LoggerFactory.getLogger(DocumentPersistenceService.class)
+                    .warn("Failed to record DOCUMENT_UPLOADED audit for {}", saved.getId(), ex);
+        }
         return saved;
     }
 

@@ -361,13 +361,14 @@ class PaperProcessingServiceImplTest {
         assertThat(section.getVersion()).isEqualTo(3);
         verify(auditService).record(
                 "SECTION_CONTENT_UPDATED",
-                "PROJECT",
-                project.getId(),
+                "PaperSection",
+                section.getId(),
                 student,
                 null,
                 Map.of(
                         "sectionId", section.getId(),
                         "sectionTitle", "Intro",
+                        "projectId", project.getId(),
                         "beforeWordCount", 2,
                         "afterWordCount", 4,
                         "wordDelta", 2,
@@ -400,13 +401,14 @@ class PaperProcessingServiceImplTest {
                 section.getId(), "previous", 3);
         verify(auditService).record(
                 "SECTION_CONTENT_UPDATED",
-                "PROJECT",
-                project.getId(),
+                "PaperSection",
+                section.getId(),
                 student,
                 null,
                 Map.of(
                         "sectionId", section.getId(),
                         "sectionTitle", "Intro",
+                        "projectId", project.getId(),
                         "beforeWordCount", 2,
                         "afterWordCount", 1,
                         "wordDelta", -1,

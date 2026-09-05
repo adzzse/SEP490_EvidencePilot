@@ -1,10 +1,147 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api.js';
 import { AppHeader, LoadingSkeleton, Breadcrumb, Modal } from '../components';
+import OtpInput from '../components/ui/OtpInput.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useLanguage } from '../context/LanguageContext.jsx';
 import { commonText } from '../locales';
+import { formatDateTime } from '../utils/formatters/date';
+
+function formatActivityTime(value, language) {
+  if (!value) return '';
+  try {
+    return formatDateTime(value, language);
+  } catch {
+    return '';
+  }
+}
+
+// ponytail: student rows always land on the project root — no /sections/... suffix.
+function studentProjectLink(item) {
+  if (item?.projectId) return `/student/projects/${item.projectId}`;
+  const m = typeof item?.link === 'string' ? item.link.match(/^\/student\/projects\/[^/]+/) : null;
+  if (m) return m[0];
+  return item?.link || '/student/projects';
+}
+
+// ponytail: single call-site polymorphic row — role + type decide the template.
+// Instructor: collection / project / source. Student: project root only.
+function ActivityLogItem({ item, role, language }) {
+  if (!item) return null;
+  const ts = formatActivityTime(item.occurredAt, language);
+  const rowClass =
+    'block p-3 rounded-xl border border-(--border-light) bg-(--surface-secondary)/50 hover:bg-(--surface-secondary) hover:border-(--brand)/40 transition-colors';
+  const titleClass = 'text-xs font-bold text-(--text-primary) truncate';
+  const metaClass = 'text-[10px] text-(--text-tertiary) mt-0.5';
+  const tsClass = 'text-[10px] font-mono text-(--text-tertiary) shrink-0';
+
+  const isInstructor = role === 'INSTRUCTOR';
+  const isStudent = role === 'STUDENT';
+
+  // Instructor — Collection: [CollectionName] [Total Sources] [Timestamp]
+  if (item.type === 'collection' && isInstructor) {
+    const sources = item.totalSources ?? 0;
+    const sourcesLabel = language === 'vi' ? 'tài liệu' : 'sources';
+    return (
+      <Link
+        key={`collection-${item.entityId || item.title}-${item.occurredAt}`}
+        to={item.link || '/instructor/source-library'}
+        className={rowClass}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className={titleClass}>{item.title}</p>
+            <p className={metaClass}>{`${sources} ${sourcesLabel}`}</p>
+          </div>
+          <span className={tsClass}>{ts}</span>
+        </div>
+      </Link>
+    );
+  }
+
+  // Instructor — Project: [ProjectName] [Total members] [Timestamp]
+  if (item.type === 'project' && isInstructor) {
+    const members = item.totalMembers ?? 0;
+    const membersLabel = language === 'vi' ? 'thành viên' : 'members';
+    return (
+      <Link
+        key={`project-${item.entityId || item.title}-${item.occurredAt}`}
+        to={item.link}
+        className={rowClass}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className={titleClass}>{item.title}</p>
+            <p className={metaClass}>{`${members} ${membersLabel}`}</p>
+          </div>
+          <span className={tsClass}>{ts}</span>
+        </div>
+      </Link>
+    );
+  }
+
+  // Instructor — Source: [SourceName] [Status] [Timestamp]
+  if (item.type === 'source' && isInstructor) {
+    return (
+      <Link
+        key={`source-${item.entityId || item.title}-${item.occurredAt}`}
+        to={item.link || '/instructor/source-library'}
+        className={rowClass}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className={titleClass}>{item.title}</p>
+            <p className={metaClass}>{item.status || ''}</p>
+          </div>
+          <span className={tsClass}>{ts}</span>
+        </div>
+      </Link>
+    );
+  }
+
+  // Student — Workspace: [Project Name] [Section Name] [Timestamp]
+  // ponytail: link targets the project root only, never /sections/...
+  if (item.type === 'project-section' && isStudent) {
+    return (
+      <Link
+        key={`project-section-${item.entityId || item.title}-${item.occurredAt}`}
+        to={studentProjectLink(item)}
+        className={rowClass}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className={titleClass}>{item.title}</p>
+            <p className={metaClass}>{item.subtitle || ''}</p>
+          </div>
+          <span className={tsClass}>{ts}</span>
+        </div>
+      </Link>
+    );
+  }
+
+  // Student generic project row (e.g. PROJECT_CREATED by the student):
+  // render as workspace root without a section name.
+  if (item.type === 'project' && isStudent) {
+    return (
+      <Link
+        key={`project-${item.entityId || item.title}-${item.occurredAt}`}
+        to={studentProjectLink(item)}
+        className={rowClass}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className={titleClass}>{item.title}</p>
+            <p className={metaClass}>{item.subtitle || ''}</p>
+          </div>
+          <span className={tsClass}>{ts}</span>
+        </div>
+      </Link>
+    );
+  }
+
+  return null;
+}
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -13,9 +150,8 @@ export default function Profile() {
   const { language } = useLanguage();
   const t = commonText[language];
   const ct = commonText[language];
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
   const [user, setUser] = useState(null);
+  const [editMode, setEditMode] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -27,10 +163,27 @@ export default function Profile() {
   const [showPasswordConfirmModal, setShowPasswordConfirmModal] = useState(false);
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
 
-  // Telemetry state
-  const [telemetry, setTelemetry] = useState(null);
-  const [telemetryLoading, setTelemetryLoading] = useState(false);
-  const [telemetryError, setTelemetryError] = useState('');
+  // OTP email verification
+  const [otpModalOpen, setOtpModalOpen] = useState(false);
+  const [otpCooldownUntil, setOtpCooldownUntil] = useState(null);
+  const [otpCountdown, setOtpCountdown] = useState(0);
+  const [otpRequesting, setOtpRequesting] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  // The email that the user has successfully verified. Until they change it again,
+  // they can save without re-verifying. Saved as a one-shot claim token from the BE.
+  const [verifiedClaim, setVerifiedClaim] = useState(null);
+  const [verifiedEmail, setVerifiedEmail] = useState(null);
+  const otpFieldRef = useRef(null);
+
+  // Recent activity feed
+  const [activity, setActivity] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState('');
+  const [activityQuery, setActivityQuery] = useState('');
+  const [activitySort, setActivitySort] = useState('latest');
+  const [activityPage, setActivityPage] = useState(1);
+  const ACTIVITY_PAGE_SIZE = 4;
 
   // Tab State with deep-linking
   const currentTab = searchParams.get('tab') === 'activity' ? 'activity' : 'account';
@@ -75,17 +228,129 @@ export default function Profile() {
     }
   }, [searchParams, setSearchParams, language, verifySession]);
 
-  // Fetch telemetry when tab is active
+  // Fetch recent activity when the activity tab is active
   useEffect(() => {
-    if (currentTab === 'activity') {
-      setTelemetryLoading(true);
-      setTelemetryError('');
-      api.get('/api/users/me/telemetry')
-        .then(res => setTelemetry(res.data))
-        .catch(err => setTelemetryError(err.response?.data?.message || 'Failed to load telemetry'))
-        .finally(() => setTelemetryLoading(false));
+    if (currentTab !== 'activity') return;
+    setActivityLoading(true);
+    setActivityError('');
+    api.get('/api/users/me/activity', { params: { limit: 20 } })
+      .then((res) => setActivity(res.data?.items || []))
+      .catch((err) => setActivityError(err.response?.data?.message || (language === 'vi' ? 'Không thể tải hoạt động gần đây.' : 'Failed to load recent activity.')))
+      .finally(() => setActivityLoading(false));
+  }, [currentTab, language]);
+
+  // ponytail: client-side search + sort + 4-per-page over the fetched feed.
+  const visibleActivity = useMemo(() => {
+    const q = activityQuery.trim().toLowerCase();
+    const filtered = q
+      ? activity.filter((item) =>
+          [item.title, item.subtitle, item.status, item.type]
+            .filter(Boolean)
+            .some((v) => String(v).toLowerCase().includes(q)),
+        )
+      : [...activity];
+    filtered.sort((a, b) => {
+      const ta = a?.occurredAt ? new Date(a.occurredAt).getTime() : 0;
+      const tb = b?.occurredAt ? new Date(b.occurredAt).getTime() : 0;
+      return activitySort === 'oldest' ? ta - tb : tb - ta;
+    });
+    return filtered;
+  }, [activity, activityQuery, activitySort]);
+
+  const totalActivityPages = Math.max(1, Math.ceil(visibleActivity.length / ACTIVITY_PAGE_SIZE));
+  const safeActivityPage = Math.min(Math.max(1, activityPage), totalActivityPages);
+  const pagedActivity = visibleActivity.slice(
+    (safeActivityPage - 1) * ACTIVITY_PAGE_SIZE,
+    safeActivityPage * ACTIVITY_PAGE_SIZE,
+  );
+
+  // OTP 1-second countdown
+  useEffect(() => {
+    if (!otpCooldownUntil) {
+      setOtpCountdown(0);
+      return;
     }
-  }, [currentTab]);
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((new Date(otpCooldownUntil).getTime() - Date.now()) / 1000));
+      setOtpCountdown(remaining);
+      if (remaining <= 0) setOtpCooldownUntil(null);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [otpCooldownUntil]);
+
+  const closeOtpModal = () => {
+    setOtpModalOpen(false);
+    setOtpError('');
+    otpFieldRef.current?.clear();
+  };
+
+  const handleRequestOtp = async () => {
+    if (!EMAIL_REGEX.test(email.trim())) {
+      setMessage({
+        type: 'error',
+        text: language === 'vi' ? 'Định dạng email không hợp lệ.' : 'Please enter a valid email address.',
+      });
+      return;
+    }
+    setOtpRequesting(true);
+    setOtpError('');
+    try {
+      const res = await api.post('/api/users/email/otp/request', { email: email.trim() });
+      setOtpCooldownUntil(res.data?.cooldownUntil || null);
+      otpFieldRef.current?.clear();
+      setOtpModalOpen(true);
+    } catch (err) {
+      const status = err.response?.status;
+      const msg = err.response?.data?.message || err.message;
+      if (status === 429) {
+        // ponytail: server tells us when the next OTP is allowed. Mirror the cooldown
+        // for the FE timer so the resend button reflects the real wait time.
+        setOtpCooldownUntil(new Date(Date.now() + 60_000).toISOString());
+      }
+      setMessage({
+        type: 'error',
+        text: msg || (language === 'vi' ? 'Không thể gửi mã xác thực.' : 'Failed to send verification code.'),
+      });
+    } finally {
+      setOtpRequesting(false);
+    }
+  };
+
+  const handleVerifyOtp = async (code) => {
+    if (!code || code.length !== 6) {
+      setOtpError(language === 'vi' ? 'Vui lòng nhập đủ 6 số.' : 'Please enter all 6 digits.');
+      return;
+    }
+    setOtpVerifying(true);
+    setOtpError('');
+    try {
+      const res = await api.post('/api/users/email/otp/verify', { email: email.trim(), code });
+      setVerifiedClaim(res.data?.claimToken || null);
+      setVerifiedEmail(email.trim());
+      setMessage({
+        type: 'success',
+        text: language === 'vi' ? 'Email đã xác thực. Nhấn Lưu để áp dụng.' : 'Email verified. Press Save to apply.',
+      });
+      closeOtpModal();
+    } catch (err) {
+      const msg = err.response?.data?.message || (language === 'vi' ? 'Mã không hợp lệ.' : 'Invalid code.');
+      setOtpError(msg);
+      // Clear all digits so the user can immediately type a fresh code.
+      otpFieldRef.current?.clear();
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
+
+  // If the user changes the email field again, the previous claim is no longer valid.
+  useEffect(() => {
+    if (verifiedEmail && email.trim() !== verifiedEmail) {
+      setVerifiedClaim(null);
+      setVerifiedEmail(null);
+    }
+  }, [email, verifiedEmail]);
 
   const handleRequestEmailChange = async (targetEmail) => {
     const toVerify = (targetEmail || email).trim();
@@ -137,7 +402,13 @@ export default function Profile() {
     setEmail(user.email || '');
     setPasswordForm({ currentPassword: '', newPassword: '' });
     setMessage({ type: '', text: '' });
+    setEditMode(false);
+    setVerifiedClaim(null);
+    setVerifiedEmail(null);
+    closeOtpModal();
   };
+
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -145,62 +416,84 @@ export default function Profile() {
       setMessage({ type: 'error', text: t.nameRequired });
       return;
     }
+    if (!EMAIL_REGEX.test(email.trim())) {
+      setMessage({
+        type: 'error',
+        text: language === 'vi' ? 'Định dạng email không hợp lệ.' : 'Please enter a valid email address.',
+      });
+      return;
+    }
 
     const currentPwd = (passwordForm.currentPassword || '').trim();
     const newPwd = (passwordForm.newPassword || '').trim();
     const hasPasswordInput = Boolean(currentPwd || newPwd);
+    const emailChanged = email.trim() !== (user.email || '');
 
-    // If password change is requested, validate current and new password, then hold state in modal
-    if (hasPasswordInput) {
-      if (!currentPwd) {
-        setMessage({
-          type: 'error',
-          text: language === 'vi' ? 'Vui lòng nhập mật khẩu hiện tại.' : 'Please enter your current password.',
-        });
-        return;
-      }
-      if (!newPwd) {
-        setMessage({
-          type: 'error',
-          text: language === 'vi' ? 'Vui lòng nhập mật khẩu mới.' : 'Please enter a new password.',
-        });
-        return;
-      }
-      // Open modal confirmation hold state
+    // Password change requires a new password. Email-only changes do NOT require the current password.
+    if (hasPasswordInput && !newPwd) {
+      setMessage({
+        type: 'error',
+        text: language === 'vi' ? 'Vui lòng nhập mật khẩu mới.' : 'Please enter a new password.',
+      });
+      return;
+    }
+    if (newPwd && !currentPwd) {
+      setMessage({
+        type: 'error',
+        text: language === 'vi' ? 'Vui lòng nhập mật khẩu hiện tại để đổi mật khẩu.' : 'Please enter your current password to change it.',
+      });
+      return;
+    }
+
+    if (newPwd) {
       setShowPasswordConfirmModal(true);
       return;
     }
 
-    // Process profile updates (names and email change request)
+    // Email change requires a verified claim token.
+    if (emailChanged && !verifiedClaim) {
+      setMessage({
+        type: 'error',
+        text: language === 'vi'
+          ? 'Vui lòng nhấn "Xác thực email" và nhập mã OTP trước khi lưu.'
+          : 'Please click "Verify Email" and enter the OTP code before saving.',
+      });
+      return;
+    }
+
     setSubmitting(true);
     setMessage({ type: '', text: '' });
 
     try {
-      let profileUpdated = false;
-      if (firstName.trim() !== (user.firstName || '') || lastName.trim() !== (user.lastName || '')) {
-        const { data } = await api.put('/api/users/profile', {
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-        });
-        setUser(data);
-        profileUpdated = true;
-        verifySession().catch(() => { });
+      const nameChanged = firstName.trim() !== (user.firstName || '') || lastName.trim() !== (user.lastName || '');
+      const payload = {};
+      if (nameChanged) {
+        payload.firstName = firstName.trim();
+        payload.lastName = lastName.trim();
+      }
+      if (emailChanged) {
+        payload.email = email.trim();
       }
 
-      // If email was modified, trigger email change request
-      if (email.trim() && email.trim() !== (user.email || '') && email.trim() !== (pendingEmail || '')) {
-        await handleRequestEmailChange(email.trim());
-      } else if (profileUpdated) {
-        setMessage({
-          type: 'success',
-          text: t.profileUpdated || (language === 'vi' ? 'Cập nhật thông tin thành công.' : 'Profile updated successfully.'),
-        });
-      }
-    } catch (error) {
+      const headers = {};
+      if (emailChanged) headers['X-Email-Otp-Claim'] = verifiedClaim;
+
+      const { data } = await api.put('/api/users/profile', payload, { headers });
+      setUser(data);
+      verifySession().catch(() => { });
+      setVerifiedClaim(null);
+      setVerifiedEmail(null);
       setMessage({
-        type: 'error',
-        text: error.response?.data?.message || t.profileUpdateFailed,
+        type: 'success',
+        text: t.profileUpdated || (language === 'vi' ? 'Cập nhật thông tin thành công.' : 'Profile updated successfully.'),
       });
+      setEditMode(false);
+    } catch (error) {
+      const status = error.response?.status;
+      const fallback = status === 403
+        ? (language === 'vi' ? 'Mã xác thực email không hợp lệ hoặc đã hết hạn. Vui lòng xác thực lại.' : 'Email verification claim is invalid or expired. Please verify again.')
+        : (t.profileUpdateFailed || (language === 'vi' ? 'Cập nhật thất bại.' : 'Update failed.'));
+      setMessage({ type: 'error', text: error.response?.data?.message || fallback });
     } finally {
       setSubmitting(false);
     }
@@ -314,13 +607,24 @@ export default function Profile() {
         {currentTab === 'account' && (
           <div className="space-y-6">
             <div className="rounded-2xl border border-(--border) bg-(--surface) p-6 sm:p-8 shadow-xs">
-              <div className="mb-6 border-b border-(--border-light) pb-4">
-                <h2 className="text-base font-bold text-(--text-primary)">
-                  {language === 'vi' ? 'Thông tin cá nhân & Bảo mật' : 'Personal Information & Security'}
-                </h2>
-                <p className="text-xs text-(--text-secondary) mt-0.5">
-                  {language === 'vi' ? 'Quản lý thông tin hồ sơ và mật khẩu tài khoản của bạn.' : 'Manage your personal profile details and account password credentials.'}
-                </p>
+              <div className="mb-6 border-b border-(--border-light) pb-4 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-base font-bold text-(--text-primary)">
+                    {language === 'vi' ? 'Thông tin cá nhân & Bảo mật' : 'Personal Information & Security'}
+                  </h2>
+                  <p className="text-xs text-(--text-secondary) mt-0.5">
+                    {language === 'vi' ? 'Quản lý thông tin hồ sơ và mật khẩu tài khoản của bạn.' : 'Manage your personal profile details and account password credentials.'}
+                  </p>
+                </div>
+                {!editMode && (
+                  <button
+                    type="button"
+                    onClick={() => { setMessage({ type: '', text: '' }); setEditMode(true); }}
+                    className="shrink-0 px-4 py-2 rounded-xl bg-(--brand) text-(--on-brand) font-bold text-xs shadow-xs hover:bg-(--brand-hover) transition-colors cursor-pointer"
+                  >
+                    {language === 'vi' ? 'Chỉnh sửa' : 'Edit'}
+                  </button>
+                )}
               </div>
 
               {message.text && (
@@ -375,7 +679,8 @@ export default function Profile() {
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
                         required
-                        className="w-full rounded-xl border border-(--border) bg-(--surface-secondary) px-4 py-2.5 text-xs font-medium text-(--text-primary) outline-none focus:ring-2 focus:ring-(--focus)"
+                        readOnly={!editMode}
+                        className={`w-full rounded-xl border border-(--border) bg-(--surface-secondary) px-4 py-2.5 text-xs font-medium text-(--text-primary) outline-none focus:ring-2 focus:ring-(--focus) ${!editMode ? 'cursor-default opacity-90' : ''}`}
                       />
                     </div>
                     <div>
@@ -385,7 +690,8 @@ export default function Profile() {
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
                         required
-                        className="w-full rounded-xl border border-(--border) bg-(--surface-secondary) px-4 py-2.5 text-xs font-medium text-(--text-primary) outline-none focus:ring-2 focus:ring-(--focus)"
+                        readOnly={!editMode}
+                        className={`w-full rounded-xl border border-(--border) bg-(--surface-secondary) px-4 py-2.5 text-xs font-medium text-(--text-primary) outline-none focus:ring-2 focus:ring-(--focus) ${!editMode ? 'cursor-default opacity-90' : ''}`}
                       />
                     </div>
                   </div>
@@ -393,15 +699,37 @@ export default function Profile() {
                   <div className="grid gap-4 sm:grid-cols-2 pt-1">
                     <div>
                       <label className="block text-xs font-bold text-(--text-secondary) mb-1.5">{t.email} <span className="text-rose-500">*</span></label>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        className="w-full rounded-xl border border-(--border) bg-(--surface-secondary) px-4 py-2.5 text-xs font-medium text-(--text-primary) outline-none focus:ring-2 focus:ring-(--focus)"
-                      />
+                      <div className="relative">
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                          readOnly={!editMode}
+                          className={`w-full rounded-xl border border-(--border) bg-(--surface-secondary) px-4 py-2.5 text-xs font-medium text-(--text-primary) outline-none focus:ring-2 focus:ring-(--focus) ${!editMode ? 'cursor-default opacity-90' : ''}`}
+                        />
+                        {editMode && email && email !== user.email && (
+                          <button
+                            type="button"
+                            onClick={handleRequestOtp}
+                            disabled={otpRequesting}
+                            className="absolute inset-y-1.5 right-1.5 px-2.5 rounded-lg bg-(--brand) text-(--on-brand) text-[10px] font-black hover:bg-(--brand-hover) transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            {otpRequesting
+                              ? (language === 'vi' ? 'Đang gửi...' : 'Sending...')
+                              : (verifiedEmail === email.trim()
+                                ? (language === 'vi' ? 'Đã xác thực ✓' : 'Verified ✓')
+                                : (language === 'vi' ? 'Xác thực email' : 'Verify Email'))}
+                          </button>
+                        )}
+                        {email && email === user.email && !pendingEmail && (
+                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-emerald-500" title={language === 'vi' ? 'Email đã xác thực' : 'Email verified'}>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] text-(--text-tertiary) mt-1">
-                        {language === 'vi' ? 'Thay đổi email yêu cầu nhấp vào liên kết xác nhận được gửi tới địa chỉ mới.' : 'Modifying email requires confirmation via link sent to the new address.'}
+                        {language === 'vi' ? 'Thay đổi email yêu cầu nhập mã OTP gửi tới địa chỉ mới.' : 'Modifying email requires an OTP code sent to the new address.'}
                       </p>
                     </div>
                     <div>
@@ -424,254 +752,180 @@ export default function Profile() {
                           {language === 'vi' ? '(Để trống nếu không đổi)' : '(Leave blank if unchanged)'}
                         </span>
                       </label>
-                      <div className="relative">
-                        <input
-                          type={showCurrentPassword ? "text" : "password"}
-                          value={passwordForm.currentPassword}
-                          onChange={(e) => setPasswordForm(f => ({ ...f, currentPassword: e.target.value }))}
-                          placeholder="••••••••"
-                          className="w-full rounded-xl border border-(--border) bg-(--surface-secondary) py-2.5 pl-4 pr-10 text-xs font-medium text-(--text-primary) outline-none focus:ring-2 focus:ring-(--focus)"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                          className="absolute inset-y-0 right-0 flex items-center pr-3 text-(--text-secondary) hover:text-(--text-primary) focus:outline-none cursor-pointer"
-                          aria-label="Toggle password visibility"
-                        >
-                          {showCurrentPassword ? (
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0l-3.29-3.29" /></svg>
-                          ) : (
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                          )}
-                        </button>
-                      </div>
+                      <input
+                        type="password"
+                        value={passwordForm.currentPassword}
+                        onChange={(e) => setPasswordForm(f => ({ ...f, currentPassword: e.target.value }))}
+                        readOnly={!editMode}
+                        placeholder="••••••••"
+                        className={`w-full rounded-xl border border-(--border) bg-(--surface-secondary) px-4 py-2.5 text-xs font-medium text-(--text-primary) outline-none focus:ring-2 focus:ring-(--focus) ${!editMode ? 'cursor-default opacity-90' : ''}`}
+                      />
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold text-(--text-secondary) mb-1.5">{t.newPassword}</label>
-                      <div className="relative">
-                        <input
-                          type={showNewPassword ? "text" : "password"}
-                          value={passwordForm.newPassword}
-                          onChange={(e) => setPasswordForm(f => ({ ...f, newPassword: e.target.value }))}
-                          placeholder="••••••••"
-                          className="w-full rounded-xl border border-(--border) bg-(--surface-secondary) py-2.5 pl-4 pr-10 text-xs font-medium text-(--text-primary) outline-none focus:ring-2 focus:ring-(--focus)"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowNewPassword(!showNewPassword)}
-                          className="absolute inset-y-0 right-0 flex items-center pr-3 text-(--text-secondary) hover:text-(--text-primary) focus:outline-none cursor-pointer"
-                          aria-label="Toggle new password visibility"
-                        >
-                          {showNewPassword ? (
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0l-3.29-3.29" /></svg>
-                          ) : (
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                          )}
-                        </button>
-                      </div>
+                      <input
+                        type="password"
+                        value={passwordForm.newPassword}
+                        onChange={(e) => setPasswordForm(f => ({ ...f, newPassword: e.target.value }))}
+                        readOnly={!editMode}
+                        placeholder="••••••••"
+                        className={`w-full rounded-xl border border-(--border) bg-(--surface-secondary) px-4 py-2.5 text-xs font-medium text-(--text-primary) outline-none focus:ring-2 focus:ring-(--focus) ${!editMode ? 'cursor-default opacity-90' : ''}`}
+                      />
+                      {/* Password strength meter — Weak / Medium / Strong. Renders only while editing. */}
+                      {editMode && passwordForm.newPassword && (() => {
+                        const pwd = passwordForm.newPassword;
+                        const rules = [
+                          pwd.length >= 8,
+                          /[A-Z]/.test(pwd),
+                          /[0-9]/.test(pwd),
+                          /[^A-Za-z0-9]/.test(pwd),
+                        ];
+                        const score = rules.filter(Boolean).length;
+                        const tier = score <= 1 ? 'weak' : score <= 3 ? 'medium' : 'strong';
+                        const palette = {
+                          weak: { bar: 'bg-rose-500', text: 'text-rose-600', label: language === 'vi' ? 'Yếu' : 'Weak', width: 'w-1/3' },
+                          medium: { bar: 'bg-amber-500', text: 'text-amber-600', label: language === 'vi' ? 'Trung bình' : 'Medium', width: 'w-2/3' },
+                          strong: { bar: 'bg-emerald-500', text: 'text-emerald-600', label: language === 'vi' ? 'Mạnh' : 'Strong', width: 'w-full' },
+                        }[tier];
+                        return (
+                          <div className="mt-1.5">
+                            <div className="h-1 w-full rounded-full bg-(--surface-tertiary) overflow-hidden">
+                              <div className={`h-full ${palette.bar} ${palette.width} transition-all`} />
+                            </div>
+                            <p className={`text-[10px] font-bold mt-1 ${palette.text}`}>
+                              {palette.label} · {language === 'vi' ? '≥8 ký tự, chữ hoa, số, ký tự đặc biệt' : '≥8 chars, uppercase, number, symbol'}
+                            </p>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
 
-                {/* Form Action Buttons: [Cancel] & [Save Changes] */}
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-(--border-light)">
-                  <button
-                    type="button"
-                    onClick={handleResetForm}
-                    disabled={submitting}
-                    className="px-5 py-2.5 rounded-xl border border-(--border) text-(--text-secondary) font-bold text-xs hover:bg-(--surface-secondary) transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {ct.cancel || 'Cancel'}
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-6 py-2.5 rounded-xl bg-(--brand) text-(--on-brand) font-bold text-xs shadow-xs hover:bg-(--brand-hover) transition-colors disabled:opacity-50 cursor-pointer"
-                  >
-                    {submitting ? t.updatingProfile : (language === 'vi' ? 'Lưu thay đổi' : 'Save Changes')}
-                  </button>
-                </div>
+                {/* Form Action Buttons: [Cancel] & [Save Changes] (only while editing) */}
+                {editMode && (
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-(--border-light)">
+                    <button
+                      type="button"
+                      onClick={handleResetForm}
+                      disabled={submitting}
+                      className="px-5 py-2.5 rounded-xl border border-(--border) text-(--text-secondary) font-bold text-xs hover:bg-(--surface-secondary) transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {ct.cancel || 'Cancel'}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="px-6 py-2.5 rounded-xl bg-(--brand) text-(--on-brand) font-bold text-xs shadow-xs hover:bg-(--brand-hover) transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      {submitting ? t.updatingProfile : (language === 'vi' ? 'Lưu thay đổi' : 'Save Changes')}
+                    </button>
+                  </div>
+                )}
               </form>
             </div>
           </div>
         )}
 
-        {/* Tab 2: My Activity (Self-View Purged Bottleneck Telemetry UI) */}
+        {/* Tab 2: My Activity */}
         {currentTab === 'activity' && (
           <div className="space-y-6">
             <div className="rounded-2xl border border-(--border) bg-(--surface) p-6 sm:p-8 shadow-xs">
               <div className="mb-6 border-b border-(--border-light) pb-4">
                 <h2 className="text-base font-bold text-(--text-primary)">
-                  {language === 'vi' ? 'Tổng quan thành tích & hoạt động' : 'Workspace Accomplishments & Telemetry'}
+                  {language === 'vi' ? 'Hoạt động gần đây' : 'Recent Activity'}
                 </h2>
                 <p className="text-xs text-(--text-secondary) mt-0.5">
-                  {language === 'vi' ? 'Dữ liệu hoạt động cá nhân được tổng hợp tự động.' : 'Personal activity metrics aggregated automatically.'}
+                  {language === 'vi'
+                    ? 'Các dự án, bộ sưu tập, nguồn tài liệu và phần bạn đã tương tác gần đây.'
+                    : 'Projects, collections, sources and sections you have interacted with recently.'}
                 </p>
               </div>
 
-              {telemetryLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                  <div className="h-28 bg-(--surface-secondary) rounded-xl animate-pulse" />
-                  <div className="h-28 bg-(--surface-secondary) rounded-xl animate-pulse" />
-                </div>
-              ) : telemetryError ? (
-                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold mb-6">
-                  {telemetryError}
-                </div>
-              ) : user.role === 'INSTRUCTOR' ? (
-                /* Purged 2-Card Layout for INSTRUCTOR */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                  {/* Card 1: Guided Projects */}
-                  <div className="p-5 rounded-2xl bg-(--surface-secondary) border border-(--border) flex flex-col justify-between">
-                    <div>
-                      <span className="text-[11px] font-bold text-(--text-tertiary) uppercase tracking-wider">
-                        {language === 'vi' ? 'Đồ án hướng dẫn' : 'Guided Projects'}
-                      </span>
-                      <p className="text-3xl font-black text-(--brand-foreground) mt-2">
-                        {telemetry?.metrics?.guidedProjectsCount ?? 0}
-                      </p>
-                    </div>
-                    <p className="text-[11px] text-(--text-tertiary) mt-3">
-                      {language === 'vi' ? 'Tổng số đồ án bạn đang tham gia cố vấn' : 'Active student workspaces under your supervision'}
-                    </p>
-                  </div>
+              <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                <input
+                  type="search"
+                  value={activityQuery}
+                  onChange={(e) => {
+                    setActivityQuery(e.target.value);
+                    setActivityPage(1);
+                  }}
+                  placeholder={language === 'vi' ? 'Tìm kiếm hoạt động...' : 'Search activity...'}
+                  aria-label={language === 'vi' ? 'Tìm kiếm hoạt động' : 'Search activity'}
+                  className="w-full sm:flex-1 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus)"
+                />
+                <select
+                  value={activitySort}
+                  onChange={(e) => {
+                    setActivitySort(e.target.value);
+                    setActivityPage(1);
+                  }}
+                  aria-label={language === 'vi' ? 'Sắp xếp' : 'Sort'}
+                  className="w-full sm:w-40 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus)"
+                >
+                  <option value="latest">{language === 'vi' ? 'Mới nhất' : 'Latest'}</option>
+                  <option value="oldest">{language === 'vi' ? 'Cũ nhất' : 'Oldest'}</option>
+                </select>
+              </div>
 
-                  {/* Card 2: Pending Feedback Requests (Bottleneck Metric) */}
-                  <div className={`p-5 rounded-2xl border flex flex-col justify-between ${
-                    (telemetry?.metrics?.pendingFeedbackRequests ?? 0) > 0
-                      ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900'
-                      : 'bg-(--surface-secondary) border-(--border)'
-                  }`}>
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-(--text-tertiary) uppercase tracking-wider">
-                          {language === 'vi' ? 'Yêu cầu phản hồi chờ duyệt' : 'Pending Feedback Requests'}
-                        </span>
-                        {(telemetry?.metrics?.pendingFeedbackRequests ?? 0) > 0 && (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500 text-white animate-pulse">
-                            Action Needed
-                          </span>
-                        )}
-                      </div>
-                      <p className={`text-3xl font-black mt-2 ${
-                        (telemetry?.metrics?.pendingFeedbackRequests ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-(--brand-foreground)'
-                      }`}>
-                        {telemetry?.metrics?.pendingFeedbackRequests ?? 0}
-                      </p>
-                    </div>
-                    <p className="text-[11px] text-(--text-tertiary) mt-3">
-                      {(telemetry?.metrics?.pendingFeedbackRequests ?? 0) > 0
-                        ? (language === 'vi' ? 'Sinh viên đang chờ bạn đánh giá và phê duyệt' : 'Student requests awaiting your review feedback')
-                        : (language === 'vi' ? 'Tất cả yêu cầu phản hồi đã được giải quyết' : 'All review feedback requests resolved')}
-                    </p>
-                  </div>
+              {activityLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="h-14 bg-(--surface-secondary) rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              ) : activityError ? (
+                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+                  {activityError}
+                </div>
+              ) : activity.length === 0 ? (
+                <div className="p-6 text-center text-xs text-(--text-tertiary) italic">
+                  {language === 'vi' ? 'Chưa có hoạt động nào được ghi nhận.' : 'No recent activity recorded yet.'}
+                </div>
+              ) : visibleActivity.length === 0 ? (
+                <div className="p-6 text-center text-xs text-(--text-tertiary) italic">
+                  {language === 'vi' ? 'Không tìm thấy hoạt động phù hợp.' : 'No matching activity found.'}
                 </div>
               ) : (
-                /* Purged 2-Card Layout for STUDENT */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                  {/* Card 1: Active Projects */}
-                  <div className="p-5 rounded-2xl bg-(--surface-secondary) border border-(--border) flex flex-col justify-between">
-                    <div>
-                      <span className="text-[11px] font-bold text-(--text-tertiary) uppercase tracking-wider">
-                        {language === 'vi' ? 'Đồ án tham gia' : 'Active Projects'}
+                <>
+                  <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                    {pagedActivity
+                      .map((item) => (
+                        <ActivityLogItem
+                          key={`${item.type}-${item.entityId || item.title}-${item.occurredAt}`}
+                          item={item}
+                          role={user?.role ?? role}
+                          language={language}
+                        />
+                      ))
+                      .filter(Boolean)}
+                  </div>
+                  {totalActivityPages > 1 && (
+                    <div className="mt-4 flex items-center justify-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        disabled={safeActivityPage <= 1}
+                        onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
+                        className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        {language === 'vi' ? 'Trước' : 'Prev'}
+                      </button>
+                      <span className="px-3 py-1.5 font-mono font-bold text-(--text-secondary)">
+                        {safeActivityPage} / {totalActivityPages}
                       </span>
-                      <p className="text-3xl font-black text-(--brand-foreground) mt-2">
-                        {telemetry?.metrics?.activeProjectsCount ?? 0}
-                      </p>
+                      <button
+                        type="button"
+                        disabled={safeActivityPage >= totalActivityPages}
+                        onClick={() => setActivityPage((p) => Math.min(totalActivityPages, p + 1))}
+                        className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        {language === 'vi' ? 'Sau' : 'Next'}
+                      </button>
                     </div>
-                    <p className="text-[11px] text-(--text-tertiary) mt-3">
-                      {language === 'vi' ? 'Số đồ án bạn đang là thành viên thực hiện' : 'Workspaces you are currently contributing to'}
-                    </p>
-                  </div>
-
-                  {/* Card 2: Pending Revision Traces (Bottleneck Metric) */}
-                  <div className={`p-5 rounded-2xl border flex flex-col justify-between ${
-                    (telemetry?.metrics?.pendingRevisionTraces ?? 0) > 0
-                      ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900'
-                      : 'bg-(--surface-secondary) border-(--border)'
-                  }`}>
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-(--text-tertiary) uppercase tracking-wider">
-                          {language === 'vi' ? 'Vết sửa đổi chờ xử lý' : 'Pending Revision Traces'}
-                        </span>
-                        {(telemetry?.metrics?.pendingRevisionTraces ?? 0) > 0 && (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500 text-white animate-pulse">
-                            Pending Trace
-                          </span>
-                        )}
-                      </div>
-                      <p className={`text-3xl font-black mt-2 ${
-                        (telemetry?.metrics?.pendingRevisionTraces ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-(--brand-foreground)'
-                      }`}>
-                        {telemetry?.metrics?.pendingRevisionTraces ?? 0}
-                      </p>
-                    </div>
-                    <p className="text-[11px] text-(--text-tertiary) mt-3">
-                      {(telemetry?.metrics?.pendingRevisionTraces ?? 0) > 0
-                        ? (language === 'vi' ? 'Có chỉnh sửa dẫn chứng đang chờ bạn rà soát lại' : 'Evidence revisions awaiting resolution')
-                        : (language === 'vi' ? 'Không có vết sửa đổi nào đang chờ' : 'All revision traces up to date')}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Recent Milestone Log */}
-              <div className="border-t border-(--border-light) pt-6">
-                <h3 className="text-xs font-black uppercase tracking-wider text-(--text-tertiary) mb-4">
-                  {language === 'vi' ? 'Mốc hoạt động gần đây' : 'Recent Milestones'}
-                </h3>
-                <div className="space-y-3">
-                  {telemetry?.milestones && telemetry.milestones.length > 0 ? (
-                    telemetry.milestones.map((m, idx) => (
-                      <div key={idx} className="p-3 rounded-xl border border-(--border-light) bg-(--surface-secondary)/50 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold text-(--text-primary)">{m.title || m.name}</p>
-                            <p className="text-[10px] text-(--text-tertiary)">{m.description || m.timestamp}</p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-mono text-(--text-tertiary)">{m.status || 'Done'}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <>
-                      <div className="p-3 rounded-xl border border-(--border-light) bg-(--surface-secondary)/50 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold text-(--text-primary)">
-                              {language === 'vi' ? 'Xác thực tài khoản thành công' : 'Account Identity Verified'}
-                            </p>
-                            <p className="text-[10px] text-(--text-tertiary)">{user.email}</p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-mono text-emerald-600 font-bold">Active</span>
-                      </div>
-                      <div className="p-3 rounded-xl border border-(--border-light) bg-(--surface-secondary)/50 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold text-(--text-primary)">
-                              {language === 'vi' ? 'Phiên làm việc bảo mật' : 'Secure Session Active'}
-                            </p>
-                            <p className="text-[10px] text-(--text-tertiary)">Role: {roleLabel}</p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-mono text-emerald-600 font-bold">Online</span>
-                      </div>
-                    </>
                   )}
-                </div>
-              </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -707,6 +961,58 @@ export default function Profile() {
               className="px-4 py-2 rounded-xl bg-(--brand) text-(--on-brand) font-bold text-xs hover:bg-(--brand-hover) transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
             >
               {passwordSubmitting ? (ct.saving || 'Saving...') : (language === 'vi' ? 'Xác nhận đổi mật khẩu' : 'Confirm Password Update')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* OTP Email Verification Modal */}
+      <Modal
+        open={otpModalOpen}
+        onClose={otpVerifying ? () => {} : closeOtpModal}
+        title={language === 'vi' ? 'Xác thực email mới' : 'Verify Your New Email'}
+        closeLabel={language === 'vi' ? 'Đóng' : 'Close'}
+      >
+        <div className="space-y-4 text-xs">
+          <p className="text-(--text-secondary) leading-relaxed">
+            {language === 'vi'
+              ? <>Chúng tôi đã gửi mã 6 số tới <strong className="text-(--text-primary)">{email}</strong>. Nhập mã vào ô bên dưới để xác thực địa chỉ email mới.</>
+              : <>We sent a 6-digit code to <strong className="text-(--text-primary)">{email}</strong>. Enter the code below to verify your new address.</>}
+          </p>
+
+          <div className="flex justify-center">
+            <OtpInput
+              ref={otpFieldRef}
+              length={6}
+              autoFocus
+              status={otpError ? 'error' : 'idle'}
+              hint={otpError ? '' : (language === 'vi' ? 'Mã gồm 6 chữ số.' : 'A 6-digit numeric code.')}
+              errorMessage={otpError}
+              onComplete={handleVerifyOtp}
+              disabled={otpVerifying}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-(--border-light)">
+            <button
+              type="button"
+              onClick={() => handleRequestOtp()}
+              disabled={otpCountdown > 0 || otpRequesting}
+              className="text-xs font-bold text-(--brand) hover:underline disabled:text-(--text-tertiary) disabled:no-underline cursor-pointer disabled:cursor-not-allowed"
+            >
+              {otpRequesting
+                ? (language === 'vi' ? 'Đang gửi...' : 'Sending...')
+                : otpCountdown > 0
+                  ? (language === 'vi' ? `Gửi lại sau ${otpCountdown}s` : `Resend in ${otpCountdown}s`)
+                  : (language === 'vi' ? 'Gửi lại mã' : 'Resend code')}
+            </button>
+            <button
+              type="button"
+              onClick={() => otpFieldRef.current?.focus()}
+              disabled={otpVerifying}
+              className="px-5 py-2 rounded-xl bg-(--brand) text-(--on-brand) font-bold text-xs hover:bg-(--brand-hover) transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+            >
+              {otpVerifying ? (ct.saving || '...') : (language === 'vi' ? 'Tập trung' : 'Focus')}
             </button>
           </div>
         </div>

@@ -190,7 +190,7 @@ class ProjectRouteMappingTest {
                 "POST /api/users/email-change/request",
                 "POST /api/users/email-change/confirm",
                 "DELETE /api/users/email-change/cancel",
-                "GET /api/users/me/telemetry"));
+                "GET /api/users/me/activity"));
         assertThat(routes).hasSize(140);
     }
 

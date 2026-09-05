@@ -6,11 +6,15 @@ import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.UserRepository;
+import com.evidencepilot.service.EmailOtpService;
 import com.evidencepilot.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -18,6 +22,7 @@ import java.util.UUID;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
+    private final EmailOtpService emailOtpService;
 
     @Override
     public UserResponse findUserById(UUID id) {
@@ -27,7 +32,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public UserResponse updateUserProfile(UUID userId, UserProfileUpdateRequest request) {
+    public UserResponse updateUserProfile(UUID userId, UserProfileUpdateRequest request, String emailClaimToken) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException(userId, "User"));
         if (request.getFirstName() != null) {
@@ -35,6 +40,21 @@ public class UserServiceImpl implements UserService {
         }
         if (request.getLastName() != null) {
             user.setLastName(request.getLastName());
+        }
+        if (request.getEmail() != null && !request.getEmail().isBlank()) {
+            String normalized = request.getEmail().trim().toLowerCase(Locale.ROOT);
+            if (!normalized.equalsIgnoreCase(user.getEmail())) {
+                if (userRepository.existsByEmailIgnoreCase(normalized)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Email address is already in use by another account");
+                }
+                if (emailClaimToken == null || emailClaimToken.isBlank()
+                        || !emailOtpService.consumeClaim(userId, normalized, emailClaimToken)) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "Email change requires a valid verification claim. Verify your new email first.");
+                }
+                user.setEmail(normalized);
+                user.setTokenVersion(user.getTokenVersion() + 1);
+            }
         }
         return UserResponse.from(userRepository.save(user));
     }

@@ -10,6 +10,7 @@ import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.UserRole;
+import com.evidencepilot.repository.AuditLogRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
@@ -62,6 +63,9 @@ class DocumentControllerTest {
 
     @Autowired
     private ProjectMemberRepository projectMemberRepository;
+
+    @Autowired
+    private AuditLogRepository auditLogRepository;
 
     @Autowired
     private JwtUtils jwtUtils;
@@ -120,6 +124,7 @@ class DocumentControllerTest {
 
     @AfterEach
     void cleanUp() {
+        auditLogRepository.deleteAll();
         documentRepository.deleteAll();
         projectMemberRepository.deleteAll();
         projectRepository.deleteAll();
