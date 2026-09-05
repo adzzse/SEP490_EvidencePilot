@@ -79,8 +79,15 @@ public class GlobalExceptionHandler {
             HttpServletRequest request) {
 
         HttpStatus status = HttpStatus.resolve(exception.getStatusCode());
-        return build(status == null ? HttpStatus.SERVICE_UNAVAILABLE : status,
-                exception.getMessage(), request);
+        ResponseEntity<ApiErrorResponse> response = build(
+                status == null ? HttpStatus.SERVICE_UNAVAILABLE : status,
+                exception.getMessage(), request,
+                exception.getCode() == null ? null : Map.of("code", exception.getCode()));
+        if (exception.getRetryAfterMillis() == null) return response;
+        long retryMillis = exception.getRetryAfterMillis();
+        return ResponseEntity.status(response.getStatusCode())
+                .header("Retry-After", String.valueOf(retryMillis / 1000 + (retryMillis % 1000 == 0 ? 0 : 1)))
+                .body(response.getBody());
     }
 
     @ExceptionHandler(OpenAlexClient.OpenAlexApiException.class)

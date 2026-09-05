@@ -2,6 +2,9 @@ package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.request.SectionStandardEvaluateRequest;
 import com.evidencepilot.dto.response.SectionStandardEvaluationResponse;
+import com.evidencepilot.dto.response.JobSubmitResponse;
+import com.evidencepilot.service.AiEvaluationService;
+import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.SectionStandardService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +19,18 @@ import java.util.UUID;
 public class SectionStandardController {
 
     private final SectionStandardService sectionStandardService;
+    private final AiEvaluationService aiEvaluationService;
+    private final CurrentUserService currentUserService;
+
+    @PostMapping("/jobs")
+    public ResponseEntity<JobSubmitResponse> submitEvaluation(
+            @PathVariable UUID documentId, @PathVariable UUID sectionId) {
+        var actor = currentUserService.requireCurrentUser();
+        var section = sectionStandardService.requireEvaluationAccess(documentId, sectionId, actor);
+        return ResponseEntity.accepted().body(aiEvaluationService.submitSectionSelfCheck(
+                section.getDocument().getProject().getId(), documentId, sectionId,
+                sectionStandardService.inputFingerprint(section), actor.getId()));
+    }
 
     @PostMapping
     public ResponseEntity<SectionStandardEvaluationResponse> evaluate(

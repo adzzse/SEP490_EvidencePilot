@@ -63,13 +63,28 @@ public class AiClientConfig {
         return buildRestClient(readTimeoutSeconds);
     }
 
-    @Bean("aiReviewRestClient")
-    public RestClient aiReviewRestClient() {
-        return buildRestClient(readTimeoutSeconds);
+    @Bean("aiGenerationClient")
+    public okhttp3.OkHttpClient aiGenerationClient() {
+        return new okhttp3.OkHttpClient.Builder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .readTimeout(Duration.ZERO)
+                .writeTimeout(Duration.ZERO)
+                .callTimeout(Duration.ofSeconds(300))
+                .retryOnConnectionFailure(false)
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .build();
     }
 
     private RestClient buildRestClient(long timeoutSeconds) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory() {
+            @Override
+            protected void prepareConnection(java.net.HttpURLConnection connection, String method)
+                    throws java.io.IOException {
+                super.prepareConnection(connection, method);
+                if ("/health".equals(connection.getURL().getPath())) connection.setReadTimeout(5_000);
+            }
+        };
         requestFactory.setConnectTimeout(Duration.ofSeconds(5));
         requestFactory.setReadTimeout(Duration.ofSeconds(Math.max(1, timeoutSeconds)));
 

@@ -3,8 +3,13 @@ package com.evidencepilot.service.impl;
 import com.evidencepilot.client.ai.gate.AiModelCallGate;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.ExtractionBundle;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,11 +26,16 @@ import java.io.OutputStream;
 import java.net.SocketTimeoutException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 
 @Slf4j
 @Component
@@ -52,9 +62,16 @@ public class AiModelClientImpl implements AiModelClient {
     // Some provider throttle windows are minute-scale; a shorter 429 backoff can
     // retry inside the same window and fail every time.
     private static final long RATE_LIMIT_FLOOR_MS = 60_000;
+    private static final String GENERATION_ENDPOINT = "/ai/generate";
+    private static final Set<String> GENERATION_ERROR_CODES = Set.of(
+            "INVALID_GENERATION_REQUEST", "GENERATION_CONFIGURATION_ERROR", "GENERATION_UNAVAILABLE",
+            "GENERATION_DEADLINE_EXCEEDED", "GENERATION_RATE_LIMITED", "GENERATION_QUOTA_EXCEEDED",
+            "GENERATION_REQUEST_REJECTED", "GENERATION_REFUSED", "INVALID_GENERATION_RESPONSE",
+            "GENERATION_INCOMPLETE");
 
     private final RestClient restClient;
-    private final RestClient reviewRestClient;
+    private final OkHttpClient generationClient;
+    private final String apiKey;
     private final String baseUrl;
     private final ObjectMapper objectMapper;
     private final int maxRetries;
@@ -62,13 +79,15 @@ public class AiModelClientImpl implements AiModelClient {
 
     @Autowired
     public AiModelClientImpl(@Qualifier("aiRestClient") RestClient restClient,
-            @Qualifier("aiReviewRestClient") RestClient reviewRestClient,
+            @Qualifier("aiGenerationClient") OkHttpClient generationClient,
             @Qualifier("aiModelBaseUrl") String baseUrl,
             ObjectMapper objectMapper,
             @Value("${ai.model.max-retries:3}") int maxRetries,
-            AiModelCallGate aiModelCallGate) {
+            AiModelCallGate aiModelCallGate,
+            @Value("${ai.model.api-key:}") String apiKey) {
         this.restClient = restClient;
-        this.reviewRestClient = reviewRestClient;
+        this.generationClient = generationClient;
+        this.apiKey = apiKey;
         this.baseUrl = baseUrl == null || baseUrl.isBlank() ? "" : trimTrailingSlash(baseUrl);
         this.objectMapper = objectMapper;
         this.maxRetries = Math.max(0, maxRetries);
@@ -86,64 +105,185 @@ public class AiModelClientImpl implements AiModelClient {
 
     @Override
     public GenerationResult generate(String system, String prompt) {
-        return generate(restClient, maxRetries, system, prompt);
+        return generateValidated(system, prompt, null, Function.identity());
     }
 
     @Override
     public GenerationResult generateForReview(String system, String prompt) {
-        return generate(reviewRestClient, 1, system, prompt);
+        return generate(system, prompt);
     }
 
     @Override
     public GenerationResult generateStrict(String system, String prompt, Map<String, Object> jsonSchema) {
+        return generateValidated(system, prompt, jsonSchema, Function.identity());
+    }
+
+    @Override
+    public <T> T generateValidated(String system, String prompt, Map<String, Object> jsonSchema,
+            Function<GenerationResult, T> validator) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(300);
+        if (baseUrl.isBlank()) {
+            throw generationFailure(503, "GENERATION_CONFIGURATION_ERROR", null);
+        }
+        aiModelCallGate.checkCircuit(GENERATION_ENDPOINT);
+        return aiModelCallGate.execute(GENERATION_ENDPOINT, deadline, () -> {
+            try {
+                T result = generate(system, prompt, jsonSchema, validator, deadline);
+                aiModelCallGate.recordFinalOutcome(GENERATION_ENDPOINT, false);
+                return result;
+            } catch (RuntimeException exception) {
+                aiModelCallGate.recordFinalOutcome(GENERATION_ENDPOINT,
+                        !(exception instanceof AiApiException api) || api.getStatusCode() >= 500);
+                throw exception;
+            }
+        });
+    }
+
+    private <T> T generate(String system, String prompt, Map<String, Object> jsonSchema,
+            Function<GenerationResult, T> validator, long deadline) {
         Map<String, Object> body = new java.util.LinkedHashMap<>();
         body.put("system", system == null ? "" : system);
         body.put("prompt", prompt);
         if (jsonSchema != null && !jsonSchema.isEmpty()) {
             body.put("response_format", Map.of(
                     "type", "json_schema",
-                    "json_schema", Map.of("name", "section_standard", "strict", true, "schema", jsonSchema)));
+                    "json_schema", Map.of("name", "generation_result", "strict", true, "schema", jsonSchema)));
         }
-        return generate(restClient, maxRetries, body);
+        int modelIndex = 0;
+        int attempt = 1;
+        while (true) {
+            body.put("model_index", modelIndex);
+            body.put("attempt", attempt);
+            // Reserve transport and final validation time inside the same batch deadline.
+            long budgetMillis = remainingMillis(deadline) - 1_000;
+            if (budgetMillis <= 0) throw generationFailure(503, "GENERATION_DEADLINE_EXCEEDED", null);
+            body.put("budget_ms", budgetMillis);
+            GenerationResult generation = requestGeneration(body, deadline);
+            if (generation.modelIndex() < modelIndex
+                    || generation.modelIndex() == modelIndex && generation.attempt() < attempt) {
+                throw generationFailure(502, "INVALID_GENERATION_RESPONSE", null);
+            }
+            remainingMillis(deadline);
+            T result;
+            try {
+                result = validator.apply(generation);
+            } catch (IllegalArgumentException invalid) {
+                if (generation.attempt() == 1) {
+                    modelIndex = generation.modelIndex();
+                    attempt = 2;
+                } else if (generation.nextModelIndex() != null) {
+                    modelIndex = generation.nextModelIndex();
+                    attempt = 1;
+                } else {
+                    throw generationFailure(502, "INVALID_GENERATION_RESPONSE", null);
+                }
+                // Never send raw model output or exception text back as instructions.
+                body.put("validation_feedback", "BUSINESS_VALIDATION_FAILED: obey the output contract, "
+                        + "return every required ID exactly once, and use only exact quotes from the supplied text.");
+                continue;
+            }
+            remainingMillis(deadline);
+            return result;
+        }
     }
 
-    private GenerationResult generate(RestClient client, int retryLimit, Map<String, Object> body) {
-        Map<String, Object> response = call("/ai/generate", retryLimit, () -> client.post()
-                .uri(baseUrl + "/ai/generate")
-                .body(body)
-                .retrieve()
-                .body(Map.class));
-        if (response == null
-                || !hasText(response.get("provider"))
-                || !hasText(response.get("model"))
-                || !hasText(response.get("response"))) {
-            throw new AiApiException("/ai/generate", "returned null or empty response", null);
+    private GenerationResult requestGeneration(Map<String, Object> body, long deadline) {
+        Request request;
+        try {
+            byte[] payload = objectMapper.writeValueAsBytes(body);
+            Request.Builder builder = new Request.Builder().url(baseUrl + GENERATION_ENDPOINT)
+                    .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                    .header("ngrok-skip-browser-warning", "true")
+                    .post(new RequestBody() {
+                        @Override public okhttp3.MediaType contentType() {
+                            return okhttp3.MediaType.get(MediaType.APPLICATION_JSON_VALUE);
+                        }
+                        @Override public long contentLength() { return payload.length; }
+                        // Also prevents implicit 408/503 retries after the body was sent.
+                        @Override public boolean isOneShot() { return true; }
+                        @Override public void writeTo(okio.BufferedSink sink) throws IOException { sink.write(payload); }
+                    });
+            if (apiKey != null && !apiKey.isBlank()) builder.header("X-API-Key", apiKey);
+            request = builder.build();
+        } catch (IOException | IllegalArgumentException exception) {
+            throw generationFailure(422, "INVALID_GENERATION_REQUEST", null);
         }
-        return new GenerationResult(
-                String.valueOf(response.get("provider")),
-                String.valueOf(response.get("model")),
-                String.valueOf(response.get("response")));
+        var call = generationClient.newCall(request);
+        call.timeout().timeout(remainingMillis(deadline), TimeUnit.MILLISECONDS);
+        try (Response response = call.execute()) {
+            byte[] responseBody = response.body() == null ? new byte[0] : response.body().bytes();
+            if (!response.isSuccessful()) {
+                String code = "GENERATION_UNAVAILABLE";
+                try {
+                    JsonNode error = objectMapper.readTree(responseBody);
+                    String upstream = error == null ? "" : error.path("code").asText();
+                    if (GENERATION_ERROR_CODES.contains(upstream)) code = upstream;
+                } catch (IOException ignored) {
+                }
+                String retryHeader = response.header("Retry-After");
+                Long retryAfter = retryHeader == null ? null : parseRetryAfter(retryHeader);
+                throw new AiApiException(GENERATION_ENDPOINT, response.code(), code,
+                        code, retryAfter, null);
+            }
+            JsonNode value = objectMapper.readTree(responseBody);
+            if (value == null || !value.isObject() || !value.path("done").isBoolean()
+                    || !value.path("done").booleanValue()
+                    || !jsonText(value.get("provider")) || !jsonText(value.get("model"))
+                    || !jsonText(value.get("response"))
+                    || !index(value.get("model_index"))
+                    || !value.path("attempt").isInt() || value.path("attempt").asInt() < 1
+                    || value.path("attempt").asInt() > 2 || !value.has("next_model_index")) {
+                throw generationFailure(502, "INVALID_GENERATION_RESPONSE", null);
+            }
+            JsonNode next = value.get("next_model_index");
+            if (!next.isNull() && (!index(next) || next.intValue() != value.path("model_index").intValue() + 1)) {
+                throw generationFailure(502, "INVALID_GENERATION_RESPONSE", null);
+            }
+            return new GenerationResult(value.get("provider").textValue(), value.get("model").textValue(),
+                    value.get("response").textValue(), true, value.get("model_index").intValue(),
+                    value.get("attempt").intValue(), next.isNull() ? null : next.intValue());
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw generationFailure(502, "INVALID_GENERATION_RESPONSE", null);
+        } catch (IOException exception) {
+            throw generationFailure(503, System.nanoTime() >= deadline
+                    || call.isCanceled() && exception instanceof java.io.InterruptedIOException
+                    ? "GENERATION_DEADLINE_EXCEEDED" : "GENERATION_UNAVAILABLE", null);
+        } finally {
+            call.cancel();
+        }
     }
 
-    private GenerationResult generate(
-            RestClient client, int retryLimit, String system, String prompt) {
-        Map<String, Object> response = call("/ai/generate", retryLimit, () -> client.post()
-                .uri(baseUrl + "/ai/generate")
-                .body(Map.of(
-                        "system", system == null ? "" : system,
-                        "prompt", prompt))
-                .retrieve()
-                .body(Map.class));
-        if (response == null
-                || !hasText(response.get("provider"))
-                || !hasText(response.get("model"))
-                || !hasText(response.get("response"))) {
-            throw new AiApiException("/ai/generate", "returned null or empty response", null);
+    private static boolean jsonText(JsonNode value) {
+        return value != null && value.isTextual() && !value.textValue().isBlank();
+    }
+
+    private static boolean index(JsonNode value) {
+        return value != null && value.isInt() && value.intValue() >= 0 && value.intValue() <= 2;
+    }
+
+    private static long remainingMillis(long deadline) {
+        long remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
+        if (remaining <= 0) throw generationFailure(503, "GENERATION_DEADLINE_EXCEEDED", null);
+        return remaining;
+    }
+
+    private static AiApiException generationFailure(int status, String code, Throwable cause) {
+        return new AiApiException(GENERATION_ENDPOINT, status, code, code, null, cause);
+    }
+
+    private static Long parseRetryAfter(String value) {
+        try {
+            return Math.multiplyExact(Math.max(0, Long.parseLong(value.strip())), 1_000);
+        } catch (NumberFormatException exception) {
+            try {
+                return Math.max(0, Duration.between(java.time.Instant.now(),
+                        ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant()).toMillis());
+            } catch (DateTimeParseException ignored) {
+                return null;
+            }
+        } catch (ArithmeticException exception) {
+            return null;
         }
-        return new GenerationResult(
-                String.valueOf(response.get("provider")),
-                String.valueOf(response.get("model")),
-                String.valueOf(response.get("response")));
     }
 
     @Override
@@ -390,10 +530,6 @@ public class AiModelClientImpl implements AiModelClient {
             return fallback;
         }
         return String.valueOf(value);
-    }
-
-    private static boolean hasText(Object value) {
-        return value != null && !String.valueOf(value).isBlank();
     }
 
     @FunctionalInterface

@@ -23,6 +23,10 @@ public interface AiEvaluationService {
             UUID sectionId,
             String sectionType);
 
+    JobSubmitResponse submitSectionSelfCheck(
+            UUID projectId, UUID documentId, UUID sectionId,
+            String inputFingerprint, UUID requestedByUserId);
+
     JobSubmitResponse submitSourceMatches(
             UUID projectId,
             UUID documentId,

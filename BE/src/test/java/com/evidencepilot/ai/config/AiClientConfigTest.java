@@ -29,7 +29,7 @@ class AiClientConfigTest {
     }
 
     @Test
-    void appliesConfiguredReadTimeoutToReviewCalls() {
+    void keepsLocalReadTimeoutSeparateFromGenerationTransport() {
         contextRunner
                 .withPropertyValues(
                         "ai.model.base-url=http://ai.test",
@@ -37,10 +37,14 @@ class AiClientConfigTest {
                         "ai.model.read-timeout-seconds=7")
                 .run(context -> {
                     RestClient normal = context.getBean("aiRestClient", RestClient.class);
-                    RestClient review = context.getBean("aiReviewRestClient", RestClient.class);
+                    okhttp3.OkHttpClient generation = context.getBean("aiGenerationClient", okhttp3.OkHttpClient.class);
 
                     assertThat(readTimeout(normal)).isEqualTo(7_000);
-                    assertThat(readTimeout(review)).isEqualTo(7_000);
+                    assertThat(generation.connectTimeoutMillis()).isEqualTo(5_000);
+                    assertThat(generation.callTimeoutMillis()).isEqualTo(300_000);
+                    assertThat(generation.retryOnConnectionFailure()).isFalse();
+                    assertThat(generation.followRedirects()).isFalse();
+                    assertThat(context.containsBean("aiReviewRestClient")).isFalse();
                 });
     }
 

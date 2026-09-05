@@ -526,7 +526,9 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         }
         if (!Objects.equals(previousAssigneeId, assignedUserId)) clearHandoff(section);
         section.setUpdatedAt(LocalDateTime.now());
-        PaperSectionResponse response = PaperSectionResponse.from(paperSectionRepository.save(section));
+        PaperSection saved = paperSectionRepository.save(section);
+        paperSectionRepository.flush();
+        PaperSectionResponse response = PaperSectionResponse.from(saved);
         if (assignedUserId != null) {
             Project project = document.getProject();
             if (project.getStatus() == ProjectStatus.CREATED) {

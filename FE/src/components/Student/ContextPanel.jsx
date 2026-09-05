@@ -119,7 +119,7 @@ export default function ContextPanel({
   // Source tab
   sources, isUploading, setIsUploading, project, setViewerFile, fetchSources,
   // Requirements tab
-  selectedPaper, selectedSection, isAssignedSection, isSectionDirty, onHandoffChanged,
+  selectedPaper, selectedSection, isAssignedSection, isSectionDirty, onHandoffChanged, pollAiJob,
   // Feedback tab
   feedbacks, assignedSections, setShowSubmitReviewModal, userProjectRole,
   isLocked,
@@ -411,6 +411,7 @@ export default function ContextPanel({
               isLocked={isLocked}
               isDirty={isSectionDirty}
               onHandoffChanged={onHandoffChanged}
+              pollAiJob={pollAiJob}
               showToast={showToast}
             />
           )}

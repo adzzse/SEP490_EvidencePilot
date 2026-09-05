@@ -10,12 +10,16 @@ import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.AiEvaluationJob;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.ReviewGuide;
+import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.prompt.SectionSuggestionPrompt;
 import com.evidencepilot.repository.AiEvaluationJobRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ReviewGuideRepository;
+import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiEvaluationService;
 import com.evidencepilot.service.AiModelClient;
+import com.evidencepilot.service.SectionStandardService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,6 +62,8 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
     private final EvidenceTraceService evidenceTraceService;
+    private final SectionStandardService sectionStandardService;
+    private final UserRepository userRepository;
 
     @Override
     public JobSubmitResponse submit(UUID projectId, String kind, String payloadJson) {
@@ -121,6 +127,22 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
     }
 
     @Override
+    public JobSubmitResponse submitSectionSelfCheck(
+            UUID projectId, UUID documentId, UUID sectionId,
+            String inputFingerprint, UUID requestedByUserId) {
+        try {
+            String payload = objectMapper.writeValueAsString(Map.of(
+                    "documentId", documentId,
+                    "sectionId", sectionId,
+                    "inputFingerprint", inputFingerprint,
+                    "requestedByUserId", requestedByUserId));
+            return submit(projectId, AiEvaluationJob.KIND_SECTION_SELF_CHECK, payload);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException("Could not serialize section self-check job", exception);
+        }
+    }
+
+    @Override
     public JobSubmitResponse submitSourceMatches(
             UUID projectId,
             UUID documentId,
@@ -157,20 +179,13 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
             job.setStatus(AiEvaluationJob.STATUS_FAILED);
         }
         job.setCompletedAt(LocalDateTime.now());
-        jobRepository.save(job);
+        jobRepository.finishProcessing(job.getId(), job.getStatus(), job.getResultJson(),
+                job.getErrorMessage(), job.getCompletedAt());
     }
 
     @Override
     public void markFailed(UUID jobId, String error) {
-        AiEvaluationJob job = jobRepository.findById(jobId).orElse(null);
-        if (job == null) {
-            log.warn("AI evaluation job {} not found for DLQ, skipping", jobId);
-            return;
-        }
-        job.setErrorMessage(error);
-        job.setStatus(AiEvaluationJob.STATUS_FAILED);
-        job.setCompletedAt(LocalDateTime.now());
-        jobRepository.save(job);
+        jobRepository.failActive(jobId, error, LocalDateTime.now());
     }
 
     @Override
@@ -208,6 +223,18 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
     private JsonNode run(AiEvaluationJob job) throws Exception {
         JsonNode payload = objectMapper.readTree(job.getPayloadJson());
         return switch (job.getKind()) {
+            case AiEvaluationJob.KIND_SECTION_SELF_CHECK -> {
+                UUID documentId = UUID.fromString(payload.path("documentId").asText());
+                UUID sectionId = UUID.fromString(payload.path("sectionId").asText());
+                UUID requestedByUserId = UUID.fromString(payload.path("requestedByUserId").asText());
+                User actor = userRepository.findById(requestedByUserId)
+                        .filter(user -> user.getAccountStatus() == AccountStatus.ACTIVE)
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "SELF_CHECK_ACTOR_UNAVAILABLE"));
+                String fingerprint = payload.path("inputFingerprint").asText();
+                if (fingerprint.isBlank()) throw new IllegalArgumentException("Self-check input fingerprint is required");
+                yield objectMapper.valueToTree(sectionStandardService.evaluate(
+                        documentId, sectionId, job.getProjectId(), actor, fingerprint));
+            }
             case AiEvaluationJob.KIND_SECTION_CITATION_REVIEW -> {
                 UUID documentId = UUID.fromString(payload.path("documentId").asText());
                 UUID projectId = UUID.fromString(payload.path("projectId").asText());
@@ -224,7 +251,17 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
                         sectionId,
                         reviewInputFingerprint(payload),
                         requestedByUserId,
-                        (current, total) -> updateProgress(job, current, total));
+                        (current, total) -> updateProgress(job, current, total),
+                        checkpoint -> {
+                            try {
+                                if (jobRepository.saveCheckpoint(job.getId(),
+                                        objectMapper.writeValueAsString(checkpoint)) != 1) {
+                                    throw new IllegalStateException("AI_JOB_NO_LONGER_PROCESSING");
+                                }
+                            } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+                                throw new IllegalStateException("Could not save review checkpoint", exception);
+                            }
+                        });
                 EvidenceTraceService.RoundMaterialization materialization =
                         evidenceTraceService.materialize(
                                 documentId, sectionId, requestedByUserId, review);
@@ -276,14 +313,12 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
     }
 
     private void updateProgress(AiEvaluationJob job, int current, int total) {
+        if (current <= job.getProgressCurrent() && total <= job.getProgressTotal()) return;
+        if (jobRepository.updateProgress(job.getId(), current, total, LocalDateTime.now()) != 1) {
+            throw new IllegalStateException("AI_JOB_NO_LONGER_PROCESSING");
+        }
         job.setProgressCurrent(current);
         job.setProgressTotal(total);
-        try {
-            jobRepository.updateProgress(job.getId(), current, total);
-        } catch (RuntimeException exception) {
-            log.warn("Could not update progress for AI evaluation job {}: {}",
-                    job.getId(), exception.getMessage());
-        }
     }
 
     private void submitTraceRecheck(
@@ -328,31 +363,19 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
                 sectionCitationReviewService.retrieveEvidence(projectId, section.getContentTex());
         log.info("Section suggestion job for section {} (type '{}') matched guide '{}' with {} checklist items",
                 section.getId(), sectionType, guide.getSectionType(), checklist.size());
-        AiModelClient.GenerationResult generation = null;
-        try {
-            generation = aiModelClient.generate(
-                    SectionSuggestionPrompt.SYSTEM,
-                    SectionSuggestionPrompt.build(
-                            guide.getSectionType(), checklist, section.getContentTex(), evidence));
-            JsonNode root = parseSuggestionItems(generation.response());
-            validateSuggestions(root, section.getContentTex(), evidence);
-            List<SectionSuggestionDto> suggestions = objectMapper.convertValue(
-                    root, new TypeReference<>() {
-                    });
-            log.info("Section suggestion LLM output for section {}: {}",
-                    section.getId(), truncate(generation.response()));
-            return objectMapper.valueToTree(suggestions);
-        } catch (AiModelClient.AiApiException exception) {
-            // Upstream model service failed (429/502/503/504 after retries): preserve the
-            // real status so the client sees the actual failure instead of a generic 502.
-            throw exception;
-        } catch (Exception exception) {
-            log.warn("Section suggestion for section {} in project {} produced invalid AI output ({}): {}",
-                    section.getId(), projectId, exception.getMessage(),
-                    generation != null ? generation.response() : "no response");
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY, "AI returned invalid section suggestions", exception);
-        }
+        return aiModelClient.generateValidated(SectionSuggestionPrompt.SYSTEM,
+                SectionSuggestionPrompt.build(
+                        guide.getSectionType(), checklist, section.getContentTex(), evidence), null, generation -> {
+                    try {
+                        JsonNode root = parseSuggestionItems(generation.response());
+                        validateSuggestions(root, section.getContentTex(), evidence);
+                        List<SectionSuggestionDto> suggestions = objectMapper.convertValue(
+                                root, new TypeReference<>() {});
+                        return objectMapper.valueToTree(suggestions);
+                    } catch (Exception exception) {
+                        throw new IllegalArgumentException("Invalid section suggestions", exception);
+                    }
+                });
     }
 
     private void validateSuggestions(
@@ -436,13 +459,6 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
             throw new IllegalArgumentException(
                     "Suggestion evidence quote is not verbatim from its chunk");
         }
-    }
-
-    private static String truncate(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.length() > 2_000 ? value.substring(0, 2_000) + "..." : value;
     }
 
     private List<String> parseChecklist(String checklistJson) {

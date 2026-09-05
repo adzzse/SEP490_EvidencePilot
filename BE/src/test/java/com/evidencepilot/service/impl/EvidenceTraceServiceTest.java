@@ -63,6 +63,19 @@ class EvidenceTraceServiceTest {
 
     @BeforeEach
     void setUp() {
+        // The client tests cover continuation; these tests exercise the supplied domain validator.
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
+            AiModelClient.GenerationResult generated = aiModelClient.generateForReview(invocation.getArgument(0), invocation.getArgument(1));
+            java.util.function.Function<AiModelClient.GenerationResult, ?> validator = invocation.getArgument(3);
+            try {
+                return validator.apply(generated);
+            } catch (IllegalArgumentException invalid) {
+                throw new AiModelClient.AiApiException("/ai/generate", 502,
+                        "INVALID_GENERATION_RESPONSE", "INVALID_GENERATION_RESPONSE", null, null);
+            }
+        }).when(aiModelClient).generateValidated(anyString(), anyString(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
         service = new EvidenceTraceService(
                 roundRepository,
                 traceRepository,
@@ -383,6 +396,34 @@ class EvidenceTraceServiceTest {
         assertThat(fixture.trace.getInstructorFeedback()).isEqualTo("Keep this human review");
         assertThat(fixture.trace.getOutcome()).isEqualTo(TraceOutcome.PARTIALLY_RESOLVED);
         verify(traceRepository, never()).saveAll(List.of(fixture.trace));
+    }
+
+    @Test
+    void recheck_rejectsUnknownLastTraceBeforeMutatingTheFirst() {
+        Fixture fixture = fixture();
+        CitationReviewRound linkedRound = linkedRound(fixture);
+        fixture.trace.setStudentAction(StudentAction.QUALIFY);
+        fixture.trace.setAfterPassage("The revised claim.");
+        EvidenceRevisionTrace second = new EvidenceRevisionTrace();
+        second.setId(UUID.randomUUID());
+        second.setStudentAction(StudentAction.QUALIFY);
+        second.setAfterPassage("Another revised claim.");
+        when(roundRepository.findById(fixture.round.getId())).thenReturn(Optional.of(fixture.round));
+        when(roundRepository.findById(linkedRound.getId())).thenReturn(Optional.of(linkedRound));
+        when(traceRepository.findByRoundIdOrderByFindingIndex(fixture.round.getId()))
+                .thenReturn(List.of(fixture.trace, second));
+        when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
+                new AiModelClient.GenerationResult("provider", "model", """
+                        {"results":[
+                          {"traceId":"%s","judgment":"EFFECTIVE","reason":"Supported."},
+                          {"traceId":"%s","judgment":"EFFECTIVE","reason":"Supported."}
+                        ]}
+                        """.formatted(fixture.trace.getId(), UUID.randomUUID())));
+        assertThatThrownBy(() -> service.recheck(fixture.project.getId(), fixture.round.getId(), linkedRound.getId()))
+                .isInstanceOf(AiModelClient.AiApiException.class);
+        assertThat(fixture.trace.getLinkedRound()).isNull();
+        assertThat(fixture.trace.getAiRecheckJudgment()).isNull();
+        verify(traceRepository, never()).saveAll(any());
     }
 
     private TraceDecisionRequest decision(StudentAction action, String explanation) {

@@ -21,6 +21,19 @@ class PaperStandardServiceTest {
 
     @BeforeEach
     void classifierDefaultsToCustom() {
+        // The client tests cover continuation; these tests exercise the supplied domain validator.
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
+            AiModelClient.GenerationResult generated = aiModelClient.generate(invocation.getArgument(0), invocation.getArgument(1));
+            java.util.function.Function<AiModelClient.GenerationResult, ?> validator = invocation.getArgument(3);
+            try {
+                return validator.apply(generated);
+            } catch (IllegalArgumentException invalid) {
+                throw new AiModelClient.AiApiException("/ai/generate", 502,
+                        "INVALID_GENERATION_RESPONSE", "INVALID_GENERATION_RESPONSE", null, null);
+            }
+        }).when(aiModelClient).generateValidated(anyString(), anyString(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
         when(aiModelClient.generate(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult("test", "classifier", """
                         {"standard":"CUSTOM","confidencePercent":0,"evidence":[]}

@@ -131,12 +131,10 @@ ai:
     max-concurrent-requests: ${AI_MODEL_MAX_CONCURRENT_REQUESTS:4}
     # Expired leases recover capacity after a backend crashes mid-call.
     lease-timeout-ms: ${AI_MODEL_LEASE_TIMEOUT_MS:3600000}
-    # Database-backed minimum spacing shared by all backend instances.
-    min-interval-ms: ${AI_MODEL_MIN_INTERVAL_MS:4000}
-    # Retry transient AI failures (429/502/503/504) with backoff; 429 backs off at least 60s.
+    # Local extraction/embedding retries only; Python owns generation routing and pacing.
     max-retries: ${AI_MODEL_MAX_RETRIES:3}
   job:
-    # Sweeper cadence and stuck-job TTL (see JobSweeper).
+    # Time without batch progress, independent of total job duration (see JobSweeper).
     sweep-interval-ms: ${AI_JOB_SWEEP_INTERVAL_MS:60000}
     processing-ttl-seconds: ${AI_JOB_PROCESSING_TTL_SECONDS:1800}
 

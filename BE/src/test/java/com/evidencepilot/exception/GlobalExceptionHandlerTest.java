@@ -221,6 +221,11 @@ class GlobalExceptionHandlerTest {
                 HttpStatus.BAD_GATEWAY, badGateway.getMessage(), "/api/papers/1/sections/2/review");
         assertError(handler().handleAiApi(unavailable, request("/api/papers/1/sections/2/review")),
                 HttpStatus.SERVICE_UNAVAILABLE, unavailable.getMessage(), "/api/papers/1/sections/2/review");
+        var coded = new AiModelClient.AiApiException("/ai/generate", 429, "GENERATION_QUOTA_EXCEEDED",
+                "GENERATION_QUOTA_EXCEEDED", 7_001L, null);
+        var response = handler().handleAiApi(coded, request("/api/papers/1/sections/2/review"));
+        assertThat(response.getBody().fieldErrors()).containsEntry("code", "GENERATION_QUOTA_EXCEEDED");
+        assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("8");
     }
 
     @Test

@@ -198,6 +198,50 @@ class ProjectStatusConcurrencyIntegrationTest {
         assertThat(stored.getOptVersion()).isEqualTo(expectedRevision + 1);
     }
 
+    @Test
+    void assignedSectionCanBeSavedUsingTheReturnedRevision() {
+        User instructor = saveUser(UserRole.INSTRUCTOR);
+        User student = saveUser(UserRole.STUDENT);
+        Project project = saveProject(ProjectStatus.CREATED, instructor, student);
+        Document paper = savePaper(project, student);
+        PaperSection section = new PaperSection();
+        section.setDocument(paper);
+        section.setSectionTitle("Introduction");
+        section.setSectionOrder(0);
+        section.setContentTex("Original text");
+        section = sections.saveAndFlush(section);
+
+        authenticate(instructor);
+        var assigned = paperProcessingService.assignSection(paper.getId(), section.getId(), student.getId());
+        assertThat(assigned.revision()).isEqualTo(sections.findById(section.getId()).orElseThrow().getOptVersion());
+
+        authenticate(student);
+        var updated = paperProcessingService.updateSection(paper.getId(), section.getId(),
+                null, null, null, "Updated after assignment", assigned.revision());
+        assertThat(updated.contentTex()).isEqualTo("Updated after assignment");
+    }
+
+    @Test
+    void selfCheckAuthorizesTheAssignedStudentWithoutARequestSession() {
+        User instructor = saveUser(UserRole.INSTRUCTOR);
+        User student = saveUser(UserRole.STUDENT);
+        Project project = saveProject(ProjectStatus.ASSIGNED, instructor, student);
+        Document paper = savePaper(project, student);
+        PaperSection section = new PaperSection();
+        section.setDocument(paper);
+        section.setSectionTitle("Introduction");
+        section.setSectionOrder(0);
+        section.setContentTex("Worker authorization fixture");
+        section.setAssignedUser(student);
+        section = sections.saveAndFlush(section);
+        SecurityContextHolder.clearContext();
+
+        PaperSection authorized = sectionStandardService.requireEvaluationAccess(paper.getId(), section.getId(), student);
+
+        assertThat(authorized.getId()).isEqualTo(section.getId());
+        assertThat(authorized.getDocument().getProject().getId()).isEqualTo(project.getId());
+    }
+
     private void submitForReview(User student, UUID projectId, String fingerprint,
             AtomicInteger successes, AtomicInteger conflicts) {
         authenticate(student);

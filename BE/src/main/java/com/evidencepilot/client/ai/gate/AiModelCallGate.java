@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
- * Local backpressure plus database-backed concurrency, pacing, and circuit state.
+ * Separate local capacity and database-backed generation concurrency/circuit state.
  */
 @Component
 @Slf4j
@@ -22,45 +22,45 @@ public class AiModelCallGate {
     private static final long SLOT_POLL_MILLIS = 100;
 
     private final Semaphore aiRequestLimiter;
+    private final Semaphore generationLimiter;
     private final AiModelCallPolicy callPolicy;
-    private final long minIntervalMillis;
     private final int maxConcurrentRequests;
     private final long leaseTimeoutMillis;
-    private final long minIntervalNanos;
-    private long nextAllowedNanos;
 
     public AiModelCallGate(Semaphore aiRequestLimiter) {
-        this(aiRequestLimiter, null, 0, 1, 1);
+        this(aiRequestLimiter, null, 4, 3_600_000);
     }
 
     public AiModelCallGate(Semaphore aiRequestLimiter, AiModelCallPolicy callPolicy) {
-        this(aiRequestLimiter, callPolicy, 0, 4, 3_600_000);
+        this(aiRequestLimiter, callPolicy, 4, 3_600_000);
     }
 
     @Autowired
     public AiModelCallGate(@Qualifier("aiRequestLimiter") Semaphore aiRequestLimiter,
             AiModelCallPolicy callPolicy,
-            @Value("${ai.model.min-interval-ms:4000}") long minIntervalMillis,
             @Value("${ai.model.max-concurrent-requests:4}") int maxConcurrentRequests,
             @Value("${ai.model.lease-timeout-ms:3600000}") long leaseTimeoutMillis) {
         this.aiRequestLimiter = aiRequestLimiter;
+        this.generationLimiter = new Semaphore(Math.max(1, maxConcurrentRequests));
         this.callPolicy = callPolicy;
-        this.minIntervalMillis = Math.max(0, minIntervalMillis);
         this.maxConcurrentRequests = Math.max(1, maxConcurrentRequests);
         this.leaseTimeoutMillis = Math.max(1, leaseTimeoutMillis);
-        this.minIntervalNanos = TimeUnit.MILLISECONDS.toNanos(Math.max(0, minIntervalMillis));
     }
 
     public <T> T execute(String endpoint, Supplier<T> call) {
-        acquireLocal(endpoint);
+        return execute(endpoint, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SLOT_WAIT_MILLIS), call);
+    }
+
+    public <T> T execute(String endpoint, long deadline, Supplier<T> call) {
+        if ("/health".equals(endpoint)) return call.get();
+        boolean generation = "/ai/generate".equals(endpoint);
+        Semaphore limiter = generation ? generationLimiter : aiRequestLimiter;
+        acquireLocal(endpoint, limiter, deadline);
         String leaseId = null;
         try {
-            if (callPolicy == null) {
-                paceLocally(endpoint);
-            } else {
+            if (generation && callPolicy != null) {
                 try {
-                    leaseId = acquireDistributed(endpoint);
-                    waitFor(endpoint, callPolicy.reserveStart(minIntervalMillis));
+                    leaseId = acquireDistributed(endpoint, deadline);
                 } catch (AiModelClient.AiApiException exception) {
                     throw exception;
                 } catch (RuntimeException exception) {
@@ -78,12 +78,12 @@ public class AiModelCallGate {
                             exception.getClass().getSimpleName());
                 }
             }
-            aiRequestLimiter.release();
+            limiter.release();
         }
     }
 
     public void checkCircuit(String endpoint) {
-        if (callPolicy == null || "/health".equals(endpoint)) {
+        if (callPolicy == null || !"/ai/generate".equals(endpoint)) {
             return;
         }
         try {
@@ -100,7 +100,7 @@ public class AiModelCallGate {
     }
 
     public void recordFinalOutcome(String endpoint, boolean breakerFailure) {
-        if (callPolicy == null || "/health".equals(endpoint)) {
+        if (callPolicy == null || !"/ai/generate".equals(endpoint)) {
             return;
         }
         try {
@@ -111,9 +111,11 @@ public class AiModelCallGate {
         }
     }
 
-    private void acquireLocal(String endpoint) {
+    private void acquireLocal(String endpoint, Semaphore limiter, long deadline) {
         try {
-            if (!aiRequestLimiter.tryAcquire(SLOT_WAIT_MILLIS, TimeUnit.MILLISECONDS)) {
+            long waitNanos = Math.min(TimeUnit.MILLISECONDS.toNanos(SLOT_WAIT_MILLIS),
+                    Math.max(0, deadline - System.nanoTime()));
+            if (waitNanos == 0 || !limiter.tryAcquire(waitNanos, TimeUnit.NANOSECONDS)) {
                 throw new AiModelClient.AiApiException(endpoint, 503,
                         "AI concurrency limit reached", null);
             }
@@ -124,8 +126,9 @@ public class AiModelCallGate {
         }
     }
 
-    private String acquireDistributed(String endpoint) {
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SLOT_WAIT_MILLIS);
+    private String acquireDistributed(String endpoint, long batchDeadline) {
+        long deadline = Math.min(batchDeadline,
+                System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SLOT_WAIT_MILLIS));
         while (true) {
             String leaseId = callPolicy.tryAcquireLease(
                     maxConcurrentRequests, leaseTimeoutMillis);
@@ -141,15 +144,6 @@ public class AiModelCallGate {
                     SLOT_POLL_MILLIS,
                     TimeUnit.NANOSECONDS.toMillis(remainingNanos)));
         }
-    }
-
-    private synchronized void paceLocally(String endpoint) {
-        long now = System.nanoTime();
-        long waitNanos = nextAllowedNanos - now;
-        if (waitNanos > 0) {
-            waitFor(endpoint, TimeUnit.NANOSECONDS.toMillis(waitNanos));
-        }
-        nextAllowedNanos = Math.max(now, nextAllowedNanos) + minIntervalNanos;
     }
 
     private static void waitFor(String endpoint, long millis) {

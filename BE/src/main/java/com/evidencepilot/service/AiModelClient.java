@@ -2,6 +2,7 @@ package com.evidencepilot.service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 public interface AiModelClient {
 
@@ -13,13 +14,20 @@ public interface AiModelClient {
 
     GenerationResult generateStrict(String system, String prompt, Map<String, Object> jsonSchema);
 
+    <T> T generateValidated(String system, String prompt, Map<String, Object> jsonSchema,
+            Function<GenerationResult, T> validator);
+
     ExtractionBundle extractDocument(String filename, String downloadUrl);
 
     List<Float> generateEmbedding(String text);
 
     List<List<Float>> generateEmbeddings(List<String> texts);
 
-    record GenerationResult(String provider, String model, String response) {
+    record GenerationResult(String provider, String model, String response, boolean done,
+            int modelIndex, int attempt, Integer nextModelIndex) {
+        public GenerationResult(String provider, String model, String response) {
+            this(provider, model, response, true, 0, 1, null);
+        }
     }
 
     record ExtractionBlock(String type, String text, Integer level, String caption) {
@@ -77,6 +85,8 @@ public interface AiModelClient {
 
     final class AiApiException extends RuntimeException {
         private final int statusCode;
+        private final String code;
+        private final Long retryAfterMillis;
 
         public AiApiException(String endpoint, int statusCode) {
             this(endpoint, statusCode, null, null);
@@ -87,18 +97,35 @@ public interface AiModelClient {
         }
 
         public AiApiException(String endpoint, int statusCode, String message, Throwable cause) {
+            this(endpoint, statusCode, message, null, null, cause);
+        }
+
+        public AiApiException(String endpoint, int statusCode, String message,
+                String code, Long retryAfterMillis, Throwable cause) {
             super("AI API error on " + endpoint + " - HTTP " + statusCode + (message != null ? " " + message : ""),
                     cause);
             this.statusCode = statusCode;
+            this.code = code;
+            this.retryAfterMillis = retryAfterMillis;
         }
 
         public AiApiException(String endpoint, String message, Throwable cause) {
             super("AI API error on " + endpoint + " - " + message, cause);
             this.statusCode = 0;
+            this.code = null;
+            this.retryAfterMillis = null;
         }
 
         public int getStatusCode() {
             return statusCode;
+        }
+
+        public String getCode() {
+            return code;
+        }
+
+        public Long getRetryAfterMillis() {
+            return retryAfterMillis;
         }
     }
 }

@@ -1,12 +1,10 @@
 package com.evidencepilot.service;
 
 import com.evidencepilot.client.ai.gate.AiModelCallGate;
-import com.evidencepilot.client.ai.gate.AiModelCallPolicy;
 import com.evidencepilot.service.impl.AiModelClientImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -15,7 +13,6 @@ import org.springframework.web.client.RestClient;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
@@ -25,19 +22,11 @@ import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class AiModelClientTest {
 
@@ -46,23 +35,8 @@ class AiModelClientTest {
     }
 
     private static AiModelClientImpl client(RestClient restClient, String baseUrl, int maxRetries) {
-        return new AiModelClientImpl(restClient, restClient, baseUrl, new ObjectMapper(), maxRetries,
-                new AiModelCallGate(new Semaphore(4)));
-    }
-
-    private static AiModelClientImpl client(
-            RestClient restClient,
-            String baseUrl,
-            int maxRetries,
-            AiModelCallPolicy policy) {
-        when(policy.tryAcquireLease(anyInt(), anyLong())).thenReturn("test-lease");
-        return new AiModelClientImpl(
-                restClient,
-                restClient,
-                baseUrl,
-                new ObjectMapper(),
-                maxRetries,
-                new AiModelCallGate(new Semaphore(4), policy));
+        return new AiModelClientImpl(restClient, new okhttp3.OkHttpClient(), baseUrl, new ObjectMapper(), maxRetries,
+                new AiModelCallGate(new Semaphore(4)), "");
     }
 
     @Test
@@ -79,75 +53,6 @@ class AiModelClientTest {
     }
 
     @Test
-    void generateSendsSystemAndReturnsProviderMetadata() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andExpect(method(HttpMethod.POST))
-                .andExpect(content().json("""
-                        {"system":"Review section citations","prompt":"Review this"}
-                        """, true))
-                .andRespond(withSuccess(
-                        """
-                        {"provider":"gemini","model":"gemini-3.6-flash","response":"Review text","done":true}
-                        """,
-                        MediaType.APPLICATION_JSON));
-
-        AiModelClientImpl client = client(builder.build(), "http://ai.test");
-
-        AiModelClient.GenerationResult result = client.generate(
-                "Review section citations", "Review this");
-
-        assertThat(result.provider()).isEqualTo("gemini");
-        assertThat(result.model()).isEqualTo("gemini-3.6-flash");
-        assertThat(result.response()).isEqualTo("Review text");
-        server.verify();
-    }
-
-    @Test
-    void generateRetriesTransient429ThenSucceeds() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", "0"));
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess(
-                        "{\"provider\":\"gemini\",\"model\":\"gemini-3.6-flash\",\"response\":\"Retried\",\"done\":true}",
-                        MediaType.APPLICATION_JSON));
-
-        AiModelClient.GenerationResult result = client(builder.build(), "http://ai.test", 1)
-                .generate("system", "prompt");
-
-        assertThat(result.response()).isEqualTo("Retried");
-        server.verify();
-    }
-
-    @Test
-    void generateGivesUpOnTransientStatusAfterMaxRetries() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", "0"));
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", "0"));
-
-        AiModelCallPolicy policy = mock(AiModelCallPolicy.class);
-        AiModelClient.AiApiException error = assertThrows(
-                AiModelClient.AiApiException.class,
-                () -> client(builder.build(), "http://ai.test", 1, policy)
-                        .generate("system", "prompt"));
-
-        assertThat(error.getStatusCode()).isEqualTo(429);
-        verify(policy).recordFinalOutcome(false);
-        verify(policy, never()).recordFinalOutcome(true);
-        server.verify();
-    }
-
-    @Test
     void healthFailsFastOnTransportFailure() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
@@ -160,189 +65,6 @@ class AiModelClientTest {
                 .isInstanceOf(AiModelClient.AiApiException.class)
                 .extracting(error -> ((AiModelClient.AiApiException) error).getStatusCode())
                 .isEqualTo(503);
-        server.verify();
-    }
-
-    @Test
-    void generateRetriesTransportFailureThenSucceeds() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andRespond(request -> {
-                    throw new IOException("connection reset");
-                });
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andRespond(withSuccess(
-                        "{\"provider\":\"ollama\",\"model\":\"qwen\",\"response\":\"Retried\",\"done\":true}",
-                        MediaType.APPLICATION_JSON));
-
-        AiModelCallPolicy policy = mock(AiModelCallPolicy.class);
-        AiModelClient.GenerationResult result = client(
-                builder.build(), "http://ai.test", 1, policy)
-                .generate("system", "prompt");
-
-        assertThat(result.response()).isEqualTo("Retried");
-        verify(policy).recordFinalOutcome(false);
-        verify(policy, never()).recordFinalOutcome(true);
-        server.verify();
-    }
-
-    @Test
-    void generateForReviewDoesNotRetryAmbiguousReadTimeout() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andRespond(request -> {
-                    throw new SocketTimeoutException("Read timed out");
-                });
-
-        AiModelClient.AiApiException error = assertThrows(
-                AiModelClient.AiApiException.class,
-                () -> client(builder.build(), "http://ai.test", 5)
-                        .generateForReview("system", "prompt"));
-
-        assertThat(error.getStatusCode()).isEqualTo(503);
-        assertThat(error).hasMessageContaining("request timed out");
-        server.verify();
-    }
-
-    @Test
-    void finalServerFailureCountsTowardsTheCircuit() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
-        AiModelCallPolicy policy = mock(AiModelCallPolicy.class);
-
-        assertThatThrownBy(() -> client(builder.build(), "http://ai.test", 0, policy)
-                .generate("system", "prompt"))
-                .isInstanceOf(AiModelClient.AiApiException.class)
-                .extracting(error -> ((AiModelClient.AiApiException) error).getStatusCode())
-                .isEqualTo(503);
-        verify(policy).recordFinalOutcome(true);
-        server.verify();
-    }
-
-    @Test
-    void openCircuitRejectsBeforeTheHttpCall() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        AiModelCallPolicy policy = mock(AiModelCallPolicy.class);
-        when(policy.isCircuitOpen()).thenReturn(true);
-
-        assertThatThrownBy(() -> client(builder.build(), "http://ai.test", 0, policy)
-                .generate("system", "prompt"))
-                .isInstanceOf(AiModelClient.AiApiException.class)
-                .hasMessageContaining("circuit is open");
-        server.verify();
-    }
-
-    @Test
-    void generateForReviewUsesAtMostOneRetry() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", "0"));
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", "0"));
-
-        AiModelClient.AiApiException error = assertThrows(
-                AiModelClient.AiApiException.class,
-                () -> client(builder.build(), "http://ai.test", 5)
-                        .generateForReview("system", "prompt"));
-
-        assertThat(error.getStatusCode()).isEqualTo(429);
-        server.verify();
-    }
-
-    @Test
-    void generatePreservesUpstreamHttpStatus() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY));
-
-        AiModelClient.AiApiException error = assertThrows(
-                AiModelClient.AiApiException.class,
-                () -> client(builder.build(), "http://ai.test")
-                        .generate("system", "prompt"));
-
-        assertThat(error.getStatusCode()).isEqualTo(422);
-        server.verify();
-    }
-
-    @Test
-    void generatePreservesSafeTemporaryProviderDetail() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"detail\":\"Generation provider is temporarily overloaded\"}"));
-
-        AiModelClient.AiApiException error = assertThrows(
-                AiModelClient.AiApiException.class,
-                () -> client(builder.build(), "http://ai.test", 0)
-                        .generate("system", "prompt"));
-
-        assertThat(error.getStatusCode()).isEqualTo(503);
-        assertThat(error).hasMessageContaining("Generation provider is temporarily overloaded");
-        server.verify();
-    }
-
-    @Test
-    void generateDoesNotRetryRejectedProviderRequest() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andRespond(withStatus(HttpStatus.BAD_GATEWAY)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"detail\":\"Generation provider rejected the request\"}"));
-
-        AiModelClient.AiApiException error = assertThrows(
-                AiModelClient.AiApiException.class,
-                () -> client(builder.build(), "http://ai.test", 3)
-                        .generate("system", "prompt"));
-
-        assertThat(error.getStatusCode()).isEqualTo(502);
-        assertThat(error).hasMessageContaining("Generation provider rejected the request");
-        server.verify();
-    }
-
-    @Test
-    void generateDoesNotRetryUnavailableProviderModel() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"detail\":\"Generation model is currently unavailable\"}"));
-
-        AiModelClient.AiApiException error = assertThrows(
-                AiModelClient.AiApiException.class,
-                () -> client(builder.build(), "http://ai.test", 3)
-                        .generate("system", "prompt"));
-
-        assertThat(error.getStatusCode()).isEqualTo(503);
-        assertThat(error).hasMessageContaining("Generation model is currently unavailable");
-        server.verify();
-    }
-
-    @Test
-    void generateDoesNotExposeUntrustedUpstreamDetail() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"detail\":\"raw provider body with secret\"}"));
-
-        AiModelClient.AiApiException error = assertThrows(
-                AiModelClient.AiApiException.class,
-                () -> client(builder.build(), "http://ai.test", 0)
-                        .generate("system", "prompt"));
-
-        assertThat(error).hasMessageNotContaining("raw provider body with secret");
         server.verify();
     }
 
@@ -427,22 +149,13 @@ class AiModelClientTest {
     }
 
     @Test
-    void missingBaseUrlAndEmptyResponsesThrowAiApiException() {
+    void missingBaseUrlThrowsAiApiException() {
         RestClient noNetworkClient = RestClient.builder()
                 .requestFactory(new SimpleClientHttpRequestFactory())
                 .build();
         assertThatThrownBy(() -> client(noNetworkClient, " ").health())
                 .isInstanceOf(AiModelClient.AiApiException.class)
                 .hasMessageContaining("not configured");
-
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/generate"))
-                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
-        assertThatThrownBy(() -> client(builder.build(), "http://ai.test")
-                .generate("system", "prompt"))
-                .isInstanceOf(AiModelClient.AiApiException.class)
-                .hasMessageContaining("empty response");
     }
 
     private static byte[] extractionZip() throws IOException {

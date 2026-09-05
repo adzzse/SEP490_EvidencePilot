@@ -23,6 +23,7 @@ export default function SectionRequirementsPanel({
   isLocked,
   isDirty,
   onHandoffChanged,
+  pollAiJob,
   showToast,
 }) {
   const { t } = useTranslation();
@@ -73,13 +74,13 @@ export default function SectionRequirementsPanel({
     setError('');
     try {
       const response = await api.post(
-        `/api/papers/${selectedPaper.id}/sections/${selectedSection.id}/standard-evaluation`,
-        null,
-        { timeout: 120000 },
+        `/api/papers/${selectedPaper.id}/sections/${selectedSection.id}/standard-evaluation/jobs`,
       );
       if (requestId !== requestRef.current) return;
-      setEvaluation(response.data);
-      if (response.data.status === 'COMPLETED') showToast(t('selfCheckCompleted'));
+      const job = await pollAiJob(response.data.jobId, () => requestId !== requestRef.current);
+      if (requestId !== requestRef.current || !job) return;
+      setEvaluation(job.result);
+      if (job.result.status === 'COMPLETED') showToast(t('selfCheckCompleted'));
     } catch (checkError) {
       if (requestId === requestRef.current) {
         setError(checkError?.response?.data?.message || t('selfCheckFailed'));

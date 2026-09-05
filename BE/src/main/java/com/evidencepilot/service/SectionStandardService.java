@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
@@ -45,6 +47,7 @@ public class SectionStandardService {
     private final SectionStandardEvaluationRepository evaluationRepository;
     private final CurrentUserService currentUserService;
     private final ObjectMapper objectMapper;
+    private final PlatformTransactionManager transactionManager;
 
     private static Map<String, Object> strictSchema() {
         return Map.of(
@@ -101,14 +104,29 @@ public class SectionStandardService {
     }
 
     public SectionStandardEvaluationResponse evaluate(UUID documentId, UUID sectionId) {
-        PaperSection section = requireSection(documentId, sectionId);
-        User currentUser = currentUserService.requireCurrentUser();
-        currentUserService.requireProjectWriteAccess(currentUser, section.getDocument().getProject());
-        if (!currentUserService.isInstructor(currentUser) && !currentUserService.isAdmin(currentUser)) {
-            currentUserService.requireSectionAssignment(currentUser, section);
-        }
-        if (section.getContentTex() == null || section.getContentTex().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SECTION_CONTENT_EMPTY");
+        return evaluate(documentId, sectionId, null, currentUserService.requireCurrentUser(), null);
+    }
+
+    public PaperSection requireEvaluationAccess(UUID documentId, UUID sectionId, User currentUser) {
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            PaperSection section = requireSection(documentId, sectionId);
+            currentUserService.requireProjectWriteAccess(currentUser, section.getDocument().getProject());
+            if (!currentUserService.isInstructor(currentUser) && !currentUserService.isAdmin(currentUser)) {
+                currentUserService.requireSectionAssignment(currentUser, section);
+            }
+            if (section.getContentTex() == null || section.getContentTex().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SECTION_CONTENT_EMPTY");
+            }
+            return section;
+        });
+    }
+
+    public SectionStandardEvaluationResponse evaluate(
+            UUID documentId, UUID sectionId, UUID expectedProjectId,
+            User currentUser, String expectedInputFingerprint) {
+        PaperSection section = requireEvaluationAccess(documentId, sectionId, currentUser);
+        if (expectedProjectId != null && !expectedProjectId.equals(section.getDocument().getProject().getId())) {
+            throw new IllegalArgumentException("Self-check section does not belong to its job project");
         }
 
         SectionStandardEvaluation configured = evaluationRepository
@@ -124,6 +142,9 @@ public class SectionStandardService {
         }
 
         String inputFingerprint = fingerprint(requirements, section);
+        if (expectedInputFingerprint != null && !expectedInputFingerprint.equals(inputFingerprint)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "STANDARD_INPUT_CHANGED");
+        }
         if (SectionStandardEvaluation.STATUS_COMPLETED.equals(configured.getStatus())
                 && inputFingerprint.equals(configured.getInputFingerprint())
                 && parseResult(configured.getResultJson()) != null) {
@@ -147,40 +168,27 @@ public class SectionStandardService {
             throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "INPUT_TOO_LARGE");
         }
 
-        String rawOutput = null;
+        java.util.concurrent.atomic.AtomicReference<String> rawOutput = new java.util.concurrent.atomic.AtomicReference<>();
         String resultJson = null;
         String errorCode = null;
-        AiModelClient.GenerationResult generation = null;
-        for (int attempt = 0; attempt < 2; attempt++) {
-            try {
-                generation = aiModelClient.generateStrict(system, prompt, strictSchema());
-                rawOutput = generation.response();
-                JsonNode result = objectMapper.readTree(extractJsonObject(rawOutput));
-                validateResult(result, requirements, section.getContentTex());
-                resultJson = objectMapper.writeValueAsString(result);
-                errorCode = null;
-                break;
-            } catch (AiModelClient.AiApiException exception) {
-                errorCode = "PROVIDER_ERROR";
-                break;
-            } catch (JsonProcessingException | IllegalArgumentException exception) {
-                errorCode = "INVALID_AI_RESPONSE";
-                if (attempt == 0) {
-                    log.warn("Section self-check section={} invalid result; requesting one regeneration", sectionId);
-                    system += """
-
-                            The previous attempt failed validation. Recheck every constraint before answering.
-                            Use exactly summary, limitations, items at the root; never rename or omit these fields.
-                            Every item must have exactly requirement, verdict, evidence, reason, missing, suggestion.
-                            For NOT_MET or UNVERIFIABLE, evidence must be an empty string.
-                            For MET or PARTIAL, evidence must be an exact contiguous quote from studentText.
-                            Return the complete JSON object only, without Markdown or extra fields.
-                            """;
+        try {
+            JsonNode result = aiModelClient.generateValidated(system, prompt, strictSchema(), generation -> {
+                rawOutput.set(generation.response());
+                try {
+                    JsonNode parsed = objectMapper.readTree(extractJsonObject(generation.response()));
+                    validateResult(parsed, requirements, section.getContentTex());
+                    return parsed;
+                } catch (JsonProcessingException exception) {
+                    throw new IllegalArgumentException("Invalid self-check JSON", exception);
                 }
-            } catch (Exception exception) {
-                errorCode = "INVALID_AI_RESPONSE";
-                break;
-            }
+            });
+            resultJson = objectMapper.writeValueAsString(result);
+        } catch (AiModelClient.AiApiException exception) {
+            errorCode = "INVALID_GENERATION_RESPONSE".equals(exception.getCode())
+                    || "GENERATION_INCOMPLETE".equals(exception.getCode())
+                    ? "INVALID_AI_RESPONSE" : "PROVIDER_ERROR";
+        } catch (JsonProcessingException | IllegalArgumentException exception) {
+            errorCode = "INVALID_AI_RESPONSE";
         }
 
         PaperSection currentSection = requireSection(documentId, sectionId);
@@ -204,8 +212,7 @@ public class SectionStandardService {
                 : SectionStandardEvaluation.STATUS_SYSTEM_ERROR);
         current.setScorePercent(null);
         current.setResultJson(resultJson);
-        current.setRawOutput(rawOutput != null ? rawOutput
-                : generation != null ? generation.response() : null);
+        current.setRawOutput(rawOutput.get());
         current.setErrorMessage(errorCode);
         current.setUpdatedAt(LocalDateTime.now());
         if (current.getCreatedAt() == null) current.setCreatedAt(LocalDateTime.now());

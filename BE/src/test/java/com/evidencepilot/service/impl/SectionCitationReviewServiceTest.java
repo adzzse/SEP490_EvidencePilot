@@ -57,6 +57,23 @@ class SectionCitationReviewServiceTest {
     private final AuditService auditService = mock(AuditService.class);
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
+    @org.junit.jupiter.api.BeforeEach
+    void configureDomainValidation() {
+
+        // The client tests cover continuation; these tests exercise the supplied domain validator.
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
+            AiModelClient.GenerationResult generated = aiModelClient.generateForReview(invocation.getArgument(0), invocation.getArgument(1));
+            java.util.function.Function<AiModelClient.GenerationResult, ?> validator = invocation.getArgument(3);
+            try {
+                return validator.apply(generated);
+            } catch (IllegalArgumentException invalid) {
+                throw new AiModelClient.AiApiException("/ai/generate", 502,
+                        "INVALID_GENERATION_RESPONSE", "INVALID_GENERATION_RESPONSE", null, null);
+            }
+        }).when(aiModelClient).generateValidated(anyString(), anyString(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
     @Test
     void runPersistsGroundedSourceDiscrepancyFinding() {
         UUID projectId = UUID.randomUUID();
@@ -223,11 +240,9 @@ class SectionCitationReviewServiceTest {
         assertThatThrownBy(() -> service.run(
                 documentId, projectId, sectionId,
                 service.reviewInputFingerprint(section), UUID.randomUUID()))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(exception -> assertThat(
-                        ((ResponseStatusException) exception).getStatusCode())
-                        .isEqualTo(HttpStatus.BAD_GATEWAY));
-        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
+                .isInstanceOf(AiModelClient.AiApiException.class)
+                .hasMessageContaining("INVALID_GENERATION_RESPONSE");
+        verify(aiModelClient).generateForReview(anyString(), anyString());
     }
 
     @Test
@@ -310,11 +325,9 @@ class SectionCitationReviewServiceTest {
 
         assertThatThrownBy(() -> service().run(
                 documentId, projectId, sectionId, service().reviewInputFingerprint(section), UUID.randomUUID()))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(exception -> assertThat(
-                        ((ResponseStatusException) exception).getStatusCode())
-                        .isEqualTo(HttpStatus.BAD_GATEWAY));
-        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
+                .isInstanceOf(AiModelClient.AiApiException.class)
+                .hasMessageContaining("INVALID_GENERATION_RESPONSE");
+        verify(aiModelClient).generateForReview(anyString(), anyString());
     }
 
     @Test
@@ -339,11 +352,9 @@ class SectionCitationReviewServiceTest {
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
                 documentId, projectId, sectionId, service.reviewInputFingerprint(section), UUID.randomUUID()))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(exception -> assertThat(
-                        ((ResponseStatusException) exception).getStatusCode())
-                        .isEqualTo(HttpStatus.BAD_GATEWAY));
-        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
+                .isInstanceOf(AiModelClient.AiApiException.class)
+                .hasMessageContaining("INVALID_GENERATION_RESPONSE");
+        verify(aiModelClient).generateForReview(anyString(), anyString());
     }
 
     @Test
@@ -380,11 +391,9 @@ class SectionCitationReviewServiceTest {
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
                 documentId, projectId, sectionId, service.reviewInputFingerprint(section), UUID.randomUUID()))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(exception -> assertThat(
-                        ((ResponseStatusException) exception).getStatusCode())
-                        .isEqualTo(HttpStatus.BAD_GATEWAY));
-        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
+                .isInstanceOf(AiModelClient.AiApiException.class)
+                .hasMessageContaining("INVALID_GENERATION_RESPONSE");
+        verify(aiModelClient).generateForReview(anyString(), anyString());
     }
 
     @Test
@@ -429,11 +438,9 @@ class SectionCitationReviewServiceTest {
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
                 documentId, projectId, sectionId, service.reviewInputFingerprint(section), UUID.randomUUID()))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(exception -> assertThat(
-                        ((ResponseStatusException) exception).getStatusCode())
-                        .isEqualTo(HttpStatus.BAD_GATEWAY));
-        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
+                .isInstanceOf(AiModelClient.AiApiException.class)
+                .hasMessageContaining("INVALID_GENERATION_RESPONSE");
+        verify(aiModelClient).generateForReview(anyString(), anyString());
     }
 
     @Test
@@ -459,11 +466,9 @@ class SectionCitationReviewServiceTest {
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
                 documentId, projectId, sectionId, service.reviewInputFingerprint(section), UUID.randomUUID()))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(exception -> assertThat(
-                        ((ResponseStatusException) exception).getStatusCode())
-                        .isEqualTo(HttpStatus.BAD_GATEWAY));
-        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
+                .isInstanceOf(AiModelClient.AiApiException.class)
+                .hasMessageContaining("INVALID_GENERATION_RESPONSE");
+        verify(aiModelClient).generateForReview(anyString(), anyString());
     }
 
     @Test
@@ -488,11 +493,9 @@ class SectionCitationReviewServiceTest {
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
                 documentId, projectId, sectionId, service.reviewInputFingerprint(section), UUID.randomUUID()))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(exception -> assertThat(
-                        ((ResponseStatusException) exception).getStatusCode())
-                        .isEqualTo(HttpStatus.BAD_GATEWAY));
-        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
+                .isInstanceOf(AiModelClient.AiApiException.class)
+                .hasMessageContaining("INVALID_GENERATION_RESPONSE");
+        verify(aiModelClient).generateForReview(anyString(), anyString());
     }
 
     @Test
@@ -584,15 +587,13 @@ class SectionCitationReviewServiceTest {
         SectionCitationReviewService service = service();
         assertThatThrownBy(() -> service.run(
                 documentId, projectId, sectionId, service.reviewInputFingerprint(section), UUID.randomUUID()))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(exception -> assertThat(
-                        ((ResponseStatusException) exception).getStatusCode())
-                        .isEqualTo(HttpStatus.BAD_GATEWAY));
-        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
+                .isInstanceOf(AiModelClient.AiApiException.class)
+                .hasMessageContaining("INVALID_GENERATION_RESPONSE");
+        verify(aiModelClient).generateForReview(anyString(), anyString());
     }
 
     @Test
-    void runRetriesInvalidJsonOnceAndUsesTheValidResponse() {
+    void runUsesValidatedProviderMetadata() {
         UUID projectId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
@@ -606,7 +607,6 @@ class SectionCitationReviewServiceTest {
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
         when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
-                new AiModelClient.GenerationResult("first-provider", "first-model", "not-json"),
                 new AiModelClient.GenerationResult(
                         "retry-provider", "retry-model", review(sectionId, 0, okVerdict(0))));
 
@@ -620,9 +620,6 @@ class SectionCitationReviewServiceTest {
         verify(aiModelClient).generateForReview(
                 eq(SectionCitationReviewPrompt.SYSTEM),
                 argThat(prompt -> !prompt.contains("Previous output was invalid")));
-        verify(aiModelClient).generateForReview(
-                eq(SectionCitationReviewPrompt.SYSTEM),
-                argThat(prompt -> prompt.contains("Previous output was invalid")));
     }
 
     @Test
@@ -648,11 +645,9 @@ class SectionCitationReviewServiceTest {
 
         assertThatThrownBy(() -> service().run(
                 documentId, projectId, sectionId, service().reviewInputFingerprint(section), UUID.randomUUID()))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(exception -> assertThat(
-                        ((ResponseStatusException) exception).getStatusCode())
-                        .isEqualTo(HttpStatus.BAD_GATEWAY));
-        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
+                .isInstanceOf(AiModelClient.AiApiException.class)
+                .hasMessageContaining("INVALID_GENERATION_RESPONSE");
+        verify(aiModelClient).generateForReview(anyString(), anyString());
     }
 
     @Test
@@ -815,14 +810,18 @@ class SectionCitationReviewServiceTest {
 
         SectionCitationReviewService service = service();
         List<String> progress = new java.util.ArrayList<>();
+        List<SectionCitationReviewResponse> checkpoints = new java.util.ArrayList<>();
         SectionCitationReviewResponse result = service.run(
                 documentId,
                 projectId,
                 sectionId,
                 service.reviewInputFingerprint(section),
                 actorId,
-                (current, total) -> progress.add(current + "/" + total));
+                (current, total) -> progress.add(current + "/" + total), checkpoints::add);
 
+        assertThat(checkpoints).hasSize(2).allMatch(checkpoint -> !checkpoint.complete());
+        assertThat(checkpoints.get(0).limitations()).singleElement().asString().contains("Batch 2/2 has not been reviewed");
+        assertThat(checkpoints.get(1).limitations()).singleElement().asString().contains("Batch 2/2");
         assertThat(result.complete()).isFalse();
         assertThat(result.provider()).isEqualTo("provider");
         assertThat(result.limitations()).singleElement().asString().contains("Batch 2/2");

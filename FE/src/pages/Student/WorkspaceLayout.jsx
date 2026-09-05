@@ -289,7 +289,8 @@ export default function WorkspaceLayout() {
         current: Math.max(0, Number(job.progressCurrent) || 0),
         total: Math.max(0, Number(job.progressTotal) || 0),
       });
-      if (job.status === 'SUCCESS') return job;
+      if (job.status === 'SUCCESS' || (job.status === 'FAILED'
+        && job.kind === 'SECTION_CITATION_REVIEW' && job.result?.complete === false)) return job;
       if (job.status === 'FAILED') {
         const error = new Error(job.errorMessage || t('aiEvaluationFailed'));
         error.status = Number(job.errorMessage?.match(/(\d{3})/)?.[1]) || undefined;
@@ -1315,7 +1316,7 @@ export default function WorkspaceLayout() {
         <ContextPanel compact={isCompactWorkspace} isOpen={isDrawerOpen} width={rightDrawerWidth} activeTab={activeTab} setActiveTab={(tab) => { setActiveTab(tab); localStorage.setItem('student_workspace_active_tab', tab); }} showToast={showToast}
           sources={sources} isUploading={isUploading} setIsUploading={setIsUploading} project={project} setViewerFile={setViewerFile} fetchSources={fetchSources} isLocked={isLocked}
           selectedPaper={selectedPaper} selectedSection={currentSection} isAssignedSection={Boolean(currentSection && String(currentSection.assignedUserId) === String(user?.id))}
-          isSectionDirty={dirtySectionsRef.current.has(selectedSectionId)} onHandoffChanged={handleHandoffChanged}
+            isSectionDirty={dirtySectionsRef.current.has(selectedSectionId)} onHandoffChanged={handleHandoffChanged} pollAiJob={pollAiJob}
           feedbacks={feedbacks} assignedSections={assignedSections} setShowSubmitReviewModal={setShowSubmitReviewModal} userProjectRole={project?.currentUserRole} />
       </div>
 

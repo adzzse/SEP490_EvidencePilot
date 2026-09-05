@@ -227,37 +227,11 @@ public class EvidenceTraceService {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Could not serialize trace recheck context", exception);
         }
-        AiModelClient.GenerationResult generation = aiModelClient.generateForReview(
-                TraceRecheckPrompt.SYSTEM, prompt);
-        RecheckBatch batch;
-        try {
-            batch = recheckMapper().readValue(
-                    extractJsonObject(generation.response()), RecheckBatch.class);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalArgumentException("Recheck verdict is not valid JSON", exception);
-        }
-        List<RecheckVerdict> verdicts = batch.results();
-        if (verdicts == null) {
-            throw new IllegalArgumentException("Recheck verdict did not contain results");
-        }
-        if (verdicts.size() != candidates.size()) {
-            throw new IllegalArgumentException("Recheck verdict count does not match the trace batch");
-        }
-        Map<UUID, RecheckVerdict> verdictByTraceId = new LinkedHashMap<>();
-        for (RecheckVerdict verdict : verdicts) {
-            if (verdict.traceId() == null || verdict.judgment() == null
-                    || verdict.reason() == null || verdict.reason().isBlank()
-                    || verdict.reason().length() > 400
-                    || verdictByTraceId.putIfAbsent(verdict.traceId(), verdict) != null) {
-                throw new IllegalArgumentException("Recheck verdict is incomplete or duplicated");
-            }
-        }
+        Map<UUID, RecheckVerdict> verdictByTraceId = aiModelClient.generateValidated(
+                TraceRecheckPrompt.SYSTEM, prompt, null, generation -> validateRecheck(generation, candidates));
         LocalDateTime recheckedAt = LocalDateTime.now();
         for (EvidenceRevisionTrace trace : candidates) {
             RecheckVerdict verdict = verdictByTraceId.get(trace.getId());
-            if (verdict == null) {
-                throw new IllegalArgumentException("Recheck verdict referenced a different trace batch");
-            }
             trace.setLinkedRound(linkedRound);
             trace.setLinkedMode(CitationReviewRound.LINK_MODE_REVISION_CHAIN);
             trace.setAiRecheckJudgment(verdict.judgment());
@@ -266,6 +240,32 @@ public class EvidenceTraceService {
         }
         traceRepository.saveAll(candidates);
         return candidates.size();
+    }
+
+    private Map<UUID, RecheckVerdict> validateRecheck(
+            AiModelClient.GenerationResult generation, List<EvidenceRevisionTrace> candidates) {
+        RecheckBatch batch;
+        try {
+            batch = recheckMapper().readValue(extractJsonObject(generation.response()), RecheckBatch.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalArgumentException("Recheck verdict is not valid JSON", exception);
+        }
+        if (batch == null || batch.results() == null || batch.results().size() != candidates.size()) {
+            throw new IllegalArgumentException("Recheck verdict count does not match the trace batch");
+        }
+        Map<UUID, RecheckVerdict> verdictByTraceId = new LinkedHashMap<>();
+        for (RecheckVerdict verdict : batch.results()) {
+            if (verdict == null || verdict.traceId() == null || verdict.judgment() == null
+                    || verdict.reason() == null || verdict.reason().isBlank()
+                    || verdict.reason().length() > 400
+                    || verdictByTraceId.putIfAbsent(verdict.traceId(), verdict) != null) {
+                throw new IllegalArgumentException("Recheck verdict is incomplete or duplicated");
+            }
+        }
+        if (!candidates.stream().allMatch(trace -> verdictByTraceId.containsKey(trace.getId()))) {
+            throw new IllegalArgumentException("Recheck verdict referenced a different trace batch");
+        }
+        return verdictByTraceId;
     }
 
     @Transactional(readOnly = true)

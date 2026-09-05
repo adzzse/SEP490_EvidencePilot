@@ -26,6 +26,7 @@ public class AiEvaluationJob {
 
     public static final String KIND_SECTION_CITATION_REVIEW = "SECTION_CITATION_REVIEW";
     public static final String KIND_SECTION_SUGGESTION = "SECTION_SUGGESTION";
+    public static final String KIND_SECTION_SELF_CHECK = "SECTION_SELF_CHECK";
     public static final String KIND_SOURCE_MATCHES = "SOURCE_MATCHES";
     public static final String KIND_TRACE_RECHECK = "TRACE_RECHECK";
 
@@ -50,6 +51,9 @@ public class AiEvaluationJob {
 
     @Column(name = "started_at")
     private LocalDateTime startedAt;
+
+    @Column(name = "last_progress_at")
+    private LocalDateTime lastProgressAt;
 
     @Column(name = "progress_current", nullable = false)
     private int progressCurrent;

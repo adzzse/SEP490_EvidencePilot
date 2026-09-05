@@ -8,10 +8,15 @@ import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ReviewGuide;
+import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.AccountStatus;
+import com.evidencepilot.dto.response.SectionStandardEvaluationResponse;
 import com.evidencepilot.repository.AiEvaluationJobRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ReviewGuideRepository;
+import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiModelClient;
+import com.evidencepilot.service.SectionStandardService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,17 +54,85 @@ class AiEvaluationServiceImplTest {
     private final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private final EvidenceTraceService evidenceTraceService = mock(EvidenceTraceService.class);
+    private final SectionStandardService sectionStandardService = mock(SectionStandardService.class);
+    private final UserRepository userRepository = mock(UserRepository.class);
 
     @BeforeEach
     void allowPendingClaim() {
+        // The client tests cover continuation; these tests exercise the supplied domain validator.
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
+            AiModelClient.GenerationResult generated = aiModelClient.generate(invocation.getArgument(0), invocation.getArgument(1));
+            java.util.function.Function<AiModelClient.GenerationResult, ?> validator = invocation.getArgument(3);
+            try {
+                return validator.apply(generated);
+            } catch (IllegalArgumentException invalid) {
+                throw new AiModelClient.AiApiException("/ai/generate", 502,
+                        "INVALID_GENERATION_RESPONSE", "INVALID_GENERATION_RESPONSE", null, null);
+            }
+        }).when(aiModelClient).generateValidated(anyString(), anyString(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
         when(jobRepository.claimPending(any(UUID.class), any(LocalDateTime.class))).thenReturn(1);
+        when(jobRepository.updateProgress(any(), org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.anyInt(), any())).thenReturn(1);
+        when(jobRepository.saveCheckpoint(any(), anyString())).thenReturn(1);
     }
 
     private AiEvaluationServiceImpl service() {
         return new AiEvaluationServiceImpl(
                 jobRepository, paperSectionRepository, sectionCitationReviewService,
                 reviewGuideRepository, aiModelClient,
-                rabbitTemplate, objectMapper, evidenceTraceService);
+                rabbitTemplate, objectMapper, evidenceTraceService, sectionStandardService, userRepository);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"COMPLETED", "SYSTEM_ERROR"})
+    void process_selfCheckUsesQueuedInputAndPreservesEvaluationStatus(String status) throws Exception {
+        UUID documentId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        UUID projectId = UUID.randomUUID();
+        User actor = new User();
+        actor.setId(UUID.randomUUID());
+        AiEvaluationJob job = new AiEvaluationJob();
+        job.setId(UUID.randomUUID());
+        job.setProjectId(projectId);
+        job.setKind(AiEvaluationJob.KIND_SECTION_SELF_CHECK);
+        job.setPayloadJson(objectMapper.writeValueAsString(Map.of(
+                "documentId", documentId, "sectionId", sectionId,
+                "requestedByUserId", actor.getId(), "inputFingerprint", "queued-input")));
+        when(jobRepository.findById(job.getId())).thenReturn(Optional.of(job));
+        when(userRepository.findById(actor.getId())).thenReturn(Optional.of(actor));
+        when(sectionStandardService.evaluate(documentId, sectionId, projectId, actor, "queued-input"))
+                .thenReturn(new SectionStandardEvaluationResponse(UUID.randomUUID(), sectionId, documentId,
+                        status, List.of("Has thesis"), null, null, "queued-input", false, LocalDateTime.now()));
+
+        service().process(job.getId());
+
+        assertThat(job.getStatus()).isEqualTo(AiEvaluationJob.STATUS_SUCCESS);
+        assertThat(objectMapper.readTree(job.getResultJson()).path("status").asText()).isEqualTo(status);
+        verify(sectionStandardService).evaluate(documentId, sectionId, projectId, actor, "queued-input");
+    }
+
+    @Test
+    void process_selfCheckRejectsUnavailableActorBeforeGeneration() throws Exception {
+        User actor = new User();
+        actor.setId(UUID.randomUUID());
+        actor.setAccountStatus(AccountStatus.BANNED);
+        AiEvaluationJob job = new AiEvaluationJob();
+        job.setId(UUID.randomUUID());
+        job.setProjectId(UUID.randomUUID());
+        job.setKind(AiEvaluationJob.KIND_SECTION_SELF_CHECK);
+        job.setPayloadJson(objectMapper.writeValueAsString(Map.of(
+                "documentId", UUID.randomUUID(), "sectionId", UUID.randomUUID(),
+                "requestedByUserId", actor.getId(), "inputFingerprint", "queued-input")));
+        when(jobRepository.findById(job.getId())).thenReturn(Optional.of(job));
+        when(userRepository.findById(actor.getId())).thenReturn(Optional.of(actor));
+
+        service().process(job.getId());
+
+        assertThat(job.getStatus()).isEqualTo(AiEvaluationJob.STATUS_FAILED);
+        assertThat(job.getErrorMessage()).contains("SELF_CHECK_ACTOR_UNAVAILABLE");
+        org.mockito.Mockito.verifyNoInteractions(sectionStandardService);
     }
 
     @Test
@@ -180,7 +253,7 @@ class AiEvaluationServiceImplTest {
         job.setKind(AiEvaluationJob.KIND_SECTION_CITATION_REVIEW);
         when(jobRepository.findById(jobId)).thenReturn(Optional.of(job));
         when(sectionCitationReviewService.run(
-                eq(documentId), eq(projectId), eq(sectionId), eq("fingerprint"), eq(requesterId), any()))
+                eq(documentId), eq(projectId), eq(sectionId), eq("fingerprint"), eq(requesterId), any(), any()))
                 .thenAnswer(invocation -> {
                     BiConsumer<Integer, Integer> progress = invocation.getArgument(5);
                     progress.accept(2, 9);
@@ -213,9 +286,9 @@ class AiEvaluationServiceImplTest {
         var response = service().getJob(jobId);
         assertThat(response.progressCurrent()).isEqualTo(2);
         assertThat(response.progressTotal()).isEqualTo(9);
-        verify(jobRepository).updateProgress(job.getId(), 2, 9);
+        verify(jobRepository).updateProgress(eq(job.getId()), eq(2), eq(9), any(LocalDateTime.class));
         verify(sectionCitationReviewService).run(
-                eq(documentId), eq(projectId), eq(sectionId), eq("fingerprint"), eq(requesterId), any());
+                eq(documentId), eq(projectId), eq(sectionId), eq("fingerprint"), eq(requesterId), any(), any());
         verify(evidenceTraceService, never()).recheck(any(), any(), any());
     }
 
@@ -274,7 +347,7 @@ class AiEvaluationServiceImplTest {
             return saved;
         });
         when(sectionCitationReviewService.run(
-                eq(documentId), eq(projectId), eq(sectionId), eq("fingerprint"), eq(requesterId), any()))
+                eq(documentId), eq(projectId), eq(sectionId), eq("fingerprint"), eq(requesterId), any(), any()))
                 .thenReturn(new SectionCitationReviewResponse(
                         "section-citation-v1",
                         "citation-rules-v1",
@@ -353,7 +426,7 @@ class AiEvaluationServiceImplTest {
         job.setKind(AiEvaluationJob.KIND_SECTION_CITATION_REVIEW);
         when(jobRepository.findById(jobId)).thenReturn(Optional.of(job));
         when(sectionCitationReviewService.run(
-                eq(documentId), eq(projectId), eq(sectionId), eq("fingerprint"), eq(requesterId), any()))
+                eq(documentId), eq(projectId), eq(sectionId), eq("fingerprint"), eq(requesterId), any(), any()))
                 .thenThrow(new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY, "AI returned an invalid section citation review"));
 
@@ -507,7 +580,7 @@ class AiEvaluationServiceImplTest {
         service().process(jobId);
 
         assertThat(job.getStatus()).isEqualTo(AiEvaluationJob.STATUS_FAILED);
-        assertThat(job.getErrorMessage()).startsWith("502");
+        assertThat(job.getErrorMessage()).contains("HTTP 502 INVALID_GENERATION_RESPONSE");
         assertThat(job.getResultJson()).isNull();
         assertThat(job.getCompletedAt()).isNotNull();
     }

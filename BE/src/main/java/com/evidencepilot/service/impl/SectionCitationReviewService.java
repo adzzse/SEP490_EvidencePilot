@@ -113,6 +113,15 @@ public class SectionCitationReviewService {
             String expectedReviewInputFingerprint,
             UUID requestedByUserId,
             BiConsumer<Integer, Integer> onProgress) {
+        return run(documentId, projectId, sectionId, expectedReviewInputFingerprint,
+                requestedByUserId, onProgress, checkpoint -> {});
+    }
+
+    @Transactional
+    public SectionCitationReviewResponse run(
+            UUID documentId, UUID projectId, UUID sectionId, String expectedReviewInputFingerprint,
+            UUID requestedByUserId, BiConsumer<Integer, Integer> onProgress,
+            java.util.function.Consumer<SectionCitationReviewResponse> onCheckpoint) {
         PaperSection section = requireSection(documentId, sectionId, true);
         Project project = section.getDocument().getProject();
         if (!projectId.equals(project.getId())) {
@@ -137,7 +146,7 @@ public class SectionCitationReviewService {
         SectionCitationReviewResponse review = isPolicyExempt(normalizedTitle)
                 ? notApplicable(
                         section, reviewInputFingerprint, exemptionSummary(normalizedTitle))
-                : generate(section, reviewInputFingerprint, normalizedTitle, onProgress);
+                : generate(section, reviewInputFingerprint, normalizedTitle, onProgress, onCheckpoint);
         if (review.complete()) {
             saveSnapshot(project, reviewInputFingerprint, review);
         }
@@ -245,7 +254,8 @@ public class SectionCitationReviewService {
             PaperSection section,
             String reviewInputFingerprint,
             String normalizedTitle,
-            BiConsumer<Integer, Integer> onProgress) {
+            BiConsumer<Integer, Integer> onProgress,
+            java.util.function.Consumer<SectionCitationReviewResponse> onCheckpoint) {
         UUID projectId = section.getDocument().getProject().getId();
         List<ClaimCandidate> candidates = sectionCandidates(section.getContentTex());
         int batchCount = (candidates.size() + REVIEW_BATCH_SIZE - 1) / REVIEW_BATCH_SIZE;
@@ -305,11 +315,26 @@ public class SectionCitationReviewService {
             } finally {
                 onProgress.accept(batchIndex + 1, batchCount);
             }
+            if (completedBatches > 0) {
+                List<String> checkpointLimitations = new ArrayList<>(limitations);
+                for (int pending = batchIndex + 1; pending < batchCount; pending++) {
+                    checkpointLimitations.add("Batch " + (pending + 1) + "/" + batchCount + " has not been reviewed yet");
+                }
+                onCheckpoint.accept(reviewResult(section, reviewInputFingerprint, provider, model,
+                        false, findings, checkpointLimitations));
+            }
         }
         if (completedBatches == 0 && lastFailure != null) {
             throw lastFailure;
         }
 
+        return reviewResult(section, reviewInputFingerprint, provider, model,
+                completedBatches == batchCount, findings, limitations);
+    }
+
+    private SectionCitationReviewResponse reviewResult(PaperSection section, String reviewInputFingerprint,
+            String provider, String model, boolean complete,
+            List<SectionCitationReviewResponse.Finding> findings, List<String> limitations) {
         List<SectionCitationReviewResponse.Finding> allFindings = findings.stream()
                 .sorted(Comparator.comparingInt(SectionCitationReviewResponse.Finding::startOffset))
                 .toList();
@@ -323,10 +348,10 @@ public class SectionCitationReviewService {
                 LocalDateTime.now(),
                 provider,
                 model,
-                completedBatches == batchCount,
+                complete,
                 summarize(allFindings),
                 allFindings,
-                limitations);
+                List.copyOf(limitations));
     }
 
     private String summarize(List<SectionCitationReviewResponse.Finding> findings) {
@@ -459,24 +484,16 @@ public class SectionCitationReviewService {
             int batchIndex,
             int batchCount) {
         String prompt = reviewPrompt(section, normalizedTitle, contexts, batchIndex, batchCount);
-        RuntimeException lastFailure = null;
-        for (int attempt = 0; attempt < 2; attempt++) {
+        return aiModelClient.generateValidated(SectionCitationReviewPrompt.SYSTEM, prompt, null, generation -> {
             try {
-                AiModelClient.GenerationResult generation = aiModelClient.generateForReview(
-                        SectionCitationReviewPrompt.SYSTEM,
-                        attempt == 0 ? prompt : prompt + "\nPrevious output was invalid. Return valid JSON only.");
                 ModelReview review = strictMapper().readValue(
                         extractJson(generation.response()), ModelReview.class);
                 validateReview(review, contexts, section.getId().toString(), batchIndex);
                 return new GeneratedReview(generation.provider(), generation.model(), review);
-            } catch (JsonProcessingException | IllegalArgumentException exception) {
-                lastFailure = new ResponseStatusException(
-                        HttpStatus.BAD_GATEWAY,
-                        "AI returned an invalid section citation review: " + exception.getMessage(),
-                        exception);
+            } catch (JsonProcessingException exception) {
+                throw new IllegalArgumentException("Invalid section citation review JSON", exception);
             }
-        }
-        throw lastFailure;
+        });
     }
 
     private String reviewPrompt(

@@ -194,8 +194,27 @@ public class PaperStandardService {
             String prompt = objectMapper.writeValueAsString(Map.of(
                     "filename", filename == null ? "" : filename,
                     "documentSample", sample));
-            JsonNode result = objectMapper.readTree(extractJsonObject(
-                    aiModelClient.generate(CLASSIFIER_SYSTEM, prompt).response()));
+            JsonNode result = aiModelClient.generateValidated(CLASSIFIER_SYSTEM, prompt, null, generation -> {
+                try {
+                    JsonNode parsed = objectMapper.readTree(extractJsonObject(generation.response()));
+                    if (parsed == null || !parsed.isObject() || !parsed.path("standard").isTextual()
+                            || !parsed.path("confidencePercent").isInt()
+                            || parsed.path("confidencePercent").intValue() < 0
+                            || parsed.path("confidencePercent").intValue() > 100
+                            || !parsed.path("evidence").isArray()) {
+                        throw new IllegalArgumentException("Invalid standard classification");
+                    }
+                    PaperStandard.valueOf(parsed.get("standard").asText().strip().toUpperCase(Locale.ROOT));
+                    for (JsonNode item : parsed.get("evidence")) {
+                        if (!item.isTextual() || item.asText().isBlank() || item.asText().length() > 200) {
+                            throw new IllegalArgumentException("Invalid standard evidence");
+                        }
+                    }
+                    return parsed;
+                } catch (JsonProcessingException exception) {
+                    throw new IllegalArgumentException("Invalid standard JSON", exception);
+                }
+            });
             PaperStandard standard = PaperStandard.valueOf(
                     result.path("standard").asText().strip().toUpperCase(Locale.ROOT));
             int confidence = result.path("confidencePercent").asInt(-1);

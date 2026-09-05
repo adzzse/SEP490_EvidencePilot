@@ -52,12 +52,26 @@ class SectionStandardServiceTest {
 
     @BeforeEach
     void setUp() {
+        // The client tests cover continuation; these tests exercise the supplied domain validator.
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
+            AiModelClient.GenerationResult generated = aiModelClient.generateStrict(invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2));
+            java.util.function.Function<AiModelClient.GenerationResult, ?> validator = invocation.getArgument(3);
+            try {
+                return validator.apply(generated);
+            } catch (IllegalArgumentException invalid) {
+                throw new AiModelClient.AiApiException("/ai/generate", 502,
+                        "INVALID_GENERATION_RESPONSE", "INVALID_GENERATION_RESPONSE", null, null);
+            }
+        }).when(aiModelClient).generateValidated(anyString(), anyString(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
         service = new SectionStandardService(
                 aiModelClient,
                 paperSectionRepository,
                 evaluationRepository,
                 currentUserService,
-                new ObjectMapper());
+                new ObjectMapper(),
+                org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
     }
 
     @ParameterizedTest
@@ -92,12 +106,14 @@ class SectionStandardServiceTest {
 
         ArgumentCaptor<String> prompt = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> system = ArgumentCaptor.forClass(String.class);
-        verify(aiModelClient, times(scenario.equals("valid") ? 1 : 2))
+        verify(aiModelClient)
                 .generateStrict(system.capture(), prompt.capture(), anyMap());
         assertThat(prompt.getValue()).contains("\"requirements\":[\"Has thesis\"]");
         assertThat(prompt.getAllValues()).allMatch(value -> value.equals(prompt.getValue()));
         if (!scenario.equals("valid")) {
-            assertThat(system.getValue()).contains("previous attempt failed validation");
+            assertThat(response.status()).isEqualTo(SectionStandardEvaluation.STATUS_SYSTEM_ERROR);
+            assertThat(response.errorCode()).isEqualTo("INVALID_AI_RESPONSE");
+            return;
         }
         assertThat(response.status()).isEqualTo(SectionStandardEvaluation.STATUS_COMPLETED);
         assertThat(response.result().get("items").get(0).get("verdict").asText()).isEqualTo("MET");
@@ -138,7 +154,7 @@ class SectionStandardServiceTest {
         assertThat(response.result()).isNull();
         assertThat(response.errorCode()).isEqualTo("INVALID_AI_RESPONSE");
         assertThat(evaluation.getRawOutput()).isEqualTo(raw);
-        verify(aiModelClient, times(2)).generateStrict(anyString(), anyString(), anyMap());
+        verify(aiModelClient).generateStrict(anyString(), anyString(), anyMap());
         verify(evaluationRepository).save(evaluation);
     }
 
@@ -174,6 +190,49 @@ class SectionStandardServiceTest {
                         .isEqualTo(HttpStatus.FORBIDDEN));
 
         verifyNoInteractions(evaluationRepository);
+    }
+
+    @Test
+    void queuedEvaluationRejectsChangedInputBeforeCallingProvider() {
+        PaperSection section = section();
+        User instructor = user(UserRole.INSTRUCTOR);
+        when(paperSectionRepository.findByIdWithDocument(section.getId())).thenReturn(Optional.of(section));
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(evaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId()))
+                .thenReturn(Optional.of(configured(section)));
+
+        assertThatThrownBy(() -> service.evaluate(section.getDocument().getId(), section.getId(),
+                section.getDocument().getProject().getId(), instructor, "older-input"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("STANDARD_INPUT_CHANGED");
+        verifyNoInteractions(aiModelClient);
+        verify(evaluationRepository, never()).save(any());
+    }
+
+    @Test
+    void queuedEvaluationRechecksAssignmentBeforeReadingConfiguration() {
+        PaperSection section = section();
+        User student = user(UserRole.STUDENT);
+        when(paperSectionRepository.findByIdWithDocument(section.getId())).thenReturn(Optional.of(section));
+        doThrow(new ResponseStatusException(HttpStatus.FORBIDDEN, "not assigned"))
+                .when(currentUserService).requireSectionAssignment(student, section);
+
+        assertThatThrownBy(() -> service.evaluate(section.getDocument().getId(), section.getId(),
+                section.getDocument().getProject().getId(), student, "queued-input"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("not assigned");
+        verifyNoInteractions(aiModelClient, evaluationRepository);
+    }
+
+    @Test
+    void queuedEvaluationRejectsSectionFromAnotherProject() {
+        PaperSection section = section();
+        User instructor = user(UserRole.INSTRUCTOR);
+        when(paperSectionRepository.findByIdWithDocument(section.getId())).thenReturn(Optional.of(section));
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.evaluate(section.getDocument().getId(), section.getId(),
+                UUID.randomUUID(), instructor, "queued-input"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("job project");
+        verifyNoInteractions(aiModelClient, evaluationRepository);
     }
 
     private PaperSection section() {
