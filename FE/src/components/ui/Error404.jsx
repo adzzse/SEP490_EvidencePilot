@@ -46,11 +46,11 @@ export default function Error404({
                   <img
                     src={postcardImage}
                     alt={postcardAlt}
-                    className="w-[360px] h-[220px] object-cover"
+                    className="w-[360px] max-w-full h-auto object-cover"
                     onError={() => setImgOk(false)}
                   />
                 ) : (
-                  <div className="w-[360px] h-[220px] flex items-center justify-center bg-gradient-to-tr from-indigo-600 to-blue-500">
+                  <div className="w-[360px] max-w-full h-[220px] flex items-center justify-center bg-gradient-to-tr from-indigo-600 to-blue-500">
                     <span className="text-white font-black text-6xl">404</span>
                   </div>
                 )}

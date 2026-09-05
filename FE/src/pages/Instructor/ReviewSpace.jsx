@@ -526,7 +526,7 @@ export default function ReviewSpace() {
     return (
       <div className="min-h-screen bg-(--page-bg)">
         <AppHeader />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"><LoadingSkeleton count={4} height="h-24" /></div>
+        <div className="max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8"><LoadingSkeleton count={4} height="h-24" /></div>
       </div>
     );
   }
@@ -537,7 +537,7 @@ export default function ReviewSpace() {
   return (
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary)">
       <AppHeader />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <main className="max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <Breadcrumb
           items={[
             { label: t.dashboard, path: '/instructor/dashboard' },
@@ -547,7 +547,7 @@ export default function ReviewSpace() {
         />
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 border-b border-(--border) pb-6">
           <div>
-            <h1 className="text-3xl font-black text-(--brand-foreground) tracking-tight mt-1">{project?.title || t.project}</h1>
+            <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight mt-1">{project?.title || t.project}</h1>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <StatusBadge status={project?.status} />
               {requests.map(req => (

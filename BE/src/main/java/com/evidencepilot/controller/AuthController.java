@@ -3,11 +3,13 @@ package com.evidencepilot.controller;
 import com.evidencepilot.dto.request.LoginRequest;
 import com.evidencepilot.dto.request.PasswordResetConfirmRequest;
 import com.evidencepilot.dto.request.PasswordResetRequest;
+import com.evidencepilot.dto.request.SetPasswordRequest;
 import com.evidencepilot.dto.request.UpdatePasswordRequest;
 import com.evidencepilot.dto.response.AuthResponse;
 import com.evidencepilot.service.AuthService;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.PasswordResetService;
+import com.evidencepilot.service.UserInvitationService;
 import lombok.extern.slf4j.Slf4j;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -34,6 +36,7 @@ public class AuthController {
     private final AuthService authService;
     private final CurrentUserService currentUserService;
     private final PasswordResetService passwordResetService;
+    private final UserInvitationService userInvitationService;
 
     private static final Map<String, String> RESET_REQUEST_RESPONSE = Map.of(
             "message", "If the account is eligible, a password reset email will be sent");
@@ -85,5 +88,19 @@ public class AuthController {
             @Valid @RequestBody PasswordResetConfirmRequest request) {
         passwordResetService.confirmReset(request.getToken(), request.getNewPassword());
         return ResponseEntity.ok(Map.of("message", "Password reset successfully"));
+    }
+
+    @Operation(summary = "Accept email-verification invitation",
+            description = "Consumes a set-password invitation token issued for a VERIFYING_EMAIL account "
+                    + "and sets the user's own password. Token expiry is validated at request time. Public endpoint.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Password set, account activated"),
+            @ApiResponse(responseCode = "400", description = "Invalid or expired token")
+    })
+    @PostMapping("/set-password")
+    public ResponseEntity<Map<String, String>> acceptInvitation(
+            @Valid @RequestBody SetPasswordRequest request) {
+        userInvitationService.acceptInvitation(request.token(), request.newPassword());
+        return ResponseEntity.ok(Map.of("message", "Password set successfully. You can now sign in."));
     }
 }

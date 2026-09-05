@@ -56,6 +56,7 @@ class ProjectRouteMappingTest {
                 "POST /api/auth/update-password",
                 "POST /api/auth/password-reset/request",
                 "POST /api/auth/password-reset/confirm",
+                "POST /api/auth/set-password",
                 "GET /api/users",
                 "GET /api/users/{id}",
                 "GET /api/users/profile",
@@ -137,6 +138,7 @@ class ProjectRouteMappingTest {
                 "PATCH /api/admin/users/{id}/status",
                 "DELETE /api/admin/users/{id}",
                 "POST /api/admin/users/{id}/password-reset",
+                "POST /api/admin/users/{id}/resend-invitation",
                 "GET /api/admin/dashboard",
                 "GET /api/admin/audit-logs",
                 "POST /api/admin/notifications/broadcast",
@@ -190,8 +192,9 @@ class ProjectRouteMappingTest {
                 "POST /api/users/email-change/request",
                 "POST /api/users/email-change/confirm",
                 "DELETE /api/users/email-change/cancel",
+                "POST /api/users/avatar",
                 "GET /api/users/me/activity"));
-        assertThat(routes).hasSize(140);
+        assertThat(routes).hasSize(143);
     }
 
     @Test

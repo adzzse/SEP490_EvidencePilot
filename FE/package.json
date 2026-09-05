@@ -31,9 +31,11 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-i18next": "^17.0.11",
+    "react-image-crop": "^11.1.2",
     "react-router-dom": "^7.18.0",
     "tailwind-merge": "^3.6.0",
     "vis-data": "^8.0.4",
-    "vis-network": "^10.1.0"
+    "vis-network": "^10.1.0",
+    "xlsx": "^0.18.5"
   }
 }

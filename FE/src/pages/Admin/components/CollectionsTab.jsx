@@ -130,19 +130,19 @@ function CollectionsSection({ lang, api }) {
   };
 
   return (
-    <div className="p-8 space-y-6 bg-[#f8fafc]">
+    <div className="p-8 space-y-6 bg-(--page-bg)">
       {/* Title Area */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-(--border) pb-5">
         <div>
-          <h1 className="text-3xl font-extrabold text-[#1e3a8a] tracking-tight">{lang.collectionsLibrary}</h1>
-          <p className="text-gray-500 text-xs mt-1">{lang.collectionsSub}</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{lang.collectionsLibrary}</h1>
+          <p className="text-(--text-secondary) text-xs mt-1">{lang.collectionsSub}</p>
         </div>
       </div>
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Card 1: Total Collections */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm flex flex-col justify-between h-32">
+        <div className="bg-(--surface) rounded-xl border border-(--border) p-5 shadow-sm flex flex-col justify-between h-32">
           <div className="flex justify-between items-start">
             <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -151,13 +151,13 @@ function CollectionsSection({ lang, api }) {
             </div>
           </div>
           <div>
-            <span className="text-[10px] font-bold text-gray-400 block tracking-wider uppercase">Total Collections</span>
-            <span className="text-2xl font-extrabold text-slate-800">{totalCollections}</span>
+            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">Total Collections</span>
+            <span className="text-2xl font-extrabold text-(--text-primary)">{totalCollections}</span>
           </div>
         </div>
 
         {/* Card 2: Active Instructors */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm flex flex-col justify-between h-32">
+        <div className="bg-(--surface) rounded-xl border border-(--border) p-5 shadow-sm flex flex-col justify-between h-32">
           <div className="flex justify-between items-start">
             <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -166,13 +166,13 @@ function CollectionsSection({ lang, api }) {
             </div>
           </div>
           <div>
-            <span className="text-[10px] font-bold text-gray-400 block tracking-wider uppercase">Active Instructors</span>
-            <span className="text-2xl font-extrabold text-slate-800">{activeInstructors}</span>
+            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">Active Instructors</span>
+            <span className="text-2xl font-extrabold text-(--text-primary)">{activeInstructors}</span>
           </div>
         </div>
 
         {/* Card 3: Total Documents */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm flex flex-col justify-between h-32">
+        <div className="bg-(--surface) rounded-xl border border-(--border) p-5 shadow-sm flex flex-col justify-between h-32">
           <div className="flex justify-between items-start">
             <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -181,20 +181,20 @@ function CollectionsSection({ lang, api }) {
             </div>
           </div>
           <div>
-            <span className="text-[10px] font-bold text-gray-400 block tracking-wider uppercase">Total Documents</span>
-            <span className="text-2xl font-extrabold text-slate-800">{totalDocuments}</span>
+            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">Total Documents</span>
+            <span className="text-2xl font-extrabold text-(--text-primary)">{totalDocuments}</span>
           </div>
         </div>
       </div>
 
       {/* Table Card */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-(--surface) rounded-2xl border border-(--border) shadow-sm overflow-hidden">
         {/* Table Header and Filters */}
-        <div className="px-6 py-4.5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h3 className="text-sm font-bold text-slate-800 tracking-wider uppercase">All Collections</h3>
+        <div className="px-6 py-4.5 border-b border-(--border-light) flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h3 className="text-sm font-bold text-(--text-primary) tracking-wider uppercase">All Collections</h3>
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <div className="relative w-full sm:w-64">
-              <svg className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-(--text-tertiary) absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input 
@@ -202,13 +202,13 @@ function CollectionsSection({ lang, api }) {
                 placeholder="Search collections..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-gray-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                className="w-full pl-9 pr-4 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500" 
               />
             </div>
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full sm:w-48 px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="w-full sm:w-48 px-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="">All Categories</option>
               {categories.map(c => (
@@ -222,7 +222,7 @@ function CollectionsSection({ lang, api }) {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-50 text-slate-400 font-bold uppercase border-b border-gray-100">
+              <tr className="bg-(--surface-secondary) text-(--text-tertiary) font-bold uppercase border-b border-(--border-light)">
                 <th className="px-6 py-3.5">Collection Name</th>
                 <th className="px-6 py-3.5">Instructor</th>
                 <th className="px-6 py-3.5">Documents</th>
@@ -231,10 +231,10 @@ function CollectionsSection({ lang, api }) {
                 <th className="px-6 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-slate-700 font-semibold">
+            <tbody className="divide-y divide-(--border-light) text-(--text-primary) font-semibold">
               {filteredCollections.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-400 font-medium">
+                  <td colSpan={6} className="px-6 py-12 text-center text-(--text-tertiary) font-medium">
                     No collections found
                   </td>
                 </tr>
@@ -244,12 +244,12 @@ function CollectionsSection({ lang, api }) {
                 const avatarColor = colors[index % colors.length];
                 
                 return (
-                  <tr key={c.id} className="hover:bg-slate-50/50 transition">
+                  <tr key={c.id} className="hover:bg-(--surface-secondary)/50 transition">
                     {/* Collection Name */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {getCollectionIcon(c.name)}
-                        <span className="font-bold text-slate-800">{c.name}</span>
+                        <span className="font-bold text-(--text-primary)">{c.name}</span>
                       </div>
                     </td>
 
@@ -260,10 +260,10 @@ function CollectionsSection({ lang, api }) {
                           {initial}
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-slate-800 font-bold">
+                          <span className="text-(--text-primary) font-bold">
                             {c.instructorEmail.includes('admin') ? 'Admin' : 'Instructor'}
                           </span>
-                          <span className="text-[10px] text-gray-400 font-semibold leading-none mt-0.5">
+                          <span className="text-[10px] text-(--text-tertiary) font-semibold leading-none mt-0.5">
                             {c.instructorEmail}
                           </span>
                         </div>
@@ -271,12 +271,12 @@ function CollectionsSection({ lang, api }) {
                     </td>
 
                     {/* Documents */}
-                    <td className="px-6 py-4 text-slate-600 font-bold">
+                    <td className="px-6 py-4 text-(--text-secondary) font-bold">
                       {c.documentCount}
                     </td>
 
                     {/* Created Date */}
-                    <td className="px-6 py-4 text-slate-500 font-mono font-medium">
+                    <td className="px-6 py-4 text-(--text-secondary) font-mono font-medium">
                       {c.createdAt}
                     </td>
 
@@ -297,7 +297,7 @@ function CollectionsSection({ lang, api }) {
                         <button 
                           onClick={() => setDetailCol(c)}
                           title="View Collection Details"
-                          className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center transition shadow-sm cursor-pointer"
+                          className="w-8 h-8 rounded-xl bg-(--surface-secondary) border border-(--border) text-(--text-secondary) hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center transition shadow-sm cursor-pointer"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
@@ -310,7 +310,7 @@ function CollectionsSection({ lang, api }) {
                           triggerLabel={lang.delete}
                           confirmLabel={lang.delete}
                           cancelLabel={lang.cancel}
-                          className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 flex items-center justify-center transition shadow-sm cursor-pointer"
+                          className="w-8 h-8 rounded-xl bg-(--surface-secondary) border border-(--border) text-(--text-secondary) hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 flex items-center justify-center transition shadow-sm cursor-pointer"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
@@ -326,19 +326,19 @@ function CollectionsSection({ lang, api }) {
         </div>
 
         {/* Footer / Pagination */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-gray-100 bg-gray-50/50 text-xs font-semibold text-gray-500">
+        <div className="flex items-center justify-between px-6 py-3.5 border-t border-(--border-light) bg-(--surface-secondary)/50 text-xs font-semibold text-(--text-secondary)">
           <span>Showing {Math.min(filteredCollections.length, (page + 1) * PAGE_SIZE)} of {filteredCollections.length} collections</span>
           {totalPages > 1 && (
             <div className="flex items-center gap-1.5">
               <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition">
+                className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
               <span>{lang.page} {page + 1} / {totalPages}</span>
               <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
-                className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition">
+                className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
@@ -351,20 +351,20 @@ function CollectionsSection({ lang, api }) {
       {/* Collection Detail Modal Overlay */}
       {detailCol && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-gray-150 overflow-hidden transform scale-100 transition-all duration-300">
+          <div className="bg-(--surface) rounded-2xl max-w-lg w-full shadow-2xl border border-gray-150 overflow-hidden transform scale-100 transition-all duration-300">
             {/* Modal Header */}
-            <div className="bg-slate-50 border-b border-gray-150 px-6 py-4 flex items-center justify-between">
+            <div className="bg-(--surface-secondary) border-b border-gray-150 px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
                   <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
                   </svg>
                 </div>
-                <h3 className="font-bold text-slate-800 text-sm">{detailCol.name}</h3>
+                <h3 className="font-bold text-(--text-primary) text-sm">{detailCol.name}</h3>
               </div>
               <button 
                 onClick={() => setDetailCol(null)}
-                className="text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                className="text-(--text-tertiary) hover:text-(--text-secondary) transition cursor-pointer"
               >
                 <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -376,19 +376,19 @@ function CollectionsSection({ lang, api }) {
             <div className="px-6 py-5 space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Instructor</span>
-                  <span className="font-bold text-slate-800">{detailCol.instructorEmail}</span>
+                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Instructor</span>
+                  <span className="font-bold text-(--text-primary)">{detailCol.instructorEmail}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Created Date</span>
-                  <span className="font-bold text-slate-800">{detailCol.createdAt}</span>
+                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Created Date</span>
+                  <span className="font-bold text-(--text-primary)">{detailCol.createdAt}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Documents</span>
-                  <span className="font-bold text-slate-800">{detailCol.documentCount}</span>
+                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Documents</span>
+                  <span className="font-bold text-(--text-primary)">{detailCol.documentCount}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Status</span>
+                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Status</span>
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                     detailCol.active 
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
@@ -399,15 +399,15 @@ function CollectionsSection({ lang, api }) {
                 </div>
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Description</span>
-                <p className="bg-slate-50 border border-gray-200 rounded-xl px-3 py-2 font-semibold text-slate-700 min-h-10">
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-1">Description</span>
+                <p className="bg-(--surface-secondary) border border-(--border) rounded-xl px-3 py-2 font-semibold text-(--text-primary) min-h-10">
                   {detailCol.description || 'No description provided.'}
                 </p>
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 px-6 py-3.5 border-t border-gray-150 flex items-center justify-end">
+            <div className="bg-(--surface-secondary) px-6 py-3.5 border-t border-gray-150 flex items-center justify-end">
               <button 
                 onClick={() => setDetailCol(null)}
                 className="px-4 py-2 bg-[#0c162e] hover:bg-[#152447] text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
@@ -421,7 +421,7 @@ function CollectionsSection({ lang, api }) {
 
       {/* Custom Toast Notification Popup */}
       {toast && (
-        <div className="fixed top-4 right-4 z-55 flex items-center gap-2.5 px-4.5 py-3 rounded-2xl shadow-xl border animate-slide-in-right bg-white border-slate-100">
+        <div className="fixed top-4 right-4 z-55 flex items-center gap-2.5 px-4.5 py-3 rounded-2xl shadow-xl border animate-slide-in-right bg-(--surface) border-(--border-light)">
           <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
             toast.type === 'error' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
           }`}>
@@ -435,7 +435,7 @@ function CollectionsSection({ lang, api }) {
               </svg>
             )}
           </div>
-          <span className="text-xs font-bold text-slate-800">{toast.message}</span>
+          <span className="text-xs font-bold text-(--text-primary)">{toast.message}</span>
         </div>
       )}
 

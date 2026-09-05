@@ -336,7 +336,7 @@ export default function SourceLibraryPanel() {
       {/* Master Action Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center w-full mb-6 gap-4 border-b border-(--border) pb-6">
         <div className="min-w-0 flex-1">
-          <h1 className="text-3xl font-black text-(--brand-foreground) tracking-tight">{t.sourceLibrary}</h1>
+          <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t.sourceLibrary}</h1>
           <p className="text-xs text-(--text-tertiary) mt-1">{t.sourceLibraryDesc || 'Manage every source you uploaded and see where it is currently used.'}</p>
         </div>
 
@@ -405,14 +405,14 @@ export default function SourceLibraryPanel() {
       )}
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-36 bg-(--surface-tertiary) rounded-2xl animate-pulse" />)}
         </div>
       ) : sources.length === 0 ? (
         <EmptyState title={t.noLibrarySourcesManaged} description={t.noLibrarySourcesManagedDesc} />
       ) : viewMode === 'grid' ? (
         /* Grid View Layout (Mirroring Collections Page Cards) */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {sources.map(source => {
             const usageNames = [
               ...(source.collections || []).map(item => item.name),

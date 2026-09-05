@@ -93,7 +93,7 @@ export default function AppHeader({ variant = 'app', labels }) {
 
   return (
     <header className={`${isPublic ? 'fixed left-0 right-0' : 'sticky shrink-0'} top-0 z-50 h-16 border-b border-(--header-border) bg-(--header-bg) text-(--text-primary) shadow-sm backdrop-blur-md`}>
-      <div className="h-full max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-4">
+      <div className="h-full max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <Link to="/" onClick={() => setMenuOpen(false)} className="flex items-center gap-2.5 shrink-0 rounded-lg">
             <span className="w-8 h-8 bg-(--brand) text-(--on-brand) rounded-lg text-xs flex items-center justify-center font-bold shadow-xs">EP</span>
@@ -120,9 +120,10 @@ export default function AppHeader({ variant = 'app', labels }) {
             <button type="button" onClick={toggleTheme} className="p-2 text-(--text-secondary) hover:text-(--brand-foreground) hover:bg-(--surface-secondary) rounded-lg transition-colors" title={themeLabel} aria-label={themeLabel}>
               <ThemeIcon theme={theme} />
             </button>
-            <button type="button" onClick={toggleLanguage} className="min-w-9 px-2 py-1.5 text-xs font-bold text-(--text-secondary) border border-(--border) rounded-lg hover:bg-(--surface-secondary) hover:text-(--brand-foreground) transition-colors">
-              {language === 'vi' ? 'EN' : 'VI'}
-            </button>
+            <div className="flex bg-(--surface-secondary) p-0.5 rounded-lg border border-(--border) text-[10px] font-bold">
+              <button onClick={() => language !== 'en' && toggleLanguage()} className={`px-2.5 py-1 rounded-md transition ${language === 'en' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>EN</button>
+              <button onClick={() => language !== 'vi' && toggleLanguage()} className={`px-2.5 py-1 rounded-md transition ${language === 'vi' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>VN</button>
+            </div>
 
             {isAuthenticated ? (
               <div className="relative ml-1" ref={profileDropdownRef}>
@@ -133,8 +134,12 @@ export default function AppHeader({ variant = 'app', labels }) {
                   aria-expanded={profileDropdownOpen}
                   aria-haspopup="true"
                 >
-                  <span className="w-6 h-6 rounded-full bg-(--brand-soft) text-(--brand-foreground) font-bold text-[10px] flex items-center justify-center">
-                    {initials}
+                  <span className="w-6 h-6 rounded-full overflow-hidden bg-(--brand-soft) text-(--brand-foreground) font-bold text-[10px] flex items-center justify-center">
+                    {user?.avatarUrl ? (
+                      <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      initials
+                    )}
                   </span>
                   <span className="max-w-[120px] truncate">{fullName}</span>
                   <svg className={`w-3.5 h-3.5 text-(--text-tertiary) transition-transform ${profileDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -159,7 +164,7 @@ export default function AppHeader({ variant = 'app', labels }) {
                       onClick={() => go('/profile?tab=account')}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-(--text-secondary) hover:bg-(--surface-secondary) hover:text-(--brand-foreground) font-medium transition-colors"
                     >
-                      <svg className="w-4 h-4 text-(--text-tertiary)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                      <svg className="w-4 h-4 text-(--text-tertiary)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                       {language === 'vi' ? 'Cài đặt tài khoản' : 'Account Settings'}
                     </button>
 
@@ -225,9 +230,10 @@ export default function AppHeader({ variant = 'app', labels }) {
             <button type="button" onClick={() => { toggleTheme(); setMenuOpen(false); }} className="flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold text-(--text-secondary) border border-(--border) rounded-xl hover:bg-(--surface-secondary)">
               <ThemeIcon theme={theme} /> {themeLabel}
             </button>
-            <button type="button" onClick={() => { toggleLanguage(); setMenuOpen(false); }} className="px-3 py-2.5 text-xs font-bold text-(--text-secondary) border border-(--border) rounded-xl hover:bg-(--surface-secondary)">
-              {language === 'vi' ? 'EN' : 'VI'}
-            </button>
+            <div className="flex bg-(--surface-secondary) p-0.5 rounded-lg border border-(--border) text-[10px] font-bold w-full">
+              <button onClick={() => { if (language !== 'en') toggleLanguage(); setMenuOpen(false); }} className={`flex-1 px-2.5 py-1 rounded-md transition ${language === 'en' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>EN</button>
+              <button onClick={() => { if (language !== 'vi') toggleLanguage(); setMenuOpen(false); }} className={`flex-1 px-2.5 py-1 rounded-md transition ${language === 'vi' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>VN</button>
+            </div>
             {isAuthenticated ? (
               <>
                 <button type="button" onClick={() => go('/profile?tab=account')} className="px-3 py-2.5 text-xs font-semibold text-(--text-secondary) border border-(--border) rounded-xl hover:bg-(--surface-secondary)">
@@ -246,6 +252,7 @@ export default function AppHeader({ variant = 'app', labels }) {
           </div>
         </div>
       )}
+
     </header>
   );
 }

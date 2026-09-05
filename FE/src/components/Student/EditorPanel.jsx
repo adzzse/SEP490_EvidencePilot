@@ -212,7 +212,7 @@ export default function EditorPanel({
                 <button onClick={() => { setShowSymbolMenu(!showSymbolMenu); setShowTextSizeMenu(false); }} className="w-7 h-7 flex items-center justify-center hover:bg-(--surface-tertiary) rounded text-(--text-primary) font-bold cursor-pointer" title={t('greekSymbols')}>Ω</button>
                 {showSymbolMenu && (
                   <div className="absolute right-0 mt-1 bg-(--surface) border border-(--border) rounded-lg shadow-xl p-2 w-48 z-50 animate-in fade-in duration-105">
-                    <div className="grid grid-cols-4 gap-1">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
                       {[{ code: '\\alpha', char: 'α' }, { code: '\\beta', char: 'β' }, { code: '\\gamma', char: 'γ' }, { code: '\\delta', char: 'δ' }, { code: '\\epsilon', char: 'ε' }, { code: '\\theta', char: 'θ' }, { code: '\\lambda', char: 'λ' }, { code: '\\pi', char: 'π' }, { code: '\\omega', char: 'ω' }, { code: '\\sigma', char: 'σ' }, { code: '\\infty', char: '∞' }, { code: '\\pm', char: '±' }, { code: '\\approx', char: '≈' }, { code: '\\neq', char: '≠' }, { code: '\\le', char: '≤' }, { code: '\\ge', char: '≥' }].map(sym => (
                         <button key={sym.code} onClick={() => { insertSymbol(sym.code); setShowSymbolMenu(false); }} className="h-7 hover:bg-(--surface-tertiary) rounded text-xs font-semibold text-(--text-primary) flex items-center justify-center cursor-pointer hover:text-indigo-600" title={sym.code}>{sym.char}</button>
                       ))}

@@ -15,6 +15,7 @@ const Privacy = lazy(() => import('./pages/Privacy.jsx'));
 const About = lazy(() => import('./pages/About.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword.jsx'));
+const SetPassword = lazy(() => import('./pages/SetPassword.jsx'));
 const Profile = lazy(() => import('./pages/Profile.jsx'));
 const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard.jsx'));
 const NotFound = lazy(() => import('./pages/NotFound.jsx'));
@@ -52,6 +53,7 @@ function App() {
             <Route path="/about" element={<About />} />
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/set-password" element={<SetPassword />} />
             <Route path="/register" element={<Navigate to="/login" replace />} />
 
             <Route path="/profile" element={

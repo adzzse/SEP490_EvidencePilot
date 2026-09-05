@@ -1066,12 +1066,12 @@ export default function CollectionDetail() {
               </div>
             ) : collection ? (
               <>
-                <h1 className="text-3xl font-black text-(--brand-foreground) tracking-tight truncate">{collection.name}</h1>
+                <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight truncate">{collection.name}</h1>
                 {collection.description && <p className="text-sm text-(--text-secondary) mt-1 truncate">{collection.description}</p>}
                 {collection.categoryName && <span className="inline-block mt-1.5 bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-200 text-[10px] font-semibold">{collection.categoryName}</span>}
               </>
             ) : (
-              <h1 className="text-3xl font-black text-(--brand-foreground) tracking-tight">{t.collectionDetail}</h1>
+              <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t.collectionDetail}</h1>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">

@@ -10,5 +10,6 @@ public record AdminUserCreateRequest(
         @NotBlank @Size(max = 100) String firstName,
         @NotBlank @Size(max = 100) String lastName,
         @NotNull UserRole role,
-        @Size(max = 50) String studentCode) {
+        @Size(max = 50) String studentCode,
+        boolean devBypass) {
 }

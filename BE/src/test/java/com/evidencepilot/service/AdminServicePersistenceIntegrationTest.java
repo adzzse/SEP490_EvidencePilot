@@ -30,10 +30,12 @@ class AdminServicePersistenceIntegrationTest {
     @jakarta.annotation.Resource UserRepository users;
     @MockBean CurrentUserService currentUsers;
     @MockBean PasswordResetService passwordResets;
+    @MockBean UserInvitationService invitations;
     @MockBean HealthService health;
     @MockBean AuditService audit;
     @MockBean SystemNotificationService notifications;
     @MockBean PasswordEncoder passwords;
+    @MockBean com.evidencepilot.service.UserAvatarService avatars;
 
     @BeforeEach
     void passwordHash() {
@@ -83,7 +85,7 @@ class AdminServicePersistenceIntegrationTest {
     @Test
     void recreatesDeletedStudentWithSameEmailAndCodeAndKeepsDeletedRow() {
         User deleted = save("recreate@example.com", "Old", "Student", UserRole.STUDENT, AccountStatus.DELETED);
-        deleted.setStudentCode("SE-REUSE");
+        deleted.setStudentCode("SE170609");
         users.saveAndFlush(deleted);
 
         User admin = new User();
@@ -93,14 +95,14 @@ class AdminServicePersistenceIntegrationTest {
         when(currentUsers.requireCurrentUser()).thenReturn(admin);
 
         var response = service.createUser(new AdminUserCreateRequest(
-                "recreate@example.com", "New", "Student", UserRole.STUDENT, " se-reuse "));
+                "recreate@example.com", "New", "Student", UserRole.STUDENT, " se170609 ", false));
 
         assertThat(response.email()).isEqualTo("recreate@example.com");
-        assertThat(response.studentCode()).isEqualTo("SE-REUSE");
+        assertThat(response.studentCode()).isEqualTo("SE170609");
         assertThat(users.findAll().stream()
                 .filter(user -> "recreate@example.com".equals(user.getEmail()))
                 .map(User::getAccountStatus))
-                .containsExactlyInAnyOrder(AccountStatus.DELETED, AccountStatus.ACTIVE);
+                .containsExactlyInAnyOrder(AccountStatus.DELETED, AccountStatus.VERIFYING_EMAIL);
         assertThat(users.findByEmail("recreate@example.com")).isPresent()
                 .get().extracting(User::getId).isNotEqualTo(deleted.getId());
         assertThat(deleted.getAccountStatus()).isEqualTo(AccountStatus.DELETED);

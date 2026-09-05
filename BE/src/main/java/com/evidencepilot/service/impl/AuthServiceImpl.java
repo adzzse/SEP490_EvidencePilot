@@ -34,6 +34,14 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials"));
 
+        // Explicit gate: sentinel-hash accounts must complete email verification
+        // first — never let them reach the encoder.
+        if (User.DISABLED_PASSWORD_SENTINEL.equals(user.getPasswordHash())
+                || user.getAccountStatus() == AccountStatus.VERIFYING_EMAIL) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Account is pending email verification");
+        }
+
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
         }

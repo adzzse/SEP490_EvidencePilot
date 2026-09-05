@@ -10,6 +10,7 @@ import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.service.ActivityFeedService;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.EmailVerificationService;
+import com.evidencepilot.service.UserAvatarService;
 import com.evidencepilot.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -19,6 +20,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,8 +31,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -48,6 +52,7 @@ public class UserController {
     private final CurrentUserService currentUserService;
     private final EmailVerificationService emailVerificationService;
     private final ActivityFeedService activityFeedService;
+    private final UserAvatarService userAvatarService;
 
     @Operation(summary = "Get user by ID", description = "Returns a user's profile by UUID. Requires authentication.")
     @ApiResponses({
@@ -82,8 +87,9 @@ public class UserController {
     })
     @GetMapping("/profile")
     public ResponseEntity<UserResponse> profile() {
+        var user = currentUserService.requireCurrentUser();
         return ResponseEntity.ok(
-                UserResponse.from(currentUserService.requireCurrentUser()));
+                UserResponse.from(user, userAvatarService.resolveAvatarUrl(user)));
     }
 
     @Operation(summary = "Update current user profile",
@@ -103,8 +109,26 @@ public class UserController {
             @Valid @RequestBody UserProfileUpdateRequest request,
             @Parameter(description = "One-shot claim token from /api/users/email/otp/verify (only required when changing email)")
             @RequestHeader(value = EMAIL_OTP_CLAIM_HEADER, required = false) String emailClaimToken) {
+        var current = currentUserService.requireCurrentUser();
+        UserResponse updated = userService.updateUserProfile(current.getId(), request, emailClaimToken);
+        return ResponseEntity.ok(UserResponse.withAvatarUrl(
+                updated, userAvatarService.resolveAvatarUrl(current)));
+    }
+
+    @Operation(summary = "Upload current user avatar",
+            description = "Stores the image in MinIO under avatars/{userId}.jpg and returns a short-lived URL. "
+                    + "Only the object key is persisted; the URL is constructed at read time.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Avatar stored"),
+            @ApiResponse(responseCode = "400", description = "Not an image or exceeds 5MB"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT")
+    })
+    @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, String>> uploadAvatar(
+            @Parameter(description = "Image file (max 5MB)") @RequestPart("file") MultipartFile file) {
         UUID userId = currentUserService.requireCurrentUser().getId();
-        return ResponseEntity.ok(userService.updateUserProfile(userId, request, emailClaimToken));
+        String avatarUrl = userAvatarService.uploadAvatar(userId, file);
+        return ResponseEntity.ok(Map.of("avatarUrl", avatarUrl == null ? "" : avatarUrl));
     }
 
     @Operation(summary = "Request email address change (token-link flow)",

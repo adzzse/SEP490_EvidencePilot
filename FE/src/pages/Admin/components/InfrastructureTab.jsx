@@ -81,12 +81,12 @@ function InfraSection({ lang, api }) {
   if (loading) return <PageSkeleton />;
 
   return (
-    <div className="p-8 space-y-6 bg-[#f8fafc]">
+    <div className="p-8 space-y-6 bg-(--page-bg)">
       {/* Header Area */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-(--border) pb-5">
         <div>
-          <h1 className="text-3xl font-extrabold text-[#1e3a8a] tracking-tight">{lang.systemHealth}</h1>
-          <p className="text-gray-500 text-xs mt-1">{lang.healthSub}</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{lang.systemHealth}</h1>
+          <p className="text-(--text-secondary) text-xs mt-1">{lang.healthSub}</p>
         </div>
         <div>
           <button 
@@ -105,7 +105,7 @@ function InfraSection({ lang, api }) {
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: System Status */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm flex flex-col justify-between h-40">
+        <div className="bg-(--surface) rounded-xl border border-(--border) p-5 shadow-sm flex flex-col justify-between h-40">
           <div className="flex justify-between items-start">
             <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -119,14 +119,14 @@ function InfraSection({ lang, api }) {
             )}
           </div>
           <div className="mt-4">
-            <span className="text-[10px] font-bold text-gray-400 block tracking-wider uppercase">System Status</span>
-            <span className="text-xl font-extrabold text-slate-800">{irServices.length > 0 ? `${upCount} / ${irServices.length} Services Online` : 'No data'}</span>
-            <p className="text-[10px] text-gray-400 italic mt-1 leading-snug">From /api/health.</p>
+            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">System Status</span>
+            <span className="text-xl font-extrabold text-(--text-primary)">{irServices.length > 0 ? `${upCount} / ${irServices.length} Services Online` : 'No data'}</span>
+            <p className="text-[10px] text-(--text-tertiary) italic mt-1 leading-snug">From /api/health.</p>
           </div>
         </div>
 
         {/* Card 2: Queue Status */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm flex flex-col justify-between h-40">
+        <div className="bg-(--surface) rounded-xl border border-(--border) p-5 shadow-sm flex flex-col justify-between h-40">
           <div className="flex justify-between items-start">
             <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -135,9 +135,9 @@ function InfraSection({ lang, api }) {
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-[10px] font-bold text-gray-400 block tracking-wider uppercase">Queue Status</span>
-            <span className="text-xl font-extrabold text-slate-800">{queueTotal} Documents</span>
-            <p className="text-[10px] text-gray-400 italic mt-1 leading-snug">
+            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">Queue Status</span>
+            <span className="text-xl font-extrabold text-(--text-primary)">{queueTotal} Documents</span>
+            <p className="text-[10px] text-(--text-tertiary) italic mt-1 leading-snug">
               {typeof counts.QUEUED === 'number' ? `${counts.QUEUED} Queued · ` : ''}
               {typeof counts.PROCESSING === 'number' ? `${counts.PROCESSING} Processing · ` : ''}
               {typeof counts.FAILED === 'number' ? `${counts.FAILED} Failed` : ''}
@@ -146,7 +146,7 @@ function InfraSection({ lang, api }) {
         </div>
 
         {/* Card 3: Documents */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm flex flex-col justify-between h-40">
+        <div className="bg-(--surface) rounded-xl border border-(--border) p-5 shadow-sm flex flex-col justify-between h-40">
           <div className="flex justify-between items-start">
             <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -155,18 +155,18 @@ function InfraSection({ lang, api }) {
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-[10px] font-bold text-gray-400 block tracking-wider uppercase">Documents</span>
-            <span className="text-xl font-extrabold text-slate-800">
+            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">Documents</span>
+            <span className="text-xl font-extrabold text-(--text-primary)">
               {(dash.activePaperDocuments ?? 0) + (dash.activeSourceDocuments ?? 0)} Active
             </span>
-            <p className="text-[10px] text-gray-400 italic mt-1 leading-snug">
+            <p className="text-[10px] text-(--text-tertiary) italic mt-1 leading-snug">
               {dash.activePaperDocuments ?? 0} Papers · {dash.activeSourceDocuments ?? 0} Sources
             </p>
           </div>
         </div>
 
         {/* Card 4: Collections */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm flex flex-col justify-between h-40">
+        <div className="bg-(--surface) rounded-xl border border-(--border) p-5 shadow-sm flex flex-col justify-between h-40">
           <div className="flex justify-between items-start">
             <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -175,22 +175,22 @@ function InfraSection({ lang, api }) {
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-[10px] font-bold text-gray-400 block tracking-wider uppercase">Collections</span>
-            <span className="text-xl font-extrabold text-slate-800">{dash.activeCollections ?? 0} Active</span>
-            <p className="text-[10px] text-gray-400 italic mt-1 leading-snug">{dash.activeCollectionCategories ?? 0} Categories</p>
+            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">Collections</span>
+            <span className="text-xl font-extrabold text-(--text-primary)">{dash.activeCollections ?? 0} Active</span>
+            <p className="text-[10px] text-(--text-tertiary) italic mt-1 leading-snug">{dash.activeCollectionCategories ?? 0} Categories</p>
           </div>
         </div>
       </div>
 
       {/* Services Table Card */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4.5 border-b border-gray-100">
-          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">ACTIVE SERVICES INVENTORY</h3>
+      <div className="bg-(--surface) rounded-2xl border border-(--border) shadow-sm overflow-hidden">
+        <div className="px-6 py-4.5 border-b border-(--border-light)">
+          <h3 className="text-xs font-bold text-(--text-primary) uppercase tracking-wider">ACTIVE SERVICES INVENTORY</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-50 text-slate-400 font-bold uppercase border-b border-gray-100">
+              <tr className="bg-(--surface-secondary) text-(--text-tertiary) font-bold uppercase border-b border-(--border-light)">
                 <th className="px-6 py-3.5">Service Node</th>
                 <th className="px-6 py-3.5">Status</th>
                 <th className="px-6 py-3.5">Response Time</th>
@@ -198,19 +198,19 @@ function InfraSection({ lang, api }) {
                 <th className="px-6 py-3.5 text-right"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-slate-700 font-semibold">
+            <tbody className="divide-y divide-(--border-light) text-(--text-primary) font-semibold">
               {irServices.length === 0 ? (
-                <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-400 font-medium">No infrastructure data available</td></tr>
+                <tr><td colSpan={5} className="px-6 py-12 text-center text-(--text-tertiary) font-medium">No infrastructure data available</td></tr>
               ) : irServices.map(s => (
-                <tr key={s.name} className="hover:bg-slate-50/50 transition">
+                <tr key={s.name} className="hover:bg-(--surface-secondary)/50 transition">
                   <td className="px-6 py-4">
-                    <span className="font-bold text-slate-800 capitalize">{s.name}</span>
+                    <span className="font-bold text-(--text-primary) capitalize">{s.name}</span>
                   </td>
                   <td className="px-6 py-4">
                     {getStatusDot(s.status)}
                   </td>
-                  <td className="px-6 py-4 text-slate-600 font-bold">{s.latencyMs != null ? `${s.latencyMs}ms` : '—'}</td>
-                  <td className="px-6 py-4 text-slate-600 font-bold">—</td>
+                  <td className="px-6 py-4 text-(--text-secondary) font-bold">{s.latencyMs != null ? `${s.latencyMs}ms` : '—'}</td>
+                  <td className="px-6 py-4 text-(--text-secondary) font-bold">—</td>
                   <td className="px-6 py-4" />
                 </tr>
               ))}

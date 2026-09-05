@@ -146,7 +146,7 @@ export default function ProjectManagement() {
   return (
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary) font-sans">
       <AppHeader />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Breadcrumb
           items={[
             { label: t.dashboard, path: '/instructor/dashboard' },
@@ -157,7 +157,7 @@ export default function ProjectManagement() {
         {/* Master Action Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center w-full mb-6 gap-4 border-b border-(--border) pb-6">
           <div className="min-w-0 flex-1">
-            <h1 className="text-3xl font-black text-(--brand-foreground) tracking-tight">{t.projects}</h1>
+            <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t.projects}</h1>
             <p className="text-xs text-(--text-tertiary) mt-1">{t.projectsManagementDesc || 'Manage and monitor your student project workspaces.'}</p>
           </div>
 
@@ -221,13 +221,13 @@ export default function ProjectManagement() {
         </div>
 
         {loading ? (
-          <div className={isGridView ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-2"}>
+          <div className={isGridView ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" : "space-y-2"}>
             {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-36 bg-(--surface-tertiary) rounded-2xl animate-pulse" />)}
           </div>
         ) : projects.length === 0 ? (
           <div className="text-xs text-(--text-tertiary) italic bg-(--surface) rounded-2xl border border-(--border) p-8 text-center">{ct.noData}</div>
         ) : isGridView ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {projects.map(p => (
               <div
                 key={p.id}

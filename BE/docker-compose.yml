@@ -192,6 +192,13 @@ services:
       MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
       MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_SMTP_STARTTLS_ENABLE:-true}
 
+      # ── Set-password invitation link (required for user creation/import) ───
+      APP_INVITATION_URL: ${APP_INVITATION_URL:-}
+      APP_INVITATION_TTL_HOURS: ${APP_INVITATION_TTL_HOURS:-24}
+      # Dev-only creation bypass (fixed password, no email). BE also requires
+      # the dev Spring profile — defaults to false, keep it that way in prod.
+      APP_DEV_BYPASS_ENABLED: ${APP_DEV_BYPASS_ENABLED:-false}
+
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
 

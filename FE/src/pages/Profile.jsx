@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import ReactCrop from 'react-image-crop';
+import 'react-image-crop/dist/ReactCrop.css';
 import api from '../services/api.js';
 import { AppHeader, LoadingSkeleton, Breadcrumb, Modal } from '../components';
 import OtpInput from '../components/ui/OtpInput.jsx';
@@ -143,7 +145,7 @@ function ActivityLogItem({ item, role, language }) {
   return null;
 }
 
-export default function Profile() {
+export function ProfileContent({ embedded = false }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user: authUser, role, logout, verifySession } = useAuth();
@@ -175,6 +177,97 @@ export default function Profile() {
   const [verifiedClaim, setVerifiedClaim] = useState(null);
   const [verifiedEmail, setVerifiedEmail] = useState(null);
   const otpFieldRef = useRef(null);
+
+  // Avatar upload + crop
+  const [avatarSrc, setAvatarSrc] = useState(null);
+  const [avatarCrop, setAvatarCrop] = useState();
+  const [completedCrop, setCompletedCrop] = useState(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const avatarFileRef = useRef(null);
+  const avatarImgRef = useRef(null);
+
+  const openAvatarPicker = () => {
+    setAvatarError('');
+    avatarFileRef.current?.click();
+  };
+
+  const handleAvatarFile = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setAvatarError(language === 'vi' ? 'Vui lòng chọn tệp hình ảnh.' : 'Please choose an image file.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError(language === 'vi' ? 'Ảnh không được vượt quá 5MB.' : 'Image must not exceed 5MB.');
+      return;
+    }
+    setAvatarSrc((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+    setAvatarCrop(undefined);
+    setCompletedCrop(null);
+  };
+
+  const handleAvatarCropComplete = async () => {
+    const image = avatarImgRef.current;
+    if (!image || !completedCrop?.width || !completedCrop?.height) {
+      setAvatarError(language === 'vi' ? 'Vui lòng chọn vùng cắt.' : 'Please select a crop area.');
+      return;
+    }
+    setAvatarUploading(true);
+    setAvatarError('');
+    try {
+      // ponytail: react-image-crop may hand back percent or pixel crops
+      // depending on version — normalize to natural pixels either way.
+      const toPixels = (c) => {
+        if (!c || !c.width || !c.height) return null;
+        if (c.unit === '%') {
+          return {
+            x: (c.x / 100) * image.naturalWidth,
+            y: (c.y / 100) * image.naturalHeight,
+            width: (c.width / 100) * image.naturalWidth,
+            height: (c.height / 100) * image.naturalHeight,
+          };
+        }
+        const scaleX = image.naturalWidth / image.width;
+        const scaleY = image.naturalHeight / image.height;
+        return { x: c.x * scaleX, y: c.y * scaleY, width: c.width * scaleX, height: c.height * scaleY };
+      };
+      const px = toPixels(completedCrop);
+      if (!px) {
+        setAvatarError(language === 'vi' ? 'Vui lòng chọn vùng cắt.' : 'Please select a crop area.');
+        return;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(px.width);
+      canvas.height = Math.round(px.height);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(image, px.x, px.y, px.width, px.height, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+      if (!blob) throw new Error('crop-failed');
+      const form = new FormData();
+      form.append('file', blob, 'avatar.jpg');
+      const { data } = await api.post('/api/users/avatar', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (data?.avatarUrl) setUser((prev) => (prev ? { ...prev, avatarUrl: data.avatarUrl } : prev));
+      verifySession().catch(() => { });
+      setAvatarSrc((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setMessage({
+        type: 'success',
+        text: language === 'vi' ? 'Đã cập nhật ảnh đại diện.' : 'Avatar updated.',
+      });
+    } catch {
+      setAvatarError(language === 'vi' ? 'Tải ảnh lên thất bại.' : 'Avatar upload failed.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   // Recent activity feed
   const [activity, setActivity] = useState([]);
@@ -244,10 +337,10 @@ export default function Profile() {
     const q = activityQuery.trim().toLowerCase();
     const filtered = q
       ? activity.filter((item) =>
-          [item.title, item.subtitle, item.status, item.type]
-            .filter(Boolean)
-            .some((v) => String(v).toLowerCase().includes(q)),
-        )
+        [item.title, item.subtitle, item.status, item.type]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q)),
+      )
       : [...activity];
     filtered.sort((a, b) => {
       const ta = a?.occurredAt ? new Date(a.occurredAt).getTime() : 0;
@@ -533,7 +626,9 @@ export default function Profile() {
   };
 
   if (!user) {
-    return (
+    return embedded ? (
+      <div className="p-2"><LoadingSkeleton count={4} /></div>
+    ) : (
       <div className="min-h-screen bg-(--page-bg)">
         <AppHeader />
         <div className="mx-auto max-w-4xl p-4 sm:p-6 lg:p-8"><LoadingSkeleton count={4} /></div>
@@ -549,27 +644,52 @@ export default function Profile() {
   const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase() || 'U';
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-(--page-bg) text-(--text-primary) font-sans">
-      <AppHeader />
-      <main className="mx-auto max-w-4xl p-4 sm:p-6 lg:p-8">
+    <div className={embedded ? '' : 'min-h-screen overflow-x-hidden bg-(--page-bg) text-(--text-primary) font-sans'}>
+      {!embedded && <AppHeader />}
+      <main className={embedded ? '' : 'mx-auto max-w-4xl p-4 sm:p-6 lg:p-8'}>
 
-        <Breadcrumb
-          items={[
-            { label: role === 'INSTRUCTOR' ? 'Dashboard' : (role === 'ADMIN' ? 'Admin' : 'Projects'), path: role === 'INSTRUCTOR' ? '/instructor/dashboard' : (role === 'ADMIN' ? '/admin/dashboard' : '/student/projects') },
-            { label: t.profile }
-          ]}
-        />
+        {!embedded && (
+          <Breadcrumb
+            items={[
+              { label: role === 'INSTRUCTOR' ? 'Dashboard' : (role === 'ADMIN' ? 'Admin' : 'Projects'), path: role === 'INSTRUCTOR' ? '/instructor/dashboard' : (role === 'ADMIN' ? '/admin/dashboard' : '/student/projects') },
+              { label: t.profile }
+            ]}
+          />
+        )}
 
         {/* Profile Header Flexbox (Left: Avatar & Identity, Right: Tabs) */}
         <div className="flex flex-col md:flex-row md:justify-between md:items-start w-full gap-4 mb-6 border-b border-(--border) pb-6">
           {/* Avatar & Identity Info */}
           <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-14 h-14 rounded-2xl bg-(--brand-soft) text-(--brand-foreground) font-black text-lg flex items-center justify-center border border-(--brand)/20 shadow-xs shrink-0">
-              {initials}
-            </div>
+            <button
+              type="button"
+              onClick={openAvatarPicker}
+              title={language === 'vi' ? 'Đổi ảnh đại diện' : 'Change avatar'}
+              aria-label={language === 'vi' ? 'Đổi ảnh đại diện' : 'Change avatar'}
+              className="relative w-14 h-14 rounded-2xl overflow-hidden bg-(--brand-soft) text-(--brand-foreground) font-black text-lg flex items-center justify-center border border-(--brand)/20 shadow-xs shrink-0 cursor-pointer group"
+            >
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                initials
+              )}
+              <span className="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/40 text-white">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              </span>
+            </button>
+            <input
+              ref={avatarFileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => { handleAvatarFile(e.target.files?.[0] || null); e.target.value = ''; }}
+            />
             <div className="min-w-0">
               <h1 className="text-xl font-black text-(--brand-foreground) truncate">
                 {user.firstName || user.lastName ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : user.email}
+                {user.role === 'STUDENT' && user.studentCode && (
+                  <span className="ml-2 font-mono text-sm font-bold text-(--text-secondary)">[{user.studentCode}]</span>
+                )}
               </h1>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <span className="inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wide bg-(--brand-soft) text-(--brand-foreground) border border-(--brand)/20 shrink-0">
@@ -969,7 +1089,7 @@ export default function Profile() {
       {/* OTP Email Verification Modal */}
       <Modal
         open={otpModalOpen}
-        onClose={otpVerifying ? () => {} : closeOtpModal}
+        onClose={otpVerifying ? () => { } : closeOtpModal}
         title={language === 'vi' ? 'Xác thực email mới' : 'Verify Your New Email'}
         closeLabel={language === 'vi' ? 'Đóng' : 'Close'}
       >
@@ -1018,6 +1138,75 @@ export default function Profile() {
         </div>
       </Modal>
 
+      {/* Avatar Crop Modal */}
+      <Modal
+        open={!!avatarSrc}
+        onClose={() => { if (!avatarUploading) setAvatarSrc((prev) => { if (prev) URL.revokeObjectURL(prev); return null; }); }}
+        title={language === 'vi' ? 'Cắt ảnh đại diện' : 'Crop avatar'}
+        closeLabel={language === 'vi' ? 'Đóng' : 'Close'}
+      >
+        <div className="space-y-4 text-xs">
+          {avatarSrc && (
+            <div className="flex justify-center">
+              <ReactCrop
+                crop={avatarCrop}
+                onChange={(_, percentCrop) => setAvatarCrop(percentCrop)}
+                onComplete={(c) => setCompletedCrop(c)}
+                aspect={1}
+                minWidth={50}
+                minHeight={50}
+              >
+                <img
+                  ref={avatarImgRef}
+                  src={avatarSrc}
+                  alt=""
+                  className="max-h-[50vh] max-w-full"
+                  onLoad={(e) => {
+                    const { width, height } = e.currentTarget;
+                    const size = Math.min(width, height) * 0.8;
+                    const initial = {
+                      unit: '%',
+                      x: ((width - size) / 2 / width) * 100,
+                      y: ((height - size) / 2 / height) * 100,
+                      width: (size / width) * 100,
+                      height: (size / height) * 100,
+                    };
+                    setAvatarCrop(initial);
+                  }}
+                />
+              </ReactCrop>
+            </div>
+          )}
+          {avatarError && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+              {avatarError}
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-(--border-light)">
+            <button
+              type="button"
+              onClick={() => setAvatarSrc((prev) => { if (prev) URL.revokeObjectURL(prev); return null; })}
+              disabled={avatarUploading}
+              className="px-4 py-2 rounded-xl border border-(--border) text-(--text-secondary) font-bold text-xs hover:bg-(--surface-secondary) transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {ct.cancel || 'Cancel'}
+            </button>
+            <button
+              type="button"
+              onClick={handleAvatarCropComplete}
+              disabled={avatarUploading}
+              className="px-5 py-2 rounded-xl bg-(--brand) text-(--on-brand) font-bold text-xs hover:bg-(--brand-hover) transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+            >
+              {avatarUploading ? (ct.saving || '...') : (language === 'vi' ? 'Tải lên' : 'Upload')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
     </div>
   );
+}
+
+export default function Profile() {
+  return <ProfileContent />;
 }

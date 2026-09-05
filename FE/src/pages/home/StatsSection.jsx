@@ -25,7 +25,7 @@ export default function StatsSection({ t }) {
   return (
     <section className="relative z-10 border-y border-(--border-light) bg-(--surface) py-5 sm:py-6" aria-labelledby="platform-stats-heading">
       <h2 id="platform-stats-heading" className="sr-only">{t.stats.heading}</h2>
-      <dl className="grid grid-cols-3 max-w-4xl mx-auto px-3 sm:px-6" aria-live="polite" aria-busy={!stats}>
+      <dl className="grid grid-cols-1 sm:grid-cols-3 max-w-4xl mx-auto px-3 sm:px-6" aria-live="polite" aria-busy={!stats}>
         {items.map((item, index) => (
           <div
             key={index}

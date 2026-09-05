@@ -15,10 +15,15 @@ public record AdminUserResponse(
         String studentCode,
         String firstName,
         String lastName,
-        LocalDateTime createdAt) {
+        LocalDateTime createdAt,
+        String avatarUrl) {
 
     public static AdminUserResponse from(User user) {
+        return from(user, null);
+    }
+
+    public static AdminUserResponse from(User user, String avatarUrl) {
         return new AdminUserResponse(user.getId(), user.getEmail(), user.getRole(), user.getAccountStatus(),
-                user.getStudentCode(), user.getFirstName(), user.getLastName(), user.getCreatedAt());
+                user.getStudentCode(), user.getFirstName(), user.getLastName(), user.getCreatedAt(), avatarUrl);
     }
 }

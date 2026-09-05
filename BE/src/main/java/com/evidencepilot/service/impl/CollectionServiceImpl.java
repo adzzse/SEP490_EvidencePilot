@@ -11,6 +11,7 @@ import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.repository.CollectionRepository;
+import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.CollectionService;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.dto.request.PagingRequest;
@@ -41,6 +42,7 @@ public class CollectionServiceImpl implements CollectionService {
     private final ProjectCollectionService projectCollectionService;
     private final com.evidencepilot.repository.DocumentRepository documentRepository;
     private final com.evidencepilot.repository.CollectionDocumentRepository collectionDocumentRepository;
+    private final AuditService auditService;
 
     @Override
     @Transactional
@@ -57,6 +59,8 @@ public class CollectionServiceImpl implements CollectionService {
         collection.setCreatedAt(LocalDateTime.now());
 
         Collection saved = collectionRepository.save(collection);
+        auditService.record("COLLECTION_CREATED", "COLLECTION", saved.getId(), currentUser, null,
+                java.util.Map.of("title", saved.getTitle() != null ? saved.getTitle() : ""));
         return toResponse(saved);
     }
 
@@ -79,7 +83,10 @@ public class CollectionServiceImpl implements CollectionService {
         collection.setTitle(request.name());
         collection.setDescription(request.description());
         collection.setCategory(resolveCategory(request.categoryId()));
-        return toResponse(collectionRepository.save(collection));
+        Collection saved = collectionRepository.save(collection);
+        auditService.record("COLLECTION_UPDATED", "COLLECTION", saved.getId(), currentUser, null,
+                java.util.Map.of("title", saved.getTitle() != null ? saved.getTitle() : ""));
+        return toResponse(saved);
     }
 
     @Override
@@ -102,6 +109,7 @@ public class CollectionServiceImpl implements CollectionService {
         projectCollectionService.prepareCollectionDeletion(collection);
         collection.setActive(false);
         collectionRepository.save(collection);
+        auditService.record("COLLECTION_DELETED", "COLLECTION", collection.getId(), currentUser, null, null);
     }
 
     private CollectionResponse toResponse(Collection collection) {

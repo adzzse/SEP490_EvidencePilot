@@ -1194,7 +1194,7 @@ export default function ProjectDetail() {
                       <div className="w-full h-2.5 rounded-full bg-[var(--surface-tertiary)] overflow-hidden">
                         <div className="h-full bg-[var(--brand)] rounded-full transition-all duration-1000 ease-in-out" style={{ width: `${pct}%` }} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} />
                       </div>
-                      <div className="grid grid-cols-4 gap-1 text-[9px] font-bold">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 text-[9px] font-bold">
                         {steps.map((label, i) => (
                           <span key={label} className={`text-center truncate px-1 py-1 rounded ${i===activeIdx ? 'bg-[var(--brand-soft)] text-[var(--brand-foreground)]' : i < activeIdx ? 'text-emerald-600' : 'text-[var(--text-tertiary)]'}`}>{i < activeIdx ? '✓ ' : ''}{label}</span>
                         ))}
@@ -1441,7 +1441,7 @@ export default function ProjectDetail() {
                       </div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div><span className="block text-[10px] font-bold uppercase text-[var(--text-tertiary)]">Student Code</span><span className="text-[11px]">{selectedMember.studentCode || '-'}</span></div>
                   </div>
                   {selectedMember.role !== 'INSTRUCTOR' && (

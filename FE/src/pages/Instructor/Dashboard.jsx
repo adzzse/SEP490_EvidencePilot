@@ -120,12 +120,12 @@ export default function InstructorDashboard() {
   return (
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary) font-sans">
       <AppHeader />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8 border-b border-(--border) pb-5">
           <div>
-            <h1 className="text-3xl font-extrabold text-(--brand-foreground) tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">
               {t.instructorControlDashboard}
             </h1>
             <p className="text-(--text-secondary) text-sm mt-1">
@@ -147,7 +147,7 @@ export default function InstructorDashboard() {
         </div>
 
         {/* High-Level Metrics Grid */}
-        <div id="metrics-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <div id="metrics-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-4 gap-5 mb-8">
           
           {/* Metric 1: Projects */}
           <div
@@ -161,7 +161,7 @@ export default function InstructorDashboard() {
               </div>
             </div>
             <div className="mt-4">
-              <div className="text-3xl font-black text-(--text-primary)">
+              <div className="text-2xl lg:text-3xl font-black text-(--text-primary)">
                 {loadingMetrics ? <span className="inline-block w-8 h-8 bg-(--surface-tertiary) rounded-lg animate-pulse" /> : metrics.projectsCount}
               </div>
               <p className="text-[11px] text-(--text-tertiary) mt-1 font-medium">{t.manageProjects} &rarr;</p>
@@ -180,7 +180,7 @@ export default function InstructorDashboard() {
               </div>
             </div>
             <div className="mt-4">
-              <div className="text-3xl font-black text-(--text-primary)">
+              <div className="text-2xl lg:text-3xl font-black text-(--text-primary)">
                 {loadingMetrics ? <span className="inline-block w-8 h-8 bg-(--surface-tertiary) rounded-lg animate-pulse" /> : metrics.collectionsCount}
               </div>
               <p className="text-[11px] text-(--text-tertiary) mt-1 font-medium">{t.manageCollectionsLink} &rarr;</p>
@@ -199,7 +199,7 @@ export default function InstructorDashboard() {
               </div>
             </div>
             <div className="mt-4">
-              <div className="text-3xl font-black text-(--text-primary) flex items-center gap-2">
+              <div className="text-2xl lg:text-3xl font-black text-(--text-primary) flex items-center gap-2">
                 {loadingMetrics ? <span className="inline-block w-8 h-8 bg-(--surface-tertiary) rounded-lg animate-pulse" /> : metrics.pendingRequestsCount}
                 {!loadingMetrics && metrics.pendingRequestsCount > 0 && (
                   <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-600">Action Required</span>
@@ -221,7 +221,7 @@ export default function InstructorDashboard() {
               </div>
             </div>
             <div className="mt-4">
-              <div className="text-3xl font-black text-(--text-primary)">
+              <div className="text-2xl lg:text-3xl font-black text-(--text-primary)">
                 {loadingMetrics ? <span className="inline-block w-8 h-8 bg-(--surface-tertiary) rounded-lg animate-pulse" /> : metrics.sourcesCount}
               </div>
               <p className="text-[11px] text-(--text-tertiary) mt-1 font-medium">{t.viewSourceLibrary || 'Explore Library'} &rarr;</p>
@@ -238,7 +238,7 @@ export default function InstructorDashboard() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-4 gap-5">
             
             {/* Quick Action 1: Project Management */}
             <div className="bg-(--surface) border border-(--border) rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-(--brand)/40 transition-colors">

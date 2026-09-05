@@ -85,7 +85,7 @@ export default function CollectionList() {
   return (
     <div className="min-h-screen bg-(--background) text-(--text-primary)">
       <AppHeader />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Breadcrumb
           items={[
             { label: t.dashboard, path: '/instructor/dashboard' },
@@ -95,7 +95,7 @@ export default function CollectionList() {
 
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6 border-b border-(--border) pb-6">
           <div className="min-w-0 flex-1">
-            <h1 className="text-3xl font-black text-(--brand-foreground) tracking-tight">{t.collections}</h1>
+            <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t.collections}</h1>
             <p className="text-xs text-(--text-tertiary) mt-1">{t.collectionsManagerDesc}</p>
           </div>
 
@@ -160,7 +160,7 @@ export default function CollectionList() {
 
         <div id="collection-grid">
           {loading ? (
-            <div className={isGridView ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-3"}>
+            <div className={isGridView ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" : "space-y-3"}>
               {[1,2,3,4,5,6].map(i => <div key={i} className="h-28 bg-(--surface-tertiary) rounded-xl animate-pulse" />)}
             </div>
           ) : collections.length === 0 ? (
@@ -168,7 +168,7 @@ export default function CollectionList() {
               action={<button onClick={() => setModalOpen(true)}
                 className="cursor-pointer px-4 py-2 bg-(--brand) text-(--on-brand) font-bold text-xs rounded-xl hover:bg-(--brand-hover) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus)">{t.createCollection}</button>} />
           ) : isGridView ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {collections.map(col => (
                 <EntityCard key={col.id}
                   className="hover:-translate-y-1 hover:shadow-lg transition-all duration-200"

@@ -54,6 +54,7 @@ public class SecurityConfig {
                                 "/api/auth/login",
                                 "/api/auth/password-reset/request",
                                 "/api/auth/password-reset/confirm",
+                                "/api/auth/set-password",
                                 "/api/health",
                                 "/api/health/**",
                                 "/api/public/**",
@@ -73,6 +74,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/users/me/**").authenticated()
                         .requestMatchers("/api/users/email/**").authenticated()
                         .requestMatchers("/api/users/email-change/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/users/avatar").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users").hasAnyRole("ADMIN", "INSTRUCTOR")
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

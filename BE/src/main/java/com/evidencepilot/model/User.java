@@ -41,6 +41,13 @@ public class User {
     @Column(name = "student_code", length = 50)
     private String studentCode;
 
+    /**
+     * MinIO object key only (e.g. avatars/{userId}.jpg) — never a URL.
+     * The full URL is constructed at read time (see UserAvatarService).
+     */
+    @Column(name = "avatar_key", length = 512)
+    private String avatarKey;
+
     @Column(name = "password_change_notice_pending", nullable = false)
     private boolean passwordChangeNoticePending;
 
@@ -61,6 +68,23 @@ public class User {
 
     @Column(name = "email_verification_requested_at")
     private LocalDateTime emailVerificationRequestedAt;
+
+    /**
+     * Invitation token for the admin-created verify-email flow (V22).
+     * Distinct from the V18 change-email hash columns.
+     */
+    @Column(name = "email_verification_token", unique = true)
+    private String emailVerificationToken;
+
+    @Column(name = "email_verification_expires_at")
+    private LocalDateTime emailVerificationExpiresAt;
+
+    /**
+     * Deliberate, un-hashable sentinel for accounts that must set their own
+     * password via verification link. NOT NULL-safe alternative to NULL that
+     * can never verify against any encoder — explicit in dumps and audits.
+     */
+    public static final String DISABLED_PASSWORD_SENTINEL = "DISABLED_PENDING_VERIFICATION";
 
     @Column(name = "token_version", nullable = false)
     private int tokenVersion;

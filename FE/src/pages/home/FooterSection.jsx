@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useLanguage } from '../../context/LanguageContext';
 
 export default function FooterSection({ t }) {
-  const { toggleLanguage } = useLanguage();
+  const { language, toggleLanguage } = useLanguage();
 
   return (
     <footer className="bg-[#0f172a] text-gray-400 py-12">
@@ -16,7 +16,10 @@ export default function FooterSection({ t }) {
           </Link>
           <div className="flex items-center gap-6 text-xs">
             <span className="text-gray-600 cursor-default">{t.footer.contact}</span>
-            <button onClick={toggleLanguage} className="text-xs font-bold text-gray-500 hover:text-white transition px-2 py-1 border border-gray-700 rounded-lg">{t.nav.lang}</button>
+            <div className="flex bg-slate-800 p-0.5 rounded-lg border border-gray-700 text-[10px] font-bold">
+              <button onClick={() => language !== 'en' && toggleLanguage()} className={`px-2.5 py-1 rounded-md transition ${language === 'en' ? 'bg-white text-slate-800 shadow-sm' : 'text-gray-400'}`}>EN</button>
+              <button onClick={() => language !== 'vi' && toggleLanguage()} className={`px-2.5 py-1 rounded-md transition ${language === 'vi' ? 'bg-white text-slate-800 shadow-sm' : 'text-gray-400'}`}>VN</button>
+            </div>
           </div>
         </div>
         <p className="text-xs text-center text-gray-600">{t.footer.tagline}</p>

@@ -78,7 +78,7 @@ export default function ReviewRequests() {
   return (
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary)">
       <AppHeader />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Breadcrumb
           items={[
             { label: t.dashboard, path: '/instructor/dashboard' },
@@ -86,7 +86,7 @@ export default function ReviewRequests() {
           ]}
         />
         <div className="mb-6 border-b border-(--border) pb-6">
-          <h1 className="text-3xl font-black text-(--brand-foreground) tracking-tight">{t.reviewRequests}</h1>
+          <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t.reviewRequests}</h1>
           <p className="text-xs text-(--text-tertiary) mt-1">{t.pendingRequests}</p>
         </div>
 
@@ -171,7 +171,7 @@ export default function ReviewRequests() {
               <div className="p-6 space-y-2"><LoadingSkeleton count={4} height="h-8" /></div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-36 bg-(--surface-tertiary) rounded-2xl animate-pulse" />)}
             </div>
           )
@@ -239,7 +239,7 @@ export default function ReviewRequests() {
             </div>
           </div>
         ) : (
-          <div id="review-table" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div id="review-table" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filtered.map((req) => {
               const proj = projectById.get(String(req.projectId));
               const projectTitle = proj?.title || `${t.project} #${String(req.projectId).slice(0, 8)}`;

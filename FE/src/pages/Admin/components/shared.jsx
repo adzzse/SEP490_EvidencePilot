@@ -67,12 +67,13 @@ const t = {
     activeDocsLabel: 'active documents',
     chooseUserAccounts: '-- Choose User Accounts --',
     showingLogs: 'Showing {shown} of {total} logs',
-    guideDashDesc: 'Overview of system KPIs at a glance.',
+    guideDashDesc: 'Overview of the platform at a glance.',
     guideDashUsers: 'Total registered users broken down by role.',
     guideDashProjects: 'Active projects with categories and collections.',
     guideDashDocuments: 'Total active documents including source files and paper docs.',
+    guideDashOverviewProjects: 'Active projects now live here, next to Collections in the Platform Overview panel.',
+    activeProjectsHint: 'live projects',
     guideDashStatus: 'User status breakdown: active vs banned accounts.',
-    guideDashInfra: 'Infrastructure service readiness indicators.',
     guideDashDone: 'Dashboard overview complete.',
     guideUsersDesc: 'User management: create, ban, reset password, or delete accounts.',
     guideUsersCreate: 'Create one Student or Instructor. The temporary password comes from the email.',
@@ -136,12 +137,32 @@ const t = {
     // UsersTab
     searchUsers: 'Search by email, name, or student code...', allRoles: 'All Roles', allStatuses: 'All Statuses',
     emailAddress: 'Email Address', userRole: 'User Role',
-    studentCode: 'Student Code', importUsers: 'Import JSON', jsonFile: 'JSON file',
+    studentCode: 'Student Code', importUsers: 'Import Users', jsonFile: 'JSON file',
     importUsersHint: 'Use { role, users } with one STUDENT or INSTRUCTOR role and no more than 200 users. Any invalid item cancels the entire import.',
     temporaryPasswordHint: 'The temporary password is the lowercase part before @ in the email. The user will be prompted to change it after the first login.',
     importing: 'Importing...', importSuccess: 'Import complete: {created} created, {updated} updated.',
     importFailed: 'Nothing was imported. Fix these errors and try again:', item: 'Item',
     jsonFileRequired: 'Select a .json file.',
+    verifying: 'Verifying',
+    password: 'Password', confirmPassword: 'Confirm Password',
+    passwordsNoMatch: 'Passwords do not match.', passwordMin: 'Password must be at least 8 characters.',
+    verifyEmail: 'Verify Email',
+    verifyEmailHint: 'Send a set-password link instead. The user sets their own password; password fields are disabled.',
+    devBypass: 'Dev bypass (local only)',
+    devBypassHint: 'Skip the invitation email and activate immediately with the fixed dev password. Never available in production.',
+    resendInvitation: 'Resend invitation', resendSent: 'Invitation resent successfully.', resendFailed: 'Failed to resend invitation.',
+    downloadTemplate: 'Download .xlsx template', xlsxFile: 'Excel file (.xlsx)',
+    xlsxFileRequired: 'Select a .xlsx file.',
+    preflightTitle: 'Validation Summary', preflightRow: 'Row',
+    preflightValid: '{n} valid users ready to import.', preflightNoValid: 'No valid rows to import.',
+    cancelFixFile: 'Cancel and Fix File', skipErrorsImport: 'Skip Errors and Import {n} Valid Users',
+    errInvalidCode: 'Invalid Student Code format (expected AB123456)',
+    errAdminRole: 'Cannot import Admin roles', errEmail: 'Invalid email address',
+    errName: 'First and last name are required', errDuplicate: 'Duplicate email in file',
+    errMissingCode: 'Student code is required for STUDENT',
+    guideUsersPassword: 'Set an initial password, or check Verify Email to send a set-password link instead.',
+    guideUsersVerify: 'When checked, password fields are disabled and the new user receives a verification link.',
+    guideUsersPreflight: 'Rows are validated before sending. Fix the file or skip the flagged rows.',
     banUser: 'Ban User', activateUser: 'Activate User', deleteUser: 'Delete User',
     showingUsers: 'Showing {shown} of {total} users',
     // ProjectsTab
@@ -259,12 +280,13 @@ const t = {
     papersBannerTitle: 'Tài liệu đang hoạt động',
     papersBannerText: 'Tổng khối lượng trong phiên hiện tại:',
     activeDocsLabel: 'tài liệu đang hoạt động',
-    guideDashDesc: 'Tổng quan các chỉ số KPI của hệ thống.',
+    guideDashDesc: 'Tổng quan nền tảng trong một cái nhìn.',
     guideDashUsers: 'Tổng số người dùng đã đăng ký, phân loại theo vai trò.',
     guideDashProjects: 'Dự án đang hoạt động với danh mục và bộ sưu tập.',
     guideDashDocuments: 'Tổng số tài liệu đang hoạt động bao gồm tệp nguồn và bài báo.',
+    guideDashOverviewProjects: 'Dự án đang hoạt động nay nằm tại đây, cạnh Bộ sưu tập trong panel Tổng quan nền tảng.',
+    activeProjectsHint: 'dự án đang chạy',
     guideDashStatus: 'Phân loại trạng thái người dùng: hoạt động và bị khóa.',
-    guideDashInfra: 'Chỉ số sẵn sàng của dịch vụ hạ tầng.',
     guideDashDone: 'Đã hoàn thành tổng quan bảng điều khiển.',
     guideUsersDesc: 'Quản lý người dùng: tạo, khóa, đặt lại mật khẩu hoặc xóa tài khoản.',
     guideUsersCreate: 'Tạo một Sinh viên hoặc Giảng viên. Mật khẩu tạm được lấy từ email.',
@@ -330,12 +352,32 @@ const t = {
     // UsersTab
     searchUsers: 'Tìm theo email, tên hoặc mã sinh viên...', allRoles: 'Tất cả vai trò', allStatuses: 'Tất cả trạng thái',
     emailAddress: 'Địa chỉ Email', userRole: 'Vai trò người dùng',
-    studentCode: 'Mã số sinh viên', importUsers: 'Import JSON', jsonFile: 'Tệp JSON',
+    studentCode: 'Mã số sinh viên', importUsers: 'Import Users', jsonFile: 'Tệp JSON',
     importUsersHint: 'Dùng cấu trúc { role, users } với một vai trò STUDENT hoặc INSTRUCTOR và tối đa 200 người dùng. Một phần tử sai sẽ hủy toàn bộ lần import.',
     temporaryPasswordHint: 'Mật khẩu tạm là phần trước @ trong email, viết thường. Người dùng sẽ được nhắc đổi mật khẩu sau lần đăng nhập đầu.',
     importing: 'Đang import...', importSuccess: 'Import hoàn tất: tạo {created}, cập nhật {updated}.',
     importFailed: 'Không có dữ liệu nào được import. Hãy sửa các lỗi sau:', item: 'Phần tử',
     jsonFileRequired: 'Hãy chọn tệp .json.',
+    verifying: 'Đang xác thực',
+    password: 'Mật khẩu', confirmPassword: 'Xác nhận mật khẩu',
+    passwordsNoMatch: 'Mật khẩu xác nhận không khớp.', passwordMin: 'Mật khẩu phải có ít nhất 8 ký tự.',
+    verifyEmail: 'Xác thực Email',
+    verifyEmailHint: 'Gửi liên kết đặt mật khẩu thay thế. Người dùng tự đặt mật khẩu; các ô mật khẩu sẽ bị tắt.',
+    devBypass: 'Bỏ qua dev (chỉ local)',
+    devBypassHint: 'Bỏ qua email mời và kích hoạt ngay bằng mật khẩu dev cố định. Không khả dụng ở production.',
+    resendInvitation: 'Gửi lại lời mời', resendSent: 'Đã gửi lại lời mời thành công.', resendFailed: 'Gửi lại lời mời thất bại.',
+    downloadTemplate: 'Tải mẫu .xlsx', xlsxFile: 'Tệp Excel (.xlsx)',
+    xlsxFileRequired: 'Hãy chọn tệp .xlsx.',
+    preflightTitle: 'Tổng hợp kiểm tra', preflightRow: 'Dòng',
+    preflightValid: '{n} người dùng hợp lệ, sẵn sàng import.', preflightNoValid: 'Không có dòng hợp lệ để import.',
+    cancelFixFile: 'Hủy và sửa tệp', skipErrorsImport: 'Bỏ qua lỗi và import {n} người dùng hợp lệ',
+    errInvalidCode: 'Sai định dạng Mã sinh viên (cần dạng AB123456)',
+    errAdminRole: 'Không được import vai trò Admin', errEmail: 'Địa chỉ email không hợp lệ',
+    errName: 'Họ và tên là bắt buộc', errDuplicate: 'Email trùng lặp trong tệp',
+    errMissingCode: 'Mã sinh viên là bắt buộc với STUDENT',
+    guideUsersPassword: 'Đặt mật khẩu ban đầu, hoặc tích Xác thực Email để gửi liên kết đặt mật khẩu.',
+    guideUsersVerify: 'Khi được tích, các ô mật khẩu bị tắt và người dùng mới nhận liên kết xác thực.',
+    guideUsersPreflight: 'Các dòng được kiểm tra trước khi gửi. Sửa tệp hoặc bỏ qua các dòng lỗi.',
     banUser: 'Khóa người dùng', activateUser: 'Kích hoạt người dùng', deleteUser: 'Xóa người dùng',
     showingUsers: 'Hiển thị {shown} trong tổng số {total} người dùng',
     // ProjectsTab
@@ -407,15 +449,15 @@ class SectionBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="p-8 flex items-center justify-center bg-[#f8fafc] min-h-[50vh]">
-          <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center max-w-md shadow-sm">
+        <div className="p-8 flex items-center justify-center bg-(--page-bg) min-h-[50vh]">
+          <div className="bg-(--surface) rounded-2xl border border-(--border) p-8 text-center max-w-md shadow-sm">
             <div className="w-12 h-12 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 mx-auto mb-4">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
               </svg>
             </div>
-            <h3 className="font-bold text-slate-800 text-sm">This section hit an unexpected error</h3>
-            <p className="text-xs text-gray-400 font-medium mt-1 mb-4">The rest of the admin console is unaffected. Reload the section to try again.</p>
+            <h3 className="font-bold text-(--text-primary) text-sm">This section hit an unexpected error</h3>
+            <p className="text-xs text-(--text-tertiary) font-medium mt-1 mb-4">The rest of the admin console is unaffected. Reload the section to try again.</p>
             <button
               onClick={() => this.setState({ hasError: false })}
               className="px-4 py-2 bg-[#0c162e] hover:bg-[#152447] text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
@@ -458,11 +500,11 @@ function ErrorBlock({ msg, onRetry }) {
 
 function StatCard({ label, value, sub, icon, iconBg }) {
   return (
-    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between min-h-[105px]">
+    <div className="bg-(--surface) p-5 rounded-2xl shadow-sm border border-(--border-light) flex items-center justify-between min-h-[105px]">
       <div className="space-y-1">
-        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">{label}</span>
-        <div className="text-2xl font-black text-slate-800">{value}</div>
-        {sub && <div className="text-[10px] text-gray-500 font-semibold flex items-center gap-1 mt-0.5">{sub}</div>}
+        <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{label}</span>
+        <div className="text-2xl font-black text-(--text-primary)">{value}</div>
+        {sub && <div className="text-[10px] text-(--text-secondary) font-semibold flex items-center gap-1 mt-0.5">{sub}</div>}
       </div>
       {icon && (
         <div className={`w-9 h-9 rounded-full flex items-center justify-center ${iconBg || 'bg-blue-50 text-blue-600'} shrink-0`}>
@@ -477,24 +519,24 @@ function StatCard({ label, value, sub, icon, iconBg }) {
 
 
 function JsonTree({ data }) {
-  if (data === null || data === undefined) return <span className="text-gray-400">null</span>;
+  if (data === null || data === undefined) return <span className="text-(--text-tertiary)">null</span>;
   if (typeof data !== 'object') {
     return <span className={typeof data === 'string' ? 'text-emerald-700' : 'text-blue-700'}>{JSON.stringify(data)}</span>;
   }
   if (Array.isArray(data)) {
-    if (data.length === 0) return <span className="text-gray-400">[]</span>;
+    if (data.length === 0) return <span className="text-(--text-tertiary)">[]</span>;
     return (
-      <div className="pl-3 border-l border-gray-100 space-y-0.5">
+      <div className="pl-3 border-l border-(--border-light) space-y-0.5">
         {data.map((v, i) => (
-          <div key={i}><span className="text-gray-400 text-[10px] font-bold">[{i}]</span>{' '}<JsonTree data={v} /></div>
+          <div key={i}><span className="text-(--text-tertiary) text-[10px] font-bold">[{i}]</span>{' '}<JsonTree data={v} /></div>
         ))}
       </div>
     );
   }
   const entries = Object.entries(data);
-  if (entries.length === 0) return <span className="text-gray-400">{'{}'}</span>;
+  if (entries.length === 0) return <span className="text-(--text-tertiary)">{'{}'}</span>;
   return (
-    <div className="pl-3 border-l border-gray-100 space-y-0.5">
+    <div className="pl-3 border-l border-(--border-light) space-y-0.5">
       {entries.map(([k, v]) => (
         <div key={k} className="break-words">
           <span className="text-rose-600 font-bold">{k}</span>

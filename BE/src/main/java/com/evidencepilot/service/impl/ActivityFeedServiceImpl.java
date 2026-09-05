@@ -3,6 +3,7 @@ package com.evidencepilot.service.impl;
 import com.evidencepilot.dto.response.ActivityFeedItem;
 import com.evidencepilot.dto.response.ActivityFeedResponse;
 import com.evidencepilot.model.AuditLog;
+import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.CollectionCategory;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperSection;
@@ -10,6 +11,7 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.AuditLogRepository;
 import com.evidencepilot.repository.CollectionCategoryRepository;
+import com.evidencepilot.repository.CollectionRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
@@ -35,6 +37,7 @@ public class ActivityFeedServiceImpl implements ActivityFeedService {
     private final CollectionCategoryRepository collectionCategoryRepository;
     private final PaperSectionRepository paperSectionRepository;
     private final DocumentRepository documentRepository;
+    private final CollectionRepository collectionRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -57,6 +60,7 @@ public class ActivityFeedServiceImpl implements ActivityFeedService {
             if (items.size() >= 50) break;
             switch (log.getEntityType()) {
                 case "PROJECT" -> asProjectItem(log, "/instructor/projects/").ifPresent(items::add);
+                case "COLLECTION" -> asCollectionItem(log).ifPresent(items::add);
                 case "COLLECTION_CATEGORY" -> asCollectionCategoryItem(log).ifPresent(items::add);
                 case "PaperSection" -> asPaperSectionProjectItem(log, "/instructor/projects/").ifPresent(items::add);
                 case "DOCUMENT" -> asSourceItem(log).ifPresent(items::add);
@@ -101,6 +105,30 @@ public class ActivityFeedServiceImpl implements ActivityFeedService {
                 members,
                 p.getStatus() != null ? p.getStatus().name() : null,
                 pathPrefix + p.getId(),
+                log.getOccurredAt()
+        ));
+    }
+
+    /**
+     * Maps a COLLECTION audit log (instructor-only) to a Collection Detail
+     * item carrying the live source count.
+     */
+    private Optional<ActivityFeedItem> asCollectionItem(AuditLog log) {
+        if (log.getEntityId() == null) return Optional.empty();
+        Collection c = collectionRepository.findById(log.getEntityId()).orElse(null);
+        if (c == null || !c.isActive()) return Optional.empty();
+        long total = documentRepository.findByCollectionId(c.getId()).stream()
+                .filter(Document::isActive).count();
+        return Optional.of(new ActivityFeedItem(
+                "collection",
+                c.getId(),
+                null,
+                c.getTitle(),
+                actionLabel(log.getAction()),
+                total,
+                null,
+                null,
+                "/instructor/collections/" + c.getId(),
                 log.getOccurredAt()
         ));
     }
@@ -219,6 +247,9 @@ public class ActivityFeedServiceImpl implements ActivityFeedService {
             case "COLLECTION_CATEGORY_CREATED" -> "Category created";
             case "COLLECTION_CATEGORY_UPDATED" -> "Category updated";
             case "COLLECTION_CATEGORY_DELETED" -> "Category deleted";
+            case "COLLECTION_CREATED" -> "Created";
+            case "COLLECTION_UPDATED" -> "Updated";
+            case "COLLECTION_DELETED" -> "Deleted";
             case "AI_SECTION_CITATION_REVIEW" -> "Citation reviewed";
             default -> action;
         };

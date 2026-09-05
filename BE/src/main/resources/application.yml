@@ -110,6 +110,14 @@ app:
     url: ${PASSWORD_RESET_URL:}
     token-ttl-minutes: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:60}
     request-cooldown-seconds: ${PASSWORD_RESET_REQUEST_COOLDOWN_SECONDS:60}
+  invitation:
+    url: ${APP_INVITATION_URL:}
+    ttl-hours: ${APP_INVITATION_TTL_HOURS:24}
+  # Dev-only user-creation bypass (fixed password, no email). The bypass code
+  # path is additionally gated behind the dev Spring profile — this flag alone
+  # can never enable it in production.
+  dev-bypass:
+    enabled: ${APP_DEV_BYPASS_ENABLED:false}
 
 # ── External AI model integration ────────────────────────────────────────
 ai:

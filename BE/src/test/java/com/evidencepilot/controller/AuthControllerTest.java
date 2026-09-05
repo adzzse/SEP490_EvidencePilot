@@ -141,6 +141,54 @@ class AuthControllerTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void setPasswordAcceptsValidInvitationAndActivatesAccount() throws Exception {
+        User user = saveUser("invited@test.com", "ValidPass1!", UserRole.STUDENT);
+        user.setPasswordHash(User.DISABLED_PASSWORD_SENTINEL);
+        user.setAccountStatus(AccountStatus.VERIFYING_EMAIL);
+        user.setEmailVerificationToken("invite-token-1");
+        user.setEmailVerificationExpiresAt(java.time.LocalDateTime.now().plusHours(1));
+        userRepository.saveAndFlush(user);
+
+        mockMvc.perform(post("/api/auth/set-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"invite-token-1\",\"newPassword\":\"NewStrongPass1!\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"invited@test.com\",\"password\":\"NewStrongPass1!\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void setPasswordRejectsExpiredInvitation() throws Exception {
+        User user = saveUser("expired@test.com", "ValidPass1!", UserRole.STUDENT);
+        user.setPasswordHash(User.DISABLED_PASSWORD_SENTINEL);
+        user.setAccountStatus(AccountStatus.VERIFYING_EMAIL);
+        user.setEmailVerificationToken("invite-token-old");
+        user.setEmailVerificationExpiresAt(java.time.LocalDateTime.now().minusMinutes(1));
+        userRepository.saveAndFlush(user);
+
+        mockMvc.perform(post("/api/auth/set-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"invite-token-old\",\"newPassword\":\"NewStrongPass1!\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void loginRejectsSentinelHashAccounts() throws Exception {
+        User user = saveUser("pending@test.com", "ValidPass1!", UserRole.STUDENT);
+        user.setPasswordHash(User.DISABLED_PASSWORD_SENTINEL);
+        user.setAccountStatus(AccountStatus.VERIFYING_EMAIL);
+        userRepository.saveAndFlush(user);
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"pending@test.com\",\"password\":\"anything\"}"))
+                .andExpect(status().isForbidden());
+    }
+
     private User saveUser(String email, String rawPassword, UserRole role) {
         User user = new User();
         user.setEmail(email);

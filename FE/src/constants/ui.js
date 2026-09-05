@@ -112,6 +112,6 @@ export const DATE_FORMATS = Object.freeze({
   DEFAULT_LOCALE: 'vi-VN',
 });
 
-export const NOTIFICATION_HOVER_DEBOUNCE_MS = 300;
+export const NOTIFICATION_HOVER_DEBOUNCE_MS = 1000;
 
 export const ACCEPTED_DOCUMENT_EXTENSIONS = '.pdf,.docx,.md,.tex';

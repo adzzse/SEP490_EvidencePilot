@@ -204,13 +204,13 @@ function ProjectsSection({ lang, api }) {
 
   const getStatusBadge = (status) => {
     const styles = {
-      CREATED: 'bg-slate-100 text-slate-700',
+      CREATED: 'bg-(--surface-tertiary) text-(--text-primary)',
       ASSIGNED: 'bg-blue-100 text-blue-700',
       IN_PROGRESS: 'bg-cyan-100 text-cyan-700',
       SUBMITTED_FOR_REVIEW: 'bg-amber-100 text-amber-700',
       RETURNED: 'bg-orange-100 text-orange-700',
       APPROVED: 'bg-emerald-100 text-emerald-700',
-      ARCHIVED: 'bg-gray-100 text-gray-600'
+      ARCHIVED: 'bg-(--surface-secondary) text-(--text-secondary)'
     };
     const labels = {
       CREATED: 'Created',
@@ -222,7 +222,7 @@ function ProjectsSection({ lang, api }) {
       ARCHIVED: 'Archived'
     };
     return (
-      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${styles[status] || 'bg-slate-100 text-slate-700'}`}>
+      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${styles[status] || 'bg-(--surface-tertiary) text-(--text-primary)'}`}>
         {labels[status] || status || '—'}
       </span>
     );
@@ -237,11 +237,11 @@ function ProjectsSection({ lang, api }) {
   const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—';
 
   return (
-    <div className="p-8 space-y-6 bg-[#f8fafc]">
+    <div className="p-8 space-y-6 bg-(--page-bg)">
       {/* Title Area */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-(--border) pb-5">
         <div>
-          <h1 className="text-3xl font-extrabold text-[#1e3a8a] tracking-tight">{lang.projects}</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{lang.projects}</h1>
           <p className="text-gray-550 text-xs mt-1">{lang.projectsSub}</p>
         </div>
       </div>
@@ -249,45 +249,45 @@ function ProjectsSection({ lang, api }) {
       {/* Mini KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Active */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col justify-between h-28">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">TOTAL PROJECTS</span>
+        <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col justify-between h-28">
+          <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">TOTAL PROJECTS</span>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-3xl font-extrabold text-slate-800">{projects.totalElements ?? '—'}</span>
+            <span className="text-3xl font-extrabold text-(--text-primary)">{projects.totalElements ?? '—'}</span>
           </div>
         </div>
 
         {/* Collaborators */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col justify-between h-28">
+        <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col justify-between h-28">
           <div className="flex justify-between items-start">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">COLLABORATORS</span>
-            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">COLLABORATORS</span>
+            <svg className="w-4 h-4 text-(--text-tertiary)" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
           </div>
-          <span className="text-3xl font-extrabold text-slate-800 mt-1">{collaboratorsTotal}</span>
+          <span className="text-3xl font-extrabold text-(--text-primary) mt-1">{collaboratorsTotal}</span>
         </div>
 
         {/* Papers Processed */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col justify-between h-28">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">PAPERS PROCESSED</span>
+        <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col justify-between h-28">
+          <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">PAPERS PROCESSED</span>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-3xl font-extrabold text-slate-800">{papersTotal}</span>
+            <span className="text-3xl font-extrabold text-(--text-primary)">{papersTotal}</span>
           </div>
         </div>
 
         {/* Completion Rate */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col justify-between h-28">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">COMPLETION RATE</span>
-          <span className="text-3xl font-extrabold text-slate-800 mt-1">{completionAvg}%</span>
+        <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col justify-between h-28">
+          <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">COMPLETION RATE</span>
+          <span className="text-3xl font-extrabold text-(--text-primary) mt-1">{completionAvg}%</span>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
+      <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
         <div className="flex flex-1 w-full gap-3 items-center">
           {/* Search Input */}
           <div className="flex-1 relative">
-            <svg className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-(--text-tertiary) absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input 
@@ -295,7 +295,7 @@ function ProjectsSection({ lang, api }) {
               placeholder="Search projects..." 
               value={q}
               onChange={(e) => { setQ(e.target.value); setPage(0); }}
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold" 
+              className="w-full pl-9 pr-4 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold" 
             />
           </div>
 
@@ -303,7 +303,7 @@ function ProjectsSection({ lang, api }) {
           <select 
             value={statusFilter} 
             onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
-            className="w-36 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
+            className="w-36 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none cursor-pointer"
           >
             <option value="">All Statuses</option>
             <option value="CREATED">Created</option>
@@ -316,7 +316,7 @@ function ProjectsSection({ lang, api }) {
           </select>
         </div>
 
-        <span className="text-xs text-gray-400 font-bold self-end sm:self-center shrink-0">
+        <span className="text-xs text-(--text-tertiary) font-bold self-end sm:self-center shrink-0">
           Showing {projects.content.length} of {projects.totalElements || projects.content.length} Projects
         </span>
       </div>
@@ -324,11 +324,11 @@ function ProjectsSection({ lang, api }) {
       {error && <ErrorBlock msg={error} onRetry={() => fetch(page, new AbortController().signal)} />}
 
       {/* Table Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border) overflow-hidden">
         <div className="overflow-x-auto">
           <table data-guide="projects-table" className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-50 text-slate-400 font-bold uppercase border-b border-gray-100">
+              <tr className="bg-(--surface-secondary) text-(--text-tertiary) font-bold uppercase border-b border-(--border-light)">
                 <th className="px-6 py-3.5 font-bold tracking-wider">Project Title</th>
                 <th className="px-6 py-3.5 font-bold tracking-wider">Instructor</th>
                 <th className="px-6 py-3.5 font-bold tracking-wider">Collaborators</th>
@@ -338,53 +338,53 @@ function ProjectsSection({ lang, api }) {
                 <th className="px-6 py-3.5 font-bold tracking-wider text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-slate-700 font-semibold">
+            <tbody className="divide-y divide-(--border-light) text-(--text-primary) font-semibold">
               {loading ? Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="animate-pulse">{Array.from({ length: 7 }).map((_, j) => (
                   <td key={j} className="px-6 py-5"><div className="h-4 bg-gray-200 rounded w-full" /></td>
                 ))}</tr>
               )) : projects.content.length === 0 ? (
-                <tr><td colSpan={7} className="px-6 py-12 text-center text-gray-400 font-medium">No projects found</td></tr>
+                <tr><td colSpan={7} className="px-6 py-12 text-center text-(--text-tertiary) font-medium">No projects found</td></tr>
               ) : projects.content.map(p => {
                 const projCode = p.projCode || '—';
 
                 return (
-                  <tr key={p.id} className="hover:bg-slate-50/50 transition">
+                  <tr key={p.id} className="hover:bg-(--surface-secondary)/50 transition">
                     {/* Project Title */}
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="font-bold text-slate-800 max-w-xs truncate">{p.title}</span>
-                        <span className="text-[10px] text-gray-400 font-bold mt-0.5">{projCode}</span>
+                        <span className="font-bold text-(--text-primary) max-w-xs truncate">{p.title}</span>
+                        <span className="text-[10px] text-(--text-tertiary) font-bold mt-0.5">{projCode}</span>
                       </div>
                     </td>
 
                     {/* Principal Investigator with Avatar */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-white font-bold shrink-0 bg-slate-500">
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-white font-bold shrink-0 bg-(--surface-secondary)0">
                           {(p.instructorName || '?').charAt(0).toUpperCase()}
                         </div>
-                        <span className="text-slate-700 font-semibold">{p.instructorName || '—'}</span>
+                        <span className="text-(--text-primary) font-semibold">{p.instructorName || '—'}</span>
                       </div>
                     </td>
 
                     {/* Collaborators */}
-                    <td className="px-6 py-4 text-slate-600 font-bold">
+                    <td className="px-6 py-4 text-(--text-secondary) font-bold">
                       {p.collaboratorCount ?? '—'}
                     </td>
 
                     {/* Papers */}
-                    <td className="px-6 py-4 text-slate-600 font-bold">
+                    <td className="px-6 py-4 text-(--text-secondary) font-bold">
                       {p.papersProcessed ?? '—'}
                     </td>
 
                     {/* Completion */}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="w-16 h-1.5 bg-(--surface-secondary) rounded-full overflow-hidden">
                           <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, p.completionRate ?? 0)}%` }} />
                         </div>
-                        <span className="text-slate-600 font-bold">{p.completionRate ?? 0}%</span>
+                        <span className="text-(--text-secondary) font-bold">{p.completionRate ?? 0}%</span>
                       </div>
                     </td>
 
@@ -397,7 +397,7 @@ function ProjectsSection({ lang, api }) {
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-1.5">
                         {/* View Details Icon */}
-                        <button onClick={() => openDetail(p)} title="View Project Details" className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition cursor-pointer">
+                        <button onClick={() => openDetail(p)} title="View Project Details" className="p-1.5 rounded-lg hover:bg-(--surface-tertiary) text-(--text-secondary) hover:text-(--text-primary) transition cursor-pointer">
                           <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -405,7 +405,7 @@ function ProjectsSection({ lang, api }) {
                         </button>
 
                         {/* Manage Members Icon */}
-                        <button onClick={() => handleOpenMembers(p)} title="Manage Members" className="p-1.5 rounded-lg hover:bg-slate-100 text-blue-600 hover:text-blue-800 transition cursor-pointer">
+                        <button onClick={() => handleOpenMembers(p)} title="Manage Members" className="p-1.5 rounded-lg hover:bg-(--surface-tertiary) text-blue-600 hover:text-blue-800 transition cursor-pointer">
                           <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                             <circle cx="9" cy="7" r="4" />
@@ -430,7 +430,7 @@ function ProjectsSection({ lang, api }) {
                           triggerLabel={lang.delete}
                           confirmLabel={lang.delete}
                           cancelLabel={lang.cancel}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 text-rose-600 hover:text-rose-800 transition cursor-pointer"
+                          className="p-1.5 rounded-lg hover:bg-(--surface-tertiary) text-rose-600 hover:text-rose-800 transition cursor-pointer"
                         >
                           <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                             <path d="M3 6h18" />
@@ -448,12 +448,12 @@ function ProjectsSection({ lang, api }) {
         </div>
 
         {/* Footer / Pagination */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-gray-100 bg-gray-50/50 text-xs font-semibold text-gray-500">
+        <div className="flex items-center justify-between px-6 py-3.5 border-t border-(--border-light) bg-(--surface-secondary)/50 text-xs font-semibold text-(--text-secondary)">
           {projects.totalPages > 1 ? (
             <>
               <div className="flex items-center gap-1.5">
                 <button onClick={() => setPage(page - 1)} disabled={page === 0}
-                  className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition">
+                  className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                   </svg>
@@ -463,17 +463,17 @@ function ProjectsSection({ lang, api }) {
                     const isActive = page === i;
                     return (
                       <button key={i} onClick={() => setPage(i)}
-                        className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold transition ${isActive ? 'bg-[#1e3a8a] text-white shadow-sm' : 'border border-gray-200 text-gray-600 hover:bg-slate-50'}`}>
+                        className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold transition ${isActive ? 'bg-[#1e3a8a] text-white shadow-sm' : 'border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary)'}`}>
                         {i + 1}
                       </button>
                     );
                   } else if (i === 1 || i === projects.totalPages - 2) {
-                    return <span key={i} className="text-gray-400 text-xs px-0.5">...</span>;
+                    return <span key={i} className="text-(--text-tertiary) text-xs px-0.5">...</span>;
                   }
                   return null;
                 })}
                 <button onClick={() => setPage(page + 1)} disabled={page >= projects.totalPages - 1}
-                  className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition">
+                  className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
@@ -493,19 +493,19 @@ function ProjectsSection({ lang, api }) {
       {/* Project Detail Modal Overlay */}
       {detailProject && (
         <div className="fixed inset-0 z-55 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl border border-gray-150 overflow-hidden transform scale-100 transition-all duration-300 max-h-[90vh] flex flex-col">
+          <div className="bg-(--surface) rounded-2xl shadow-2xl w-full max-w-2xl border border-gray-150 overflow-hidden transform scale-100 transition-all duration-300 max-h-[90vh] flex flex-col">
             {/* Modal Header */}
-            <div className="bg-slate-50 border-b border-gray-150 px-6 py-4 flex items-center justify-between">
+            <div className="bg-(--surface-secondary) border-b border-gray-150 px-6 py-4 flex items-center justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-2.5">
-                  <h3 className="font-bold text-slate-800 text-sm truncate">{detailProject.title}</h3>
+                  <h3 className="font-bold text-(--text-primary) text-sm truncate">{detailProject.title}</h3>
                   {getStatusBadge(detailProject.status)}
                 </div>
-                <p className="text-gray-400 text-[10px] mt-0.5 font-mono truncate">{detailProject.id}</p>
+                <p className="text-(--text-tertiary) text-[10px] mt-0.5 font-mono truncate">{detailProject.id}</p>
               </div>
               <button
                 onClick={() => setDetailProject(null)}
-                className="text-slate-400 hover:text-slate-600 transition cursor-pointer shrink-0"
+                className="text-(--text-tertiary) hover:text-(--text-secondary) transition cursor-pointer shrink-0"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -517,36 +517,36 @@ function ProjectsSection({ lang, api }) {
             <div className="p-6 space-y-5 overflow-y-auto">
               {/* General Information */}
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-3">General Information</span>
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-3">General Information</span>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Instructor</span>
-                    <span className="font-bold text-slate-800">{detailProject.instructorName || '—'}</span>
+                    <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Instructor</span>
+                    <span className="font-bold text-(--text-primary)">{detailProject.instructorName || '—'}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Target Standard</span>
-                    <span className="font-bold text-slate-800">{detailProject.targetStandard || '—'}</span>
+                    <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Target Standard</span>
+                    <span className="font-bold text-(--text-primary)">{detailProject.targetStandard || '—'}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Created</span>
-                    <span className="font-bold text-slate-800">{fmtDate(detailProject.createdAt)}</span>
+                    <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Created</span>
+                    <span className="font-bold text-(--text-primary)">{fmtDate(detailProject.createdAt)}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Collaborators</span>
-                    <span className="font-bold text-slate-800">{detailProject.collaboratorCount ?? 0}</span>
+                    <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Collaborators</span>
+                    <span className="font-bold text-(--text-primary)">{detailProject.collaboratorCount ?? 0}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Papers Processed</span>
-                    <span className="font-bold text-slate-800">{detailProject.papersProcessed ?? 0}</span>
+                    <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Papers Processed</span>
+                    <span className="font-bold text-(--text-primary)">{detailProject.papersProcessed ?? 0}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Completion Rate</span>
-                    <span className="font-bold text-slate-800">{detailProject.completionRate ?? 0}%</span>
+                    <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Completion Rate</span>
+                    <span className="font-bold text-(--text-primary)">{detailProject.completionRate ?? 0}%</span>
                   </div>
                 </div>
                 <div className="mt-4">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Description</span>
-                  <p className="bg-slate-50 border border-gray-200 rounded-xl px-3 py-2 font-semibold text-slate-700">
+                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-1">Description</span>
+                  <p className="bg-(--surface-secondary) border border-(--border) rounded-xl px-3 py-2 font-semibold text-(--text-primary)">
                     {detailProject.description || 'No description provided.'}
                   </p>
                 </div>
@@ -554,7 +554,7 @@ function ProjectsSection({ lang, api }) {
 
               {/* Project Structure */}
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-3">Project Structure</span>
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-3">Project Structure</span>
                 {detailLoading ? (
                   <div className="animate-pulse space-y-2 py-4">
                     <div className="h-8 bg-gray-200 rounded w-full" />
@@ -564,23 +564,23 @@ function ProjectsSection({ lang, api }) {
                   <div className="space-y-4">
                     {/* Members */}
                     <div>
-                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">Members ({detailMembers.length})</span>
+                      <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-1.5">Members ({detailMembers.length})</span>
                       {detailMembers.length === 0 ? (
-                        <p className="text-xs text-gray-400 italic border border-dashed border-gray-200 rounded-xl px-3 py-2 bg-slate-50/20">No members assigned.</p>
+                        <p className="text-xs text-(--text-tertiary) italic border border-dashed border-(--border) rounded-xl px-3 py-2 bg-(--surface-secondary)/20">No members assigned.</p>
                       ) : (
-                        <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden bg-white">
+                        <div className="divide-y divide-(--border-light) border border-(--border) rounded-xl overflow-hidden bg-(--surface)">
                           {detailMembers.map(m => (
                             <div key={m.id} className="px-4 py-2 flex items-center justify-between text-xs">
                               <div className="min-w-0">
-                                <p className="font-bold text-slate-800 truncate">{(m.firstName || '') + ' ' + (m.lastName || '')}</p>
-                                <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate">{m.email}</p>
+                                <p className="font-bold text-(--text-primary) truncate">{(m.firstName || '') + ' ' + (m.lastName || '')}</p>
+                                <p className="text-[10px] text-(--text-tertiary) font-mono mt-0.5 truncate">{m.email}</p>
                               </div>
                               <span className={`px-2 py-0.5 rounded text-[9px] font-bold border shrink-0 ml-3 ${
                                 m.role === 'INSTRUCTOR'
                                   ? 'bg-amber-50 text-amber-700 border-amber-100'
                                   : m.role === 'LEADER'
                                   ? 'bg-blue-50 text-blue-700 border-blue-100'
-                                  : 'bg-slate-50 text-slate-600 border-slate-100'
+                                  : 'bg-(--surface-secondary) text-(--text-secondary) border-(--border-light)'
                               }`}>
                                 {m.role}
                               </span>
@@ -592,16 +592,16 @@ function ProjectsSection({ lang, api }) {
 
                     {/* Documents */}
                     <div>
-                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">Documents ({detailDocs.length})</span>
+                      <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-1.5">Documents ({detailDocs.length})</span>
                       {detailDocs.length === 0 ? (
-                        <p className="text-xs text-gray-400 italic border border-dashed border-gray-200 rounded-xl px-3 py-2 bg-slate-50/20">No documents in this project.</p>
+                        <p className="text-xs text-(--text-tertiary) italic border border-dashed border-(--border) rounded-xl px-3 py-2 bg-(--surface-secondary)/20">No documents in this project.</p>
                       ) : (
-                        <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden bg-white max-h-56 overflow-y-auto">
+                        <div className="divide-y divide-(--border-light) border border-(--border) rounded-xl overflow-hidden bg-(--surface) max-h-56 overflow-y-auto">
                           {detailDocs.map(d => (
                             <div key={d.id} className="px-4 py-2 flex items-center justify-between gap-3 text-xs">
                               <div className="min-w-0">
-                                <p className="font-bold text-slate-800 truncate">{d.title || d.originalFilename || 'Untitled'}</p>
-                                <p className="text-[10px] text-gray-400 font-medium mt-0.5 truncate">{d.docType || ''}{d.doi ? ` · ${d.doi}` : ''}</p>
+                                <p className="font-bold text-(--text-primary) truncate">{d.title || d.originalFilename || 'Untitled'}</p>
+                                <p className="text-[10px] text-(--text-tertiary) font-medium mt-0.5 truncate">{d.docType || ''}{d.doi ? ` · ${d.doi}` : ''}</p>
                               </div>
                               <span className={`px-2 py-0.5 rounded text-[9px] font-bold border shrink-0 ${
                                 ['COMPLETED', 'READY'].includes(d.processingStatus)
@@ -610,7 +610,7 @@ function ProjectsSection({ lang, api }) {
                                   ? 'bg-rose-50 text-rose-700 border-rose-100'
                                   : ['PROCESSING', 'QUEUED'].includes(d.processingStatus)
                                   ? 'bg-amber-50 text-amber-700 border-amber-100'
-                                  : 'bg-slate-50 text-slate-600 border-slate-100'
+                                  : 'bg-(--surface-secondary) text-(--text-secondary) border-(--border-light)'
                               }`}>
                                 {d.processingStatus || '—'}
                               </span>
@@ -625,7 +625,7 @@ function ProjectsSection({ lang, api }) {
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 px-6 py-3.5 border-t border-gray-150 flex items-center justify-end">
+            <div className="bg-(--surface-secondary) px-6 py-3.5 border-t border-gray-150 flex items-center justify-end">
               <button
                 onClick={() => setDetailProject(null)}
                 className="px-4 py-2 bg-[#0c162e] hover:bg-[#152447] text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
@@ -640,16 +640,16 @@ function ProjectsSection({ lang, api }) {
       {/* Workspace Membership Management Modal Overlay */}
       {showMembersModal && activeProject && (
         <div className="fixed inset-0 z-55 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-gray-150 overflow-hidden transform scale-100 transition-all duration-300">
+          <div className="bg-(--surface) rounded-2xl shadow-2xl w-full max-w-lg border border-gray-150 overflow-hidden transform scale-100 transition-all duration-300">
             {/* Modal Header */}
-            <div className="bg-slate-50 border-b border-gray-150 px-6 py-4 flex items-center justify-between">
+            <div className="bg-(--surface-secondary) border-b border-gray-150 px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-slate-800 text-sm">Manage Workspace Members</h3>
-                <p className="text-gray-400 text-[10px] mt-0.5 truncate max-w-xs">{activeProject.title}</p>
+                <h3 className="font-bold text-(--text-primary) text-sm">Manage Workspace Members</h3>
+                <p className="text-(--text-tertiary) text-[10px] mt-0.5 truncate max-w-xs">{activeProject.title}</p>
               </div>
               <button 
                 onClick={() => setShowMembersModal(false)}
-                className="text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                className="text-(--text-tertiary) hover:text-(--text-secondary) transition cursor-pointer"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -660,8 +660,8 @@ function ProjectsSection({ lang, api }) {
             {/* Modal Body */}
             <div className="p-6 space-y-5">
               {/* Form to add a new member */}
-              <form onSubmit={doAddMember} className="bg-slate-50/50 border border-slate-200 rounded-xl p-4.5 space-y-3">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Add Workspace Member</span>
+              <form onSubmit={doAddMember} className="bg-(--surface-secondary)/50 border border-(--border) rounded-xl p-4.5 space-y-3">
+                <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block">Add Workspace Member</span>
                 
                 <div className="flex flex-col sm:flex-row gap-3">
                   {/* Select User */}
@@ -669,7 +669,7 @@ function ProjectsSection({ lang, api }) {
                     <select 
                       value={selectedUser} 
                       onChange={e => setSelectedUser(e.target.value)} 
-                      className="w-full px-3 py-2 bg-white border border-gray-255 rounded-xl font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs cursor-pointer"
+                      className="w-full px-3 py-2 bg-(--surface) border border-gray-255 rounded-xl font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs cursor-pointer"
                     >
                       <option value="">{lang.chooseUserAccounts}</option>
                       {allUsers
@@ -687,7 +687,7 @@ function ProjectsSection({ lang, api }) {
                     <select 
                       value={selectedRole} 
                       onChange={e => setSelectedRole(e.target.value)} 
-                      className="w-full px-3 py-2 bg-white border border-gray-255 rounded-xl font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs cursor-pointer"
+                      className="w-full px-3 py-2 bg-(--surface) border border-gray-255 rounded-xl font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs cursor-pointer"
                     >
                       <option value="MEMBER">Member</option>
                       <option value="LEADER">Leader</option>
@@ -707,7 +707,7 @@ function ProjectsSection({ lang, api }) {
 
               {/* Members List */}
               <div className="space-y-2">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Current Members ({members.length})</span>
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Current Members ({members.length})</span>
                 
                 {membersLoading ? (
                   <div className="animate-pulse space-y-2 py-4">
@@ -715,16 +715,16 @@ function ProjectsSection({ lang, api }) {
                     <div className="h-8 bg-gray-200 rounded w-full"></div>
                   </div>
                 ) : members.length === 0 ? (
-                  <div className="text-xs text-gray-400 py-6 text-center italic border border-dashed border-gray-255 rounded-xl bg-slate-50/20">
+                  <div className="text-xs text-(--text-tertiary) py-6 text-center italic border border-dashed border-gray-255 rounded-xl bg-(--surface-secondary)/20">
                     No members assigned to this project workspace.
                   </div>
                 ) : (
-                  <div className="divide-y divide-gray-150 border border-gray-200 rounded-xl max-h-56 overflow-y-auto bg-white">
+                  <div className="divide-y divide-gray-150 border border-(--border) rounded-xl max-h-56 overflow-y-auto bg-(--surface)">
                     {members.map(m => (
-                      <div key={m.id} className="px-4 py-2.5 flex items-center justify-between hover:bg-slate-50/50 transition text-xs">
+                      <div key={m.id} className="px-4 py-2.5 flex items-center justify-between hover:bg-(--surface-secondary)/50 transition text-xs">
                         <div className="min-w-0">
-                          <p className="font-bold text-slate-800 truncate">{m.firstName} {m.lastName}</p>
-                          <p className="text-[10px] text-gray-400 font-mono mt-0.5 truncate">{m.email}</p>
+                          <p className="font-bold text-(--text-primary) truncate">{m.firstName} {m.lastName}</p>
+                          <p className="text-[10px] text-(--text-tertiary) font-mono mt-0.5 truncate">{m.email}</p>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           {m.role === 'INSTRUCTOR' ? (
@@ -737,7 +737,7 @@ function ProjectsSection({ lang, api }) {
                               onChange={e => doUpdateMemberRole(m.userId, e.target.value)}
                               disabled={updatingMemberId !== null}
                               aria-label={`${lang.role}: ${m.firstName} ${m.lastName}`}
-                              className="cursor-pointer rounded-lg border border-gray-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-600 outline-none transition focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                              className="cursor-pointer rounded-lg border border-(--border) bg-(--surface) px-2 py-1 text-[10px] font-bold text-(--text-secondary) outline-none transition focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               <option value="MEMBER">Member</option>
                               <option value="LEADER">Leader</option>
@@ -766,7 +766,7 @@ function ProjectsSection({ lang, api }) {
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 px-6 py-3.5 border-t border-gray-150 flex items-center justify-end">
+            <div className="bg-(--surface-secondary) px-6 py-3.5 border-t border-gray-150 flex items-center justify-end">
               <button 
                 onClick={() => setShowMembersModal(false)}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
@@ -780,7 +780,7 @@ function ProjectsSection({ lang, api }) {
 
       {/* Custom Toast Notification Popup */}
       {toast && (
-        <div className="fixed top-4 right-4 z-55 flex items-center gap-2.5 px-4.5 py-3 rounded-2xl shadow-xl border animate-slide-in-right bg-white border-slate-100">
+        <div className="fixed top-4 right-4 z-55 flex items-center gap-2.5 px-4.5 py-3 rounded-2xl shadow-xl border animate-slide-in-right bg-(--surface) border-(--border-light)">
           <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
             toast.type === 'error' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
           }`}>
@@ -794,7 +794,7 @@ function ProjectsSection({ lang, api }) {
               </svg>
             )}
           </div>
-          <span className="text-xs font-bold text-slate-800">{toast.message}</span>
+          <span className="text-xs font-bold text-(--text-primary)">{toast.message}</span>
         </div>
       )}
 

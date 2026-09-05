@@ -103,14 +103,10 @@ export default function Login() {
             </Link>
 
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={toggleLanguage}
-                aria-label="Toggle language"
-                className="min-w-9 px-2 py-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-zinc-700 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
-              >
-                {language === 'vi' ? 'EN' : 'VI'}
-              </button>
+              <div className="flex bg-slate-100 dark:bg-zinc-800 p-0.5 rounded-lg border border-slate-200 dark:border-zinc-700 text-[10px] font-bold">
+                <button onClick={() => language !== 'en' && toggleLanguage()} className={`px-2.5 py-1 rounded-md transition ${language === 'en' ? 'bg-white dark:bg-zinc-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>EN</button>
+                <button onClick={() => language !== 'vi' && toggleLanguage()} className={`px-2.5 py-1 rounded-md transition ${language === 'vi' ? 'bg-white dark:bg-zinc-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>VN</button>
+              </div>
               <button
                 type="button"
                 onClick={toggleTheme}

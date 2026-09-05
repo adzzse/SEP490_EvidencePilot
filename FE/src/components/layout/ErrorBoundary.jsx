@@ -13,8 +13,8 @@ export default class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] text-[#0f172a]">
-          <div className="max-w-md w-full bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center space-y-4">
+        <div className="min-h-screen flex items-center justify-center bg-(--page-bg) text-(--text-primary)">
+          <div className="max-w-md w-full bg-(--surface) rounded-2xl border border-(--border) shadow-sm p-8 text-center space-y-4">
             <div className="text-3xl font-black text-rose-600">Something went wrong</div>
             <p className="text-xs text-gray-500">{this.state.message}</p>
             <button

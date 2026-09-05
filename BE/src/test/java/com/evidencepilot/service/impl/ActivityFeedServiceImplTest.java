@@ -10,6 +10,7 @@ import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.AuditLogRepository;
 import com.evidencepilot.repository.CollectionCategoryRepository;
+import com.evidencepilot.repository.CollectionRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
@@ -37,6 +38,7 @@ class ActivityFeedServiceImplTest {
     private CollectionCategoryRepository collectionCategoryRepository;
     private PaperSectionRepository paperSectionRepository;
     private DocumentRepository documentRepository;
+    private CollectionRepository collectionRepository;
     private ActivityFeedServiceImpl service;
 
     @BeforeEach
@@ -47,9 +49,10 @@ class ActivityFeedServiceImplTest {
         collectionCategoryRepository = mock(CollectionCategoryRepository.class);
         paperSectionRepository = mock(PaperSectionRepository.class);
         documentRepository = mock(DocumentRepository.class);
+        collectionRepository = mock(CollectionRepository.class);
         service = new ActivityFeedServiceImpl(userRepository, auditLogRepository,
                 projectRepository, collectionCategoryRepository,
-                paperSectionRepository, documentRepository);
+                paperSectionRepository, documentRepository, collectionRepository);
     }
 
     private User user(UserRole role) {
@@ -108,6 +111,31 @@ class ActivityFeedServiceImplTest {
         assertThat(resp.items().get(0).type()).isEqualTo("collection");
         assertThat(resp.items().get(0).title()).isEqualTo("AI Research");
         assertThat(resp.items().get(0).link()).isEqualTo("/instructor/source-library");
+    }
+
+    @Test
+    void instructor_collectionRow_projectsToCollectionDetail() {
+        User u = user(UserRole.INSTRUCTOR);
+        UUID cid = UUID.randomUUID();
+        when(userRepository.findById(u.getId())).thenReturn(Optional.of(u));
+        when(auditLogRepository.findByActorIdOrderByOccurredAtDesc(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(log("COLLECTION_CREATED", "COLLECTION", cid))));
+        com.evidencepilot.model.Collection c = new com.evidencepilot.model.Collection();
+        c.setId(cid);
+        c.setTitle("Research Collection");
+        c.setActive(true);
+        when(collectionRepository.findById(cid)).thenReturn(Optional.of(c));
+        Document d = new Document();
+        d.setActive(true);
+        when(documentRepository.findByCollectionId(cid)).thenReturn(List.of(d));
+
+        ActivityFeedResponse resp = service.getMyActivity(u.getId(), 10);
+
+        assertThat(resp.items()).hasSize(1);
+        assertThat(resp.items().get(0).type()).isEqualTo("collection");
+        assertThat(resp.items().get(0).title()).isEqualTo("Research Collection");
+        assertThat(resp.items().get(0).totalSources()).isEqualTo(1L);
+        assertThat(resp.items().get(0).link()).isEqualTo("/instructor/collections/" + cid);
     }
 
     @Test

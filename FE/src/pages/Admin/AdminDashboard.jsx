@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useTheme } from '../../context/ThemeContext';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import api from '../../services/api.js';
@@ -17,6 +18,7 @@ import { CollectionsSection } from './components/CollectionsTab.jsx';
 import { NotificationsSection } from './components/NotificationsTab.jsx';
 import { SettingsSection } from './components/SettingsTab.jsx';
 import NotificationBell from '../../components/ui/NotificationBell.jsx';
+import ProfileModal from '../../components/ui/ProfileModal.jsx';
 const NAV_ITEMS = [
   { key: 'dashboard', labelEn: 'Dashboard', labelVi: 'Bảng điều khiển' },
   { key: 'users', labelEn: 'Users', labelVi: 'Người dùng' },
@@ -107,10 +109,18 @@ const getIcon = (key, isActive) => {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, user: authUser } = useAuth();
   const { language, toggleLanguage } = useLanguage();
+  const { theme, toggleTheme } = useTheme();
   const L = t[language] || t.en;
   const label = (item) => language === 'vi' ? item.labelVi : item.labelEn;
+  const [navQuery, setNavQuery] = useState('');
+  const filteredNav = useMemo(() => {
+    const q = navQuery.trim().toLowerCase();
+    if (!q) return NAV_ITEMS;
+    return NAV_ITEMS.filter((item) =>
+      item.labelEn.toLowerCase().includes(q) || item.labelVi.toLowerCase().includes(q));
+  }, [navQuery]);
 
   const [active, setActive] = useState(() => {
     const saved = localStorage.getItem('admin_active_tab');
@@ -118,6 +128,7 @@ export default function AdminDashboard() {
   });
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('admin_active_tab', active);
@@ -170,8 +181,8 @@ export default function AdminDashboard() {
           popover: {
             title: language === 'vi' ? 'Thanh tiêu đề' : 'Header Bar',
             description: language === 'vi'
-              ? 'Chứa nút chuyển ngôn ngữ, hướng dẫn và thông tin quản trị viên.'
-              : 'Contains language toggle, guide, and admin profile info.',
+              ? 'Chứa nút chuyển ngôn ngữ, chế độ sáng/tối, hướng dẫn, thông tin quản trị viên và đăng xuất.'
+              : 'Contains language toggle, dark/light mode, guide, admin profile info, and sign out.',
             side: 'bottom',
           }
         },
@@ -211,31 +222,59 @@ export default function AdminDashboard() {
   }, [language]);
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans flex text-[#0f172a]">
+    <div className="min-h-screen bg-(--page-bg) font-sans flex text-(--text-primary)">
       {/* Mobile overlay */}
       {mobileOpen && <div className="fixed inset-0 bg-black/30 z-30 lg:hidden" onClick={() => setMobileOpen(false)} />}
 
       {/* Sidebar */}
       <aside data-tour="sidebar" className={`fixed lg:static lg:h-screen lg:sticky lg:top-0 inset-y-0 left-0 z-40 bg-[#111e3b] flex flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-56'} ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} border-none`}>
-        {/* Brand */}
-        <div className="h-16 flex items-center gap-3 px-4 border-b border-white/5 shrink-0 bg-[#0c162e]">
-          {/* Circular University Pillars Icon */}
-          <div className="w-8 h-8 rounded-lg bg-[#1e3a8a] flex items-center justify-center text-white shadow-sm shrink-0">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2L1 8h3v12h2V8h4v12h2V8h4v12h2V8h3L12 2zm-5 8h2v8H7v-8zm6 0h2v8h-2v-8z" />
-            </svg>
-          </div>
+        {/* Brand — with inline collapse icon */}
+        <div className={`h-16 flex items-center gap-2 px-3 border-b border-white/5 shrink-0 bg-[#0c162e] ${collapsed ? 'justify-center' : 'justify-between'}`}>
           {!collapsed && (
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-white tracking-tight leading-none">EvidencePilot</span>
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">ADMIN CONSOLE</span>
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-[#1e3a8a] flex items-center justify-center text-white shadow-sm shrink-0">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2L1 8h3v12h2V8h4v12h2V8h4v12h2V8h3L12 2zm-5 8h2v8H7v-8zm6 0h2v8h-2v-8z" />
+                </svg>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-bold text-white tracking-tight leading-none truncate">EvidencePilot</span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 truncate">ADMIN CONSOLE</span>
+              </div>
             </div>
           )}
+          <button
+            onClick={() => setCollapsed(p => !p)}
+            title={collapsed ? 'Expand' : 'Collapse'}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="hidden lg:flex w-7 h-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition shrink-0"
+          >
+            <span className="text-xs">{collapsed ? '\u25B6' : '\u25C0'}</span>
+          </button>
         </div>
+
+        {/* Search Functions — hidden when collapsed */}
+        {!collapsed && (
+          <div className="px-3 pt-3">
+            <div className="flex items-center relative">
+              <svg className="w-3.5 h-3.5 text-slate-500 absolute left-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={navQuery}
+                onChange={(e) => setNavQuery(e.target.value)}
+                placeholder={language === 'vi' ? 'Tìm chức năng...' : 'Search functions...'}
+                aria-label={language === 'vi' ? 'Tìm chức năng' : 'Search functions'}
+                className="w-full pl-8 pr-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {NAV_ITEMS.map(item => (
+          {filteredNav.map(item => (
             <button key={item.key} data-tour={`nav-${item.key}`} onClick={() => { setActive(item.key); setMobileOpen(false); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition text-left group ${active === item.key ? 'bg-white/10 text-white shadow-sm font-semibold' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
               title={collapsed ? label(item) : undefined}>
@@ -245,51 +284,78 @@ export default function AdminDashboard() {
           ))}
         </nav>
 
-        {/* Bottom */}
-        <div className="border-t border-white/5 p-3 space-y-1 shrink-0 bg-[#0c162e]">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-400 hover:bg-white/5 hover:text-white transition group">
-            <svg className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            {!collapsed && <span>{L.signOut}</span>}
-          </button>
-          <button onClick={() => setCollapsed(p => !p)} className="hidden lg:flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-500 hover:bg-white/5 hover:text-white transition">
-            <span className="text-sm shrink-0">{collapsed ? '\u25B6' : '\u25C0'}</span>
-            {!collapsed && <span>{L.collapse}</span>}
-          </button>
+        {/* Bottom — Avatar + Name + Role with inline Sign Out icon + Collapse */}
+        <div className="border-t border-white/5 p-3 space-y-2 shrink-0 bg-[#0c162e]">
+          <div className={`flex items-center gap-2 ${collapsed ? 'justify-center' : ''}`}>
+            <button
+              type="button"
+              onClick={() => setProfileModalOpen(true)}
+              title={language === 'vi' ? 'Hồ sơ cá nhân' : 'My Profile'}
+              className={`flex items-center gap-3 rounded-lg hover:bg-white/5 transition-colors p-1 -m-1 text-left flex-1 min-w-0 ${collapsed ? 'justify-center' : ''}`}
+            >
+              <div className="w-8 h-8 rounded-lg overflow-hidden bg-[#1e3a8a] flex items-center justify-center text-xs text-white font-bold shadow-sm shrink-0">
+                {authUser?.avatarUrl ? (
+                  <img src={authUser.avatarUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  'AD'
+                )}
+              </div>
+              {!collapsed && (
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-xs font-bold text-white leading-none truncate">{L.adminUser}</p>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1 truncate">{L.systemManager}</p>
+                </div>
+              )}
+            </button>
+            {!collapsed && (
+              <button
+                onClick={handleLogout}
+                title={L.signOut}
+                aria-label={L.signOut}
+                className="p-2 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {collapsed && (
+            <button
+              onClick={handleLogout}
+              title={L.signOut}
+              aria-label={L.signOut}
+              className="w-full flex items-center justify-center p-2 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          )}
         </div>
       </aside>
 
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header data-tour="header" className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0 shadow-sm">
+        <header data-tour="header" className="h-16 bg-(--surface) border-b border-(--border) flex items-center justify-between px-6 shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
-            <button onClick={() => setMobileOpen(true)} className="lg:hidden text-gray-500 hover:text-gray-900">
+            <button onClick={() => setMobileOpen(true)} className="lg:hidden text-(--text-tertiary) hover:text-(--text-primary)">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
             
             {/* Breadcrumb breadcrumb */}
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-(--text-tertiary)">
               <span>{L.admin}</span>
               <span>{'\u203A'}</span>
-              <span className="text-slate-800 font-bold">{label(NAV_ITEMS.find(n => n.key === active))}</span>
+              <span className="text-(--text-primary) font-bold">{label(NAV_ITEMS.find(n => n.key === active))}</span>
             </div>
-          </div>
-
-          {/* Search bar in the middle */}
-          <div className="hidden md:flex items-center w-80 relative">
-            <svg className="w-4 h-4 text-gray-400 absolute left-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input type="text" placeholder={L.searchPlaceholder} 
-              className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" />
           </div>
 
           {/* Right side items */}
           <div className="flex items-center gap-4">
             <NotificationBell />
-            <button onClick={startTour} className="flex items-center gap-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition shadow-sm">
+            <button onClick={startTour} className="flex items-center gap-1.5 text-xs font-bold text-(--text-secondary) bg-(--surface) border border-(--border) px-3 py-1.5 rounded-lg hover:bg-(--surface-secondary) transition shadow-sm">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636-.707.707M21 12h-1M4 12H3m3.343-5.657-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
@@ -297,38 +363,48 @@ export default function AdminDashboard() {
             </button>
 
             {/* Language buttons EN | VN */}
-            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-gray-200 text-[10px] font-bold">
+            <div className="flex bg-(--surface-secondary) p-0.5 rounded-lg border border-(--border) text-[10px] font-bold">
               <button onClick={() => language !== 'en' && toggleLanguage()} 
-                className={`px-2.5 py-1 rounded-md transition ${language === 'en' ? 'bg-white text-slate-800 shadow-sm' : 'text-gray-400'}`}>EN</button>
+                className={`px-2.5 py-1 rounded-md transition ${language === 'en' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>EN</button>
               <button onClick={() => language !== 'vi' && toggleLanguage()} 
-                className={`px-2.5 py-1 rounded-md transition ${language === 'vi' ? 'bg-white text-slate-800 shadow-sm' : 'text-gray-400'}`}>VN</button>
+                className={`px-2.5 py-1 rounded-md transition ${language === 'vi' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>VN</button>
             </div>
 
-            {/* Profile User Info */}
-            <div className="flex items-center gap-3">
-              <div className="hidden lg:flex flex-col text-right">
-                <span className="text-xs font-bold text-slate-800 leading-none">{L.adminUser}</span>
-                <span className="text-[10px] text-gray-400 font-bold mt-1">{L.systemManager}</span>
-              </div>
-              <div className="w-8 h-8 rounded-lg bg-[#1e3a8a] flex items-center justify-center text-xs text-white font-bold shadow-sm shrink-0">
-                AD
-              </div>
-            </div>
+            {/* Dark/Light mode toggle */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="p-2 text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary) rounded-lg transition-colors"
+            >
+              {theme === 'dark' ? (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="4" />
+                  <path strokeLinecap="round" d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+                </svg>
+              )}
+            </button>
+
+
           </div>
         </header>
 
         {/* Content */}
-        <main data-tour="content" className="flex-1 overflow-y-auto">
+        <main data-tour="content" className="flex-1 overflow-y-auto w-full max-w-[1600px] mx-auto">
           <SectionBoundary>
             <Section lang={L} api={api} />
           </SectionBoundary>
         </main>
 
-        {/* Footer */}
-        <footer data-tour="footer" className="bg-white border-t border-gray-200 px-6 py-3.5 flex items-center justify-center text-[10px] font-semibold text-gray-400 shrink-0">
-          <span>{L.footerTagline}</span>
-        </footer>
+
       </div>
+
+      <ProfileModal open={profileModalOpen} onClose={() => setProfileModalOpen(false)} />
     </div>
   );
 }

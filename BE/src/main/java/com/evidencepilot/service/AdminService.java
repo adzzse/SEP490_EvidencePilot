@@ -28,6 +28,7 @@ import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -57,6 +58,7 @@ public class AdminService {
     private static final Set<String> USER_SORT_FIELDS = Set.of(
             "createdAt", "email", "studentCode", "firstName", "lastName", "role", "accountStatus");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+    private static final Pattern STUDENT_CODE_PATTERN = Pattern.compile("^[A-Z]{2}\\d{6}$");
 
     private final UserRepository users;
     private final ProjectRepository projects;
@@ -70,6 +72,10 @@ public class AdminService {
     private final SystemNotificationService notifications;
     private final ObjectMapper objectMapper;
     private final PasswordEncoder passwords;
+    private final UserInvitationService invitations;
+    private final UserAvatarService avatars;
+    // Empty unless the dev profile is active — DevBypassPolicy is @Profile("dev").
+    private final ObjectProvider<DevBypassPolicy> devBypassPolicies;
 
     @Transactional(readOnly = true)
     public PagedResponse<AdminUserResponse> getUsers(
@@ -90,7 +96,7 @@ public class AdminService {
                     builder.like(builder.lower(root.get("firstName")), pattern),
                     builder.like(builder.lower(root.get("lastName")), pattern)));
         }
-        return PagedResponse.from(users.findAll(filters, pageable).map(AdminUserResponse::from));
+        return PagedResponse.from(users.findAll(filters, pageable).map(u -> AdminUserResponse.from(u, avatars.resolveAvatarUrl(u))));
     }
 
     @Transactional
@@ -109,20 +115,42 @@ public class AdminService {
             throw conflict("Student code already exists");
         }
 
+        // No admin-supplied passwords: every account is born VERIFYING_EMAIL with
+        // the un-hashable sentinel and sets its own password via the emailed
+        // set-password link — except the quarantined dev bypass (fixed password,
+        // ACTIVE immediately, no email), which 403s unless explicitly enabled.
+        boolean devBypass = request.devBypass();
+        if (devBypass) {
+            requireDevBypass();
+        }
+
         User user = new User();
         user.setEmail(email);
         user.setFirstName(request.firstName().trim());
         user.setLastName(request.lastName().trim());
         user.setRole(request.role());
         user.setStudentCode(studentCode);
-        user.setAccountStatus(AccountStatus.ACTIVE);
         user.setPasswordChangeNoticePending(true);
-        user.setPasswordHash(passwords.encode(temporaryPassword(email)));
+        if (devBypass) {
+            user.setAccountStatus(AccountStatus.ACTIVE);
+            user.setPasswordHash(passwords.encode(DevBypassPolicy.FIXED_PASSWORD));
+        } else {
+            user.setAccountStatus(AccountStatus.VERIFYING_EMAIL);
+            user.setPasswordHash(User.DISABLED_PASSWORD_SENTINEL);
+        }
+        Map<String, Object> auditValue = safeUser(user);
+        if (devBypass) {
+            auditValue.put("devBypass", true);
+        }
         user.setCreatedAt(LocalDateTime.now());
         user = users.save(user);
 
-        audit.record("USER_CREATED", "USER", user.getId(), currentUsers.requireCurrentUser(), null, safeUser(user));
-        return AdminUserResponse.from(user);
+        audit.record("USER_CREATED", "USER", user.getId(), currentUsers.requireCurrentUser(), null, auditValue);
+        if (!devBypass) {
+            invitations.issueInvitation(user.getId());
+        }
+        User created = users.findById(user.getId()).orElse(user);
+        return AdminUserResponse.from(created, avatars.resolveAvatarUrl(created));
     }
 
     @Transactional
@@ -172,8 +200,8 @@ public class AdminService {
             if (role == UserRole.STUDENT) {
                 if (studentCode == null) {
                     addImportError(errors, itemNumber, "studentCode", "Student code is required for STUDENT");
-                } else if (studentCode.length() > 50) {
-                    addImportError(errors, itemNumber, "studentCode", "Student code must not exceed 50 characters");
+                } else if (!STUDENT_CODE_PATTERN.matcher(studentCode).matches()) {
+                    addImportError(errors, itemNumber, "studentCode", "Student code must match format AB123456");
                 } else {
                     Integer duplicate = codeItems.putIfAbsent(studentCode, itemNumber);
                     if (duplicate != null) {
@@ -215,9 +243,14 @@ public class AdminService {
             return new AdminUserImportResponse(0, 0, errors);
         }
 
+        boolean devBypass = request.devBypass();
+        if (devBypass) {
+            requireDevBypass();
+        }
         int created = 0;
         int updated = 0;
         List<User> changedUsers = new ArrayList<>();
+        List<UUID> invitedIds = new ArrayList<>();
         Map<UUID, Map<String, Object>> previousValues = new HashMap<>();
         for (ImportRow row : rows) {
             User user = existingByEmail.get(row.email());
@@ -225,9 +258,14 @@ public class AdminService {
                 user = new User();
                 user.setEmail(row.email());
                 user.setRole(role);
-                user.setAccountStatus(AccountStatus.ACTIVE);
                 user.setPasswordChangeNoticePending(true);
-                user.setPasswordHash(passwords.encode(temporaryPassword(row.email())));
+                if (devBypass) {
+                    user.setAccountStatus(AccountStatus.ACTIVE);
+                    user.setPasswordHash(passwords.encode(DevBypassPolicy.FIXED_PASSWORD));
+                } else {
+                    user.setAccountStatus(AccountStatus.VERIFYING_EMAIL);
+                    user.setPasswordHash(User.DISABLED_PASSWORD_SENTINEL);
+                }
                 user.setCreatedAt(LocalDateTime.now());
                 created++;
             } else {
@@ -243,8 +281,18 @@ public class AdminService {
         users.saveAll(changedUsers);
         User actor = currentUsers.requireCurrentUser();
         for (User user : changedUsers) {
+            Map<String, Object> newValue = safeUser(user);
+            if (devBypass) {
+                newValue.put("devBypass", true);
+            }
             audit.record("USER_IMPORTED", "USER", user.getId(), actor,
-                    previousValues.get(user.getId()), safeUser(user));
+                    previousValues.get(user.getId()), newValue);
+            if (!devBypass && !previousValues.containsKey(user.getId())) {
+                invitedIds.add(user.getId());
+            }
+        }
+        for (UUID invitedId : invitedIds) {
+            invitations.issueInvitation(invitedId);
         }
         return new AdminUserImportResponse(created, updated, List.of());
     }
@@ -263,7 +311,7 @@ public class AdminService {
         users.save(user);
         audit.record("USER_STATUS_UPDATED", "USER", id, currentUsers.requireCurrentUser(),
                 Map.of("accountStatus", oldStatus), Map.of("accountStatus", user.getAccountStatus()));
-        return AdminUserResponse.from(user);
+        return AdminUserResponse.from(user, avatars.resolveAvatarUrl(user));
     }
 
     @Transactional
@@ -281,6 +329,19 @@ public class AdminService {
         users.save(user);
         audit.record("USER_DELETED", "USER", id, currentUsers.requireCurrentUser(),
                 Map.of("accountStatus", oldStatus), Map.of("accountStatus", AccountStatus.DELETED));
+    }
+
+    @Transactional
+    public void resendInvitation(UUID id) {
+        User user = requireUser(id);
+        if (user.getRole() == UserRole.ADMIN || user.getAccountStatus() == AccountStatus.DELETED) {
+            throw conflict("Account is not eligible for invitation");
+        }
+        if (user.getAccountStatus() != AccountStatus.PENDING
+                && user.getAccountStatus() != AccountStatus.VERIFYING_EMAIL) {
+            throw conflict("Only pending or verifying accounts can be re-invited");
+        }
+        invitations.issueInvitation(id);
     }
 
     @Transactional
@@ -511,6 +572,11 @@ public class AdminService {
         if (role == UserRole.STUDENT && studentCode == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Student code is required for STUDENT");
         }
+        if (role == UserRole.STUDENT && studentCode != null
+                && !STUDENT_CODE_PATTERN.matcher(studentCode).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Student code must match format AB123456");
+        }
         if (role == UserRole.INSTRUCTOR && rawCode != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "INSTRUCTOR must omit studentCode");
         }
@@ -562,8 +628,12 @@ public class AdminService {
         return value.trim();
     }
 
-    private String temporaryPassword(String email) {
-        return email.substring(0, email.indexOf('@')).toLowerCase(Locale.ROOT);
+    private void requireDevBypass() {
+        DevBypassPolicy policy = devBypassPolicies.getIfAvailable();
+        if (policy == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Dev bypass is not available");
+        }
+        policy.allowOrThrow();
     }
 
     private ResponseStatusException conflict(String message) {

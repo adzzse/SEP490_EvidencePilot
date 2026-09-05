@@ -2,6 +2,7 @@
 export { default as StatusBadge } from './ui/StatusBadge';
 export { default as EntityCard } from './ui/EntityCard';
 export { default as Modal } from './ui/Modal';
+export { default as ProfileModal } from './ui/ProfileModal';
 export { default as EmptyState } from './ui/EmptyState';
 export { default as LoadingSkeleton } from './ui/LoadingSkeleton';
 export { default as LoadingScreen } from './ui/LoadingScreen';

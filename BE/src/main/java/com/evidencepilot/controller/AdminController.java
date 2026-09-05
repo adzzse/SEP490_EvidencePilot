@@ -138,6 +138,12 @@ public class AdminController {
         adminService.requestPasswordReset(id);
     }
 
+    @PostMapping("/users/{id}/resend-invitation")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void resendInvitation(@PathVariable UUID id) {
+        adminService.resendInvitation(id);
+    }
+
     @GetMapping("/dashboard")
     public AdminDashboardResponse dashboard() {
         return adminService.getDashboard();

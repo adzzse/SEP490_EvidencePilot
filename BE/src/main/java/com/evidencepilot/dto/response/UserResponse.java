@@ -15,8 +15,25 @@ public class UserResponse {
     private final String studentCode;
     private final String firstName;
     private final String lastName;
+    private final String avatarUrl;
 
     public static UserResponse from(User user) {
+        return from(user, null);
+    }
+
+    public static UserResponse withAvatarUrl(UserResponse base, String avatarUrl) {
+        return UserResponse.builder()
+                .id(base.getId())
+                .email(base.getEmail())
+                .role(base.getRole())
+                .studentCode(base.getStudentCode())
+                .firstName(base.getFirstName())
+                .lastName(base.getLastName())
+                .avatarUrl(avatarUrl)
+                .build();
+    }
+
+    public static UserResponse from(User user, String avatarUrl) {
         return UserResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
@@ -24,6 +41,7 @@ public class UserResponse {
                 .studentCode(user.getStudentCode())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
+                .avatarUrl(avatarUrl)
                 .build();
     }
 }

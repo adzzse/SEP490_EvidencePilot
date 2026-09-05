@@ -42,6 +42,9 @@ class CollectionServiceImplTest {
     @Mock
     private com.evidencepilot.repository.CollectionDocumentRepository collectionDocumentRepository;
 
+    @Mock
+    private com.evidencepilot.service.AuditService auditService;
+
     @Test
     void createCollectionRequiresInstructorRole() {
         User instructor = user(UserRole.INSTRUCTOR);
@@ -87,10 +90,44 @@ class CollectionServiceImplTest {
         verify(projectCollectionService).prepareCollectionDeletion(collection);
     }
 
+    @Test
+    void createCollectionRecordsAuditRow() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(collectionRepository.save(any(Collection.class))).thenAnswer(invocation -> {
+            Collection collection = invocation.getArgument(0);
+            collection.setId(UUID.randomUUID());
+            return collection;
+        });
+
+        var response = service().createCollection(new CollectionRequest("Evidence", "Notes", null));
+
+        verify(auditService).record(
+                org.mockito.ArgumentMatchers.eq("COLLECTION_CREATED"),
+                org.mockito.ArgumentMatchers.eq("COLLECTION"),
+                org.mockito.ArgumentMatchers.eq(response.id()),
+                org.mockito.ArgumentMatchers.eq(instructor),
+                org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void deleteCollectionRecordsAuditRow() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        Collection collection = collection(instructor);
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(collectionRepository.findById(collection.getId())).thenReturn(Optional.of(collection));
+
+        service().deleteCollection(collection.getId());
+
+        verify(auditService).record("COLLECTION_DELETED", "COLLECTION", collection.getId(),
+                instructor, null, null);
+    }
+
     private CollectionServiceImpl service() {
         return new CollectionServiceImpl(
                 collectionRepository, collectionCategoryRepository, currentUserService, projectCollectionService,
-                documentRepository, collectionDocumentRepository);
+                documentRepository, collectionDocumentRepository, auditService);
     }
 
     private User user(UserRole role) {

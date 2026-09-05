@@ -4,5 +4,6 @@ public enum AccountStatus {
     PENDING,
     ACTIVE,
     BANNED,
-    DELETED
+    DELETED,
+    VERIFYING_EMAIL
 }
