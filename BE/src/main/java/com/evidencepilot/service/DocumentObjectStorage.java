@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -72,20 +74,6 @@ public class DocumentObjectStorage {
         return new String(read(objectKey), StandardCharsets.UTF_8);
     }
 
-    public void writeText(String objectKey, String text) {
-        byte[] content = text.getBytes(StandardCharsets.UTF_8);
-        try (var stream = new ByteArrayInputStream(content)) {
-            minioClient.putObject(PutObjectArgs.builder()
-                    .bucket(bucketName)
-                    .object(objectKey)
-                    .stream(stream, content.length, -1)
-                    .contentType("text/markdown; charset=utf-8")
-                    .build());
-        } catch (Exception e) {
-            throw new DocumentStorageException("Failed to write object " + objectKey + " to MinIO", e);
-        }
-    }
-
     public void write(String objectKey, InputStream stream, long size, String contentType) {
         try {
             minioClient.putObject(PutObjectArgs.builder()
@@ -123,6 +111,25 @@ public class DocumentObjectStorage {
         } catch (Exception e) {
             throw new DocumentStorageException("Failed to delete object " + objectKey + " from MinIO", e);
         }
+    }
+
+    public void deleteOnRollback(String objectKey) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_COMMITTED) {
+                    return;
+                }
+                try {
+                    delete(objectKey);
+                } catch (RuntimeException e) {
+                    log.warn("Failed to delete rolled-back object {}", objectKey, e);
+                }
+            }
+        });
     }
 
     public static String extractionCheckpointKey(UUID documentId, String fileHashSha256) {

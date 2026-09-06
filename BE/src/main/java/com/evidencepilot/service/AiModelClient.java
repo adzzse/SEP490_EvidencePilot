@@ -66,23 +66,6 @@ public interface AiModelClient {
         }
     }
 
-    record ExtractionResult(
-        String status,
-        String method,
-        String markdown,
-        ExtractionMetadata metadata,
-        java.util.List<String> warnings
-    ) {}
-
-    record ExtractionMetadata(
-        int pageCount,
-        int extractedPageCount,
-        java.util.List<Integer> failedPages,
-        java.util.Map<Integer, String> failureReasons,
-        int totalChars,
-        String detectedLanguage
-    ) {}
-
     final class AiApiException extends RuntimeException {
         private final int statusCode;
         private final String code;

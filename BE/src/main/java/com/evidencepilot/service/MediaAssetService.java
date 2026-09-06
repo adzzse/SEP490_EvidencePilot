@@ -60,7 +60,7 @@ public class MediaAssetService {
             deleteAfterFailedWrite(storageKey, failure);
             throw failure;
         }
-        deleteAfterRollback(storageKey);
+        objectStorage.deleteOnRollback(storageKey);
 
         ProjectMedia media = new ProjectMedia();
         media.setProject(project);
@@ -219,25 +219,6 @@ public class MediaAssetService {
         } catch (RuntimeException referenceCheckFailure) {
             failure.addSuppressed(referenceCheckFailure);
         }
-    }
-
-    private void deleteAfterRollback(String storageKey) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status == TransactionSynchronization.STATUS_COMMITTED) {
-                    return;
-                }
-                try {
-                    objectStorage.delete(storageKey);
-                } catch (RuntimeException e) {
-                    log.warn("Failed to delete rolled-back media object {}", storageKey, e);
-                }
-            }
-        });
     }
 
     private void deleteAfterCommit(String storageKey) {

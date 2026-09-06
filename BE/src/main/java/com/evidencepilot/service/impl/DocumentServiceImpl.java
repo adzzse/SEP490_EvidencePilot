@@ -686,7 +686,7 @@ public class DocumentServiceImpl implements DocumentService {
             deleteObjectAfterFailure(objectKey, failure);
             throw failure;
         }
-        deleteObjectOnRollback(objectKey);
+        documentObjectStorage.deleteOnRollback(objectKey);
 
         doc.setContentType(file.getContentType());
         doc.setOriginalFilename(file.getOriginalFilename());
@@ -734,25 +734,6 @@ public class DocumentServiceImpl implements DocumentService {
         } catch (RuntimeException cleanupFailure) {
             failure.addSuppressed(cleanupFailure);
         }
-    }
-
-    private void deleteObjectOnRollback(String objectKey) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status == TransactionSynchronization.STATUS_COMMITTED) {
-                    return;
-                }
-                try {
-                    documentObjectStorage.delete(objectKey);
-                } catch (RuntimeException e) {
-                    log.warn("Failed to delete rolled-back object {}", objectKey, e);
-                }
-            }
-        });
     }
 
     private void deleteDerivedDataAfterCommit(UUID documentId, String fileHashSha256) {

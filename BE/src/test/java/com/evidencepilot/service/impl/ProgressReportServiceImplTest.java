@@ -15,7 +15,6 @@ import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.service.CurrentUserService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,8 +57,7 @@ class ProgressReportServiceImplTest {
                 instructorFeedbackRepository,
                 projectMemberRepository,
                 auditLogRepository,
-                currentUserService,
-                new ObjectMapper());
+                currentUserService);
     }
 
     @Test

@@ -2,7 +2,6 @@ package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.response.ProgressReportResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
-import com.evidencepilot.model.AuditLog;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.InstructorFeedback;
 import com.evidencepilot.model.PaperSection;
@@ -19,8 +18,6 @@ import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.ProgressReportService;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -44,8 +41,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ProgressReportServiceImpl implements ProgressReportService {
 
-    private static final String SECTION_EDIT_ACTION = "SECTION_CONTENT_UPDATED";
-
     private final ProjectRepository projectRepository;
     private final DocumentRepository documentRepository;
     private final PaperSectionRepository paperSectionRepository;
@@ -53,7 +48,6 @@ public class ProgressReportServiceImpl implements ProgressReportService {
     private final ProjectMemberRepository projectMemberRepository;
     private final AuditLogRepository auditLogRepository;
     private final CurrentUserService currentUserService;
-    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -232,23 +226,6 @@ public class ProgressReportServiceImpl implements ProgressReportService {
             currentWordCount += panel.wordCount();
             feedbackAnswered += panel.feedbackAnswered();
             feedbackUnanswered += panel.feedbackUnanswered();
-        }
-
-        private void addEdit(int delta, int added, int removed, String sectionTitle,
-                LocalDateTime occurredAt) {
-            saveCount++;
-            wordDelta += delta;
-            wordsAdded += Math.max(added, 0);
-            wordsRemoved += Math.max(removed, 0);
-            if (sectionTitle != null && !sectionTitle.isBlank()) editedSections.add(sectionTitle);
-            if (lastEditedAt == null || occurredAt.isAfter(lastEditedAt)) {
-                lastEditedAt = occurredAt;
-            }
-            int[] day = daily.computeIfAbsent(occurredAt.toLocalDate(), ignored -> new int[4]);
-            day[0]++;
-            day[1] += delta;
-            day[2] += Math.max(added, 0);
-            day[3] += Math.max(removed, 0);
         }
 
         private void addAggregated(LocalDate date, long cnt, int delta, int added, int removed, LocalDateTime maxAt, String titlesConcat) {

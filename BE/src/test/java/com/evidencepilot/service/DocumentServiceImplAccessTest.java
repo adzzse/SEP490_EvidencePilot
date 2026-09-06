@@ -493,6 +493,28 @@ class DocumentServiceImplAccessTest {
     }
 
     @Test
+    void attachFileRegistersRollbackCleanupBeforeUpdatingMetadata() {
+        User user = user();
+        Document document = document(project());
+        document.setProcessingStatus(ProcessingStatus.METADATA_FETCHED);
+        String objectKey = "sources/raw/" + document.getId() + ".pdf";
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "paper.pdf", "application/pdf", "content".getBytes());
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(documentRepository.findById(document.getId())).thenReturn(Optional.of(document));
+        when(documentObjectStorage.writeWithSha256(eq(objectKey), any(), eq(7L), eq("application/pdf")))
+                .thenReturn("file-hash");
+        when(documentPersistenceService.markDocumentAsUploaded(document.getId(), objectKey, "file-hash"))
+                .thenReturn(document);
+
+        service().attachFileToDocument(document.getId(), file);
+
+        var order = org.mockito.Mockito.inOrder(documentObjectStorage, documentPersistenceService);
+        order.verify(documentObjectStorage).deleteOnRollback(objectKey);
+        order.verify(documentPersistenceService).markDocumentAsUploaded(document.getId(), objectKey, "file-hash");
+    }
+
+    @Test
     void archivedProjectRejectsExtractionAffectingFileAttachment() {
         User user = user();
         Project project = project();

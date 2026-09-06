@@ -3,20 +3,29 @@ package com.evidencepilot.service;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class DocumentObjectStorageTest {
@@ -32,6 +41,52 @@ class DocumentObjectStorageTest {
     void setUp() {
         storage = new DocumentObjectStorage(minioClient, presignClient);
         ReflectionTestUtils.setField(storage, "bucketName", "test-bucket");
+    }
+
+    @AfterEach
+    void clearSynchronization() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {TransactionSynchronization.STATUS_COMMITTED,
+            TransactionSynchronization.STATUS_ROLLED_BACK, TransactionSynchronization.STATUS_UNKNOWN})
+    void rollbackCleanupWaitsForCompletionAndRetainsCommittedObjects(int status) throws Exception {
+        TransactionSynchronizationManager.initSynchronization();
+
+        storage.deleteOnRollback("media/file.png");
+
+        verifyNoInteractions(minioClient);
+        var callbacks = TransactionSynchronizationManager.getSynchronizations();
+        assertThat(callbacks).hasSize(1);
+        callbacks.getFirst().afterCompletion(status);
+        if (status == TransactionSynchronization.STATUS_COMMITTED) {
+            verifyNoInteractions(minioClient);
+        } else {
+            verify(minioClient).removeObject(argThat(args ->
+                    args.bucket().equals("test-bucket") && args.object().equals("media/file.png")));
+        }
+    }
+
+    @Test
+    void rollbackCleanupWithoutSynchronizationDoesNotDelete() {
+        storage.deleteOnRollback("media/file.png");
+
+        verifyNoInteractions(minioClient);
+    }
+
+    @Test
+    void rollbackCleanupFailureDoesNotEscapeTransactionCompletion() throws Exception {
+        TransactionSynchronizationManager.initSynchronization();
+        doThrow(new RuntimeException("storage offline")).when(minioClient).removeObject(any());
+        storage.deleteOnRollback("media/file.png");
+
+        assertThatCode(() -> TransactionSynchronizationManager.getSynchronizations().getFirst()
+                .afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK))
+                .doesNotThrowAnyException();
+        verify(minioClient).removeObject(any());
     }
 
     @Test

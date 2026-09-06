@@ -18,22 +18,6 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     Page<AuditLog> findByActorIdAndEntityTypeAndEntityIdOrderByOccurredAtDesc(
             UUID actorId, String entityType, UUID entityId, Pageable pageable);
     Page<AuditLog> findByActionOrderByOccurredAtDesc(String action, Pageable pageable);
-    List<AuditLog> findByActionAndEntityTypeAndEntityIdOrderByOccurredAtAsc(
-            String action, String entityType, UUID entityId);
-
-    @Query("""
-            SELECT a FROM AuditLog a
-            WHERE a.action = 'SECTION_CONTENT_UPDATED'
-              AND a.entityType = 'PROJECT'
-              AND a.entityId = :projectId
-              AND a.occurredAt >= :fromInclusive
-              AND a.occurredAt < :toExclusive
-            ORDER BY a.occurredAt ASC
-            """)
-    List<AuditLog> findProjectEditsWithin(
-            @Param("projectId") UUID projectId,
-            @Param("fromInclusive") LocalDateTime fromInclusive,
-            @Param("toExclusive") LocalDateTime toExclusive);
 
 // Phase 1.5: DB-level daily aggregation — preserves wordDelta→wordsAdded/Removed fallback for legacy rows
     @Query(value = """

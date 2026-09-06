@@ -123,6 +123,7 @@ class MediaAssetServiceTest {
 
         assertThrows(RuntimeException.class, () -> service().upload(file, project.getId()));
 
+        verify(objectStorage).deleteOnRollback(argThat(key -> key.startsWith("media/" + project.getId() + "/")));
         verify(objectStorage).delete(argThat(key -> key.startsWith("media/" + project.getId() + "/")));
     }
 

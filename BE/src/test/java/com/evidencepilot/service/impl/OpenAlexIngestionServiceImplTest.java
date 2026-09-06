@@ -198,6 +198,7 @@ class OpenAlexIngestionServiceImplTest {
         assertThat(result.processingStatus()).isEqualTo(ProcessingStatus.UPLOADED);
         assertThat(result.originalFilename()).contains("Test Paper");
         verify(documentObjectStorage).writeWithSha256(anyString(), eq(pdfBytes), eq("application/pdf"));
+        verify(documentObjectStorage).deleteOnRollback(result.fileUrl());
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<DocumentReference>> references = ArgumentCaptor.forClass(List.class);

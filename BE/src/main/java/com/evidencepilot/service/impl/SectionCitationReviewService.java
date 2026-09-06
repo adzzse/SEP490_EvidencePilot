@@ -734,15 +734,6 @@ public class SectionCitationReviewService {
         return suffix.stripLeading().startsWith("\\cite");
     }
 
-    private static int excerptStart(String content, String excerpt) {
-        int start = content.indexOf(excerpt);
-        if (start < 0 || content.indexOf(excerpt, start + 1) >= 0) {
-            throw new IllegalArgumentException(
-                    "Finding excerpt is missing or ambiguous in the supplied chunk");
-        }
-        return start;
-    }
-
     private ObjectMapper strictMapper() {
         return objectMapper.copy()
                 .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)

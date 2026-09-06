@@ -32,8 +32,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -177,7 +175,7 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
             }
             String fileHashSha256 = documentObjectStorage.writeWithSha256(
                     objectKey, pdfBytes, "application/pdf");
-            deleteObjectOnRollback(objectKey);
+            documentObjectStorage.deleteOnRollback(objectKey);
             document.setFileSizeBytes((long) pdfBytes.length);
             document = documentPersistenceService.markDocumentAsUploaded(
                     document.getId(), objectKey, fileHashSha256);
@@ -199,25 +197,6 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
         projectCollectionService.syncSource(document);
 
         return DocumentResponse.from(document);
-    }
-
-    private void deleteObjectOnRollback(String objectKey) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status == TransactionSynchronization.STATUS_COMMITTED) {
-                    return;
-                }
-                try {
-                    documentObjectStorage.delete(objectKey);
-                } catch (RuntimeException e) {
-                    log.warn("Failed to delete rolled-back OpenAlex object {}", objectKey, e);
-                }
-            }
-        });
     }
 
     private static boolean hasPdfSignature(byte[] content) {
