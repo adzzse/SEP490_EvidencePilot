@@ -7,6 +7,7 @@ import com.evidencepilot.dto.response.DocumentResponse;
 import com.evidencepilot.dto.response.PagedResponse;
 import com.evidencepilot.dto.response.ProjectMemberResponse;
 import com.evidencepilot.dto.response.ProjectResponse;
+import com.evidencepilot.dto.response.ProjectSourceMapResponse;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.ProjectRole;
@@ -15,6 +16,7 @@ import com.evidencepilot.service.DocumentService;
 import com.evidencepilot.service.PaperProcessingService;
 import com.evidencepilot.service.ProjectService;
 import com.evidencepilot.service.impl.ProjectCollectionService;
+import com.evidencepilot.service.impl.ProjectSourceMapService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -50,6 +52,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Tag(name = "Projects", description = "Project lifecycle and membership management")
 public class ProjectController {
+    private final ProjectSourceMapService projectSourceMapService;
 
     private final ProjectService projectService;
     private final DocumentService documentService;
@@ -198,6 +201,13 @@ public class ProjectController {
             @RequestParam(required = false) Boolean active) {
         return documentService.getSourcesByProject(
                 projectId, page, size, sort, q, processingStatus, active);
+    }
+
+    @Operation(summary = "Get project source map",
+            description = "Shows project sources and their recorded citation relationships. Reads saved metadata only.")
+    @GetMapping("/{projectId}/source-map")
+    public ProjectSourceMapResponse getSourceMap(@PathVariable UUID projectId) {
+        return projectSourceMapService.getSourceMap(projectId);
     }
 
     @Operation(summary = "List collections linked to a project")

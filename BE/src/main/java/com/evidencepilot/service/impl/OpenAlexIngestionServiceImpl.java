@@ -156,6 +156,8 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
             document.setProcessingStatus(ProcessingStatus.METADATA_FETCHED);
             document.setProcessingError("No open-access PDF available for this DOI");
             document = documentRepository.save(document);
+            tryPersistReferences(document, work);
+            tryPersistCitedBy(document, work);
             projectCollectionService.syncSource(document);
             return DocumentResponse.from(document);
         }
@@ -192,8 +194,8 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
             documentRepository.save(document);
         }
 
-        persistReferences(document, work);
-        persistCitedBy(document, work);
+        tryPersistReferences(document, work);
+        tryPersistCitedBy(document, work);
         projectCollectionService.syncSource(document);
 
         return DocumentResponse.from(document);
@@ -229,16 +231,18 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
         }
     }
 
+    private void tryPersistReferences(Document document, OpenAlexWorkResponse work) {
+        try {
+            persistReferences(document, work);
+        } catch (Exception e) {
+            log.warn("Failed to fetch references for document {}: {}", document.getId(), e.getMessage());
+        }
+    }
+
     private void persistReferences(Document document, OpenAlexWorkResponse work) {
         if (work.referencedWorks() == null || work.referencedWorks().isEmpty()) return;
 
         UUID documentId = document.getId();
-        List<String> collectionDois = List.of();
-        if (document.getCollection() != null) {
-            collectionDois = documentRepository.findByCollectionId(document.getCollection().getId()).stream()
-                    .map(Document::getDoi).filter(java.util.Objects::nonNull).toList();
-        }
-
         List<String> refIds = work.referencedWorks().stream()
                 .filter(r -> r != null && !r.isBlank())
                 .distinct().toList();
@@ -252,10 +256,10 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
 
         List<DocumentReference> existing = documentReferenceRepository
                 .findByDocumentIdAndEdgeTypeOrderByReferenceIndexAsc(documentId, EdgeType.REFERENCES);
-        Set<String> existingIds = new HashSet<>();
+        Map<String, DocumentReference> existingById = new LinkedHashMap<>();
         int nextIndex = 0;
         for (DocumentReference reference : existing) {
-            if (reference.getRawText() != null) existingIds.add(reference.getRawText());
+            if (reference.getRawText() != null) existingById.put(reference.getRawText(), reference);
             if (reference.getReferenceIndex() != null) {
                 nextIndex = Math.max(nextIndex, reference.getReferenceIndex() + 1);
             }
@@ -263,9 +267,9 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
 
         List<DocumentReference> pending = new ArrayList<>();
         for (String refId : refIds) {
-            if (existingIds.contains(refId)) continue;
-
             OpenAlexWorkResponse refWork = resolved.get(refId);
+            DocumentReference previous = existingById.get(refId);
+            if (previous != null && (previous.getDoi() != null || refWork == null || refWork.doi() == null)) continue;
             if (refWork == null) {
                 DocumentReference ref = new DocumentReference();
                 ref.setDocument(document);
@@ -273,23 +277,21 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
                 ref.setRawText(refId);
                 ref.setEdgeType(EdgeType.REFERENCES);
                 pending.add(ref);
-                existingIds.add(refId);
                 continue;
             }
 
-            if (refWork.doi() != null && collectionDois.contains(refWork.doi())) continue;
-
-            DocumentReference ref = new DocumentReference();
-            ref.setDocument(document);
-            ref.setReferenceIndex(nextIndex++);
-            ref.setRawText(refId);
+            DocumentReference ref = previous == null ? new DocumentReference() : previous;
+            if (previous == null) {
+                ref.setDocument(document);
+                ref.setReferenceIndex(nextIndex++);
+                ref.setRawText(refId);
+            }
             ref.setTitle(refWork.title());
             ref.setPublicationYear(refWork.publicationYear());
             ref.setDoi(refWork.doi() != null ? refWork.doi() : null);
             ref.setCitedByCount(refWork.citedByCount());
             ref.setEdgeType(EdgeType.REFERENCES);
             pending.add(ref);
-            existingIds.add(refId);
         }
         if (!pending.isEmpty()) documentReferenceRepository.saveAll(pending);
     }
@@ -307,24 +309,36 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
         }
     }
 
+    private void tryPersistCitedBy(Document document, OpenAlexWorkResponse work) {
+        try {
+            persistCitedBy(document, work);
+        } catch (Exception e) {
+            log.warn("Failed to fetch cited-by works for {}: {}", work.id(), e.getMessage());
+        }
+    }
+
+    // Explicit maintenance entry point: failures propagate so callers cannot report a failed refresh as successful.
+    @Transactional
+    public void refreshReferences(UUID documentId) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException(documentId, "Document"));
+        if (!document.isActive() || document.getDocType() != DocumentType.SOURCE
+                || DoiUtils.comparisonKey(document.getDoi()) == null) {
+            throw new IllegalArgumentException("An active source with a valid DOI is required");
+        }
+        OpenAlexWorkResponse work = openAlexClient.fetchWork(document.getDoi());
+        if (work.id() == null || work.id().isBlank()) {
+            throw new IllegalStateException("OpenAlex returned no work ID");
+        }
+        persistReferences(document, work);
+        persistCitedBy(document, work);
+    }
+
     private void persistCitedBy(Document document, OpenAlexWorkResponse work) {
         String openAlexId = work.id();
         if (openAlexId == null) return;
-
         UUID documentId = document.getId();
-        List<String> collectionDois = List.of();
-        if (document.getCollection() != null) {
-            collectionDois = documentRepository.findByCollectionId(document.getCollection().getId()).stream()
-                    .map(Document::getDoi).filter(java.util.Objects::nonNull).toList();
-        }
-
-        List<OpenAlexWorkResponse> citingWorks;
-        try {
-            citingWorks = openAlexClient.fetchCitedByWorks(openAlexId, 5);
-        } catch (Exception e) {
-            log.warn("Failed to fetch cited-by works for {}: {}", openAlexId, e.getMessage());
-            return;
-        }
+        List<OpenAlexWorkResponse> citingWorks = openAlexClient.fetchCitedByWorks(openAlexId, 5);
 
         List<DocumentReference> existing = documentReferenceRepository
                 .findByDocumentIdAndEdgeTypeOrderByReferenceIndexAsc(documentId, EdgeType.CITED_BY);
@@ -339,8 +353,6 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
 
         List<DocumentReference> pending = new ArrayList<>();
         for (OpenAlexWorkResponse citing : citingWorks) {
-            if (citing.doi() != null && collectionDois.contains(citing.doi())) continue;
-
             String citingId = citing.id();
             if (citingId == null || citingId.isBlank() || existingIds.contains(citingId)) continue;
 
@@ -379,7 +391,13 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
 
         List<CitationGraphResponse.GraphNode> nodes = new ArrayList<>();
         List<CitationGraphResponse.GraphEdge> edges = new ArrayList<>();
-        java.util.Map<String, CitationGraphResponse.GraphNode> externalNodes = new LinkedHashMap<>();
+        Map<String, CitationGraphResponse.GraphNode> externalNodes = new LinkedHashMap<>();
+        Map<String, List<Document>> byDoi = new LinkedHashMap<>();
+        Set<String> citationKeys = new HashSet<>();
+        for (Document doc : docs) {
+            String doi = DoiUtils.comparisonKey(doc.getDoi());
+            if (doi != null) byDoi.computeIfAbsent(doi, ignored -> new ArrayList<>()).add(doc);
+        }
 
         int maxPerDoc = 20;
 
@@ -394,14 +412,19 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
                 List<DocumentReference> refs = documentReferenceRepository
                         .findByDocumentIdAndEdgeTypeOrderByReferenceIndexAsc(doc.getId(), edgeType);
 
-                int count = 0;
+                int externalCount = 0;
                 for (DocumentReference ref : refs) {
-                    if (count++ >= maxPerDoc) break;
-                    String refId = ref.getRawText();
-                    String edgeLabel = edgeType.name();
-                    edges.add(new CitationGraphResponse.GraphEdge(docId, refId, edgeLabel));
+                    var matches = byDoi.get(DoiUtils.comparisonKey(ref.getDoi()));
+                    boolean internal = matches != null && matches.size() == 1;
+                    if (!internal && externalCount++ >= maxPerDoc) continue;
+                    String refId = internal ? matches.getFirst().getId().toString() : ref.getRawText();
+                    if (refId == null || refId.isBlank() || docId.equals(refId)) continue;
+                    String from = edgeType == EdgeType.CITED_BY ? refId : docId;
+                    String to = edgeType == EdgeType.CITED_BY ? docId : refId;
+                    if (!citationKeys.add(from + "->" + to)) continue;
+                    edges.add(new CitationGraphResponse.GraphEdge(docId, refId, edgeType.name()));
 
-                    if (!externalNodes.containsKey(refId)) {
+                    if (!internal && !externalNodes.containsKey(refId)) {
                         externalNodes.put(refId, new CitationGraphResponse.GraphNode(
                                 refId, ref.getDoi(), ref.getTitle(), null,
                                 ref.getPublicationYear(), false,

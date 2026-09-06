@@ -126,8 +126,9 @@ class OpenAlexIngestionServiceImplTest {
     @Test
     void lookupByDoi_returnsPreview() {
         when(openAlexClient.fetchWork("10.1000/xyz")).thenReturn(sampleWork);
+        doReturn(true).when(serviceSpy).urlIsReachable("https://example.com/paper.pdf");
 
-        OpenAlexPreview preview = service.lookupByDoi("10.1000/xyz");
+        OpenAlexPreview preview = serviceSpy.lookupByDoi("10.1000/xyz");
 
         assertThat(preview.title()).isEqualTo("Test Paper");
         assertThat(preview.publicationYear()).isEqualTo(2024);
@@ -477,6 +478,103 @@ class OpenAlexIngestionServiceImplTest {
                 .hasMessageContaining("Collection access denied");
 
         verifyNoInteractions(documentRepository, documentReferenceRepository);
+    }
+
+    @Test
+    void collectionGraphResolvesInternalDoiAndDeduplicatesOppositeMetadataDirections() {
+        Collection collection = collection();
+        Document a = citationDocument(collection, ProcessingStatus.READY);
+        Document b = citationDocument(collection, ProcessingStatus.READY);
+        DocumentReference ab = reference("https://openalex.org/W2", EdgeType.REFERENCES);
+        ab.setDoi("https://doi.org/" + b.getDoi().toUpperCase());
+        DocumentReference ba = reference("https://openalex.org/W1", EdgeType.CITED_BY);
+        ba.setDoi(a.getDoi());
+        allowCitationGraph(collection);
+        when(documentRepository.findByCollectionId(collection.getId())).thenReturn(List.of(a, b));
+        var many = new java.util.ArrayList<>(IntStream.range(0, 25)
+                .mapToObj(i -> reference("external-" + i, EdgeType.REFERENCES)).toList());
+        many.add(ab);
+        when(documentReferenceRepository.findByDocumentIdAndEdgeTypeOrderByReferenceIndexAsc(a.getId(), EdgeType.REFERENCES))
+                .thenReturn(many);
+        when(documentReferenceRepository.findByDocumentIdAndEdgeTypeOrderByReferenceIndexAsc(a.getId(), EdgeType.CITED_BY))
+                .thenReturn(List.of());
+        when(documentReferenceRepository.findByDocumentIdAndEdgeTypeOrderByReferenceIndexAsc(b.getId(), EdgeType.REFERENCES))
+                .thenReturn(List.of());
+        when(documentReferenceRepository.findByDocumentIdAndEdgeTypeOrderByReferenceIndexAsc(b.getId(), EdgeType.CITED_BY))
+                .thenReturn(List.of(ba));
+
+        var graph = service.getCitationGraph(collection.getId(), true);
+
+        assertThat(graph.nodes()).hasSize(22);
+        assertThat(graph.edges()).hasSize(21);
+        assertThat(graph.edges()).anySatisfy(edge -> {
+            assertThat(edge.sourceId()).isEqualTo(a.getId().toString());
+            assertThat(edge.targetId()).isEqualTo(b.getId().toString());
+            assertThat(edge.type()).isEqualTo("REFERENCES");
+        });
+        assertThat(graph.nodes()).noneMatch(node -> node.id().startsWith("https://openalex.org/"));
+    }
+
+    @Test
+    void refreshKeepsInternalCollectionCitationsAndRepairsUnresolvedRowsWithoutDuplicates() {
+        Collection collection = collection();
+        Document a = citationDocument(collection, ProcessingStatus.READY);
+        a.setDocType(DocumentType.SOURCE);
+        a.setActive(true);
+        var work = new OpenAlexWorkResponse("https://openalex.org/W1", a.getDoi(), "A", null,
+                null, null, null, null, 2025, null, List.of("https://openalex.org/W2"), null);
+        var other = new OpenAlexWorkResponse("https://openalex.org/W2", "10.1000/b", "B", null,
+                null, null, null, null, 2024, null, List.of(), null);
+        Document b = citationDocument(collection, ProcessingStatus.READY);
+        b.setDoi(other.doi());
+        org.mockito.Mockito.lenient().when(documentRepository.findByCollectionId(collection.getId())).thenReturn(List.of(a, b));
+        var refs = new java.util.ArrayList<DocumentReference>();
+        var cited = new java.util.ArrayList<DocumentReference>();
+        DocumentReference unresolved = reference(other.id(), EdgeType.REFERENCES);
+        unresolved.setId(UUID.randomUUID());
+        unresolved.setDocument(a);
+        unresolved.setReferenceIndex(0);
+        refs.add(unresolved);
+        when(documentRepository.findById(a.getId())).thenReturn(Optional.of(a));
+        when(openAlexClient.fetchWork(a.getDoi())).thenReturn(work);
+        when(openAlexClient.fetchWorksByIds(any(), anyString())).thenReturn(List.of(other));
+        when(openAlexClient.fetchCitedByWorks(work.id(), 5)).thenReturn(List.of(other));
+        when(documentReferenceRepository.findByDocumentIdAndEdgeTypeOrderByReferenceIndexAsc(a.getId(), EdgeType.REFERENCES))
+                .thenReturn(refs);
+        when(documentReferenceRepository.findByDocumentIdAndEdgeTypeOrderByReferenceIndexAsc(a.getId(), EdgeType.CITED_BY))
+                .thenReturn(cited);
+        when(documentReferenceRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<DocumentReference> saved = invocation.getArgument(0);
+            for (var row : saved) {
+                if (row.getId() == null) {
+                    row.setId(UUID.randomUUID());
+                    (row.getEdgeType() == EdgeType.REFERENCES ? refs : cited).add(row);
+                }
+            }
+            return saved;
+        });
+
+        service.refreshReferences(a.getId());
+        service.refreshReferences(a.getId());
+
+        assertThat(refs).hasSize(1);
+        assertThat(refs.getFirst().getId()).isEqualTo(unresolved.getId());
+        assertThat(refs.getFirst().getDoi()).isEqualTo("10.1000/b");
+        assertThat(cited).hasSize(1);
+        verify(documentObjectStorage, never()).writeWithSha256(anyString(), any(), anyString());
+        verifyNoInteractions(documentPersistenceService, projectCollectionService);
+    }
+
+    @Test
+    void maintenanceRefreshPropagatesProviderFailureInsteadOfReportingSuccess() {
+        Document source = citationDocument(collection(), ProcessingStatus.READY);
+        source.setDocType(DocumentType.SOURCE);
+        source.setActive(true);
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+        when(openAlexClient.fetchWork(source.getDoi())).thenReturn(sampleWork);
+        when(openAlexClient.fetchCitedByWorks(sampleWork.id(), 5)).thenThrow(new IllegalStateException("provider unavailable"));
+        assertThatThrownBy(() -> service.refreshReferences(source.getId()))
+                .isInstanceOf(IllegalStateException.class).hasMessage("provider unavailable");
     }
 
     private Collection collection() {

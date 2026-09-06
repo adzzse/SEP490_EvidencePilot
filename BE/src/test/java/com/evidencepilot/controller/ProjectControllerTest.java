@@ -8,6 +8,7 @@ import com.evidencepilot.service.DocumentService;
 import com.evidencepilot.service.PaperProcessingService;
 import com.evidencepilot.service.ProjectService;
 import com.evidencepilot.service.impl.ProjectCollectionService;
+import com.evidencepilot.service.impl.ProjectSourceMapService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -37,6 +38,7 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 class ProjectControllerTest {
 
     private final ProjectService projectService = mock(ProjectService.class);
+    private final ProjectSourceMapService projectSourceMapService = mock(ProjectSourceMapService.class);
     private final DocumentService documentService = mock(DocumentService.class);
     private final ProjectCollectionService projectCollectionService = mock(ProjectCollectionService.class);
     private final PaperProcessingService paperProcessingService = mock(PaperProcessingService.class);
@@ -46,7 +48,7 @@ class ProjectControllerTest {
     @BeforeEach
     void setUp() {
         controller = new ProjectController(
-                projectService, documentService, projectCollectionService,
+                projectSourceMapService, projectService, documentService, projectCollectionService,
                 paperProcessingService);
         mockMvc = standaloneSetup(controller).build();
     }
@@ -134,6 +136,17 @@ class ProjectControllerTest {
         UUID id = UUID.randomUUID();
         mockMvc.perform(get("/api/projects/{id}/sources", id)).andExpect(status().isOk());
         verify(documentService).getSourcesByProject(id, 0, 20, "createdAt,desc", null, null, null);
+    }
+
+    @Test
+    void sourceMapUsesProjectScopeAndPreservesAccessErrors() throws Exception {
+        UUID id = UUID.randomUUID();
+        mockMvc.perform(get("/api/projects/{id}/source-map", id)).andExpect(status().isOk());
+        verify(projectSourceMapService).getSourceMap(id);
+        when(projectSourceMapService.getSourceMap(id)).thenThrow(new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN));
+        mockMvc.perform(get("/api/projects/{id}/source-map", id)).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/projects/not-a-uuid/source-map")).andExpect(status().isBadRequest());
     }
 
     @Test

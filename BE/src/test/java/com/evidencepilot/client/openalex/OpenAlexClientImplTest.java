@@ -78,7 +78,7 @@ class OpenAlexClientImplTest {
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.body(OpenAlexWorkResponse.class)).thenReturn(sampleWork);
 
-        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "");
+        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "", mock(HttpClient.class), new ObjectMapper());
         OpenAlexWorkResponse result = client.fetchWork("10.1000/xyz123");
 
         assertThat(result.title()).isEqualTo("Test Paper Title");
@@ -94,7 +94,7 @@ class OpenAlexClientImplTest {
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.body(OpenAlexWorkResponse.class)).thenReturn(null);
 
-        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "");
+        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "", mock(HttpClient.class), new ObjectMapper());
 
         assertThatThrownBy(() -> client.fetchWork("10.1000/bad-doi"))
                 .isInstanceOf(OpenAlexClient.OpenAlexApiException.class)
@@ -108,7 +108,7 @@ class OpenAlexClientImplTest {
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.body(OpenAlexWorkResponse.class)).thenReturn(sampleWork);
 
-        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "");
+        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "", mock(HttpClient.class), new ObjectMapper());
         OpenAlexWorkResponse result = client.fetchWork("10.1000/xyz");
 
         assertThat(result).isNotNull();
@@ -121,7 +121,7 @@ class OpenAlexClientImplTest {
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.body(OpenAlexWorkResponse.class)).thenReturn(sampleWork);
 
-        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "");
+        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "", mock(HttpClient.class), new ObjectMapper());
         OpenAlexWorkResponse result = client.fetchWork("doi:10.1000/xyz");
 
         assertThat(result).isNotNull();
@@ -129,7 +129,7 @@ class OpenAlexClientImplTest {
 
     @Test
     void fetchWork_rejectsMalformedDoiWithBadRequestStatus() {
-        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "");
+        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "", mock(HttpClient.class), new ObjectMapper());
 
         assertThatThrownBy(() -> client.fetchWork("not-a-doi"))
                 .isInstanceOf(OpenAlexClient.OpenAlexApiException.class)
@@ -146,7 +146,7 @@ class OpenAlexClientImplTest {
                 .thenThrow(HttpClientErrorException.create(HttpStatus.NOT_FOUND, "Not Found",
                         HttpHeaders.EMPTY, new byte[0], null));
 
-        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "");
+        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "", mock(HttpClient.class), new ObjectMapper());
 
         assertThatThrownBy(() -> client.fetchWork("10.0000/e2e-invalid-doi"))
                 .isInstanceOf(OpenAlexClient.OpenAlexApiException.class)
@@ -162,11 +162,42 @@ class OpenAlexClientImplTest {
                 .thenThrow(HttpServerErrorException.create(HttpStatus.BAD_GATEWAY, "Bad Gateway",
                         HttpHeaders.EMPTY, new byte[0], null));
 
-        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "");
+        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "", mock(HttpClient.class), new ObjectMapper());
 
         assertThatThrownBy(() -> client.fetchWork("10.1000/xyz"))
                 .isInstanceOf(OpenAlexClient.OpenAlexApiException.class)
                 .satisfies(e -> assertThat(((OpenAlexClient.OpenAlexApiException) e).getStatusCode()).isEqualTo(502));
+    }
+
+    @Test
+    void workLists_distinguishEmptyResultsFromProviderFailure() {
+        when(restClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(org.mockito.ArgumentMatchers.anyString())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.body(String.class)).thenReturn("{\"results\":[]}", "{\"error\":\"quota\"}")
+                .thenThrow(new IllegalStateException("private provider details"));
+        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "", mock(HttpClient.class), new ObjectMapper());
+        assertThat(client.fetchCitedByWorks("W1", 5)).isEmpty();
+        assertThatThrownBy(() -> client.fetchCitedByWorks("W1", 5))
+                .isInstanceOf(OpenAlexClient.OpenAlexApiException.class);
+        assertThatThrownBy(() -> client.fetchWorksByIds(java.util.List.of("W1"), "id,doi"))
+                .isInstanceOf(OpenAlexClient.OpenAlexApiException.class)
+                .hasMessage("OpenAlex work list could not be loaded");
+    }
+
+    @Test
+    void largeReferenceListsAreFetchedInBatchesWithoutDroppingIds() {
+        when(restClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(org.mockito.ArgumentMatchers.anyString())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.body(String.class)).thenReturn("{\"results\":[{\"id\":\"W0\"}]}", "{\"results\":[{\"id\":\"W100\"}]}");
+        var ids = java.util.stream.IntStream.range(0, 129).mapToObj(i -> "https://openalex.org/W" + i).toList();
+        var client = new OpenAlexClientImpl(restClient, BASE, "", mock(HttpClient.class), new ObjectMapper());
+        assertThat(client.fetchWorksByIds(ids, "id,doi")).extracting(OpenAlexWorkResponse::id).containsExactly("W0", "W100");
+        var requests = ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(requestHeadersUriSpec, org.mockito.Mockito.times(2)).uri(requests.capture());
+        assertThat(requests.getAllValues().getFirst()).contains("W0|W1|").contains("|W99&").doesNotContain("|W100");
+        assertThat(requests.getAllValues().getLast()).contains("openalex:W100|").contains("|W128&");
     }
 
     @Test

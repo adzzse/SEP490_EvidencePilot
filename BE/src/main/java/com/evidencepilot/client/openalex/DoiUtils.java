@@ -29,6 +29,11 @@ public final class DoiUtils {
         return normalized;
     }
 
+    public static String comparisonKey(String doi) {
+        String normalized = normalize(doi == null ? null : doi.toLowerCase(java.util.Locale.ROOT));
+        return isValid(normalized) ? normalized : null;
+    }
+
     public static String toOpenAlexId(String doi) {
         String normalized = normalize(doi);
         if (normalized == null) return null;

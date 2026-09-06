@@ -14,6 +14,7 @@ export const API_ROUTES = Object.freeze({
   PROJECTS: Object.freeze({
     BASE: '/api/projects',
     BY_ID: (id) => `/api/projects/${id}`,
+    SOURCE_MAP: (id) => `/api/projects/${id}/source-map`,
   }),
   SOURCES: Object.freeze({
     BASE: '/api/sources',

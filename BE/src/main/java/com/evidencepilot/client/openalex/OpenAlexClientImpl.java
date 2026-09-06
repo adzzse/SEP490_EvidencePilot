@@ -129,6 +129,14 @@ public class OpenAlexClientImpl implements OpenAlexClient {
     @Override
     public List<OpenAlexWorkResponse> fetchWorksByIds(List<String> openAlexIds, String selectFields) {
         if (openAlexIds == null || openAlexIds.isEmpty()) return List.of();
+        // OpenAlex allows at most 100 OR-filter values per request.
+        if (openAlexIds.size() > 100) {
+            var results = new java.util.ArrayList<OpenAlexWorkResponse>();
+            for (int offset = 0; offset < openAlexIds.size(); offset += 100) {
+                results.addAll(fetchWorksByIds(openAlexIds.subList(offset, Math.min(offset + 100, openAlexIds.size())), selectFields));
+            }
+            return results;
+        }
         StringBuilder sb = new StringBuilder();
         for (String oid : openAlexIds) {
             String shortId = oid.contains("/") ? oid.substring(oid.lastIndexOf('/') + 1) : oid;
@@ -182,12 +190,12 @@ public class OpenAlexClientImpl implements OpenAlexClient {
             String json = restClient.get().uri(uri).retrieve().body(String.class);
             Map<String, Object> page = objectMapper.readValue(json, new TypeReference<>() {});
             Object rawResults = page.get("results");
-            if (rawResults == null) return List.of();
+            if (!(rawResults instanceof List<?>)) throw new IllegalStateException("Missing OpenAlex results");
             String resultsJson = objectMapper.writeValueAsString(rawResults);
             return objectMapper.readValue(resultsJson, new TypeReference<List<OpenAlexWorkResponse>>() {});
         } catch (Exception e) {
-            log.warn("Failed to list works from {}: {}", uri, e.getMessage());
-            return List.of();
+            // Keep request URLs/API keys out of propagated errors and logs.
+            throw new OpenAlexApiException("OpenAlex work list could not be loaded", HttpStatus.BAD_GATEWAY.value());
         }
     }
 

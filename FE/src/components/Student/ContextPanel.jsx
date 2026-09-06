@@ -117,7 +117,7 @@ export default function ContextPanel({
   activeTab, setActiveTab,
   showToast,
   // Source tab
-  sources, isUploading, setIsUploading, project, setViewerFile, fetchSources,
+  sources, isUploading, setIsUploading, project, setViewerFile, fetchSources, onOpenSourceMap,
   // Requirements tab
   selectedPaper, selectedSection, isAssignedSection, isSectionDirty, onHandoffChanged, pollAiJob,
   // Feedback tab
@@ -280,6 +280,10 @@ export default function ContextPanel({
         <div className="flex-1 overflow-y-auto bg-(--surface-secondary)/50 p-4">
           {activeTab === 'Source' && (
             <div className="p-5 flex flex-col gap-6 animate-in fade-in duration-300">
+              <button type="button" onClick={onOpenSourceMap} aria-haspopup="dialog"
+                className="w-full min-h-10 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm font-semibold text-(--text-primary) hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand) cursor-pointer">
+                {t('sourceMap.title')}
+              </button>
               <button onClick={() => { setDoiErrors([]); setShowSourceModal(true); }} disabled={isLocked} className="w-full flex items-center justify-center gap-2 bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-40 text-(--on-brand) font-bold text-sm py-3 px-4 rounded-xl shadow-md transition-colors">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
                 {t('insertSource')}

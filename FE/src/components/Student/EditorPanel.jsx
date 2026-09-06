@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import LatexEditor from '../features/LatexEditor';
 import PreviewPane from '../features/PreviewPane';
-import VisualSourceMap from '../features/VisualSourceMap.jsx';
 import { useTranslation } from 'react-i18next';
 import { mapScrollPosition } from '../../utils/student/scrollSync.js';
 
@@ -31,7 +30,7 @@ export default function EditorPanel({
   showSearchPanel, setShowSearchPanel, searchQuery, setSearchQuery, replaceQuery, setReplaceQuery,
   textSize, setTextSize, showToast, editorRef, mediaAssets, isLocked,
   findings = [], onFindingClick,
-  sources = [], aiSourceMatches = {},
+  onOpenSourceMap,
   onRunCitationReview, onOpenCitationReview, reviewBusy = false, reviewProgress = null,
   reviewFindingsCount = 0, reviewError = null,
   canRunCitationReview = false, onEditorUserScroll,
@@ -45,7 +44,6 @@ export default function EditorPanel({
   const citationReviewTitle = reviewBusy ? t('reviewing') : canRunCitationReview && !isLocked ? t('citationReviewDescription') : t('citationReviewUnavailable');
   const saveTitle = saveStatus === 'saving' ? t('saving') : isLocked ? t('saveReadOnly') : !isOwnSection ? t('noAssignedSection') : t('saveSectionHelp');
   const [previewZoom, setPreviewZoom] = useState(100);
-  const [showVisualMap, setShowVisualMap] = useState(false);
   const generatedReferences = [];
   const previewPaneRef = useRef(null);
 
@@ -292,8 +290,8 @@ export default function EditorPanel({
             {t('preview')}
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={() => setShowVisualMap(!showVisualMap)} className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${showVisualMap ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700' : 'hover:bg-(--surface-secondary) text-(--text-primary)'}`} title={t('visualSourceMap') || 'Visual Map of Sources'}>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 13a5 5 0 007.54.54l2-2a5 5 0 00-7.07-7.07l-1.15 1.15m2.68 5.38a5 5 0 00-7.54-.54l-2 2a5 5 0 007.07 7.07l1.15-1.15" /></svg>
+            <button type="button" onClick={onOpenSourceMap} className="w-7 h-7 flex items-center justify-center rounded transition-colors hover:bg-(--surface-secondary) text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)" title={t('sourceMap.title')} aria-label={t('sourceMap.title')} aria-haspopup="dialog">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m7 7 10 10M7 17 17 7M7 7h10v10H7z" /><circle cx="7" cy="7" r="2" /><circle cx="17" cy="7" r="2" /><circle cx="7" cy="17" r="2" /><circle cx="17" cy="17" r="2" /></svg>
             </button>
             <button onClick={() => setPreviewZoom(p => Math.min(200, p + 10))} className="text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary) px-1.5 py-0.5 rounded transition-colors">+</button>
             <span className="text-xs font-mono text-(--text-primary) min-w-[36px] text-center">{previewZoom}%</span>
@@ -311,18 +309,6 @@ export default function EditorPanel({
             generatedReferences={generatedReferences}
             referencesTitle={currentSection?.sectionTitle || 'References'}
           />
-          {showVisualMap && (
-            <div className="absolute inset-0 z-10 bg-(--surface)/95 backdrop-blur-sm overflow-hidden flex flex-col">
-              <div className="flex items-center justify-between px-4 py-2 border-b border-(--border) shrink-0">
-                <span className="text-xs font-bold text-(--text-primary)">Source Map</span>
-                <button onClick={() => setShowVisualMap(false)} className="text-xs text-(--text-tertiary) hover:text-(--text-primary)">✕</button>
-              </div>
-              <VisualSourceMap
-                sources={sources}
-                aiSourceMatches={aiSourceMatches}
-              />
-            </div>
-          )}
         </div>
       </div>
     </div>
