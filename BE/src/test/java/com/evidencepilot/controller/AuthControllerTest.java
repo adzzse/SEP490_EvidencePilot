@@ -152,13 +152,35 @@ class AuthControllerTest {
 
         mockMvc.perform(post("/api/auth/set-password")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"token\":\"invite-token-1\",\"newPassword\":\"NewStrongPass1!\"}"))
-                .andExpect(status().isOk());
+                        .content("{\"token\":\"invite-token-1\",\"newPassword\":\"NewStrongPass1!\",\"firstName\":\"Ada\",\"lastName\":\"Lovelace\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token", not(blankOrNullString())))
+                .andExpect(jsonPath("$.user.firstName", is("Ada")))
+                .andExpect(jsonPath("$.user.lastName", is("Lovelace")))
+                .andExpect(jsonPath("$.user.role", is("STUDENT")))
+                .andExpect(jsonPath("$.passwordChangeNotice", is(false)));
+    }
 
-        mockMvc.perform(post("/api/auth/login")
+    @Test
+    void setPasswordIssuesJwtUsableAgainstProtectedEndpoints() throws Exception {
+        User user = saveUser("autologin@test.com", "ValidPass1!", UserRole.INSTRUCTOR);
+        user.setPasswordHash(User.DISABLED_PASSWORD_SENTINEL);
+        user.setAccountStatus(AccountStatus.VERIFYING_EMAIL);
+        user.setEmailVerificationToken("autologin-token");
+        user.setEmailVerificationExpiresAt(java.time.LocalDateTime.now().plusHours(1));
+        userRepository.saveAndFlush(user);
+
+        String response = mockMvc.perform(post("/api/auth/set-password")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"invited@test.com\",\"password\":\"NewStrongPass1!\"}"))
-                .andExpect(status().isOk());
+                        .content("{\"token\":\"autologin-token\",\"newPassword\":\"NewStrongPass1!\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token", not(blankOrNullString())))
+                .andReturn().getResponse().getContentAsString();
+        String token = objectMapper.readTree(response).path("token").asText();
+
+        mockMvc.perform(get("/api/users/profile").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("autologin@test.com")));
     }
 
     @Test
@@ -173,6 +195,39 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/auth/set-password")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"token\":\"invite-token-old\",\"newPassword\":\"NewStrongPass1!\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void setPasswordPreviewReturnsContextForValidToken() throws Exception {
+        User user = saveUser("preview@test.com", "ValidPass1!", UserRole.STUDENT);
+        user.setStudentCode("STU-007");
+        user.setFirstName("Ada");
+        user.setLastName("Lovelace");
+        user.setPasswordHash(User.DISABLED_PASSWORD_SENTINEL);
+        user.setAccountStatus(AccountStatus.VERIFYING_EMAIL);
+        user.setEmailVerificationToken("preview-token");
+        user.setEmailVerificationExpiresAt(java.time.LocalDateTime.now().plusHours(1));
+        userRepository.saveAndFlush(user);
+
+        mockMvc.perform(get("/api/auth/set-password/preview").param("token", "preview-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("preview@test.com")))
+                .andExpect(jsonPath("$.role", is("STUDENT")))
+                .andExpect(jsonPath("$.studentCode", is("STU-007")))
+                .andExpect(jsonPath("$.firstName", is("Ada")))
+                .andExpect(jsonPath("$.lastName", is("Lovelace")));
+
+        // Token must still be valid after a preview call.
+        mockMvc.perform(post("/api/auth/set-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"preview-token\",\"newPassword\":\"NewStrongPass1!\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void setPasswordPreviewRejectsBadToken() throws Exception {
+        mockMvc.perform(get("/api/auth/set-password/preview").param("token", "no-such-token"))
                 .andExpect(status().isBadRequest());
     }
 

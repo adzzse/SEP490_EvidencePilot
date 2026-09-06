@@ -54,6 +54,9 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     @Query("select user from User user where user.emailVerificationToken = :token")
     Optional<User> findByEmailVerificationTokenForUpdate(@Param("token") String token);
 
+    @Query("select user from User user where user.emailVerificationToken = :token")
+    Optional<User> findByEmailVerificationToken(@Param("token") String token);
+
     @Query("select user from User user where user.accountStatus = 'VERIFYING_EMAIL' and user.emailVerificationExpiresAt < CURRENT_TIMESTAMP")
     List<User> findExpiredVerifyingEmailUsers();
 

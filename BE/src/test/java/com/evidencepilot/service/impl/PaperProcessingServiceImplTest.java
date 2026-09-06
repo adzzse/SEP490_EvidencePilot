@@ -20,6 +20,7 @@ import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.PaperStandardService;
+import com.evidencepilot.service.FeedbackAnchorService;
 import com.evidencepilot.service.SystemNotificationService;
 import com.evidencepilot.service.TexArchiveBuilder;
 import org.junit.jupiter.api.Test;
@@ -63,6 +64,8 @@ class PaperProcessingServiceImplTest {
     private EvidenceTraceService evidenceTraceService;
     @Mock
     private SectionStandardEvaluationRepository sectionStandardEvaluationRepository;
+    @Mock
+    private FeedbackAnchorService feedbackAnchorService;
 
     @Test
     void detectsLatexSections() {
@@ -358,6 +361,7 @@ class PaperProcessingServiceImplTest {
                 "new words plus one", 0L);
 
         assertThat(section.getPreviousContentTex()).isEqualTo("old words");
+        verify(feedbackAnchorService).contentChanged(section, "old words", "new words plus one", 2, 3, null);
         assertThat(section.getVersion()).isEqualTo(3);
         verify(auditService).record(
                 "SECTION_CONTENT_UPDATED",
@@ -396,6 +400,7 @@ class PaperProcessingServiceImplTest {
 
         assertThat(section.getContentTex()).isEqualTo("previous");
         assertThat(section.getPreviousContentTex()).isEqualTo("current words");
+        verify(feedbackAnchorService).contentChanged(section, "current words", "previous", 2, 3, null);
         assertThat(section.getVersion()).isEqualTo(3);
         verify(evidenceTraceService).stampStaleOnContentChanged(
                 section.getId(), "previous", 3);
@@ -593,6 +598,7 @@ class PaperProcessingServiceImplTest {
                 new SectionBatchItem(section.getId(), 0, "Intro", student.getId(), "After", 0L)));
 
         assertThat(evaluation.getStatus()).isEqualTo(SectionStandardEvaluation.STATUS_STALE);
+        verify(feedbackAnchorService).contentChanged(section, "Before", "After", 1, 2, null);
         verify(sectionStandardEvaluationRepository).save(evaluation);
         verify(paperSectionRepository).saveAll(anyList());
         verify(paperSectionRepository).flush();
@@ -638,7 +644,8 @@ class PaperProcessingServiceImplTest {
                 mock(TexArchiveBuilder.class),
                 evidenceTraceService,
                 auditService,
-                sectionStandardEvaluationRepository);
+                sectionStandardEvaluationRepository,
+                feedbackAnchorService);
     }
 
     private User user(UserRole role) {

@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import LatexEditor from '../features/LatexEditor';
+import FeedbackPanel from './FeedbackPanel.jsx';
 import PreviewPane from '../features/PreviewPane';
 import { useTranslation } from 'react-i18next';
 import { mapScrollPosition } from '../../utils/student/scrollSync.js';
@@ -35,6 +36,8 @@ export default function EditorPanel({
   reviewFindingsCount = 0, reviewError = null,
   canRunCitationReview = false, onEditorUserScroll,
   isReviewVisible = true, onToggleReviewVisible,
+  feedback, feedbackOpen = false, setFeedbackOpen, activeFeedbackId, onSelectFeedback,
+  feedbackRequestId, setFeedbackRequestId, feedbackScope, setFeedbackScope,
   citationIndex = {}
 }) {
   const { t } = useTranslation();
@@ -46,17 +49,50 @@ export default function EditorPanel({
   const [previewZoom, setPreviewZoom] = useState(100);
   const generatedReferences = [];
   const previewPaneRef = useRef(null);
+  const containerRef = useRef(null);
+  const [availableWidth, setAvailableWidth] = useState(0);
+  const [keepPreview, setKeepPreview] = useState(false);
+  const [positions, setPositions] = useState([]);
+  const [overlapIds, setOverlapIds] = useState([]);
+  const measureFrameRef = useRef(null);
+  const narrow = compact || (availableWidth > 0 && availableWidth < 780);
+  const canShowThree = availableWidth >= 1240;
+  const threePanes = feedbackOpen && keepPreview && canShowThree && !narrow;
+  const previewVisible = !narrow && (!feedbackOpen || threePanes);
+  const sectionFeedback = useMemo(() => (feedback?.items || []).filter(item => String(item.sectionId) === String(selectedSectionId)), [feedback?.items, selectedSectionId]);
+  const measureFeedback = useCallback(() => {
+    if (measureFrameRef.current != null) return;
+    measureFrameRef.current = requestAnimationFrame(() => {
+      measureFrameRef.current = null;
+      setPositions(editorRef.current?.getFeedbackPositions?.() || []);
+    });
+  }, [editorRef]);
+  useEffect(() => {
+    const observer = new ResizeObserver(entries => { setAvailableWidth(entries[0].contentRect.width); measureFeedback(); });
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => { observer.disconnect(); cancelAnimationFrame(measureFrameRef.current); measureFrameRef.current = null; };
+  }, [measureFeedback]);
+  useEffect(() => { setOverlapIds([]); measureFeedback(); }, [selectedSectionId, feedbackOpen, measureFeedback]);
+  const handleFeedbackClick = useCallback(ids => {
+    setOverlapIds(ids);
+    const item = feedback?.items.find(entry => entry.id === ids[0]);
+    if (item) onSelectFeedback?.(item);
+  }, [feedback?.items, onSelectFeedback]);
+  const closeFeedback = () => {
+    setFeedbackOpen(false);
+    containerRef.current?.querySelector('[data-tour="editor-feedback"]')?.focus();
+  };
 
   // Sync by source anchors so tall preview blocks (especially tables) can move at their own rate.
   const syncScrollRef = useRef(null);
-  const editorScrollBridge = useCallback(() => syncScrollRef.current?.('editor'), []);
+  const editorScrollBridge = useCallback(() => { syncScrollRef.current?.('editor'); measureFeedback(); }, [measureFeedback]);
   const previewScrollBridge = useCallback(() => syncScrollRef.current?.('preview'), []);
-  const layoutBridge = useCallback(() => syncScrollRef.current?.(), []);
+  const layoutBridge = useCallback(() => { syncScrollRef.current?.(); measureFeedback(); }, [measureFeedback]);
 
   // Recreated per section so pending scrolls reset; both panes start at top.
   useEffect(() => {
     const preview = previewPaneRef.current;
-    if (!preview) return;
+    if (!preview || !previewVisible) return;
     let frame = null;
     let activeSide = 'editor';
     const writtenTop = { editor: 0, preview: 0 };
@@ -95,23 +131,33 @@ export default function EditorPanel({
     };
     syncScrollRef.current = schedule;
 
-    // Reset both panes for the new section.
-    preview.scrollTop = 0;
-    editorRef.current?.scrollToTop?.();
+    // Mounting Preview follows the existing editor scroll, including when switching tabs.
+    schedule();
     const resizeObserver = new ResizeObserver(() => schedule());
     resizeObserver.observe(preview);
-    resizeObserver.observe(preview.firstElementChild);
+    if (preview.firstElementChild) resizeObserver.observe(preview.firstElementChild);
 
     return () => {
       syncScrollRef.current = null;
       resizeObserver.disconnect();
       if (frame != null) cancelAnimationFrame(frame);
     };
-  }, [editorRef, selectedSectionId]);
+  }, [editorRef, selectedSectionId, previewVisible]);
 
   return (
-    <div id="editor-preview-container" className="flex-1 min-w-0 flex overflow-hidden bg-(--surface-tertiary)/50 p-2 gap-2">
-      <div style={{ width: compact ? '100%' : `${editorWidth}%`, flexGrow: 0, flexShrink: 0 }} className="bg-(--surface) rounded-lg shadow-sm border border-(--border) flex flex-col overflow-hidden min-w-0">
+    <div ref={containerRef} id="editor-preview-container" className="flex-1 min-w-0 flex flex-col overflow-hidden bg-(--surface-tertiary)/50 p-2 gap-2">
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex rounded-lg border border-(--border) bg-(--surface) p-0.5" aria-label={t('studentFeedback.view')}>
+          {!narrow && <button type="button" aria-pressed={!feedbackOpen} onClick={() => setFeedbackOpen?.(false)} className={`rounded-md px-3 py-1.5 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${!feedbackOpen ? 'bg-(--brand-soft) text-(--brand)' : ''}`}>{t('preview')}</button>}
+          <button type="button" data-tour="editor-feedback" aria-expanded={feedbackOpen} aria-controls="student-feedback-panel" onClick={() => setFeedbackOpen?.(!feedbackOpen)}
+            className={`rounded-md px-3 py-1.5 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${feedbackOpen ? 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300' : ''}`}>
+            {t('studentFeedback.title')}{feedback?.items.length ? ` (${feedback.items.length})` : ''}
+          </button>
+        </div>
+        {feedbackOpen && canShowThree && !narrow && <label className="flex items-center gap-1.5 text-(--text-secondary)"><input type="checkbox" checked={keepPreview} onChange={event => setKeepPreview(event.target.checked)} />{t('studentFeedback.keepPreview')}</label>}
+      </div>
+      <div className={`flex-1 min-h-0 min-w-0 flex gap-2 ${narrow ? 'flex-col' : ''}`}>
+      <div style={{ flex: narrow ? '1 1 0' : threePanes ? '1 1 480px' : `${editorWidth} 1 0` }} className="bg-(--surface) rounded-lg shadow-sm border border-(--border) flex flex-col overflow-hidden min-w-0 min-h-0">
         <div data-tour="editor-toolbar" className="h-10 border-b border-(--border-light) flex items-center justify-between px-3 bg-(--surface) shadow-sm shrink-0 z-10">
           <div className="flex items-center gap-2 truncate">
             <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded tracking-wide font-mono">LaTeX</span>
@@ -277,13 +323,20 @@ export default function EditorPanel({
           </div>
         )}
         <div className="flex-1 min-h-0 overflow-hidden">
-          <LatexEditor key={selectedSectionId || 'no-section'} ref={editorRef} content={displayContent} onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} />
+          <LatexEditor key={selectedSectionId || 'no-section'} ref={editorRef} content={displayContent} savedContent={currentSection?.contentTex || ''} savedVersion={currentSection?.version}
+            feedbackItems={sectionFeedback} activeFeedbackId={activeFeedbackId} feedbackVisible={feedbackOpen} onFeedbackClick={handleFeedbackClick} onFeedbackChange={measureFeedback}
+            onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} />
         </div>
       </div>
-      <div onMouseDown={onEditorResizeStart} className={`${compact ? 'hidden' : 'flex'} w-1.5 hover:bg-indigo-500 cursor-col-resize self-stretch transition-all shrink-0 z-10 relative group items-center justify-center border-l border-r border-(--border)`} title={t('dragToResize')}>
+      <div onMouseDown={onEditorResizeStart} className={`${narrow || threePanes ? 'hidden' : 'flex'} w-1.5 hover:bg-indigo-500 cursor-col-resize self-stretch transition-all shrink-0 z-10 relative group items-center justify-center border-l border-r border-(--border)`} title={t('dragToResize')}>
         <div className="h-6 w-0.5 bg-(--border) group-hover:bg-indigo-500 rounded"></div>
       </div>
-      <div style={{ width: `${100 - editorWidth}%`, flexGrow: 0, flexShrink: 0 }} className={`${compact ? 'hidden' : 'flex'} bg-(--surface) rounded-xl shadow-sm border border-(--border) flex-col overflow-hidden`}>
+      {feedback && <div id="student-feedback-panel" hidden={!feedbackOpen} style={{ flex: narrow ? '0 0 44%' : threePanes ? '0 0 320px' : `${100 - editorWidth} 1 0` }}
+        className={`${feedbackOpen ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-(--border) bg-(--surface) shadow-sm`}>
+        <FeedbackPanel feedback={feedback} sectionId={selectedSectionId} activeId={activeFeedbackId} onSelect={onSelectFeedback} onClose={closeFeedback} visible={feedbackOpen}
+          positions={positions} narrow={narrow} requestId={feedbackRequestId} setRequestId={setFeedbackRequestId} scope={feedbackScope} setScope={setFeedbackScope} overlapIds={overlapIds} />
+      </div>}
+      <div style={{ flex: threePanes ? '1 1 400px' : `${100 - editorWidth} 1 0` }} className={`${previewVisible ? 'flex' : 'hidden'} min-w-0 min-h-0 bg-(--surface) rounded-xl shadow-sm border border-(--border) flex-col overflow-hidden`}>
         <div className="h-11 border-b border-(--border-light) flex items-center justify-between px-4 bg-(--surface)">
           <div className="flex items-center gap-2 text-sm font-bold text-(--text-primary)">
             <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
@@ -310,6 +363,7 @@ export default function EditorPanel({
             referencesTitle={currentSection?.sectionTitle || 'References'}
           />
         </div>
+      </div>
       </div>
     </div>
   );

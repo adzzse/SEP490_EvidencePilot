@@ -264,8 +264,10 @@ public class PaperController {
             @RequestParam(required = false) UUID mergeIntoId) {
         String content = body != null ? body.content() : null;
         Long expectedRevision = body != null ? body.expectedRevision() : null;
-        PaperSectionResponse updated = paperProcessingService.updateSection(
-                documentId, sectionId, title, order, mergeIntoId, content, expectedRevision);
+        PaperSectionResponse updated = body != null && body.changes() != null
+                ? paperProcessingService.updateSection(documentId, sectionId, title, order, mergeIntoId,
+                        content, expectedRevision, body.changes())
+                : paperProcessingService.updateSection(documentId, sectionId, title, order, mergeIntoId, content, expectedRevision);
         return SectionUpdateResponse.from(updated);
     }
 

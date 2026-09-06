@@ -120,8 +120,8 @@ export default function ContextPanel({
   sources, isUploading, setIsUploading, project, setViewerFile, fetchSources, onOpenSourceMap,
   // Requirements tab
   selectedPaper, selectedSection, isAssignedSection, isSectionDirty, onHandoffChanged, pollAiJob,
-  // Feedback tab
-  feedbacks, assignedSections, setShowSubmitReviewModal, userProjectRole,
+  // Review tab
+  feedbacks, feedbackLoading, feedbackError, onRetryFeedback, onViewFeedback, setShowSubmitReviewModal, userProjectRole,
   isLocked,
 }) {
   const [showSourceModal, setShowSourceModal] = useState(false);
@@ -132,48 +132,6 @@ export default function ContextPanel({
   const [attachingSourceId, setAttachingSourceId] = useState(null);
   const fileInputRef = useRef(null);
   const { t, i18n } = useTranslation();
-  const [expandedFeedbackId, setExpandedFeedbackId] = useState(null);
-  const [feedbackDetail, setFeedbackDetail] = useState({});
-  const [answerDrafts, setAnswerDrafts] = useState({});
-  const [answeringId, setAnsweringId] = useState(null);
-  const [answerErrors, setAnswerErrors] = useState({});
-
-  const submitAnswer = async (item, fb) => {
-    const content = (answerDrafts[item.id] || '').trim();
-    if (!content) {
-      setAnswerErrors(prev => ({ ...prev, [item.id]: t('answerRequired') }));
-      return;
-    }
-    setAnsweringId(item.id);
-    setAnswerErrors(prev => ({ ...prev, [item.id]: null }));
-    try {
-      await api.post(`/api/instructor-feedback/${item.id}/answer`, { content });
-      const key = fb.id || fb.requestId;
-      setFeedbackDetail(prev => ({
-        ...prev,
-        [key]: (prev[key] || []).map(f =>
-          f.id === item.id ? { ...f, answered: true, answerContent: content } : f),
-      }));
-      setAnswerDrafts(prev => ({ ...prev, [item.id]: '' }));
-    } catch (err) {
-      setAnswerErrors(prev => ({ ...prev, [item.id]: err?.response?.data?.message || t('answerFailed') }));
-    } finally {
-      setAnsweringId(null);
-    }
-  };
-
-  const toggleFeedbackDetail = async (fb) => {
-    const id = fb.id || fb.requestId;
-    if (!id) return;
-    if (expandedFeedbackId === id) { setExpandedFeedbackId(null); return; }
-    setExpandedFeedbackId(id);
-    if (!feedbackDetail[id]) {
-      try {
-        const r = await api.get(`/api/feedback-requests/${id}/feedback`);
-        setFeedbackDetail(prev => ({ ...prev, [id]: r.data || [] }));
-      } catch { setFeedbackDetail(prev => ({ ...prev, [id]: [] })); }
-    }
-  };
 
   const handleAttachPdf = async (sourceId, file) => {
     if (!file || isLocked || attachingSourceId !== null) return;
@@ -255,7 +213,7 @@ export default function ContextPanel({
 
   return (
     <>
-      <aside data-tour="context-panel" style={{ width: compact ? 'min(24rem, calc(100vw - 3.5rem))' : width }} className="absolute inset-y-0 right-0 z-40 bg-(--surface) border-l border-(--border) flex flex-col shadow-[-8px_0_24px_-6px_rgba(0,0,0,0.25)] overflow-hidden">
+      <aside data-tour="context-panel" style={{ width: compact ? 'min(24rem, calc(100vw - 3.5rem))' : width }} className={`${compact ? 'absolute inset-y-0 right-0' : 'relative shrink-0'} z-40 bg-(--surface) border-l border-(--border) flex flex-col shadow-[-8px_0_24px_-6px_rgba(0,0,0,0.25)] overflow-hidden`}>
         <div className="flex border-b border-(--border) bg-(--surface) relative shrink-0">
           <button data-tour="context-info-tab" onClick={() => setActiveTab('Source')} className={activeClass('Source')}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -267,13 +225,12 @@ export default function ContextPanel({
             {t('requirements')}
             {activeTab === 'Requirements' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 shadow-[0_-2px_8px_rgba(79,70,229,0.5)]"></div>}
           </button>
-          <button data-tour="context-feedback-tab" onClick={() => setActiveTab('Feedback')} className={activeClass('Feedback')}>
+          <button data-tour="context-review-tab" onClick={() => setActiveTab('Review')} className={activeClass('Review')}>
             <div className="relative">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-              {feedbacks.length > 0 && <span className="absolute -top-1.5 -right-2 bg-rose-500 text-white flex items-center justify-center text-[9px] w-4 h-4 rounded-full font-bold animate-pulse">{feedbacks.length}</span>}
             </div>
-            {t('feedback')}
-            {activeTab === 'Feedback' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 shadow-[0_-2px_8px_rgba(79,70,229,0.5)]"></div>}
+            {t('studentFeedback.review')}
+            {activeTab === 'Review' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 shadow-[0_-2px_8px_rgba(79,70,229,0.5)]"></div>}
           </button>
         </div>
 
@@ -420,7 +377,7 @@ export default function ContextPanel({
             />
           )}
 
-          {activeTab === 'Feedback' && (
+          {activeTab === 'Review' && (
             <div className="flex flex-col gap-4 animate-in fade-in duration-200">
               <div className="flex justify-between items-center mb-1 bg-(--surface) border border-(--border) rounded-xl p-3.5 shadow-sm">
                 <div>
@@ -431,10 +388,12 @@ export default function ContextPanel({
               </div>
               <h3 className="text-[11px] font-bold text-(--text-tertiary) tracking-widest uppercase flex items-center gap-2 mt-2"><div className="h-px bg-(--border) flex-1"></div> {t('reviewHistory')} <div className="h-px bg-(--border) flex-1"></div></h3>
               <div className="space-y-4">
-                {feedbacks.length === 0 ? <div className="text-xs text-(--text-tertiary) italic text-center py-8">{t('noReviews')}</div> : (
+                {feedbackLoading && <p role="status" className="text-xs text-(--text-secondary)">{t('studentFeedback.loading')}</p>}
+                {feedbackError && <div role="alert" className="text-xs text-rose-600"><p>{t('studentFeedback.loadError')}</p><button type="button" onClick={onRetryFeedback} className="mt-2 font-bold underline">{t('retry')}</button></div>}
+                {!feedbackLoading && !feedbackError && feedbacks.length === 0 ? <div className="text-xs text-(--text-tertiary) italic text-center py-8">{t('noReviews')}</div> : (
                   feedbacks.map((fb, idx) => (
                     <div key={fb.id || idx} className="bg-(--surface) border border-(--border) rounded-xl shadow-sm overflow-hidden">
-                      <button type="button" className="w-full text-left bg-(--surface-secondary) border-b border-(--border-light) p-3 flex justify-between items-start cursor-pointer" onClick={() => toggleFeedbackDetail(fb)}>
+                      <div className="w-full text-left bg-(--surface-secondary) border-b border-(--border-light) p-3 flex justify-between items-start">
                         <div className="flex items-center gap-2">
                           <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 flex items-center justify-center font-bold text-xs border border-indigo-200 dark:border-indigo-800">I</div>
                           <div>
@@ -444,60 +403,14 @@ export default function ContextPanel({
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={`text-[9px] px-2 py-0.5 rounded font-black border uppercase ${fb.status === 'PENDING' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 border-amber-200 dark:border-amber-800' : fb.status === 'RETURNED' ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 border-rose-200 dark:border-rose-800' : fb.status === 'REVIEWED' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/30 text-rose-700'}`}>{t(`status.${fb.status}`, { defaultValue: fb.status })}</span>
-                          <svg className={`w-3 h-3 text-(--text-tertiary) transition-transform ${expandedFeedbackId === (fb.id || fb.requestId) ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
                         </div>
-                      </button>
+                      </div>
                       <div className="p-3 text-xs leading-relaxed text-(--text-primary)">
                         {fb.status === 'PENDING' && <p className="text-amber-600 font-medium italic">{t('reviewPending')}</p>}
                         {fb.status === 'RETURNED' && <p className="text-rose-600 font-medium">{t('reviewReturned')}</p>}
                         {fb.status === 'REVIEWED' && <p className="text-emerald-600 font-medium">{t('reviewApproved')}</p>}
                         {fb.status === 'REJECTED' && <p className="text-rose-600 font-medium">{t('reviewRejected')}</p>}
-                        {expandedFeedbackId === (fb.id || fb.requestId) && (
-                          <div className="mt-3 space-y-2">
-                            {(feedbackDetail[fb.id || fb.requestId] || []).length === 0 ? (
-                              <p className="text-[10px] text-(--text-tertiary) italic">{t('noSectionFeedback')}</p>
-                            ) : (
-                              feedbackDetail[fb.id || fb.requestId].map(item => (
-                                <div key={item.id} className="rounded-lg border border-(--border) bg-(--surface-secondary) p-2.5 space-y-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">{t('sectionLabel', { name: item.sectionTitle || '' })}</span>
-                                    {item.stale && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{t('sectionChanged')}</span>}
-                                    {item.answered && <span className="text-[9px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">{t('answered')}</span>}
-                                  </div>
-                                  {item.lineReference && <p className="text-[9px] text-(--text-tertiary) font-mono">{item.lineReference}</p>}
-                                  <p className="text-[10px] text-(--text-primary) leading-relaxed">{item.content}</p>
-                                  {item.answered && item.answerContent && (
-                                    <p className="text-[9px] text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 rounded p-1.5">{t('myAnswer', { answer: item.answerContent })}</p>
-                                  )}
-                                  {!item.answered && fb.status === 'RETURNED'
-                                    && assignedSections.some(section => String(section.id) === String(item.sectionId)) && (
-                                      <div className="mt-2 space-y-1.5">
-                                        <textarea
-                                          value={answerDrafts[item.id] || ''}
-                                          onChange={(e) => setAnswerDrafts(prev => ({ ...prev, [item.id]: e.target.value }))}
-                                          placeholder={t('answerPlaceholder')}
-                                          aria-label={t('answerFeedback')}
-                                          rows="2"
-                                          className="w-full text-[10px] border border-(--border) rounded-lg px-2 py-1.5 bg-(--surface) outline-none focus:ring-1 focus:ring-indigo-500 text-(--text-primary)"
-                                        />
-                                        {answerErrors[item.id] && <p className="text-[9px] text-rose-600">{answerErrors[item.id]}</p>}
-                                        <div className="flex justify-end">
-                                          <button
-                                            type="button"
-                                            onClick={() => submitAnswer(item, fb)}
-                                            disabled={answeringId === item.id}
-                                            className="text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 px-2.5 py-1 rounded-lg"
-                                          >
-                                            {answeringId === item.id ? t('answering') : t('answerFeedback')}
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        )}
+                        <button type="button" onClick={() => onViewFeedback(fb.id || fb.requestId)} className="mt-3 rounded-md border border-(--border) px-3 py-2 font-semibold text-(--brand) hover:bg-(--brand-soft) focus-visible:ring-2 focus-visible:ring-(--brand)">{t('studentFeedback.viewFeedback')}</button>
                       </div>
                     </div>
                   ))

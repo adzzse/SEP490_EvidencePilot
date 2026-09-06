@@ -21,10 +21,20 @@ public record InstructorFeedbackResponseDto(
     Integer sectionVersion,
     boolean stale,
     LocalDateTime updatedAt,
-    UUID updatedBy
+    UUID updatedBy,
+    String instructorName,
+    FeedbackAnchor anchor,
+    boolean canAnswer,
+    UUID paperId
 ) {
     public static InstructorFeedbackResponseDto fromEntity(
             InstructorFeedback feedback, PaperSection section, Integer currentSectionVersion) {
+        return fromEntity(feedback, section, currentSectionVersion, null, false);
+    }
+
+    public static InstructorFeedbackResponseDto fromEntity(
+            InstructorFeedback feedback, PaperSection section, Integer currentSectionVersion,
+            FeedbackAnchor anchor, boolean canAnswer) {
         return new InstructorFeedbackResponseDto(
             feedback.getId(),
             feedback.getRequest() != null ? feedback.getRequest().getId() : null,
@@ -41,7 +51,12 @@ public record InstructorFeedbackResponseDto(
             feedback.getSectionVersion(),
             isStale(feedback.getSectionVersion(), currentSectionVersion),
             feedback.getUpdatedAt(),
-            feedback.getUpdatedBy() != null ? feedback.getUpdatedBy().getId() : null
+            feedback.getUpdatedBy() != null ? feedback.getUpdatedBy().getId() : null,
+            feedback.getInstructor() != null ? (java.util.Objects.toString(feedback.getInstructor().getFirstName(), "") + " "
+                    + java.util.Objects.toString(feedback.getInstructor().getLastName(), "")).trim() : null,
+            anchor,
+            canAnswer,
+            section != null && section.getDocument() != null ? section.getDocument().getId() : null
         );
     }
 

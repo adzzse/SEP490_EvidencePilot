@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import TourLauncher from '../../components/ui/TourLauncher';
@@ -15,6 +15,8 @@ import ContextPanel from '../../components/Student/ContextPanel.jsx';
 import FullPaperPreview from '../../components/Student/FullPaperPreview.jsx';
 import SubmissionReadinessModal from '../../components/Student/SubmissionReadinessModal.jsx';
 import { hasActiveExtraction } from '../../utils/student/extractionPolling.js';
+import useProjectFeedback from '../../hooks/useProjectFeedback.js';
+import { normalizeSource } from '../../utils/student/feedbackAnchors.js';
 import useUndoDelete, { UndoToast } from '../../components/ui/UndoDelete.jsx';
 
 const VisualSourceMap = React.lazy(() => import('../../components/features/VisualSourceMap.jsx'));
@@ -111,6 +113,7 @@ export default function WorkspaceLayout() {
   const compactAtLoad = typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { logout, user, role } = useAuth();
   const { t, i18n } = useTranslation();
   const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
@@ -124,7 +127,7 @@ export default function WorkspaceLayout() {
   };
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem('student_workspace_active_tab') || 'Source';
-    return ['Source', 'Requirements', 'Feedback'].includes(stored) ? stored : 'Source';
+    return stored === 'Feedback' ? 'Review' : ['Source', 'Requirements', 'Review'].includes(stored) ? stored : 'Source';
   });
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [sectionsExpanded, setSectionsExpanded] = useState(true);
@@ -137,7 +140,17 @@ export default function WorkspaceLayout() {
   const [mediaAssets, setMediaAssets] = useState([]);
   const [papers, setPapers] = useState([]);
   const [selectedPaper, setSelectedPaper] = useState(null);
-  const [feedbacks, setFeedbacks] = useState([]);
+  const feedback = useProjectFeedback(project?.id);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [activeFeedbackId, setActiveFeedbackId] = useState(null);
+  const [feedbackRequestId, setFeedbackRequestId] = useState(null);
+  const [feedbackScope, setFeedbackScope] = useState('section');
+  const pendingFeedbackRef = useRef(null);
+  useEffect(() => { localStorage.setItem('student_workspace_active_tab', activeTab); }, [activeTab]);
+  useEffect(() => {
+    setFeedbackOpen(false); setActiveFeedbackId(null); setFeedbackRequestId(null); setFeedbackScope('section');
+    pendingFeedbackRef.current = null;
+  }, [projectId]);
   const [exports, setExports] = useState([]);
   const [loadingProject, setLoadingProject] = useState(false);
   const [projectLoadError, setProjectLoadError] = useState(null);
@@ -232,7 +245,7 @@ export default function WorkspaceLayout() {
     setSelectedSectionId(id);
   };
 
-  const putSectionContent = useCallback((paperId, sectionId, content, fallbackRevision) => {
+  const putSectionContent = useCallback((paperId, sectionId, content, fallbackRevision, changes) => {
     if (!paperId) return Promise.reject(new Error('No paper selected'));
     const key = String(sectionId);
     const prev = saveInFlightRef.current.get(key) || Promise.resolve();
@@ -241,7 +254,7 @@ export default function WorkspaceLayout() {
       if (expectedRevision == null) throw new Error('Section revision is unavailable');
       const response = await api.put(
         `/api/papers/${paperId}/sections/${sectionId}`,
-        { content, expectedRevision },
+        { content, expectedRevision, ...(changes ? { changes } : {}) },
       );
       sectionRevisionRef.current.set(key, response.data.revision);
       return response.data;
@@ -264,6 +277,69 @@ export default function WorkspaceLayout() {
     const draft = readWorkspaceDraft(projectRef.current?.id, sec.id);
     loadCode(draft ?? sec.contentTex ?? '');
     if (draft !== null) dirtySectionsRef.current.add(sec.id);
+    return true;
+  };
+
+  const openFeedback = requestId => {
+    setFeedbackRequestId(requestId || null);
+    setFeedbackScope('project');
+    setFeedbackOpen(true);
+  };
+
+  const reviewLink = new URLSearchParams(location.search).get('review');
+  useEffect(() => {
+    if (!reviewLink || feedback.loading || !feedback.requests.some(round => round.id === reviewLink)) return;
+    openFeedback(reviewLink);
+    const search = new URLSearchParams(location.search);
+    search.delete('review');
+    navigate({ pathname: location.pathname, search: search.toString() }, { replace: true });
+  }, [reviewLink, feedback.loading, feedback.requests, location.pathname, location.search, navigate]);
+
+  const handleOpenNotification = async notification => {
+    if (!['INSTRUCTOR_FEEDBACK_ADDED', 'REVIEW_STATUS_CHANGED'].includes(notification.actionType)) return;
+    try {
+      const response = await api.get('/api/feedback-requests');
+      const round = (response.data || []).find(item => item.id === notification.entityId);
+      if (!round) { showToast(t('studentFeedback.reviewUnavailable')); return; }
+      if (String(round.projectId) === String(project?.id)) openFeedback(round.id);
+      else {
+        if (dirtySectionsRef.current.has(selectedSectionIdRef.current) && !window.confirm(t('unsavedPaperSwitch'))) return;
+        navigate(`/student/projects/${encodeURIComponent(round.projectId)}?review=${encodeURIComponent(round.id)}`);
+      }
+      setShowNotifications(false);
+    } catch { showToast(t('studentFeedback.loadError')); }
+  };
+
+  const handleSelectFeedback = async item => {
+    if (String(item.sectionId) !== String(selectedSectionIdRef.current)) {
+      const section = sections.find(entry => String(entry.id) === String(item.sectionId));
+      if (section) {
+        if (!await handleSelectSection(section)) return false;
+      } else {
+        const paper = papers.find(entry => String(entry.id) === String(item.paperId));
+        if (!paper) { showToast(t('studentFeedback.sectionUnavailable')); return false; }
+        const current = selectedSectionIdRef.current;
+        if (current && dirtySectionsRef.current.has(current)) {
+          if (!window.confirm(t('unsavedSectionSwitch'))) return false;
+          dirtySectionsRef.current.delete(current);
+          removeWorkspaceDraft(projectRef.current?.id, current);
+        }
+        pendingFeedbackRef.current = item;
+        setSelectedPaper(paper);
+      }
+    }
+    pendingFeedbackRef.current = item;
+    setActiveFeedbackId(item.id);
+    setFeedbackRequestId(null);
+    setFeedbackScope('section');
+    setFeedbackOpen(true);
+    if (String(item.sectionId) === String(selectedSectionId)) {
+      const position = editorRef.current?.getFeedbackPositions?.().find(entry => entry.id === item.id);
+      if (position?.from != null) {
+        editorRef.current?.revealRange(position.from, position.to);
+        pendingFeedbackRef.current = null;
+      }
+    }
     return true;
   };
 
@@ -378,7 +454,6 @@ export default function WorkspaceLayout() {
     setSources([]);
     setPapers([]);
     setMediaAssets([]);
-    setFeedbacks([]);
     setSections([]);
     setSelectedPaper(null);
     selectSection('');
@@ -417,12 +492,6 @@ export default function WorkspaceLayout() {
         if (list.length > 0) { setSelectedPaper(list[0]); loadCode(''); }
         else { setSelectedPaper(null); loadCode(''); }
       } catch { if (!stale()) setLoadErrors(errs => [...errs, 'paper']); }
-      try {
-        const r = await api.get('/api/feedback-requests');
-        if (stale()) return;
-        const all = r.data || [];
-        setFeedbacks(all.filter(fb => String(fb.projectId) === String(projId)));
-      } catch { if (!stale()) setLoadErrors(errs => [...errs, 'feedback']); }
     } catch (err) {
       const status = err?.response?.status;
       if (status === 403) {
@@ -643,27 +712,46 @@ export default function WorkspaceLayout() {
 
   useEffect(() => {
     if (!selectedPaper) { setSections([]); return; }
-    api.get(`/api/papers/${selectedPaper.id}/sections`)
+    const controller = new AbortController();
+    api.get(`/api/papers/${selectedPaper.id}/sections`, { signal: controller.signal })
       .then(r => {
+        if (controller.signal.aborted) return;
         const list = r.data || [];
         setSections(list);
         const mine = user ? list.filter(s => String(s.assignedUserId) === String(user.id)) : [];
-        if (mine.length > 0) {
-          selectSection(mine[0].id);
-          const draft = readWorkspaceDraft(projectRef.current?.id, mine[0].id);
+        const target = list.find(section => String(section.id) === String(pendingFeedbackRef.current?.sectionId)) || mine[0];
+        if (target) {
+          selectSection(target.id);
+          const draft = readWorkspaceDraft(projectRef.current?.id, target.id);
           if (draft !== null) {
             loadCode(draft);
-            dirtySectionsRef.current.add(mine[0].id);
+            dirtySectionsRef.current.add(target.id);
           } else {
-            loadCode(mine[0].contentTex || '');
+            loadCode(target.contentTex || '');
           }
         } else {
           selectSection('');
           loadCode('');
         }
       })
-      .catch(() => setSections([]));
+      .catch(() => { if (!controller.signal.aborted) setSections([]); });
+    return () => controller.abort();
   }, [selectedPaper, user]);
+
+  useEffect(() => {
+    const pending = pendingFeedbackRef.current;
+    if (!pending || String(pending.sectionId) !== String(selectedSectionId)) return;
+    let frame;
+    let attempts = 0;
+    const reveal = () => {
+      const position = editorRef.current?.getFeedbackPositions?.().find(item => item.id === pending.id);
+      if (!position && attempts++ < 20) { frame = requestAnimationFrame(reveal); return; }
+      if (position?.from != null) editorRef.current?.revealRange(position.from, position.to);
+      if (pendingFeedbackRef.current === pending) pendingFeedbackRef.current = null;
+    };
+    frame = requestAnimationFrame(reveal);
+    return () => cancelAnimationFrame(frame);
+  }, [activeFeedbackId, selectedSectionId, feedback.items, feedbackOpen]);
 
   const { notifications, unreadCount, markRead } = useNotification();
 
@@ -852,6 +940,7 @@ export default function WorkspaceLayout() {
         loadCode(updated.contentTex || '');
       }
       showToast(t('versionRestored'));
+      feedback.refresh();
       setTimeout(() => { setShowHistoryModal(false); setRollingBack(false); }, 300);
     } catch (error) {
       showToast(error?.response?.status === 409 ? t('saveConflict') : t('restoreFailed'));
@@ -873,14 +962,19 @@ export default function WorkspaceLayout() {
     const projectId = projectRef.current?.id;
     const sectionId = selectedSectionIdRef.current;
     const content = codeContentRef.current;
+    const editor = editorRef.current;
+    const snapshot = editor?.getChangeSnapshot?.();
+    const changes = snapshot?.content === normalizeSource(content) ? snapshot.changes : undefined;
     const revision = sections.find(section =>
       String(section.id) === String(sectionId))?.revision;
     try {
       const updated = await putSectionContent(
-        paperId, sectionId, content, revision);
+        paperId, sectionId, content, revision, changes);
+      if (changes) editor?.acknowledgeSave?.(snapshot);
       setSections(previous => previous.map(section =>
         withSavedContent(section, sectionId, content, updated)));
       setLastSaved(new Date());
+      feedback.refresh();
       const stillCurrent = String(selectedSectionIdRef.current) === String(sectionId);
       if (!stillCurrent || codeContentRef.current !== content) {
         if (stillCurrent) {
@@ -1292,7 +1386,7 @@ export default function WorkspaceLayout() {
   return (
     <div className="h-screen w-full flex flex-col bg-(--surface-secondary) overflow-hidden font-sans antialiased text-(--text-primary)">
       <WorkspaceHeader project={project} navigate={navigate} canRunAiReview={canRunCitationReview} handleRunAiReview={handleRunAiReview} loadingAiReview={loadingAiReview} onShowHistory={() => setShowHistoryModal(true)} historyDisabled={assignedSections.length === 0}
-        notifications={notifications} unreadCount={unreadCount} showNotifications={showNotifications} setShowNotifications={setShowNotifications} onMarkNotificationRead={handleMarkNotificationRead}
+        notifications={notifications} unreadCount={unreadCount} showNotifications={showNotifications} setShowNotifications={setShowNotifications} onMarkNotificationRead={handleMarkNotificationRead} onOpenNotification={handleOpenNotification}
         showExportMenu={showExportMenu} setShowExportMenu={setShowExportMenu} handleExportTexArchive={handleExportTexArchive} handleExportTraceabilityJson={handleExportTraceabilityJson} handleExportTraceabilityCsv={handleExportTraceabilityCsv} />
 
       {loadErrors.length > 0 && (
@@ -1316,13 +1410,16 @@ export default function WorkspaceLayout() {
 
         <FilePanel compact={isCompactWorkspace} isOpen={isFileTreeOpen} width={fileTreeWidth} onResizeStart={handleLeftDividerMouseDown} sections={sections} assignedSections={assignedSections} selectedSectionId={selectedSectionId} onSelectSection={handleSelectSection} selectedPaper={selectedPaper} onSelectPaper={handleSelectPaper} onViewFullPaper={setShowFullPaperPreview} papers={papers} onUploadPaper={isLocked ? undefined : handleUploadPaper} sources={sources} onUploadSource={isLocked ? undefined : handleUploadSource} onDeleteSource={handleDeleteSource} mediaAssets={mediaAssets} onUploadMedia={isLocked ? undefined : handleUploadMedia} onDeleteMedia={handleDeleteMedia} onInsertMedia={canEditCurrentSection ? handleInsertMedia : undefined} showToast={showToast} isLocked={isLocked} onSaveDraft={handleSaveDraft} saveStatus={saveStatus} />
 
-        <EditorPanel compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={handleSaveDraft} insertLatexTag={insertLatexTag} insertSymbol={insertSymbol} handleFindReplace={handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} isLocked={isLocked} findings={editorFindings} onFindingClick={handleFindingClick} onOpenSourceMap={openSourceMap} onRunCitationReview={handleRunAiReview} onOpenCitationReview={handleOpenCitationReview} reviewBusy={loadingAiReview} reviewProgress={aiReviewProgress} reviewFindingsCount={(aiReviewResult?.findings || []).length} reviewError={aiReviewError?.message} canRunCitationReview={canRunCitationReview} onEditorUserScroll={closeReviewOverlay} isReviewVisible={isReviewVisible} onToggleReviewVisible={toggleReviewVisible} citationIndex={citationIndex} />
+        <EditorPanel compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={handleSaveDraft} insertLatexTag={insertLatexTag} insertSymbol={insertSymbol} handleFindReplace={handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} isLocked={isLocked} findings={editorFindings} onFindingClick={handleFindingClick} onOpenSourceMap={openSourceMap} onRunCitationReview={handleRunAiReview} onOpenCitationReview={handleOpenCitationReview} reviewBusy={loadingAiReview} reviewProgress={aiReviewProgress} reviewFindingsCount={(aiReviewResult?.findings || []).length} reviewError={aiReviewError?.message} canRunCitationReview={canRunCitationReview} onEditorUserScroll={closeReviewOverlay} isReviewVisible={isReviewVisible} onToggleReviewVisible={toggleReviewVisible} citationIndex={citationIndex}
+          feedback={feedback} feedbackOpen={feedbackOpen} setFeedbackOpen={setFeedbackOpen} activeFeedbackId={activeFeedbackId} onSelectFeedback={handleSelectFeedback}
+          feedbackRequestId={feedbackRequestId} setFeedbackRequestId={setFeedbackRequestId} feedbackScope={feedbackScope} setFeedbackScope={setFeedbackScope} />
 
         <ContextPanel compact={isCompactWorkspace} isOpen={isDrawerOpen} width={rightDrawerWidth} activeTab={activeTab} setActiveTab={(tab) => { setActiveTab(tab); localStorage.setItem('student_workspace_active_tab', tab); }} showToast={showToast}
           sources={sources} isUploading={isUploading} setIsUploading={setIsUploading} project={project} setViewerFile={setViewerFile} fetchSources={fetchSources} onOpenSourceMap={openSourceMap} isLocked={isLocked}
           selectedPaper={selectedPaper} selectedSection={currentSection} isAssignedSection={Boolean(currentSection && String(currentSection.assignedUserId) === String(user?.id))}
             isSectionDirty={dirtySectionsRef.current.has(selectedSectionId)} onHandoffChanged={handleHandoffChanged} pollAiJob={pollAiJob}
-          feedbacks={feedbacks} assignedSections={assignedSections} setShowSubmitReviewModal={setShowSubmitReviewModal} userProjectRole={project?.currentUserRole} />
+          feedbacks={feedback.requests} feedbackLoading={feedback.loading} feedbackError={feedback.error} onRetryFeedback={feedback.refresh} onViewFeedback={openFeedback}
+          setShowSubmitReviewModal={setShowSubmitReviewModal} userProjectRole={project?.currentUserRole} />
       </div>
 
       {/* Restore Previous Save Modal */}

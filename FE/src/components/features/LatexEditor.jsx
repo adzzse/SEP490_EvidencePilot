@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 // ponytail: diff-match-patch removed — single replace dispatch covers hydration; CM maps decorations.
 import { basicSetup } from 'codemirror';
-import { EditorState, StateEffect, StateField } from '@codemirror/state';
+import { Annotation, EditorState, StateEffect, StateField } from '@codemirror/state';
 import { EditorView, Decoration, WidgetType, ViewPlugin } from '@codemirror/view';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { latex } from 'codemirror-lang-latex';
+import { undo, redo } from '@codemirror/commands';
+import { changeSpans, createChangeTracker, normalizeSource, remapAnchor, resolveAnchor, sourceFingerprint } from '../../utils/student/feedbackAnchors.js';
 
 const lightTheme = EditorView.theme({
   '&': { backgroundColor: '#ffffff' },
@@ -17,6 +19,35 @@ let reviewClickBridge = null;
 const TONE_COLORS = { discrepancy: '#ef4444', warn: '#f59e0b', neutral: '#94a3b8' };
 
 const setReviewRanges = StateEffect.define();
+const setFeedbackItems = StateEffect.define();
+const setFeedbackActive = StateEffect.define();
+const hydrateSource = Annotation.define();
+const feedbackRanges = StateField.define({
+  create: () => ({ items: [], activeId: null, visible: false, decorations: Decoration.none }),
+  update(value, transaction) {
+    let items = value.items;
+    let activeId = value.activeId;
+    let visible = value.visible;
+    if (transaction.docChanged) {
+      const spans = changeSpans(transaction.changes);
+      const text = transaction.newDoc.toString();
+      items = items.map(item => ({ ...item, anchor: remapAnchor(item.anchor, text, spans) }));
+    }
+    for (const effect of transaction.effects) {
+      if (effect.is(setFeedbackItems)) items = effect.value;
+      if (effect.is(setFeedbackActive)) ({ activeId, visible } = effect.value);
+    }
+    if (items === value.items && activeId === value.activeId && visible === value.visible) return value;
+    const decorations = visible ? Decoration.set(items.flatMap(item => {
+      const { from, to } = item.anchor.current;
+      if (from == null || to == null || from < 0 || to <= from || to > transaction.newDoc.length) return [];
+      return [Decoration.mark({ class: `cm-feedback-range${item.id === activeId ? ' cm-feedback-active' : ''}`,
+        attributes: { 'data-feedback-id': String(item.id) } }).range(from, to)];
+    }), true) : Decoration.none;
+    return { items, activeId, visible, decorations };
+  },
+  provide: field => EditorView.decorations.from(field, value => value.decorations),
+});
 const reviewRanges = StateField.define({
   create: () => Decoration.none,
   update: (decorations, transaction) => {
@@ -124,9 +155,19 @@ function buildCiteMask(view, citationIndexRef) {
   return Decoration.set(decorations, true);
 }
 
-const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onLayoutChange, onUserScroll, citationIndex = {} }, ref) {
+const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = content, savedVersion,
+  feedbackItems, activeFeedbackId, feedbackVisible = false, onFeedbackClick, onFeedbackChange,
+  onChange, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onLayoutChange, onUserScroll, citationIndex = {} }, ref) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
+  const trackerRef = useRef(null);
+  if (!trackerRef.current) trackerRef.current = createChangeTracker(savedContent, content);
+  const onChangeRef = useRef(onChange);
+  const feedbackClickRef = useRef(onFeedbackClick);
+  const feedbackChangeRef = useRef(onFeedbackChange);
+  onChangeRef.current = onChange;
+  feedbackClickRef.current = onFeedbackClick;
+  feedbackChangeRef.current = onFeedbackChange;
   const lastEmittedRef = useRef('');
   const onScrollRef = useRef(null);
   const onLayoutChangeRef = useRef(null);
@@ -148,6 +189,19 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
   reviewClickBridge = onFindingClick; // live bridge for CM widget clicks
 
   useImperativeHandle(ref, () => ({
+    getChangeSnapshot: () => trackerRef.current.snapshot(),
+    acknowledgeSave: snapshot => trackerRef.current.acknowledge(snapshot),
+    getFeedbackPositions: () => {
+      const v = viewRef.current;
+      if (!v) return [];
+      const viewport = v.scrollDOM.getBoundingClientRect();
+      return v.state.field(feedbackRanges).items.map(item => {
+        const { from, to } = item.anchor.current;
+        const coords = from != null && from <= v.state.doc.length ? v.coordsAtPos(from, 1) : null;
+        return { ...item, from, to, top: coords?.top ?? null, bottom: coords?.bottom ?? null,
+          viewportTop: viewport.top, viewportBottom: viewport.bottom };
+      });
+    },
     getSelection: () => {
       const v = viewRef.current;
       if (!v) return '';
@@ -207,12 +261,12 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
     undo: () => {
       const v = viewRef.current;
       if (!v) return;
-      v.undo();
+      undo(v);
     },
     redo: () => {
       const v = viewRef.current;
       if (!v) return;
-      v.redo();
+      redo(v);
     },
     replaceFirst: (query, replacement) => {
       const v = viewRef.current;
@@ -303,27 +357,46 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
 
   useEffect(() => {
     if (!containerRef.current) return;
-    if (viewRef.current) viewRef.current.destroy();
+    const previousState = viewRef.current?.state;
+    const previousScroll = viewRef.current?.scrollDOM.scrollTop ?? 0;
 
     const updateListener = EditorView.updateListener.of((update) => {
       if (update.geometryChanged) onLayoutChangeRef.current?.();
-      if (update.docChanged && onChange) {
+      if (update.docChanged && !update.transactions.some(transaction => transaction.annotation(hydrateSource))) {
+        trackerRef.current.record(update.changes, update.state.doc.toString());
+      }
+      if (update.state.field(feedbackRanges) !== update.startState.field(feedbackRanges)) {
+        feedbackChangeRef.current?.(update.state.field(feedbackRanges).items);
+      }
+      if (update.docChanged && onChangeRef.current) {
         const text = update.state.doc.toString();
         if (text === lastEmittedRef.current) return;
         lastEmittedRef.current = text;
-        onChange(text);
+        onChangeRef.current(text);
       }
     });
 
-    const state = EditorState.create({
+    const config = {
       doc: content || '',
       extensions: [
         basicSetup,
         latex(),
         isDark ? oneDark : lightTheme,
         EditorView.editable.of(!readOnly),
+        EditorState.readOnly.of(readOnly),
         EditorView.lineWrapping,
         reviewRanges,
+        feedbackRanges,
+        EditorView.domEventHandlers({
+          click(event, view) {
+            if (!event.target.closest('[data-feedback-id]')) return false;
+            const position = view.posAtCoords({ x: event.clientX, y: event.clientY });
+            const ids = view.state.field(feedbackRanges).items.filter(item => item.anchor.current.from != null
+              && position >= item.anchor.current.from && position <= item.anchor.current.to).map(item => item.id);
+            if (ids.length) feedbackClickRef.current?.(ids);
+            return false;
+          },
+        }),
         // \cite{} pill masking with cursor-proximity reveal + atomic navigation
         ViewPlugin.fromClass(
           class CitationMasker {
@@ -365,6 +438,8 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
           '.cm-review-finding--high': { borderBottomStyle: 'solid' },
           '.cm-review-finding--medium': { borderBottomStyle: 'dashed' },
           '.cm-review-finding--low': { borderBottomStyle: 'dotted' },
+          '.cm-feedback-range': { backgroundColor: 'rgba(20, 184, 166, 0.16)', boxShadow: 'inset 0 -2px #0d9488', cursor: 'pointer' },
+          '.cm-feedback-active': { backgroundColor: 'rgba(20, 184, 166, 0.3)', outline: '1px solid #0d9488' },
           '.cm-finding-widget': {
             display: 'inline-flex',
             alignItems: 'center',
@@ -406,9 +481,13 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
           '.cm-gutters': { display: 'none' },
         }),
       ],
-    });
+    };
+    const state = previousState
+      ? previousState.update({ effects: StateEffect.reconfigure.of(config.extensions) }).state
+      : EditorState.create(config);
 
     viewRef.current = new EditorView({ state, parent: containerRef.current });
+    viewRef.current.scrollDOM.scrollTop = previousScroll;
     onLayoutChangeRef.current?.();
 
     // Scroll listener lives with the view so readOnly/fontSize/theme rebuilds re-bind it.
@@ -426,18 +505,47 @@ const LatexEditor = forwardRef(function LatexEditor({ content, onChange, readOnl
     };
   }, [readOnly, fontSize, isDark]);
 
+  useEffect(() => {
+    const saved = normalizeSource(savedContent);
+    if (trackerRef.current.baseContent !== saved) {
+      trackerRef.current = createChangeTracker(saved, content);
+    }
+  }, [savedContent]);
+
   // Hydration — replace whole doc; CM maps decorations/marks for us.
   useEffect(() => {
     const v = viewRef.current;
     if (!v || content === undefined) return;
     const current = v.state.doc.toString();
-    if (current === content) {
-      lastEmittedRef.current = content || '';
+    const next = normalizeSource(content);
+    if (current === next) {
+      lastEmittedRef.current = next;
       return;
     }
-    lastEmittedRef.current = content || '';
-    v.dispatch({ changes: { from: 0, to: current.length, insert: content || '' } });
+    lastEmittedRef.current = next;
+    v.dispatch({ changes: { from: 0, to: current.length, insert: next },
+      annotations: trackerRef.current.content === next ? hydrateSource.of(true) : undefined });
   }, [content]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const base = normalizeSource(savedContent);
+    sourceFingerprint(base).catch(() => null).then(hash => {
+      if (cancelled || trackerRef.current.baseContent !== base || !viewRef.current) return;
+      const snapshot = trackerRef.current.snapshot();
+      const items = (feedbackItems || []).map(item => {
+        let anchor = resolveAnchor(item.anchor ?? { original: null, current: { status: item.lineReference ? 'UNLOCATED' : 'SECTION' } }, base, savedVersion, hash);
+        if (snapshot.changes.length) anchor = remapAnchor(anchor, snapshot.content, snapshot.changes);
+        return { id: item.id, anchor };
+      });
+      viewRef.current.dispatch({ effects: setFeedbackItems.of(items) });
+    });
+    return () => { cancelled = true; };
+  }, [feedbackItems, savedContent, savedVersion]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: setFeedbackActive.of({ activeId: activeFeedbackId, visible: feedbackVisible }) });
+  }, [activeFeedbackId, feedbackVisible]);
 
   // Update review ranges when findings change
   useEffect(() => {

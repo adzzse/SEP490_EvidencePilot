@@ -37,6 +37,10 @@ public interface PaperProcessingService {
     PaperSectionResponse updateSection(UUID documentId, UUID sectionId, String title, Integer order,
             UUID mergeIntoId, String content, Long expectedRevision);
 
+    PaperSectionResponse updateSection(UUID documentId, UUID sectionId, String title, Integer order,
+            UUID mergeIntoId, String content, Long expectedRevision,
+            List<com.evidencepilot.dto.request.SectionContentUpdateRequest.TextChange> changes);
+
     PaperSectionResponse createSection(UUID documentId, String title, UUID parentSectionId);
 
     List<PaperSectionResponse> createSectionsFromStandard(UUID documentId, String standard);

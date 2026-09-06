@@ -1,6 +1,8 @@
 package com.evidencepilot.service;
 
 import com.evidencepilot.dto.request.SubmitReviewRequest;
+import com.evidencepilot.dto.request.InstructorFeedbackRequest;
+import com.evidencepilot.dto.request.FeedbackAnchorRequest;
 import com.evidencepilot.exception.SubmissionReadinessException;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperSection;
@@ -15,6 +17,7 @@ import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.FeedbackRequestRepository;
+import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
@@ -39,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
@@ -79,6 +83,9 @@ class ProjectStatusConcurrencyIntegrationTest {
     @Autowired
     private FeedbackRequestRepository feedbackRequests;
 
+    @Autowired
+    private InstructorFeedbackRepository feedbackItems;
+
     @MockBean
     private SystemNotificationService notifications;
 
@@ -96,6 +103,7 @@ class ProjectStatusConcurrencyIntegrationTest {
 
     @AfterEach
     void clean() {
+        feedbackItems.deleteAll();
         feedbackRequests.deleteAll();
         sections.deleteAll();
         documents.deleteAll();
@@ -103,6 +111,64 @@ class ProjectStatusConcurrencyIntegrationTest {
         projects.deleteAll();
         users.deleteAll();
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void assignedMemberReadsAndAnswersAfterSubmitterLeavesButRemovedAccountsCannotRead() {
+        User instructor = saveUser(UserRole.INSTRUCTOR);
+        User submitter = saveUser(UserRole.STUDENT);
+        User member = saveUser(UserRole.STUDENT);
+        User outsider = saveUser(UserRole.STUDENT);
+        Project project = saveProject(ProjectStatus.ASSIGNED, instructor, submitter);
+        saveMember(project, member, ProjectRole.MEMBER);
+        Document paper = savePaper(project, submitter);
+        PaperSection section = new PaperSection();
+        section.setDocument(paper);
+        section.setSectionTitle("Introduction");
+        section.setSectionOrder(0);
+        section.setContentTex("Before target after");
+        section.setAssignedUser(member);
+        section = sections.saveAndFlush(section);
+        authenticate(member);
+        submissionReadinessService.confirm(paper.getId(), section.getId(), sectionStandardService.inputFingerprint(section));
+        authenticate(submitter);
+        var round = feedbackService.submitForReview(project.getId(), new SubmitReviewRequest(
+                submissionReadinessService.readiness(project.getId()).submissionFingerprint()));
+        authenticate(instructor);
+        var feedback = feedbackService.comment(round.id(), new InstructorFeedbackRequest(section.getId(), null,
+                "Explain the target", new FeedbackAnchorRequest(7, 13, section.getVersion(),
+                FeedbackAnchorService.fingerprint(section.getContentTex()), "latex-source-lf-v1", "utf16")));
+        feedbackService.updateStatus(round.id(), "RETURNED");
+        authenticate(submitter);
+        assertThat(feedbackService.getFeedbackItems(round.id()).getFirst().canAnswer()).isFalse();
+        assertThatThrownBy(() -> feedbackService.answerFeedback(feedback.id(), "Not assigned"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        projectMembers.deleteAll(projectMembers.findByProjectIdAndUserId(project.getId(), submitter.getId()));
+        assertThat(feedbackService.findAllForCurrentUser()).noneMatch(item -> item.id().equals(round.id()));
+        assertThatThrownBy(() -> feedbackService.getSubmissionSnapshot(round.id()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        authenticate(outsider);
+        assertThatThrownBy(() -> feedbackService.getFeedbackItems(round.id()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        authenticate(member);
+        assertThat(feedbackService.findAllForCurrentUser()).anyMatch(item -> item.id().equals(round.id()));
+        assertThat(feedbackService.getSubmissionSnapshot(round.id())).isNotNull();
+        assertThat(feedbackService.getFeedbackItems(round.id()).getFirst().canAnswer()).isTrue();
+        assertThat(feedbackService.answerFeedback(feedback.id(), "Member answer\nSecond line").answerContent())
+                .isEqualTo("Member answer\nSecond line");
+        authenticate(instructor);
+        var stored = feedbackService.getFeedbackItems(round.id()).getFirst();
+        assertThat(stored.answerContent()).isEqualTo("Member answer\nSecond line");
+        assertThat(stored.anchor().original().exact()).isEqualTo("target");
+        projectMembers.deleteAll(projectMembers.findByProjectIdAndUserId(project.getId(), member.getId()));
+        authenticate(member);
+        assertThat(feedbackService.findAllForCurrentUser()).noneMatch(item -> item.id().equals(round.id()));
+        assertThatThrownBy(() -> feedbackService.getFeedbackItems(round.id()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        assertThatThrownBy(() -> feedbackService.getSubmissionSnapshot(round.id()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        assertThatThrownBy(() -> feedbackService.answerFeedback(feedback.id(), "Removed"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
     }
 
     @Test

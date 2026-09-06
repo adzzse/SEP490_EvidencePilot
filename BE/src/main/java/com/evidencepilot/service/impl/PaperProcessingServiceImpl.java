@@ -23,6 +23,8 @@ import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.PaperProcessingService;
+import com.evidencepilot.service.FeedbackAnchorService;
+import com.evidencepilot.dto.request.SectionContentUpdateRequest.TextChange;
 import com.evidencepilot.service.PaperStandardService;
 import com.evidencepilot.service.SystemNotificationService;
 import com.evidencepilot.service.TexArchiveBuilder;
@@ -106,6 +108,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
     private final EvidenceTraceService evidenceTraceService;
     private final AuditService auditService;
     private final SectionStandardEvaluationRepository sectionStandardEvaluationRepository;
+    private final FeedbackAnchorService feedbackAnchorService;
 
     @Override
     public List<PaperSectionResponse> getPaperSections(UUID documentId) {
@@ -442,6 +445,14 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
     public PaperSectionResponse updateSection(UUID documentId, UUID sectionId,
             String title, Integer order, UUID mergeIntoId, String content,
             Long expectedRevision) {
+        return updateSection(documentId, sectionId, title, order, mergeIntoId, content, expectedRevision, null);
+    }
+
+    @Override
+    @Transactional
+    public PaperSectionResponse updateSection(UUID documentId, UUID sectionId,
+            String title, Integer order, UUID mergeIntoId, String content,
+            Long expectedRevision, List<TextChange> changes) {
         boolean structureChange = title != null || order != null || mergeIntoId != null;
         if (structureChange && content != null) {
             throw new ResponseStatusException(
@@ -478,11 +489,12 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         if (content != null) {
             currentUserService.requireSectionContentWriteAccess(currentUser, section);
             requireExpectedRevision(section, expectedRevision);
+            FeedbackAnchorService.validateChanges(section.getContentTex(), content, changes);
             if (Objects.equals(section.getContentTex(), content)) {
                 return PaperSectionResponse.from(section);
             }
             return PaperSectionResponse.from(
-                    persistContentRevision(section, content, currentUser));
+                    persistContentRevision(section, content, currentUser, changes));
         }
         if (!structureChange) {
             return PaperSectionResponse.from(section);
@@ -759,7 +771,13 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
 
     private PaperSection persistContentRevision(
             PaperSection section, String content, User editor) {
+        return persistContentRevision(section, content, editor, null);
+    }
+
+    private PaperSection persistContentRevision(
+            PaperSection section, String content, User editor, List<TextChange> changes) {
         String previousContent = section.getContentTex();
+        Integer previousVersion = section.getVersion();
         section.setPreviousContentTex(previousContent);
         section.setContentTex(content);
         section.setContentMdCache(null);
@@ -768,6 +786,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         section.setUpdatedAt(LocalDateTime.now());
         PaperSection saved = paperSectionRepository.save(section);
         paperSectionRepository.flush();
+        feedbackAnchorService.contentChanged(section, previousContent, content, previousVersion, section.getVersion(), changes);
         advanceProjectStatusOnStudentContent(
                 section.getDocument().getProject(), section, editor);
         evidenceTraceService.stampStaleOnContentChanged(
@@ -1050,10 +1069,13 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
             PaperSection section = persistedById.get(item.id());
             boolean changed = false;
             if (item.contentTex() != null && !Objects.equals(section.getContentTex(), item.contentTex())) {
+                Integer previousVersion = section.getVersion();
                 section.setPreviousContentTex(section.getContentTex());
                 section.setContentTex(item.contentTex());
                 section.setContentMdCache(null);
                 section.setVersion(section.getVersion() == null ? 1 : section.getVersion() + 1);
+                feedbackAnchorService.contentChanged(section, section.getPreviousContentTex(), section.getContentTex(),
+                        previousVersion, section.getVersion(), null);
                 advanceProjectStatusOnStudentContent(project, section, currentUser);
                 recordContentEdit(project, section, currentUser, section.getPreviousContentTex(), section.getContentTex());
                 evidenceTraceService.stampStaleOnContentChanged(section.getId(), section.getContentTex(), section.getVersion());

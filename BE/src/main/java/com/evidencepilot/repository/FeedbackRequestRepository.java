@@ -3,6 +3,8 @@ package com.evidencepilot.repository;
 import com.evidencepilot.model.FeedbackRequest;
 import com.evidencepilot.model.FeedbackStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -14,6 +16,13 @@ public interface FeedbackRequestRepository extends JpaRepository<FeedbackRequest
     List<FeedbackRequest> findByProjectIdOrderByRequestedAtDesc(UUID projectId);
 
     List<FeedbackRequest> findByStudentIdOrderByRequestedAtDesc(UUID studentId);
+
+    @Query("""
+            select r from FeedbackRequest r where exists (
+                select m.id from ProjectMember m where m.project = r.project and m.user.id = :userId
+            ) order by r.requestedAt desc
+            """)
+    List<FeedbackRequest> findVisibleToStudent(@Param("userId") UUID userId);
 
     List<FeedbackRequest> findByInstructorIdOrderByRequestedAtDesc(UUID instructorId);
 

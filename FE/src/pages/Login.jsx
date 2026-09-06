@@ -8,6 +8,7 @@ import api from '../services/api.js';
 import { getPostLoginDestination } from './loginOrigin.js';
 import { AuroraBackground } from '../components/ui/aurora-background';
 import WordRotate from '../components/ui/WordRotate.jsx';
+import { PasswordInput } from '../components/ui/PasswordInput.jsx';
 
 function SunIcon({ className = 'w-4 h-4' }) {
   return (
@@ -159,14 +160,14 @@ export default function Login() {
                   {t.password || (language === 'vi' ? 'Mật khẩu' : 'Password')}
                 </label>
               </div>
-              <input
-                type="password"
+              <PasswordInput
                 name="passwordHash"
                 value={form.passwordHash}
                 onChange={handleChange}
+                autoComplete="current-password"
                 required
                 placeholder="••••••••"
-                className="w-full bg-slate-50/70 dark:bg-zinc-800/80 border border-slate-300 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all shadow-2xs"
+                inputClassName="w-full bg-slate-50/70 dark:bg-zinc-800/80 border border-slate-300 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all shadow-2xs"
               />
             </div>
 

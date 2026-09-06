@@ -42,6 +42,13 @@ public class InstructorFeedback {
     @Column(name = "section_version")
     private Integer sectionVersion;
 
+    @Column(name = "anchor_json", columnDefinition = "LONGTEXT")
+    private String anchorJson;
+
+    @Version
+    @Column(name = "opt_version", nullable = false)
+    private Long optVersion = 0L;
+
     @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;
 

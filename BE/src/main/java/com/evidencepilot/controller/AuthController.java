@@ -18,10 +18,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
@@ -91,16 +93,32 @@ public class AuthController {
     }
 
     @Operation(summary = "Accept email-verification invitation",
-            description = "Consumes a set-password invitation token issued for a VERIFYING_EMAIL account "
-                    + "and sets the user's own password. Token expiry is validated at request time. Public endpoint.")
+            description = "Consumes a set-password invitation token issued for a VERIFYING_EMAIL account, "
+                    + "applies the user's profile (firstName, lastName) and password, then mints a JWT so the "
+                    + "client can auto-login without a second round-trip. Token expiry is validated at request "
+                    + "time. Public endpoint.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Password set, account activated"),
+            @ApiResponse(responseCode = "200", description = "Password set, account activated, JWT issued"),
             @ApiResponse(responseCode = "400", description = "Invalid or expired token")
     })
     @PostMapping("/set-password")
-    public ResponseEntity<Map<String, String>> acceptInvitation(
+    public ResponseEntity<AuthResponse> acceptInvitation(
             @Valid @RequestBody SetPasswordRequest request) {
-        userInvitationService.acceptInvitation(request.token(), request.newPassword());
-        return ResponseEntity.ok(Map.of("message", "Password set successfully. You can now sign in."));
+        AuthResponse response = userInvitationService.acceptInvitation(
+                request.token(), request.newPassword(), request.firstName(), request.lastName());
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "Preview invitation context",
+            description = "Returns {email, role, studentCode} for a valid (unexpired) invitation token so the "
+                    + "client can seed read-only onboarding fields. Does not consume the token. Public endpoint.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Invitation preview"),
+            @ApiResponse(responseCode = "400", description = "Invalid or expired token")
+    })
+    @GetMapping("/set-password/preview")
+    public ResponseEntity<UserInvitationService.InvitationPreview> previewInvitation(
+            @RequestParam("token") String token) {
+        return ResponseEntity.ok(userInvitationService.previewInvitation(token));
     }
 }

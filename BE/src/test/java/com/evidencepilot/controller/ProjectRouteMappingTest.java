@@ -57,6 +57,7 @@ class ProjectRouteMappingTest {
                 "POST /api/auth/password-reset/request",
                 "POST /api/auth/password-reset/confirm",
                 "POST /api/auth/set-password",
+                "GET /api/auth/set-password/preview",
                 "GET /api/users",
                 "GET /api/users/{id}",
                 "GET /api/users/profile",
@@ -195,7 +196,7 @@ class ProjectRouteMappingTest {
                 "DELETE /api/users/email-change/cancel",
                 "POST /api/users/avatar",
                 "GET /api/users/me/activity"));
-        assertThat(routes).hasSize(144);
+        assertThat(routes).hasSize(145);
     }
 
     @Test

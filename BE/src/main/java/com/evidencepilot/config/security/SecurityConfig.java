@@ -55,6 +55,7 @@ public class SecurityConfig {
                                 "/api/auth/password-reset/request",
                                 "/api/auth/password-reset/confirm",
                                 "/api/auth/set-password",
+                                "/api/auth/set-password/preview",
                                 "/api/health",
                                 "/api/health/**",
                                 "/api/public/**",

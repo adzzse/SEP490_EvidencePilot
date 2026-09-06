@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 
-export default function WorkspaceHeader({ project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, historyDisabled, handleRunAiReview, loadingAiReview, canRunAiReview, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv }) {
+export default function WorkspaceHeader({ project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onOpenNotification, historyDisabled, handleRunAiReview, loadingAiReview, canRunAiReview, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv }) {
   const { user } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
@@ -56,7 +56,7 @@ export default function WorkspaceHeader({ project, notifications, unreadCount, s
               {notifications.length === 0 ? (
                 <div className="text-xs text-(--text-tertiary) italic text-center py-8">{t('noNotifications')}</div>
               ) : notifications.map((notification) => (
-                <button key={notification.id} onClick={() => { if (!notification.read) onMarkNotificationRead(notification.id); }} className={`block w-full text-left px-4 py-3 border-b border-(--border-light) hover:bg-(--surface-secondary) transition-colors ${notification.read ? 'opacity-60' : 'bg-(--brand-soft)'}`}>
+                <button key={notification.id} onClick={() => { if (!notification.read) onMarkNotificationRead(notification.id); onOpenNotification?.(notification); }} className={`block w-full text-left px-4 py-3 border-b border-(--border-light) hover:bg-(--surface-secondary) transition-colors ${notification.read ? 'opacity-60' : 'bg-(--brand-soft)'}`}>
                   <p className="text-xs font-semibold text-(--text-primary)">{notification.message || notification.title || t('notifications')}</p>
                   <p className="text-[10px] text-(--text-tertiary) mt-0.5">{notification.createdAt ? new Date(notification.createdAt).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US') : ''}</p>
                 </button>

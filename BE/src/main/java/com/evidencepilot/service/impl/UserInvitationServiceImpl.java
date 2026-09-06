@@ -20,6 +20,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.evidencepilot.config.security.JwtSessionRegistry;
+import com.evidencepilot.config.security.JwtUtils;
+import com.evidencepilot.dto.response.AuthResponse;
+import com.evidencepilot.dto.response.UserResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
@@ -37,6 +41,8 @@ public class UserInvitationServiceImpl implements UserInvitationService {
     private final PasswordEncoder passwordEncoder;
     private final JavaMailSender mailSender;
     private final AuditService audit;
+    private final JwtUtils jwtUtils;
+    private final JwtSessionRegistry sessionRegistry;
     private final String invitationUrl;
     private final Duration invitationTtl;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -47,10 +53,12 @@ public class UserInvitationServiceImpl implements UserInvitationService {
             PasswordEncoder passwordEncoder,
             ObjectProvider<JavaMailSender> mailSenderProvider,
             AuditService audit,
+            JwtUtils jwtUtils,
+            JwtSessionRegistry sessionRegistry,
             @Value("${app.invitation.url:}") String invitationUrl,
             @Value("${app.invitation.ttl-hours:24}") long invitationTtlHours) {
         this(userRepository, passwordEncoder, mailSenderProvider.getIfAvailable(), audit,
-                invitationUrl, Duration.ofHours(invitationTtlHours));
+                jwtUtils, sessionRegistry, invitationUrl, Duration.ofHours(invitationTtlHours));
     }
 
     UserInvitationServiceImpl(
@@ -58,12 +66,16 @@ public class UserInvitationServiceImpl implements UserInvitationService {
             PasswordEncoder passwordEncoder,
             JavaMailSender mailSender,
             AuditService audit,
+            JwtUtils jwtUtils,
+            JwtSessionRegistry sessionRegistry,
             String invitationUrl,
             Duration invitationTtl) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.mailSender = mailSender;
         this.audit = audit;
+        this.jwtUtils = jwtUtils;
+        this.sessionRegistry = sessionRegistry;
         this.invitationUrl = invitationUrl;
         this.invitationTtl = invitationTtl;
     }
@@ -90,7 +102,7 @@ public class UserInvitationServiceImpl implements UserInvitationService {
 
     @Override
     @Transactional
-    public void acceptInvitation(String rawToken, String newPassword) {
+    public AuthResponse acceptInvitation(String rawToken, String newPassword, String firstName, String lastName) {
         if (rawToken == null || rawToken.isBlank()) {
             throw badToken();
         }
@@ -109,6 +121,13 @@ public class UserInvitationServiceImpl implements UserInvitationService {
             throw badToken();
         }
 
+        if (firstName != null && !firstName.isBlank()) {
+            user.setFirstName(firstName.trim());
+        }
+        if (lastName != null && !lastName.isBlank()) {
+            user.setLastName(lastName.trim());
+        }
+
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setEmailVerificationToken(null);
         user.setEmailVerificationExpiresAt(null);
@@ -118,6 +137,27 @@ public class UserInvitationServiceImpl implements UserInvitationService {
         userRepository.save(user);
 
         audit.record("INVITATION_ACCEPTED", "USER", user.getId(), user, null, null);
+
+        // ponytail: mint JWT on the spot so the FE can auto-login without a second round-trip.
+        // tokenVersion was bumped above, invalidating any prior tokens.
+        String token = jwtUtils.generateToken(user);
+        sessionRegistry.register(jwtUtils.extractJti(token));
+        return new AuthResponse(token, UserResponse.from(user), false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public InvitationPreview previewInvitation(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw badToken();
+        }
+        User user = userRepository.findByEmailVerificationToken(rawToken).orElseThrow(this::badToken);
+        if (user.getEmailVerificationExpiresAt() == null
+                || user.getEmailVerificationExpiresAt().isBefore(LocalDateTime.now())) {
+            throw badToken();
+        }
+        return new InvitationPreview(user.getEmail(), user.getRole().name(), user.getStudentCode(),
+                user.getFirstName(), user.getLastName());
     }
 
     @Override

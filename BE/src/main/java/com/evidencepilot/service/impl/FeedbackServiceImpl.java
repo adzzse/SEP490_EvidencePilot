@@ -20,6 +20,8 @@ import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.CheckpointService;
 import com.evidencepilot.service.FeedbackService;
+import com.evidencepilot.service.FeedbackAnchorService;
+import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.service.SubmissionReadinessService;
 import com.evidencepilot.service.SystemNotificationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -52,8 +54,10 @@ public class FeedbackServiceImpl implements FeedbackService {
     private final ProjectCollectionService projectCollectionService;
     private final SubmissionReadinessService submissionReadinessService;
     private final ObjectMapper objectMapper;
+    private final FeedbackAnchorService feedbackAnchorService;
 
     @Override
+    @Transactional(readOnly = true)
     public List<FeedbackRequestResponseDto> findAllForCurrentUser() {
         User currentUser = currentUserService.requireCurrentUser();
         List<FeedbackRequest> requests;
@@ -62,7 +66,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         } else if (currentUserService.isInstructor(currentUser)) {
             requests = feedbackRequestRepository.findByInstructorIdOrderByRequestedAtDesc(currentUser.getId());
         } else {
-            requests = feedbackRequestRepository.findByStudentIdOrderByRequestedAtDesc(currentUser.getId());
+            requests = feedbackRequestRepository.findVisibleToStudent(currentUser.getId());
         }
         return requests.stream().map(FeedbackRequestResponseDto::fromEntity).toList();
     }
@@ -164,6 +168,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         feedback.setCreatedAt(now);
         feedback.setUpdatedAt(now);
         feedback.setUpdatedBy(currentUser);
+        feedbackAnchorService.initialize(feedback, request.anchor());
         InstructorFeedback saved = instructorFeedbackRepository.save(feedback);
         systemNotificationService.createNotification(
                 feedbackRequest.getStudent(),
@@ -172,15 +177,14 @@ public class FeedbackServiceImpl implements FeedbackService {
                 feedbackRequest.getId(),
                 currentUser.getEmail() + " added feedback to project \""
                         + feedbackRequest.getProject().getTitle() + "\".");
-        return InstructorFeedbackResponseDto.fromEntity(saved, section, reviewedVersion);
+        return response(saved, section, currentUser);
     }
 
     @Override
     @Transactional
     public List<InstructorFeedbackResponseDto> getFeedbackItems(UUID feedbackRequestId) {
         User currentUser = currentUserService.requireCurrentUser();
-        FeedbackRequest request = requireFeedbackAccess(feedbackRequestId, currentUser, false);
-        Map<UUID, Integer> submittedVersions = submittedSectionVersions(request);
+        requireFeedbackAccess(feedbackRequestId, currentUser, false);
         List<InstructorFeedback> items = instructorFeedbackRepository.findByRequestId(feedbackRequestId);
         List<PaperSection> sections = paperSectionRepository.findAllById(
                 items.stream().map(f -> f.getSection().getId()).distinct().toList());
@@ -189,9 +193,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         return items.stream()
                 .map(f -> {
                     PaperSection section = sectionsById.get(f.getSection().getId());
-                    return InstructorFeedbackResponseDto.fromEntity(f, section,
-                            submittedVersions.getOrDefault(
-                                    f.getSection().getId(), section != null ? section.getVersion() : null));
+                    return response(f, section, currentUser);
                 })
                 .toList();
     }
@@ -202,14 +204,18 @@ public class FeedbackServiceImpl implements FeedbackService {
         User currentUser = currentUserService.requireCurrentUser();
         InstructorFeedback feedback = requireOwnedFeedback(feedbackItemId, currentUser);
         requireEditable(feedback);
+        if (!feedback.getSection().getId().equals(request.sectionId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Feedback section cannot be changed.");
+        }
+        boolean anchorChanged = !java.util.Objects.equals(feedback.getLineReference(), request.lineReference())
+                || request.anchor() != null;
         feedback.setContent(request.content());
         feedback.setLineReference(request.lineReference());
+        if (anchorChanged) feedbackAnchorService.initialize(feedback, request.anchor());
         feedback.setUpdatedAt(LocalDateTime.now());
         feedback.setUpdatedBy(currentUser);
         InstructorFeedback saved = instructorFeedbackRepository.save(feedback);
-        Integer reviewedVersion = submittedSectionVersions(feedback.getRequest())
-                .getOrDefault(feedback.getSection().getId(), feedback.getSection().getVersion());
-        return InstructorFeedbackResponseDto.fromEntity(saved, feedback.getSection(), reviewedVersion);
+        return response(saved, feedback.getSection(), currentUser);
     }
 
     @Override
@@ -249,13 +255,13 @@ public class FeedbackServiceImpl implements FeedbackService {
     @Transactional
     public InstructorFeedbackResponseDto answerFeedback(UUID feedbackItemId, String answerContent) {
         User currentUser = currentUserService.requireCurrentUser();
-        InstructorFeedback feedback = instructorFeedbackRepository.findById(feedbackItemId)
+        InstructorFeedback feedback = instructorFeedbackRepository.findByIdForUpdate(feedbackItemId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Instructor feedback not found: " + feedbackItemId));
         FeedbackRequest request = feedback.getRequest();
-        if (request.getStudent() == null || !currentUser.getId().equals(request.getStudent().getId())) {
+        if (!isStudentMember(currentUser, request.getProject())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Only the assigned student can answer feedback.");
+                    "Only a current project student can answer feedback.");
         }
         if (feedback.isAnswered()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Feedback already answered.");
@@ -264,12 +270,13 @@ public class FeedbackServiceImpl implements FeedbackService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Feedback can only be answered when the request is RETURNED.");
         }
-        if (request.getProject().getStatus().isReadOnly()) {
+        if (request.getProject().getStatus().isReadOnly()
+                || request.getProject().getStatus() == ProjectStatus.SUBMITTED_FOR_REVIEW) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Project is read-only.");
         }
         PaperSection section = feedback.getSection();
-        if (section != null && section.getAssignedUser() != null
-                && !currentUser.getId().equals(section.getAssignedUser().getId())) {
+        if (section == null || !section.isActive() || section.getAssignedUser() == null
+                || !currentUser.getId().equals(section.getAssignedUser().getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "You are not assigned to this section.");
         }
@@ -292,7 +299,7 @@ public class FeedbackServiceImpl implements FeedbackService {
                 currentUser.getEmail() + " answered feedback on project \""
                         + request.getProject().getTitle() + "\".");
 
-        return InstructorFeedbackResponseDto.fromEntity(saved, feedback.getSection(), feedback.getSection().getVersion());
+        return response(saved, feedback.getSection(), currentUser);
     }
 
     @Override
@@ -389,12 +396,30 @@ public class FeedbackServiceImpl implements FeedbackService {
         }
         boolean isInstructor = feedbackRequest.getInstructor() != null
                 && currentUser.getId().equals(feedbackRequest.getInstructor().getId());
-        boolean isStudent = feedbackRequest.getStudent() != null
-                && currentUser.getId().equals(feedbackRequest.getStudent().getId());
+        boolean isStudent = isStudentMember(currentUser, feedbackRequest.getProject());
         if ((instructorOnly && isInstructor) || (!instructorOnly && (isInstructor || isStudent))) {
             return feedbackRequest;
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Feedback access denied.");
+    }
+
+    private boolean isStudentMember(User user, Project project) {
+        return user.getRole() == UserRole.STUDENT && project.getProjectMembers() != null
+                && project.getProjectMembers().stream().anyMatch(member -> member.getUser() != null
+                && user.getId().equals(member.getUser().getId()));
+    }
+
+    private InstructorFeedbackResponseDto response(InstructorFeedback feedback, PaperSection section, User user) {
+        Project project = feedback.getRequest().getProject();
+        boolean canAnswer = isStudentMember(user, project) && !feedback.isAnswered()
+                && feedback.getRequest().getStatus() == FeedbackStatus.RETURNED
+                && !project.getStatus().isReadOnly() && project.getStatus() != ProjectStatus.SUBMITTED_FOR_REVIEW
+                && section != null && section.isActive() && section.getAssignedUser() != null
+                && user.getId().equals(section.getAssignedUser().getId());
+        return InstructorFeedbackResponseDto.fromEntity(feedback, section,
+                section != null ? section.getVersion() : null,
+                section != null ? feedbackAnchorService.resolve(feedback, section.getContentTex(), section.getVersion()) : null,
+                canAnswer);
     }
 
     private Map<UUID, Integer> submittedSectionVersions(FeedbackRequest request) {
