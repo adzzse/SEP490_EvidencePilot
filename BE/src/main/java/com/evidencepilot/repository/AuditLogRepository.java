@@ -1,6 +1,7 @@
 package com.evidencepilot.repository;
 
 import com.evidencepilot.model.AuditLog;
+import com.evidencepilot.model.enums.AuditSeverity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,6 +19,12 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     Page<AuditLog> findByActorIdAndEntityTypeAndEntityIdOrderByOccurredAtDesc(
             UUID actorId, String entityType, UUID entityId, Pageable pageable);
     Page<AuditLog> findByActionOrderByOccurredAtDesc(String action, Pageable pageable);
+    Page<AuditLog> findBySeverityOrderByOccurredAtDesc(AuditSeverity severity, Pageable pageable);
+    Page<AuditLog> findByActorIdAndSeverityOrderByOccurredAtDesc(UUID actorId, AuditSeverity severity, Pageable pageable);
+    Page<AuditLog> findByActorIdAndActionOrderByOccurredAtDesc(UUID actorId, String action, Pageable pageable);
+    Page<AuditLog> findByActionAndSeverityOrderByOccurredAtDesc(String action, AuditSeverity severity, Pageable pageable);
+    Page<AuditLog> findByActorIdAndActionAndSeverityOrderByOccurredAtDesc(
+            UUID actorId, String action, AuditSeverity severity, Pageable pageable);
 
 // Phase 1.5: DB-level daily aggregation — preserves wordDelta→wordsAdded/Removed fallback for legacy rows
     @Query(value = """

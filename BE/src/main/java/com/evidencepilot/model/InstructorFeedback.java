@@ -1,5 +1,6 @@
 package com.evidencepilot.model;
 
+import com.evidencepilot.model.enums.FeedbackThreadState;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -71,6 +72,28 @@ public class InstructorFeedback {
 
     @Column(name = "answered_at")
     private LocalDateTime answeredAt;
+
+    @Column(name = "published_at")
+    private LocalDateTime publishedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "thread_state", nullable = false, length = 10)
+    private FeedbackThreadState threadState = FeedbackThreadState.OPEN;
+
+    @Column(name = "state_changed_at")
+    private LocalDateTime stateChangedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "state_changed_by", columnDefinition = "BINARY(16)", referencedColumnName = "id")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private User stateChangedBy;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pending_state", length = 10)
+    private FeedbackThreadState pendingState;
+
+    @Column(name = "pending_state_opt_version")
+    private Long pendingStateOptVersion;
 
     @Override
     public boolean equals(Object o) {

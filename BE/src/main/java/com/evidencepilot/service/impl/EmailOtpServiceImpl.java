@@ -10,13 +10,11 @@ import com.evidencepilot.repository.EmailOtpClaimRepository;
 import com.evidencepilot.repository.EmailOtpTokenRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.EmailOtpService;
+import com.evidencepilot.service.HtmlMailService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -43,7 +41,7 @@ public class EmailOtpServiceImpl implements EmailOtpService {
     private final UserRepository userRepository;
     private final EmailOtpTokenRepository otpTokenRepository;
     private final EmailOtpClaimRepository otpClaimRepository;
-    private final JavaMailSender mailSender;
+    private final HtmlMailService htmlMail;
     private final Duration tokenTtl;
     private final Duration cooldown;
     private final Duration claimTtl;
@@ -53,14 +51,14 @@ public class EmailOtpServiceImpl implements EmailOtpService {
             UserRepository userRepository,
             EmailOtpTokenRepository otpTokenRepository,
             EmailOtpClaimRepository otpClaimRepository,
-            ObjectProvider<JavaMailSender> mailSenderProvider,
+            HtmlMailService htmlMail,
             @Value("${app.email-otp.token-ttl-minutes:5}") long tokenTtlMinutes,
             @Value("${app.email-otp.cooldown-seconds:60}") long cooldownSeconds,
             @Value("${app.email-otp.claim-ttl-minutes:10}") long claimTtlMinutes) {
         this.userRepository = userRepository;
         this.otpTokenRepository = otpTokenRepository;
         this.otpClaimRepository = otpClaimRepository;
-        this.mailSender = mailSenderProvider.getIfAvailable();
+        this.htmlMail = htmlMail;
         this.tokenTtl = Duration.ofMinutes(tokenTtlMinutes);
         this.cooldown = Duration.ofSeconds(cooldownSeconds);
         this.claimTtl = Duration.ofMinutes(claimTtlMinutes);
@@ -184,18 +182,18 @@ public class EmailOtpServiceImpl implements EmailOtpService {
     }
 
     private void sendOtpEmail(String to, String code) {
-        if (mailSender == null) {
-            log.warn("JavaMailSender not configured; OTP code for {} is {}", to, code);
+        if (!htmlMail.isConfigured()) {
+            log.warn("Mail not configured; OTP code for {} is {}", to, code);
             return;
         }
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setTo(to);
-            message.setSubject("Your Evidence Pilot verification code");
-            message.setText("Your verification code is: " + code
-                    + "\n\nIt expires in " + tokenTtl.toMinutes() + " minutes. "
-                    + "If you didn't request this, you can ignore this email.");
-            mailSender.send(message);
+            htmlMail.send(to,
+                    "Your Evidence Pilot verification code",
+                    "Your verification code",
+                    "Your verification code is: <strong style=\"font-size:20px;letter-spacing:4px;\">" + code + "</strong>",
+                    null, null,
+                    "It expires in " + tokenTtl.toMinutes() + " minutes. "
+                            + "If you didn't request this, you can ignore this email.");
         } catch (MailException e) {
             log.warn("Failed to send OTP email to {}", to, e);
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,

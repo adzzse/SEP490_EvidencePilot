@@ -1,97 +1,49 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import Modal from '../../../components/ui/Modal.jsx';
 import { PageSkeleton, ErrorBlock, JsonTree } from './shared.jsx';
-function PapersSection({ lang, api }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [documents, setDocuments] = useState({ content: [], totalElements: 0, totalPages: 0 });
-  const [documentCounts, setDocumentCounts] = useState({ processed: 0, failed: 0 });
+import ProjectAvatar from '../../../components/ui/ProjectAvatar.jsx';
+import { useTranslation } from 'react-i18next';
+
+function PapersSection({ api }) {
+  const { t } = useTranslation();
   const [selectedDoc, setSelectedDoc] = useState(null);
-  const [diag, setDiag] = useState(null);
-  const [diagLoading, setDiagLoading] = useState(false);
-  const [diagError, setDiagError] = useState(null);
   const [page, setPage] = useState(0);
   const [q, setQ] = useState('');
   const [projectId, setProjectId] = useState('');
   const [collectionId, setCollectionId] = useState('');
-  const [projects, setProjects] = useState([]);
-  const [collections, setCollections] = useState([]);
 
-  const fetch = useCallback(async (signal) => {
-    setLoading(true);
-    try {
-      const [dash, docs, counts] = await Promise.all([
-        api.get('/api/admin/dashboard', { signal }),
-        api.get('/api/admin/documents', {
-          params: { page, size: 5, q: q || undefined, projectId: projectId || undefined, collectionId: collectionId || undefined },
-          signal,
-        }),
-        api.get('/api/admin/documents/counts', {
-          params: { q: q || undefined, projectId: projectId || undefined, collectionId: collectionId || undefined },
-          signal,
-        }),
-      ]);
-      setData(dash.data);
-      setDocuments(docs.data);
-      setDocumentCounts(counts.data || { processed: 0, failed: 0 });
-    }
-    catch (e) {
-      if (signal && signal.aborted) return;
-      setError(e.message || lang.loadFailed);
-    }
-    finally {
-      if (!signal || !signal.aborted) setLoading(false);
-    }
-  }, [api, lang.loadFailed, page, q, projectId, collectionId]);
+  const params = { page, size: 5 };
+  if (q) params.q = q;
+  if (projectId) params.projectId = projectId;
+  if (collectionId) params.collectionId = collectionId;
 
-  useEffect(() => {
-    const ac = new AbortController();
-    fetch(ac.signal);
-    return () => ac.abort();
-  }, [fetch]);
+  const dashboardQuery = useQuery({
+    queryKey: ['adminDashboard'],
+    queryFn: ({ signal }) => api.get('/api/admin/dashboard', { signal }).then(r => r.data),
+  });
 
-  useEffect(() => {
-    const ac = new AbortController();
-    api.get('/api/admin/projects', { params: { page: 0, size: 100 }, signal: ac.signal })
-      .then(r => setProjects(r.data?.content || []))
-      .catch(() => { });
-    api.get('/api/admin/collections', { signal: ac.signal })
-      .then(r => setCollections(Array.isArray(r.data) ? r.data : []))
-      .catch(() => { });
-    return () => ac.abort();
-  }, [api]);
+  const documentsQuery = useQuery({
+    queryKey: ['documents', { page, q, projectId, collectionId }],
+    queryFn: ({ signal }) => api.get('/api/admin/documents', { params, signal }).then(r => r.data),
+    placeholderData: (prev) => prev,
+  });
 
-  const openDiagnostics = async (doc) => {
-    setSelectedDoc(doc);
-    setDiag(null);
-    setDiagError(null);
-    setDiagLoading(true);
-    try {
-      const r = await api.get(`/api/documents/${doc.id}/diagnostics`);
-      setDiag(r.data);
-    } catch (e) {
-      setDiagError(e.response?.data?.message || e.message || lang.loadFailed);
-    } finally {
-      setDiagLoading(false);
-    }
-  };
+  const projectsQuery = useQuery({
+    queryKey: ['projects', 'admin', { page: 0, size: 100 }],
+    queryFn: ({ signal }) => api.get('/api/admin/projects', { params: { page: 0, size: 100 }, signal }).then(r => r.data?.content || []),
+  });
 
-  if (loading) return <PageSkeleton />;
-  if (error) return <ErrorBlock msg={error} onRetry={() => fetch(new AbortController().signal)} />;
-  if (!data) return <div className="p-6 text-(--text-tertiary) text-center">{lang.loadFailed}</div>;
+  const collectionsQuery = useQuery({
+    queryKey: ['adminCollections'],
+    queryFn: ({ signal }) => api.get('/api/admin/collections', { signal }).then(r => Array.isArray(r.data) ? r.data : []),
+  });
 
-  const display = data;
-
-  const pageProcessed = documentCounts.processed ?? 0;
-  const pageFailed = documentCounts.failed ?? 0;
-
-  const stats = [
-    { label: 'TOTAL DOCUMENTS', value: documents.totalElements ?? 0, subtext: 'all documents', barColor: 'bg-gray-400' },
-    { label: 'PAPERS', value: display?.activePaperDocuments ?? 0, subtext: 'active papers', barColor: 'bg-blue-500' },
-    { label: 'SOURCES', value: display?.activeSourceDocuments ?? 0, subtext: 'active sources', barColor: 'bg-emerald-500' },
-    { label: 'PROCESSED', value: pageProcessed, subtext: 'processed', barColor: 'bg-amber-500' },
-    { label: 'FAILED / PARTIAL', value: pageFailed, subtext: 'failed', barColor: 'bg-rose-500' }
-  ];
+  const diagnosticsQuery = useQuery({
+    queryKey: ['documentDiagnostics', selectedDoc?.id],
+    queryFn: ({ signal }) => api.get(`/api/documents/${selectedDoc.id}/diagnostics`, { signal }).then(r => r.data),
+    enabled: !!selectedDoc,
+  });
 
   const statusBadge = (s) => {
     const styles = {
@@ -112,55 +64,46 @@ function PapersSection({ lang, api }) {
     );
   };
 
+  if (dashboardQuery.isLoading || documentsQuery.isLoading) return <PageSkeleton />;
+  if (dashboardQuery.error) return <ErrorBlock msg={dashboardQuery.error.message || t('admin.loadFailed')} onRetry={() => dashboardQuery.refetch()} />;
+  if (!dashboardQuery.data) return <div className="p-6 text-(--text-tertiary) text-center">{t('admin.loadFailed')}</div>;
+
+  const display = dashboardQuery.data;
+  const documents = documentsQuery.data || { content: [], totalElements: 0, totalPages: 0 };
+  const projects = projectsQuery.data || [];
+  const collections = collectionsQuery.data || [];
+
   return (
     <div className="p-8 space-y-6 bg-(--page-bg)">
-      {/* Header Area */}
+      {/* Header — title left, total badge right */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-(--border) pb-5">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{lang.papersOverview}</h1>
-          <p className="text-(--text-secondary) text-xs mt-1">{lang.papersSub}</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{t('admin.papersOverview')}</h1>
+          <p className="text-(--text-secondary) text-xs mt-1">{t('admin.papersSub')}</p>
         </div>
+        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-(--surface) border border-(--border) text-xs font-bold text-(--text-secondary) self-start sm:self-auto">
+          {t('admin.totalDocumentsInline', { count: documents.totalElements ?? 0 })}
+        </span>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        {stats.map((s, i) => (
-          <div key={i} className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col justify-between h-28">
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">{s.label}</span>
-              <div className={`h-1.5 w-8 rounded-full ${s.barColor}`} />
-            </div>
-            <div className="mt-2">
-              <span className="text-3xl font-extrabold text-(--text-primary)">{s.value}</span>
-              <p className="text-[10px] text-(--text-tertiary) font-bold mt-0.5">{s.subtext}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Recent Documents Main Card */}
       <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border) overflow-hidden">
         <div className="p-5 border-b border-(--border-light) flex flex-col lg:flex-row lg:items-center gap-3">
-          <h2 className="text-lg font-bold text-(--text-primary)">{lang.recentDocuments}</h2>
+          <h2 className="text-lg font-bold text-(--text-primary)">{t('admin.recentDocuments')}</h2>
           <div className="flex flex-1 flex-col sm:flex-row gap-2.5 lg:justify-end">
-            <div className="relative sm:w-56">
-              <svg className="w-4 h-4 text-(--text-tertiary) absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder={lang.searchDocuments}
-                value={q}
-                onChange={(e) => { setQ(e.target.value); setPage(0); }}
-                className="w-full pl-9 pr-4 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+            <input
+              type="text"
+              value={q}
+              onChange={(e) => { setQ(e.target.value); setPage(0); }}
+              placeholder={t('admin.searchDocuments')}
+              className="w-full sm:w-56 px-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
             <select
               value={projectId}
               onChange={(e) => { setProjectId(e.target.value); setPage(0); }}
+              aria-label={t('admin.project')}
               className="px-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">{lang.project}: All</option>
+              <option value="">{t('admin.projectAll')}</option>
               {projects.map(p => (
                 <option key={p.id} value={p.id}>{p.title}</option>
               ))}
@@ -168,9 +111,10 @@ function PapersSection({ lang, api }) {
             <select
               value={collectionId}
               onChange={(e) => { setCollectionId(e.target.value); setPage(0); }}
+              aria-label={t('admin.collections')}
               className="px-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Collection: All</option>
+              <option value="">{t('admin.collectionAll')}</option>
               {collections.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -178,36 +122,40 @@ function PapersSection({ lang, api }) {
           </div>
         </div>
 
-        {/* Documents Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-(--surface-secondary) text-(--text-tertiary) font-bold uppercase border-b border-(--border-light)">
-                <th className="px-6 py-3.5 font-bold tracking-wider">{lang.title}</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider">{lang.project}</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider">DOI</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider">{lang.status}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.title')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.project')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.columnDoi')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.status')}</th>
                 <th className="px-6 py-3.5 font-bold tracking-wider text-right"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-(--border-light) text-(--text-primary) font-semibold">
               {documents.content.length === 0 ? (
-                <tr><td colSpan={5} className="px-6 py-12 text-center text-(--text-tertiary) font-medium">{lang.noPipelineData}</td></tr>
+                <tr><td colSpan={5} className="px-6 py-12 text-center text-(--text-tertiary) font-medium">{t('admin.noPipelineData')}</td></tr>
               ) : documents.content.map(doc => (
                 <tr key={doc.id} className="hover:bg-(--surface-secondary)/50 transition">
                   <td className="px-6 py-4">
-                    <span className="font-bold text-(--text-primary) block truncate max-w-xs">{doc.title || doc.originalFilename}</span>
-                    {doc.originalFilename && doc.title && <span className="text-[10px] text-(--text-tertiary) font-medium">{doc.originalFilename}</span>}
+                    <div className="flex items-center gap-3">
+                      <ProjectAvatar name={doc.projectName || doc.title || doc.originalFilename || '?'} size="w-8 h-8" />
+                      <div className="min-w-0">
+                        <span className="font-bold text-(--text-primary) block truncate max-w-xs">{doc.title || doc.originalFilename}</span>
+                        {doc.originalFilename && doc.title && <span className="text-[10px] text-(--text-tertiary) font-medium">{doc.originalFilename}</span>}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-(--text-secondary)">{doc.projectName || '—'}</td>
                   <td className="px-6 py-4 text-(--text-secondary) font-mono text-[10px]">{doc.doi || '—'}</td>
                   <td className="px-6 py-4">{statusBadge(doc.processingStatus)}</td>
                   <td className="px-6 py-4 text-right">
                     <button
-                      onClick={() => openDiagnostics(doc)}
+                      onClick={() => setSelectedDoc(doc)}
                       className="px-3 py-1.5 text-[10px] font-bold text-(--text-secondary) bg-(--surface-secondary) border border-(--border) rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition shadow-sm cursor-pointer"
                     >
-                      Diagnostics
+                      {t('admin.viewDocumentDetails')}
                     </button>
                   </td>
                 </tr>
@@ -216,9 +164,8 @@ function PapersSection({ lang, api }) {
           </table>
         </div>
 
-        {/* Footer / Pagination */}
         <div className="flex items-center justify-between px-6 py-3.5 border-t border-(--border-light) bg-(--surface-secondary)/50 text-xs font-semibold text-(--text-secondary)">
-          <span>Showing {documents.content.length} of {documents.totalElements} documents</span>
+          <span>{t('admin.showingDocs', { shown: documents.content.length, total: documents.totalElements })}</span>
           {documents.totalPages > 1 && (
             <div className="flex items-center gap-2">
               <button
@@ -226,87 +173,86 @@ function PapersSection({ lang, api }) {
                 onClick={() => setPage(p => Math.max(0, p - 1))}
                 className="px-3 py-1.5 rounded-lg border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary) transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                {lang.prev}
+                {t('admin.prev')}
               </button>
-              <span>{lang.page} {page + 1} / {documents.totalPages}</span>
+              <span>{t('admin.page')} {page + 1} / {documents.totalPages}</span>
               <button
                 disabled={page + 1 >= documents.totalPages}
                 onClick={() => setPage(p => p + 1)}
                 className="px-3 py-1.5 rounded-lg border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary) transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                {lang.next}
+                {t('admin.next')}
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Diagnostics Panel */}
-      {selectedDoc && (
-        <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border) overflow-hidden">
-          <div className="p-5 border-b border-(--border-light) flex items-center justify-between gap-4">
-            <h2 className="text-sm font-bold text-(--text-primary)">
-              Diagnostics — {selectedDoc.title || selectedDoc.originalFilename}
-              <span className="ml-2 font-mono text-[10px] text-(--text-tertiary)">{selectedDoc.id}</span>
-            </h2>
-            <button onClick={() => setSelectedDoc(null)} className="text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) cursor-pointer">Close</button>
-          </div>
+      {/* Diagnostics Modal — same as before, no nested modals */}
+      <Modal
+        open={!!selectedDoc}
+        onClose={() => setSelectedDoc(null)}
+        title={selectedDoc ? `${t('admin.diagnostics')} — ${selectedDoc.title || selectedDoc.originalFilename}` : t('admin.diagnostics')}
+        closeLabel={t('admin.close')}
+        wide
+        style={{ maxWidth: '72rem' }}
+      >
+        {selectedDoc && (
+          <span className="font-mono text-[10px] text-(--text-tertiary) block mb-4">{selectedDoc.id}</span>
+        )}
+        {diagnosticsQuery.isLoading && <PageSkeleton />}
+        {diagnosticsQuery.error && <ErrorBlock msg={diagnosticsQuery.error.message || t('admin.loadFailed')} />}
 
-          {diagLoading && <div className="p-8"><PageSkeleton /></div>}
-          {diagError && <div className="p-4"><ErrorBlock msg={diagError} /></div>}
-
-          {diag && (
-            <div className="p-5 space-y-5">
-              {diag.processingError && (
-                <div className="bg-rose-50 border border-rose-200 rounded-xl p-4">
-                  <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider block mb-1">Extraction error</span>
-                  <pre className="text-xs text-rose-800 whitespace-pre-wrap break-words font-mono">{diag.processingError}</pre>
-                </div>
-              )}
-              {diag.openAlexError && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                  <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block mb-1">OpenAlex metadata error</span>
-                  <pre className="text-xs text-amber-800 whitespace-pre-wrap break-words font-mono">{diag.openAlexError}</pre>
-                </div>
-              )}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <div className="bg-(--surface-secondary) rounded-xl border border-(--border) p-4 min-w-0">
-                  <h3 className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider mb-3">OpenAlex metadata (live re-fetch)</h3>
-                  <pre className="text-xs font-mono text-(--text-primary) whitespace-pre-wrap break-words max-h-96 overflow-y-auto pr-1">
-                    {diag.openAlexRaw ? <JsonTree data={diag.openAlexRaw} /> : 'No DOI — no OpenAlex lookup.'}
-                  </pre>
-                </div>
-                <div className="bg-(--surface-secondary) rounded-xl border border-(--border) p-4 min-w-0">
-                  <h3 className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider mb-3">System extraction output (MinIO)</h3>
-                  <pre className="text-xs font-mono text-(--text-primary) whitespace-pre-wrap break-words max-h-96 overflow-y-auto pr-1">
-                    {diag.extractionAvailable && diag.extractionJson ? <JsonTree data={diag.extractionJson} /> : 'No extraction checkpoint stored.'}
-                  </pre>
-                </div>
-                <div className="bg-(--surface-secondary) rounded-xl border border-(--border) p-4 min-w-0">
-                  <h3 className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider mb-3">Document metadata</h3>
-                  <pre className="text-xs font-mono text-(--text-primary) whitespace-pre-wrap break-words max-h-96 overflow-y-auto pr-1">
-                    <JsonTree data={{
-                      id: diag.id,
-                      originalFilename: diag.originalFilename,
-                      title: diag.title,
-                      doi: diag.doi,
-                      docType: diag.docType,
-                      processingStatus: diag.processingStatus,
-                      chunkCount: diag.chunkCount,
-                      createdAt: diag.createdAt,
-                      processedAt: diag.processedAt,
-                      projectName: diag.projectName,
-                    }} />
-                  </pre>
-                </div>
+        {diagnosticsQuery.data && (
+          <div className="space-y-5">
+            {diagnosticsQuery.data.processingError && (
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-4">
+                <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider block mb-1">{t('admin.extractionError')}</span>
+                <pre className="text-xs text-rose-800 whitespace-pre-wrap break-words font-mono">{diagnosticsQuery.data.processingError}</pre>
+              </div>
+            )}
+            {diagnosticsQuery.data.openAlexError && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block mb-1">{t('admin.openAlexError')}</span>
+                <pre className="text-xs text-amber-800 whitespace-pre-wrap break-words font-mono">{diagnosticsQuery.data.openAlexError}</pre>
+              </div>
+            )}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="bg-(--surface-secondary) rounded-xl border border-(--border) p-4 min-w-0">
+                <h3 className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider mb-3">{t('admin.openAlexMeta')}</h3>
+                <pre className="text-xs font-mono text-(--text-primary) whitespace-pre-wrap break-words max-h-96 overflow-y-auto pr-1">
+                  {diagnosticsQuery.data.openAlexRaw ? <JsonTree data={diagnosticsQuery.data.openAlexRaw} /> : t('admin.noDoi')}
+                </pre>
+              </div>
+              <div className="bg-(--surface-secondary) rounded-xl border border-(--border) p-4 min-w-0">
+                <h3 className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider mb-3">{t('admin.extractionOutput')}</h3>
+                <pre className="text-xs font-mono text-(--text-primary) whitespace-pre-wrap break-words max-h-96 overflow-y-auto pr-1">
+                  {diagnosticsQuery.data.extractionAvailable && diagnosticsQuery.data.extractionJson ? <JsonTree data={diagnosticsQuery.data.extractionJson} /> : t('admin.noCheckpoint')}
+                </pre>
+              </div>
+              <div className="bg-(--surface-secondary) rounded-xl border border-(--border) p-4 min-w-0">
+                <h3 className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider mb-3">{t('admin.docMeta')}</h3>
+                <pre className="text-xs font-mono text-(--text-primary) whitespace-pre-wrap break-words max-h-96 overflow-y-auto pr-1">
+                  <JsonTree data={{
+                    id: diagnosticsQuery.data.id,
+                    originalFilename: diagnosticsQuery.data.originalFilename,
+                    title: diagnosticsQuery.data.title,
+                    doi: diagnosticsQuery.data.doi,
+                    docType: diagnosticsQuery.data.docType,
+                    processingStatus: diagnosticsQuery.data.processingStatus,
+                    chunkCount: diagnosticsQuery.data.chunkCount,
+                    createdAt: diagnosticsQuery.data.createdAt,
+                    processedAt: diagnosticsQuery.data.processedAt,
+                    projectName: diagnosticsQuery.data.projectName,
+                  }} />
+                </pre>
               </div>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
-
 
 export { PapersSection };

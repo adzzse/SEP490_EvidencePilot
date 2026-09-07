@@ -12,6 +12,7 @@ import com.evidencepilot.dto.response.AdminUserImportResponse;
 import com.evidencepilot.dto.response.BroadcastResponse;
 import com.evidencepilot.dto.response.PagedResponse;
 import com.evidencepilot.model.enums.AccountStatus;
+import com.evidencepilot.model.enums.AuditSeverity;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.service.AdminService;
@@ -35,6 +36,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.format.annotation.DateTimeFormat;
+
+import java.time.LocalDate;
 
 import java.util.List;
 import java.util.Map;
@@ -155,8 +159,10 @@ public class AdminController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) UUID actorId,
             @RequestParam(required = false) String entityType,
-            @RequestParam(required = false) UUID entityId) {
-        return adminService.getAuditLogs(page, size, actorId, entityType, entityId);
+            @RequestParam(required = false) UUID entityId,
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) AuditSeverity severity) {
+        return adminService.getAuditLogs(page, size, actorId, entityType, entityId, action, severity);
     }
 
     @PostMapping("/notifications/broadcast")
@@ -165,8 +171,10 @@ public class AdminController {
     }
 
     @GetMapping("/documents/extraction-queue")
-    public Map<String, Object> extractionQueue() {
-        return adminService.getExtractionQueue();
+    public Map<String, Object> extractionQueue(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return adminService.getExtractionQueue(from, to);
     }
 
     @GetMapping("/documents")
@@ -192,8 +200,29 @@ public class AdminController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String q,
-            @RequestParam(required = false) ProjectStatus status) {
-        return adminService.getProjects(page, size, q, status);
+            @RequestParam(required = false) ProjectStatus status,
+            @RequestParam(required = false) String instructor) {
+        return adminService.getProjects(page, size, q, status, instructor);
+    }
+
+    @GetMapping("/projects/{id}/sections-count")
+    public Map<String, Long> projectSectionsCount(@PathVariable UUID id) {
+        return Map.of("sectionsCount", adminService.countProjectSections(id));
+    }
+
+    @GetMapping("/projects/{id}/sections")
+    public List<com.evidencepilot.dto.response.PaperSectionResponse> projectSections(@PathVariable UUID id) {
+        return adminService.listProjectSections(id);
+    }
+
+    @PatchMapping("/projects/{id}/archive")
+    public com.evidencepilot.dto.response.ProjectResponse adminArchiveProject(@PathVariable UUID id) {
+        return adminService.adminArchiveProject(id);
+    }
+
+    @PatchMapping("/projects/{id}/unarchive")
+    public com.evidencepilot.dto.response.ProjectResponse adminUnarchiveProject(@PathVariable UUID id) {
+        return adminService.adminUnarchiveProject(id);
     }
 
     @GetMapping("/notifications/broadcast-history")

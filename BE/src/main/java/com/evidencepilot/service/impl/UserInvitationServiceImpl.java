@@ -7,13 +7,11 @@ import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -24,11 +22,13 @@ import com.evidencepilot.config.security.JwtSessionRegistry;
 import com.evidencepilot.config.security.JwtUtils;
 import com.evidencepilot.dto.response.AuthResponse;
 import com.evidencepilot.dto.response.UserResponse;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AuditService;
+import com.evidencepilot.service.HtmlMailService;
 import com.evidencepilot.service.UserInvitationService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -39,10 +39,11 @@ public class UserInvitationServiceImpl implements UserInvitationService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JavaMailSender mailSender;
+    private final HtmlMailService htmlMail;
     private final AuditService audit;
     private final JwtUtils jwtUtils;
     private final JwtSessionRegistry sessionRegistry;
+    private final ApplicationEventPublisher events;
     private final String invitationUrl;
     private final Duration invitationTtl;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -51,31 +52,34 @@ public class UserInvitationServiceImpl implements UserInvitationService {
     public UserInvitationServiceImpl(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            ObjectProvider<JavaMailSender> mailSenderProvider,
+            HtmlMailService htmlMail,
             AuditService audit,
             JwtUtils jwtUtils,
             JwtSessionRegistry sessionRegistry,
+            ApplicationEventPublisher events,
             @Value("${app.invitation.url:}") String invitationUrl,
             @Value("${app.invitation.ttl-hours:24}") long invitationTtlHours) {
-        this(userRepository, passwordEncoder, mailSenderProvider.getIfAvailable(), audit,
-                jwtUtils, sessionRegistry, invitationUrl, Duration.ofHours(invitationTtlHours));
+        this(userRepository, passwordEncoder, htmlMail, audit,
+                jwtUtils, sessionRegistry, events, invitationUrl, Duration.ofHours(invitationTtlHours));
     }
 
     UserInvitationServiceImpl(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            JavaMailSender mailSender,
+            HtmlMailService htmlMail,
             AuditService audit,
             JwtUtils jwtUtils,
             JwtSessionRegistry sessionRegistry,
+            ApplicationEventPublisher events,
             String invitationUrl,
             Duration invitationTtl) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.mailSender = mailSender;
+        this.htmlMail = htmlMail;
         this.audit = audit;
         this.jwtUtils = jwtUtils;
         this.sessionRegistry = sessionRegistry;
+        this.events = events;
         this.invitationUrl = invitationUrl;
         this.invitationTtl = invitationTtl;
     }
@@ -94,6 +98,7 @@ public class UserInvitationServiceImpl implements UserInvitationService {
         user.setEmailVerificationExpiresAt(LocalDateTime.now().plus(invitationTtl));
         user.setAccountStatus(AccountStatus.VERIFYING_EMAIL);
         userRepository.save(user);
+        events.publishEvent(new EntityChangedEvent("USER", user.getId(), "STATUS_CHANGED", null));
 
         sendInvitationEmail(user.getEmail(), rawToken);
         audit.record("INVITATION_ISSUED", "USER", user.getId(), user, null,
@@ -135,6 +140,7 @@ public class UserInvitationServiceImpl implements UserInvitationService {
         user.setPasswordChangeNoticePending(false);
         user.setTokenVersion(user.getTokenVersion() + 1);
         userRepository.save(user);
+        events.publishEvent(new EntityChangedEvent("USER", user.getId(), "STATUS_CHANGED", null));
 
         audit.record("INVITATION_ACCEPTED", "USER", user.getId(), user, null, null);
 
@@ -174,23 +180,24 @@ public class UserInvitationServiceImpl implements UserInvitationService {
         }
         if (!expired.isEmpty()) {
             log.info("Swept {} expired email-verification invitations to PENDING", expired.size());
+            events.publishEvent(new EntityChangedEvent("USER", null, "STATUS_CHANGED", null));
         }
         return expired.size();
     }
 
     private void sendInvitationEmail(String to, String rawToken) {
-        if (invitationUrl == null || invitationUrl.isBlank() || mailSender == null) {
+        if (invitationUrl == null || invitationUrl.isBlank() || !htmlMail.isConfigured()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Invitation email is not configured");
         }
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setTo(to);
-            message.setSubject("Set up your Evidence Pilot account");
-            message.setText("Welcome to Evidence Pilot. Set your own password by opening this link:\n\n"
-                    + invitationUrl + "?token=" + rawToken
-                    + "\n\nThis link expires in " + invitationTtl.toHours() + " hours.");
-            mailSender.send(message);
+            htmlMail.send(to,
+                    "Set up your Evidence Pilot account",
+                    "Welcome to Evidence Pilot",
+                    "Set your own password to activate your account.",
+                    invitationUrl + "?token=" + rawToken,
+                    "Set my password",
+                    "This link expires in " + invitationTtl.toHours() + " hours.");
         } catch (MailException e) {
             log.warn("Failed to send invitation email to {}", to, e);
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,

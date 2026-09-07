@@ -5,14 +5,12 @@ import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.User;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.EmailVerificationService;
+import com.evidencepilot.service.HtmlMailService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -36,7 +34,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
     private final UserRepository userRepository;
-    private final JavaMailSender mailSender;
+    private final HtmlMailService htmlMail;
     private final String verificationUrl;
     private final Duration tokenTtl;
     private final Duration requestCooldown;
@@ -45,22 +43,22 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     @Autowired
     public EmailVerificationServiceImpl(
             UserRepository userRepository,
-            ObjectProvider<JavaMailSender> mailSenderProvider,
+            HtmlMailService htmlMail,
             @Value("${app.email-verification.url:http://localhost:5173/profile}") String verificationUrl,
             @Value("${app.email-verification.token-ttl-minutes:60}") long tokenTtlMinutes,
             @Value("${app.email-verification.request-cooldown-seconds:60}") long requestCooldownSeconds) {
-        this(userRepository, mailSenderProvider.getIfAvailable(), verificationUrl,
+        this(userRepository, htmlMail, verificationUrl,
                 Duration.ofMinutes(tokenTtlMinutes), Duration.ofSeconds(requestCooldownSeconds));
     }
 
     EmailVerificationServiceImpl(
             UserRepository userRepository,
-            JavaMailSender mailSender,
+            HtmlMailService htmlMail,
             String verificationUrl,
             Duration tokenTtl,
             Duration requestCooldown) {
         this.userRepository = userRepository;
-        this.mailSender = mailSender;
+        this.htmlMail = htmlMail;
         this.verificationUrl = verificationUrl;
         this.tokenTtl = tokenTtl;
         this.requestCooldown = requestCooldown;
@@ -100,15 +98,15 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         secureRandom.nextBytes(tokenBytes);
         String rawToken = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
 
-        if (verificationUrl != null && !verificationUrl.isBlank() && mailSender != null) {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setTo(normalizedEmail);
-            message.setSubject("Verify your new Evidence Pilot email address");
-            message.setText("Please verify your email address change by opening this link:\n\n"
-                    + verificationUrl + "?verifyEmailToken=" + rawToken
-                    + "\n\nThis link will expire in " + tokenTtl.toMinutes() + " minutes.");
+        if (verificationUrl != null && !verificationUrl.isBlank() && htmlMail.isConfigured()) {
             try {
-                mailSender.send(message);
+                htmlMail.send(normalizedEmail,
+                        "Verify your new Evidence Pilot email address",
+                        "Verify your new email address",
+                        "Please verify your email address change by opening the link below.",
+                        verificationUrl + "?verifyEmailToken=" + rawToken,
+                        "Verify my email",
+                        "This link will expire in " + tokenTtl.toMinutes() + " minutes.");
             } catch (MailException exception) {
                 log.warn("Failed to send email verification to {}", normalizedEmail, exception);
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,

@@ -63,6 +63,8 @@ export const studentText = {
       'Run Citation Review, then insert citations or record decisions for each finding.',
       'Address instructor feedback in the Feedback tab, then submit your project for review.',
     ],
+    status: 'Status',
+    action: 'Action',
   },
   vi: {
     projects: 'Dự án',
@@ -76,7 +78,7 @@ export const studentText = {
     tourProjects: 'Dự án được phân công',
     tourProjectsDesc: 'Xem các dự án nghiên cứu được giảng viên phân công cho bạn.',
     tourWorkspace: 'Mở không gian làm việc',
-    tourWorkspaceDesc: 'Mở dự án để làm việc với bài viết, nguồn, Citation Review, gợi ý và phản hồi.',
+    tourWorkspaceDesc: 'Mở dự án để làm việc với bài viết, nguồn, Đánh giá trích dẫn, gợi ý và phản hồi.',
     workspace: 'Không gian làm việc',
     papers: 'Bài viết',
     sources: 'Tài liệu tham khảo',
@@ -128,5 +130,7 @@ export const studentText = {
       'Chạy Đánh giá AI, sau đó chèn trích dẫn hoặc ghi nhận quyết định cho từng kết quả.',
       'Xử lý phản hồi của giảng viên trong tab Nhận xét, sau đó gửi dự án để đánh giá.',
     ],
+    status: 'Trạng thái',
+    action: 'Thao tác',
   },
 };

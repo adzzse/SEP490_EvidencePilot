@@ -19,6 +19,10 @@ public interface PaperSectionRepository extends JpaRepository<PaperSection, UUID
 
     List<PaperSection> findByDocumentIdOrderBySectionOrderAsc(UUID documentId);
     List<PaperSection> findByDocumentIdAndAssignedUserIdOrderBySectionOrderAsc(UUID documentId, UUID assignedUserId);
+    // Sections across every document of one project — admin project-detail modal.
+    long countByDocument_Project_Id(UUID projectId);
+    // Full section list across every document of one project (admin modal Sections tab).
+    List<PaperSection> findByDocument_Project_IdOrderByDocument_IdAscSectionOrderAsc(UUID projectId);
     // Bulk hard-delete all sections for a paper — used by resetSectionsForStandard.
     // Spring Data derives: DELETE FROM paper_sections WHERE document_id = ?
     // @Transactional is required by Spring Data for derived-delete methods.

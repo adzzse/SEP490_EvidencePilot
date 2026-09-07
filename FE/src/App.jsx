@@ -1,9 +1,12 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './services/queryClient';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { ToastProvider } from './components/ui/Toast.jsx';
 import ProtectedRoute from './routes/ProtectedRoute';
 import ErrorBoundary from './components/layout/ErrorBoundary';
 import ScrollToTop from './components/layout/ScrollToTop';
@@ -37,12 +40,14 @@ const WorkspaceLayout = lazy(() => import('./pages/Student/WorkspaceLayout.jsx')
 
 function App() {
   return (
+    <QueryClientProvider client={queryClient}>
     <BrowserRouter>
       <ScrollToTop />
       <AuthProvider>
         <NotificationProvider>
         <LanguageProvider>
           <ThemeProvider>
+          <ToastProvider>
           <UrgentNotificationBanner />
           <Suspense fallback={<div className="min-h-screen grid place-items-center" role="status">Loading...</div>}>
           <Routes>
@@ -109,11 +114,13 @@ function App() {
             
           </Routes>
           </Suspense>
+          </ToastProvider>
           </ThemeProvider>
         </LanguageProvider>
         </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>
+    </QueryClientProvider>
   );
 }
 

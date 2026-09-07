@@ -8,10 +8,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
+
+import jakarta.mail.Session;
+import jakarta.mail.internet.MimeMessage;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -33,24 +35,46 @@ class PasswordResetServiceTest {
     private final JavaMailSender mail = mock(JavaMailSender.class);
     private final PasswordEncoder passwords = mock(PasswordEncoder.class);
     private final PasswordResetService service = new PasswordResetService(
-            users, mail, passwords, "https://app.test/reset", Duration.ofMinutes(60), Duration.ofSeconds(60));
+            users, new HtmlMailService(mail, "no-reply@test.local"), passwords,
+            "https://app.test/reset", Duration.ofMinutes(60), Duration.ofSeconds(60));
 
     @ParameterizedTest
     @MethodSource("eligibleAccounts")
     void eligibleStudentAndInstructorStatusesReceiveHashOnlyToken(UserRole role, AccountStatus status) throws Exception {
         User user = user(role, status);
         when(users.findByEmailForPasswordReset(user.getEmail())).thenReturn(Optional.of(user));
+        when(mail.createMimeMessage()).thenReturn(new MimeMessage((Session) null));
 
         service.requestReset(user.getEmail());
 
-        var message = org.mockito.ArgumentCaptor.forClass(SimpleMailMessage.class);
+        var message = org.mockito.ArgumentCaptor.forClass(MimeMessage.class);
         verify(mail).send(message.capture());
-        String rawToken = message.getValue().getText().substring(message.getValue().getText().lastIndexOf("token=") + 6);
+        String html = htmlBody(message.getValue());
+        java.util.regex.Matcher token = java.util.regex.Pattern.compile("token=([A-Za-z0-9_-]+)").matcher(html);
+        assertThat(token.find()).isTrue();
+        String rawToken = token.group(1);
         assertThat(rawToken).hasSize(43);
+        assertThat(html).contains("EVIDENCE PILOT");
         assertThat(user.getPasswordResetTokenHash()).isEqualTo(hash(rawToken)).isNotEqualTo(rawToken);
         assertThat(user.getPasswordResetTokenExpiresAt()).isAfter(LocalDateTime.now().plusMinutes(59));
         assertThat(user.getPasswordResetRequestedAt()).isNotNull();
         verify(users).save(user);
+    }
+
+    private static String htmlBody(MimeMessage message) throws Exception {
+        StringBuilder body = new StringBuilder();
+        appendBody(message.getContent(), body);
+        return body.toString();
+    }
+
+    private static void appendBody(Object content, StringBuilder body) throws Exception {
+        if (content instanceof jakarta.mail.Multipart multipart) {
+            for (int i = 0; i < multipart.getCount(); i++) {
+                appendBody(multipart.getBodyPart(i).getContent(), body);
+            }
+        } else if (content != null) {
+            body.append(content);
+        }
     }
 
     @Test
@@ -127,7 +151,8 @@ class PasswordResetServiceTest {
     @Test
     void publicRequestPropagatesMailFailureForControllerToSuppress() {
         User user = user(UserRole.STUDENT, AccountStatus.ACTIVE);
-        doThrow(new org.springframework.mail.MailSendException("down")).when(mail).send(any(SimpleMailMessage.class));
+        when(mail.createMimeMessage()).thenReturn(new MimeMessage((Session) null));
+        doThrow(new org.springframework.mail.MailSendException("down")).when(mail).send(any(MimeMessage.class));
         when(users.findByEmailForPasswordReset(user.getEmail())).thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> service.requestReset(user.getEmail()))

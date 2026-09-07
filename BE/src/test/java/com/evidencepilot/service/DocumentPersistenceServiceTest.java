@@ -4,11 +4,14 @@ import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentChunk;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.ProcessingStatus;
+import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.DocumentTextRepository;
+import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.event.DocumentUploadedEvent;
 import com.evidencepilot.service.impl.DocumentPersistenceService;
 import org.junit.jupiter.api.Test;
@@ -29,7 +32,10 @@ class DocumentPersistenceServiceTest {
     private final DocumentChunkRepository chunks = mock(DocumentChunkRepository.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private final AuditService audit = mock(AuditService.class);
-    private final DocumentPersistenceService service = new DocumentPersistenceService(documents, texts, chunks, events, audit);
+    private final SystemNotificationService notifications = mock(SystemNotificationService.class);
+    private final UserRepository users = mock(UserRepository.class);
+    private final DocumentPersistenceService service = new DocumentPersistenceService(
+            documents, texts, chunks, events, audit, notifications, users);
 
     @Test
     void savePendingDocument_populatesUploadMetadata() {
@@ -93,6 +99,64 @@ class DocumentPersistenceServiceTest {
 
         verify(documents).queueForExtraction(
                 id, List.of(ProcessingStatus.PROCESSING), ProcessingStatus.QUEUED);
+    }
+
+    @Test
+    void markReadyNotifiesOwnerAndAdmins() {
+        UUID id = UUID.randomUUID();
+        User owner = new User();
+        owner.setId(UUID.randomUUID());
+        User admin = new User();
+        admin.setId(UUID.randomUUID());
+        Document document = new Document();
+        document.setId(id);
+        document.setOriginalFilename("paper.pdf");
+        document.setUploadedBy(owner);
+        when(documents.findById(id)).thenReturn(Optional.of(document));
+        when(users.findByAccountStatusAndRole(AccountStatus.ACTIVE, UserRole.ADMIN))
+                .thenReturn(List.of(admin));
+
+        service.markReady(id, 3);
+
+        assertThat(document.getProcessingStatus()).isEqualTo(ProcessingStatus.READY);
+        verify(notifications).createNotification(eq(owner), eq(owner), eq("DOCUMENT_READY"), eq(id), anyString());
+        verify(notifications).createNotification(eq(admin), eq(owner), eq("DOCUMENT_READY"), eq(id), anyString());
+    }
+
+    @Test
+    void markFailedNotifiesOwnerAndAdmins() {
+        UUID id = UUID.randomUUID();
+        User owner = new User();
+        owner.setId(UUID.randomUUID());
+        Document document = new Document();
+        document.setId(id);
+        document.setOriginalFilename("paper.pdf");
+        document.setUploadedBy(owner);
+        when(documents.findById(id)).thenReturn(Optional.of(document));
+        when(users.findByAccountStatusAndRole(AccountStatus.ACTIVE, UserRole.ADMIN))
+                .thenReturn(List.of());
+
+        service.markFailed(id, "boom");
+
+        assertThat(document.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED);
+        verify(notifications).createNotification(eq(owner), eq(owner), eq("DOCUMENT_FAILED"), eq(id), anyString());
+    }
+
+    @Test
+    void terminalNotificationFailureDoesNotEscape() {
+        UUID id = UUID.randomUUID();
+        User owner = new User();
+        owner.setId(UUID.randomUUID());
+        Document document = new Document();
+        document.setId(id);
+        document.setUploadedBy(owner);
+        when(documents.findById(id)).thenReturn(Optional.of(document));
+        when(users.findByAccountStatusAndRole(AccountStatus.ACTIVE, UserRole.ADMIN))
+                .thenThrow(new RuntimeException("db down"));
+
+        service.markReady(id, 1);
+
+        assertThat(document.getProcessingStatus()).isEqualTo(ProcessingStatus.READY);
     }
 
     @Test

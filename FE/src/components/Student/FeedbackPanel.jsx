@@ -8,16 +8,24 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
   positions, narrow, requestId, setRequestId, scope, setScope, overlapIds = [] }) {
   const { t, i18n } = useTranslation();
   const [status, setStatus] = useState('all');
+  const [threadState, setThreadState] = useState('OPEN');
   const [layout, setLayout] = useState([]);
   const scrollerRef = useRef(null);
   const cardsRef = useRef(new Map());
   const [sizeVersion, setSizeVersion] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
   useEffect(() => setStatus('all'), [activeId]);
-  const filtered = useMemo(() => feedback.items.filter(item =>
-    (!requestId || item.requestId === requestId)
-    && (scope === 'project' || String(item.sectionId) === String(sectionId))
-    && (status === 'all' || item.answered === (status === 'answered'))), [feedback.items, requestId, scope, sectionId, status]);
+  useEffect(() => {
+    const active = feedback.items.find(item => item.id === activeId);
+    if (active && (active.threadState || 'OPEN') === 'DONE') setThreadState('ALL');
+  }, [activeId, feedback.items]);
+  const filtered = useMemo(() => feedback.items.filter(item => {
+    const answered = item.replyState ? item.replyState === 'ANSWERED' : item.answered;
+    return (!requestId || item.requestId === requestId)
+      && (scope === 'project' || String(item.sectionId) === String(sectionId))
+      && (threadState === 'ALL' || (item.threadState || 'OPEN') === threadState)
+      && (status === 'all' || answered === (status === 'answered'));
+  }), [feedback.items, requestId, scope, sectionId, threadState, status]);
   const byId = useMemo(() => new Map(positions.map(position => [position.id, position])), [positions]);
   const anchored = !narrow && scope === 'section';
   const visibleItems = anchored ? filtered.filter(item => {
@@ -92,6 +100,11 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
           <option value="all">{t('studentFeedback.all')}</option><option value="unanswered">{t('studentFeedback.unanswered')}</option><option value="answered">{t('answered')}</option>
         </select>
       </div>
+      <select className={`${control} w-full mt-2`} value={threadState} onChange={event => setThreadState(event.target.value)} aria-label={t('studentFeedback.threadFilter')}>
+        <option value="OPEN">{t('studentFeedback.open')}</option>
+        <option value="DONE">{t('studentFeedback.done')}</option>
+        <option value="ALL">{t('studentFeedback.all')}</option>
+      </select>
       <select className={`${control} w-full mt-2`} value={requestId || ''} onChange={event => setRequestId(event.target.value || null)} aria-label={t('studentFeedback.roundFilter')}>
         <option value="">{t('studentFeedback.allRounds')}</option>
         {feedback.requests.map((request, index) => <option key={request.id} value={request.id}>
@@ -124,6 +137,12 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
           const locationStatus = anchor?.current?.status || (item.lineReference ? 'UNLOCATED' : 'SECTION');
           const placed = layoutById.get(item.id);
           const active = item.id === activeId;
+          const answered = item.replyState ? item.replyState === 'ANSWERED' : item.answered;
+          const messages = item.messages?.length ? item.messages : [{
+            id: item.id, kind: 'ROOT', authorName: item.instructorName, authorRole: 'INSTRUCTOR',
+            content: item.content, createdAt: item.createdAt, publishedAt: item.publishedAt || item.createdAt,
+          }, ...(item.answerContent ? [{ id: `${item.id}-legacy-answer`, kind: 'REPLY', authorRole: 'STUDENT',
+            content: item.answerContent, createdAt: item.answeredAt, publishedAt: item.answeredAt }] : [])];
           const canNavigate = item.sectionId && (String(item.sectionId) !== String(sectionId) || position?.from != null);
           return <article key={item.id} ref={node => { if (node) cardsRef.current.set(item.id, node); else cardsRef.current.delete(item.id); }}
             data-feedback-card={item.id} aria-label={t('studentFeedback.card', { section: item.sectionTitle || '' })}
@@ -134,7 +153,7 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
             </svg>}
             <button type="button" className="w-full text-left rounded focus-visible:ring-2 focus-visible:ring-(--brand)" onClick={() => select(item)} aria-expanded={active}>
               <span className="flex justify-between gap-2 font-semibold"><span>{item.instructorName || t('instructor')}</span>
-                <span className={item.answered ? 'text-teal-700 dark:text-teal-300' : 'text-(--text-secondary)'}>{item.answered ? `✓ ${t('answered')}` : t('studentFeedback.unanswered')}</span></span>
+                <span className={answered ? 'text-teal-700 dark:text-teal-300' : 'text-(--text-secondary)'}>{answered ? `✓ ${t('answered')}` : t('studentFeedback.unanswered')}</span></span>
               <span className="mt-1 block text-[10px] text-(--text-secondary)">{item.sectionTitle} · {t('studentFeedback.round', { number: item.roundNumber || '?' })}</span>
               <span className={`mt-2 block whitespace-pre-wrap break-words leading-relaxed ${active ? '' : 'line-clamp-3'}`}>{item.content}</span>
             </button>
@@ -149,12 +168,15 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
                 <p className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono leading-relaxed">{anchor.original.exact}</p>
               </details>}
               {canNavigate && <button type="button" className={`${control} font-semibold`} onClick={() => select(item)}>{t('studentFeedback.goToText')}</button>}
-              {item.answered && <div className="rounded-md border-l-2 border-teal-600 bg-(--surface-secondary) p-2.5">
-                <p className="font-semibold">{t('studentFeedback.reply')}</p>
-                <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed">{item.answerContent}</p>
-                <p className="mt-1 text-[10px] text-(--text-tertiary)">{date(item.answeredAt)}</p>
-              </div>}
-              {!item.answered && item.canAnswer && <form onSubmit={event => { event.preventDefault(); feedback.answer(item); }} className="space-y-2">
+              <div className="space-y-2" aria-label={t('studentFeedback.conversation')}>
+                {messages.map((message, index) => <div key={message.id || index} className={`rounded-md border-l-2 p-2.5 ${message.authorRole === 'STUDENT' ? 'border-teal-600 bg-(--surface-secondary)' : 'border-indigo-500 bg-(--surface-secondary)'}`}>
+                  <p className="font-semibold">{message.authorName || (message.authorRole === 'STUDENT' ? t('studentFeedback.you') : item.instructorName || t('instructor'))}</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
+                  <p className="mt-1 text-[10px] text-(--text-tertiary)">{date(message.publishedAt || message.createdAt)}</p>
+                </div>)}
+              </div>
+              {item.threadState === 'DONE' && <p className="rounded-md bg-(--surface-secondary) p-2 text-[11px] text-(--text-secondary)">{t('studentFeedback.done')}</p>}
+              {item.canAnswer && <form onSubmit={event => { event.preventDefault(); feedback.answer(item); }} className="space-y-2">
                 <label className="block font-semibold" htmlFor={`feedback-answer-${item.id}`}>{t('answerFeedback')}</label>
                 <textarea id={`feedback-answer-${item.id}`} className={`${control} w-full resize-y leading-relaxed`} rows={3} maxLength={20000}
                   value={feedback.drafts[item.id] || ''} onChange={event => feedback.setDraft(item.id, event.target.value)} placeholder={t('answerPlaceholder')} />
@@ -165,7 +187,7 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
                 </button>
                 <p className="text-[10px] leading-relaxed text-(--text-secondary)">{t('studentFeedback.replyHint')}</p>
               </form>}
-              {!item.answered && !item.canAnswer && <p className="text-[11px] text-(--text-secondary)">{t('studentFeedback.replyUnavailable')}</p>}
+              {!item.canAnswer && item.threadState !== 'DONE' && <p className="text-[11px] text-(--text-secondary)">{t('studentFeedback.replyUnavailable')}</p>}
             </div>}
           </article>;
         })}

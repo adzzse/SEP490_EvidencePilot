@@ -61,7 +61,7 @@ export default function AppHeader({ variant = 'app', labels }) {
           { label: it.requests, path: '/instructor/requests' },
         ]
       : role === 'ADMIN'
-        ? [{ label: 'Dashboard', path: '/admin/dashboard' }]
+        ? [{ label: ct.dashboard, path: '/admin/dashboard' }]
         : [{ label: st.projects, path: '/student/projects' }];
 
   const isActive = (path) => {

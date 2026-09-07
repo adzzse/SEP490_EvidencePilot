@@ -1,12 +1,14 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import api from '../services/api.js';
 import { useAuth } from './AuthContext';
-import { subscribeToNotifications } from '../services/notificationSocket.js';
+import { subscribeToNotifications, subscribeToEntityEvents } from '../services/notificationSocket.js';
 
 const NotificationContext = createContext(null);
 
 export function NotificationProvider({ children }) {
   const { token } = useAuth();
+  const queryClient = useQueryClient();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState(null);
@@ -64,6 +66,34 @@ export function NotificationProvider({ children }) {
     });
     return () => { cancelled = true; unsubscribe(); };
   }, [token, restReadyToken]);
+
+  // Generic entity-change events: map {entity,id,action,projectId} -> queryClient.invalidateQueries.
+  useEffect(() => {
+    if (!token || restReadyToken !== token) return undefined;
+    const unsubscribe = subscribeToEntityEvents(evt => {
+      console.log('WS Event Received:', evt);
+      if (!evt || !evt.entity) return;
+      const { entity, id, action, projectId } = evt;
+      if (entity === 'USER') {
+        queryClient.invalidateQueries({ queryKey: ['users'] });
+        return;
+      }
+      if (entity === 'PROJECT') {
+        queryClient.invalidateQueries({ queryKey: ['projects'] });
+        if (id) queryClient.invalidateQueries({ queryKey: ['project', id] });
+        return;
+      }
+      if (entity === 'DOCUMENT') {
+        queryClient.invalidateQueries({ queryKey: ['documents'] });
+        if (id) queryClient.invalidateQueries({ queryKey: ['project', id, 'documents'] });
+        if (projectId) queryClient.invalidateQueries({ queryKey: ['project', projectId, 'documents'] });
+        if (action === 'FAILED' || action === 'READY') {
+          queryClient.invalidateQueries({ queryKey: ['extractionQueue'] });
+        }
+      }
+    });
+    return unsubscribe;
+  }, [token, restReadyToken, queryClient]);
 
   const markRead = useCallback(async (id) => {
     try {

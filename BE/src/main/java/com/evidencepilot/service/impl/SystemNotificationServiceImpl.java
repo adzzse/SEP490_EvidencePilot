@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -58,22 +60,33 @@ public class SystemNotificationServiceImpl implements SystemNotificationService 
             User actor,
             String actionType,
             UUID entityId,
+            UUID feedbackId,
             String message) {
         SystemNotification notification = new SystemNotification();
         notification.setUser(recipient);
         notification.setActor(actor);
         notification.setActionType(actionType);
         notification.setEntityId(entityId);
+        notification.setFeedbackId(feedbackId);
         notification.setMessage(message);
         notification.setRead(false);
         notification.setCreatedAt(LocalDateTime.now());
 
         SystemNotificationResponse response =
                 SystemNotificationResponse.from(systemNotificationRepository.save(notification));
-        messagingTemplate.convertAndSendToUser(
-                recipient.getId().toString(),
-                USER_NOTIFICATION_DESTINATION,
-                response);
+        Runnable push = () -> messagingTemplate.convertAndSendToUser(
+                recipient.getId().toString(), USER_NOTIFICATION_DESTINATION, response);
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    push.run();
+                }
+            });
+        } else {
+            push.run();
+        }
         return response;
     }
 }

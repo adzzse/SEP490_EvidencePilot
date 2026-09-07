@@ -27,4 +27,8 @@ public interface InstructorFeedbackRepository extends JpaRepository<InstructorFe
 
     @EntityGraph(attributePaths = "section")
     List<InstructorFeedback> findByRequestProjectId(UUID projectId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select f from InstructorFeedback f join f.request r where r.project.id = :projectId")
+    List<InstructorFeedback> findByRequestProjectIdForUpdate(@Param("projectId") UUID projectId);
 }

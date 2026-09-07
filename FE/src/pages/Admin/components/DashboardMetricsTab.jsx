@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { driver } from 'driver.js';
 import { PageSkeleton, ErrorBlock } from './shared.jsx';
-function DashboardSection({ lang, api }) {
+import { useTranslation } from 'react-i18next';
+function DashboardSection({ api }) {
+  const { t } = useTranslation();
   const [data, setData] = useState(null);
   const [recentLogs, setRecentLogs] = useState([]);
   const [health, setHealth] = useState(null);
@@ -24,11 +26,11 @@ function DashboardSection({ lang, api }) {
       setQueue(q ? q.data : null);
     } catch (e) {
       if (signal && signal.aborted) return;
-      setError(e.message || lang.loadFailed);
+      setError(e.message || t('admin.loadFailed'));
     } finally {
       if (!signal || !signal.aborted) setLoading(false);
     }
-  }, [api, lang.loadFailed]);
+  }, [api, t('admin.loadFailed')]);
 
   useEffect(() => { const ac = new AbortController(); fetch(ac.signal); return () => ac.abort(); }, [fetch]);
 
@@ -57,10 +59,10 @@ function DashboardSection({ lang, api }) {
       driver({
         animate: true, showProgress: true,
         steps: [
-          { popover: { title: lang.processGuide, description: lang.guideDashDesc, side: 'center' } },
-          { element: '[data-guide="overview-projects"]', popover: { title: lang.activeProjects, description: lang.guideDashOverviewProjects, side: 'bottom' } },
-          { element: '[data-guide="dash-status"]', popover: { title: lang.status, description: lang.guideDashStatus, side: 'top' } },
-          { popover: { title: lang.done, description: lang.guideDashDone, side: 'center' } },
+          { popover: { title: t('admin.processGuide'), description: t('admin.guideDashDesc'), side: 'center' } },
+          { element: '[data-guide="overview-projects"]', popover: { title: t('admin.activeProjects'), description: t('admin.guideDashOverviewProjects'), side: 'bottom' } },
+          { element: '[data-guide="dash-status"]', popover: { title: t('admin.status'), description: t('admin.guideDashStatus'), side: 'top' } },
+          { popover: { title: t('admin.done'), description: t('admin.guideDashDone'), side: 'center' } },
         ],
       }).drive();
     }, 300);
@@ -68,7 +70,7 @@ function DashboardSection({ lang, api }) {
 
   if (loading) return <PageSkeleton />;
   if (error) return <ErrorBlock msg={error} onRetry={() => fetch(new AbortController().signal)} />;
-  if (!display) return <div className="p-6 text-(--text-tertiary) text-center">{lang.loadFailed}</div>;
+  if (!display) return <div className="p-6 text-(--text-tertiary) text-center">{t('admin.loadFailed')}</div>;
 
   return (
     <div className="p-6 space-y-6 bg-(--page-bg)">
@@ -79,10 +81,10 @@ function DashboardSection({ lang, api }) {
           <div>
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-sm font-bold text-(--text-primary)">Platform Overview</h3>
-                <p className="text-xs text-(--text-tertiary) mt-0.5">Research data and collection summary</p>
+                <h3 className="text-sm font-bold text-(--text-primary)">{t('admin.platformOverview')}</h3>
+                <p className="text-xs text-(--text-tertiary) mt-0.5">{t('admin.platformOverviewSub')}</p>
               </div>
-              <button onClick={startProcessGuide} className="text-xs font-bold text-blue-600 hover:underline">View Guide</button>
+              <button onClick={startProcessGuide} className="text-xs font-bold text-blue-600 hover:underline">{t('admin.viewGuide')}</button>
             </div>
           </div>
 
@@ -95,9 +97,9 @@ function DashboardSection({ lang, api }) {
                 </svg>
               </div>
               <div className="space-y-0.5">
-                <div className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">COLLECTIONS</div>
+                <div className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">{t('admin.collections')}</div>
                 <div className="text-lg font-extrabold text-(--text-primary)">{data.activeCollections != null ? data.activeCollections.toLocaleString() : '—'}</div>
-                <div className="text-[10px] text-indigo-600 font-bold">{data.activeCollectionCategories != null ? `${data.activeCollectionCategories} categories` : ''}</div>
+                <div className="text-[10px] text-indigo-600 font-bold">{data.activeCollectionCategories != null ? `${data.activeCollectionCategories} ${t('admin.categories')}` : ''}</div>
               </div>
             </div>
 
@@ -108,9 +110,9 @@ function DashboardSection({ lang, api }) {
                 </svg>
               </div>
               <div className="space-y-0.5">
-                <div className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">ACTIVE PROJECTS</div>
+                <div className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">{t('admin.activeProjects')}</div>
                 <div className="text-lg font-extrabold text-(--text-primary)">{data.activeProjects != null ? data.activeProjects.toLocaleString() : '—'}</div>
-                <div className="text-[10px] text-rose-500 font-bold">{lang.activeProjectsHint || ''}</div>
+                <div className="text-[10px] text-rose-500 font-bold">{t('admin.activeProjectsHint')}</div>
               </div>
             </div>
 
@@ -121,12 +123,12 @@ function DashboardSection({ lang, api }) {
                 </svg>
               </div>
               <div className="space-y-0.5">
-                <div className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">ACTIVE DOCUMENTS</div>
+                <div className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">{t('admin.activeDocuments')}</div>
                 <div className="text-lg font-extrabold text-(--text-primary)">
                   {data.activeSourceDocuments != null && data.activePaperDocuments != null ? (data.activeSourceDocuments + data.activePaperDocuments).toLocaleString() : '—'}
                 </div>
                 <div className="text-[10px] text-blue-600 font-bold">
-                  {data.activeSourceDocuments != null && data.activePaperDocuments != null ? `${data.activeSourceDocuments} source · ${data.activePaperDocuments} paper` : ''}
+                  {data.activeSourceDocuments != null && data.activePaperDocuments != null ? `${data.activeSourceDocuments} ${t('admin.sourceFiles')} · ${data.activePaperDocuments} ${t('admin.paperDocs')}` : ''}
                 </div>
               </div>
             </div>
@@ -136,15 +138,15 @@ function DashboardSection({ lang, api }) {
           <div className="mt-4 border-t border-(--border-light) pt-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">System Health</span>
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">{t('admin.systemHealth')}</span>
                 {irServices.length > 0 ? (
                   <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider ${allUp ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
-                    {allUp ? 'OPERATIONAL' : 'DEGRADED'}
+                    {allUp ? t('admin.operational') : t('admin.degraded')}
                   </span>
                 ) : null}
               </div>
-              <span className="text-xs font-extrabold text-(--text-primary)">{irServices.length > 0 ? `${upCount} / ${irServices.length} services online` : 'No health data'}</span>
-              <span className="text-xs font-extrabold text-(--text-primary)">{queueTotal} in queue</span>
+              <span className="text-xs font-extrabold text-(--text-primary)">{irServices.length > 0 ? t('admin.servicesOnline', { up: upCount, total: irServices.length }) : t('admin.noHealthData')}</span>
+              <span className="text-xs font-extrabold text-(--text-primary)">{queueTotal} {t('admin.inQueue')}</span>
             </div>
             {irServices.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
@@ -154,7 +156,7 @@ function DashboardSection({ lang, api }) {
                     <span key={s.name} className="inline-flex items-center gap-1.5 rounded-lg border border-(--border) bg-(--surface-secondary) px-2.5 py-1 text-[10px] font-bold text-(--text-secondary)">
                       <span className={`w-2 h-2 rounded-full ${isUp ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                       <span className="capitalize">{s.name}</span>
-                      <span className={isUp ? 'text-emerald-600' : 'text-rose-600'}>{isUp ? 'UP' : 'DOWN'}</span>
+                      <span className={isUp ? 'text-emerald-600' : 'text-rose-600'}>{isUp ? t('admin.online') : t('admin.offline')}</span>
                     </span>
                   );
                 })}
@@ -166,10 +168,10 @@ function DashboardSection({ lang, api }) {
         {/* User Distribution */}
         <div data-guide="dash-status" className="bg-(--surface) rounded-2xl shadow-sm border border-(--border-light) p-6 flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-bold text-(--text-primary)">User Distribution</h3>
-            <p className="text-xs text-(--text-tertiary) mt-0.5">Faculty to Student engagement ratio</p>
+            <h3 className="text-sm font-bold text-(--text-primary)">{t('admin.userDistribution')}</h3>
+            <p className="text-xs text-(--text-tertiary) mt-0.5">{t('admin.userDistributionSub')}</p>
           </div>
-          
+
           {/* Donut Chart SVG */}
           <div className="relative w-36 h-36 mx-auto my-4 flex items-center justify-center">
             <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
@@ -179,7 +181,7 @@ function DashboardSection({ lang, api }) {
             </svg>
             <div className="absolute text-center">
               <div className="text-xl font-extrabold text-(--text-primary)">{userTotal > 0 ? sIRatio : '—'}</div>
-              <div className="text-[10px] text-(--text-tertiary) font-extrabold tracking-wider">S:I RATIO</div>
+              <div className="text-[10px] text-(--text-tertiary) font-extrabold tracking-wider">{t('admin.siRatio')}</div>
             </div>
           </div>
 
@@ -188,14 +190,14 @@ function DashboardSection({ lang, api }) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#1e3a8a]" />
-                <span className="text-(--text-secondary)">Students</span>
+                <span className="text-(--text-secondary)">{t('admin.studentsLabel')}</span>
               </div>
               <span className="text-(--text-primary)">{userTotal > 0 ? `${sPct}%` : '—'}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#bfdbfe]" />
-                <span className="text-(--text-secondary)">Instructors</span>
+                <span className="text-(--text-secondary)">{t('admin.instructorsLabel')}</span>
               </div>
               <span className="text-(--text-primary)">{userTotal > 0 ? `${100 - sPct}%` : '—'}</span>
             </div>
@@ -206,32 +208,32 @@ function DashboardSection({ lang, api }) {
       {/* Row 3: Recent System Logs */}
       <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border-light) p-6 space-y-4">
         <div className="flex justify-between items-center">
-          <h3 className="text-sm font-bold text-(--text-primary)">Recent System Logs</h3>
+          <h3 className="text-sm font-bold text-(--text-primary)">{t('admin.recentSystemLogs')}</h3>
           <span className="text-[10px] text-(--text-tertiary) font-semibold">
-            {recentLogs === null ? 'Feed unavailable' : `${recentLogs.length} latest events`}
+            {recentLogs === null ? t('admin.feedUnavailable') : t('admin.latestEvents', { n: recentLogs.length })}
           </span>
         </div>
 
         {recentLogs === null ? (
-          <div className="text-center py-10 text-sm text-rose-500 font-semibold">Could not load recent system logs.</div>
+          <div className="text-center py-10 text-sm text-rose-500 font-semibold">{t('admin.couldNotLoadLogs')}</div>
         ) : recentLogs.length === 0 ? (
-          <div className="text-center py-10 text-sm text-(--text-tertiary) font-semibold">No system logs recorded yet.</div>
+          <div className="text-center py-10 text-sm text-(--text-tertiary) font-semibold">{t('admin.noSystemLogsYet')}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="text-[10px] uppercase tracking-wider text-(--text-tertiary) border-b border-(--border-light)">
                 <tr>
-                  <th className="py-2 pr-4">Time</th>
-                  <th className="py-2 pr-4">Actor</th>
-                  <th className="py-2 pr-4">Action</th>
-                  <th className="py-2">Entity</th>
+                  <th className="py-2 pr-4">{t('admin.logTime')}</th>
+                  <th className="py-2 pr-4">{t('admin.logActor')}</th>
+                  <th className="py-2 pr-4">{t('admin.logAction')}</th>
+                  <th className="py-2">{t('admin.logEntity')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-(--border-light) text-(--text-secondary) font-semibold">
                 {recentLogs.map((log, index) => (
                   <tr key={`${log.occurredAt}-${log.action}-${log.entityId ?? index}`}>
                     <td className="py-3 pr-4 whitespace-nowrap">{log.occurredAt ? new Date(log.occurredAt).toLocaleString() : '—'}</td>
-                    <td className="py-3 pr-4 text-(--text-primary)">{log.actorEmail || 'System'}</td>
+                    <td className="py-3 pr-4 text-(--text-primary)">{log.actorEmail || t('admin.logSystemActor')}</td>
                     <td className="py-3 pr-4">{log.action || '—'}</td>
                     <td className="py-3 font-mono">{log.entityType || '—'}{log.entityId ? `#${log.entityId}` : ''}</td>
                   </tr>

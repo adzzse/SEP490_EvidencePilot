@@ -1,7 +1,10 @@
 package com.evidencepilot.controller;
 
+import com.evidencepilot.dto.request.FeedbackReplyRequest;
+import com.evidencepilot.dto.request.FeedbackStateRequest;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
+import com.evidencepilot.model.enums.FeedbackThreadState;
 import com.evidencepilot.service.FeedbackService;
 import com.evidencepilot.service.SubmissionReadinessService;
 import org.junit.jupiter.api.BeforeEach;
@@ -109,5 +112,37 @@ class FeedbackControllerTest {
         mockMvc.perform(delete("/api/instructor-feedback/{id}", itemId))
                 .andExpect(status().isNoContent());
         verify(service).deleteFeedbackItem(itemId);
+    }
+
+    @Test
+    void answerFeedback_bindsIdempotencyKey() throws Exception {
+        UUID itemId = UUID.randomUUID();
+        UUID key = UUID.randomUUID();
+        mockMvc.perform(post("/api/instructor-feedback/{id}/answer", itemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Revised the paragraph.\",\"idempotencyKey\":\"" + key + "\"}"))
+                .andExpect(status().isOk());
+        verify(service).answerFeedback(itemId, "Revised the paragraph.", key);
+    }
+
+    @Test
+    void instructorReply_bindsConversationRequest() throws Exception {
+        UUID itemId = UUID.randomUUID();
+        UUID key = UUID.randomUUID();
+        mockMvc.perform(post("/api/instructor-feedback/{id}/replies", itemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Please verify the source.\",\"idempotencyKey\":\"" + key + "\"}"))
+                .andExpect(status().isOk());
+        verify(service).createInstructorReply(itemId, new FeedbackReplyRequest("Please verify the source.", key));
+    }
+
+    @Test
+    void feedbackState_bindsRevision() throws Exception {
+        UUID itemId = UUID.randomUUID();
+        mockMvc.perform(patch("/api/instructor-feedback/{id}/state", itemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"state\":\"DONE\",\"expectedRevision\":2}"))
+                .andExpect(status().isOk());
+        verify(service).prepareFeedbackState(itemId, new FeedbackStateRequest(FeedbackThreadState.DONE, 2L));
     }
 }

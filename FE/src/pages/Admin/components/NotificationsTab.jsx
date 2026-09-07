@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-function NotificationsSection({ lang, api }) {
+import { useTranslation } from 'react-i18next';
+function NotificationsSection({ api }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState({ message: '', role: '' });
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState(null);
@@ -35,7 +37,7 @@ function NotificationsSection({ lang, api }) {
   const doSend = async (e) => {
     e.preventDefault();
     if (!form.message) {
-      showToast(lang.notifMsgRequired, 'error');
+      showToast(t('admin.notifMsgRequired'), 'error');
       return;
     }
     setSending(true);
@@ -44,12 +46,12 @@ function NotificationsSection({ lang, api }) {
       const payload = { message: form.message, urgent: urgency === 'Urgent' };
       if (form.role) payload.role = form.role;
       const r = await api.post('/api/admin/notifications/broadcast', payload);
-      showToast(lang.broadcastSent, 'success');
+      showToast(t('admin.broadcastSent'), 'success');
       setForm({ message: '', role: '' });
       setUrgency('Standard');
       fetchHistory();
     } catch (err) {
-      showToast(err.message || lang.broadcastFailed, 'error');
+      showToast(err.message || t('admin.broadcastFailed'), 'error');
     } finally {
       setSending(false);
     }
@@ -63,11 +65,11 @@ function NotificationsSection({ lang, api }) {
       id: `hist-${i}`,
       title: shortMsg,
       detail: count != null
-        ? lang.sentAnnouncementTo.replace('{count}', count).replace('{role}', roleStr.toLowerCase())
-        : lang.sentTo.replace('{role}', roleStr.toLowerCase()),
+        ? t('admin.sentAnnouncementTo', { count, role: roleStr.toLowerCase() })
+        : t('admin.sentTo', { role: roleStr.toLowerCase() }),
       audience: roleStr,
       timestamp: h.occurredAt ? new Date(h.occurredAt).toLocaleString() : '—',
-      status: lang.delivered,
+      status: t('admin.delivered'),
       recipients: count
     };
   });
@@ -82,8 +84,8 @@ function NotificationsSection({ lang, api }) {
       {/* Title Area */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-(--border) pb-5">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{lang.broadcast}</h1>
-          <p className="text-gray-550 text-xs mt-1">{lang.broadcastSub}</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{t('admin.broadcast')}</h1>
+          <p className="text-gray-550 text-xs mt-1">{t('admin.broadcastSub')}</p>
         </div>
       </div>
 
@@ -95,16 +97,16 @@ function NotificationsSection({ lang, api }) {
             <svg className="w-5 h-5 text-(--text-secondary)" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
             </svg>
-            <h3 className="text-xs font-bold text-(--text-primary) uppercase tracking-wider">{lang.messageComposer}</h3>
+            <h3 className="text-xs font-bold text-(--text-primary) uppercase tracking-wider">{t('admin.messageComposer')}</h3>
           </div>
 
           <div>
-            <label className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-1.5">{lang.notifBody}</label>
+            <label className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-1.5">{t('admin.notifBody')}</label>
             <div className="border border-(--border) rounded-xl overflow-hidden shadow-sm">
               {/* Rich-text Toolbar simulation */}
               <div className="flex items-center gap-1 border-b border-(--border) bg-(--surface-secondary) px-3 py-1.5 text-(--text-tertiary) text-xs font-bold">
-                <button type="button" className="p-1 hover:bg-(--surface-tertiary) hover:text-(--text-primary) rounded transition font-serif font-extrabold text-[13px] w-6 h-6 flex items-center justify-center">B</button>
-                <button type="button" className="p-1 hover:bg-(--surface-tertiary) hover:text-(--text-primary) rounded transition font-serif italic text-[13px] w-6 h-6 flex items-center justify-center">I</button>
+                <button type="button" className="p-1 hover:bg-(--surface-tertiary) hover:text-(--text-primary) rounded transition font-serif font-extrabold text-[13px] w-6 h-6 flex items-center justify-center">{t('admin.fontBold')}</button>
+                <button type="button" className="p-1 hover:bg-(--surface-tertiary) hover:text-(--text-primary) rounded transition font-serif italic text-[13px] w-6 h-6 flex items-center justify-center">{t('admin.fontItalic')}</button>
                 <button type="button" className="p-1 hover:bg-(--surface-tertiary) hover:text-(--text-primary) rounded transition w-6 h-6 flex items-center justify-center">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
@@ -127,7 +129,7 @@ function NotificationsSection({ lang, api }) {
                 onChange={e => setForm(p => ({ ...p, message: e.target.value }))}
                 required
                 rows={5}
-                placeholder={lang.announceDraftPlaceholder}
+                placeholder={t('admin.announceDraftPlaceholder')}
                 className="w-full border-0 px-3.5 py-3 text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-0 resize-none"
               />
             </div>
@@ -136,34 +138,34 @@ function NotificationsSection({ lang, api }) {
           {/* Selector inputs */}
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
-              <label className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-1">{lang.recipientSegment}</label>
+              <label className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-1">{t('admin.recipientSegment')}</label>
               <select
                 value={form.role}
                 onChange={e => setForm(p => ({ ...p, role: e.target.value }))}
                 className="w-full border border-gray-250 rounded-xl px-3.5 py-2 text-xs font-semibold bg-(--surface) text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">{lang.allUsers}</option>
-                <option value="STUDENT">{lang.studentsOpt}</option>
-                <option value="INSTRUCTOR">{lang.instructorsOpt}</option>
+                <option value="">{t('admin.allUsers')}</option>
+                <option value="STUDENT">{t('admin.studentsOpt')}</option>
+                <option value="INSTRUCTOR">{t('admin.instructorsOpt')}</option>
               </select>
             </div>
 
             <div className="flex-1">
-              <label className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-1">{lang.urgencyLevel}</label>
+              <label className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-1">{t('admin.urgencyLevel')}</label>
               <div className="flex bg-(--surface-tertiary) p-0.5 rounded-xl text-xs font-bold text-(--text-secondary)">
                 <button
                   type="button"
                   onClick={() => setUrgency('Standard')}
                   className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${urgency === 'Standard' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'hover:text-(--text-primary)'}`}
                 >
-                  {lang.standard}
+                  {t('admin.standard')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setUrgency('Urgent')}
                   className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${urgency === 'Urgent' ? 'bg-(--surface) text-rose-600 shadow-sm' : 'hover:text-(--text-primary)'}`}
                 >
-                  {lang.urgent}
+                  {t('admin.urgent')}
                 </button>
               </div>
             </div>
@@ -175,14 +177,14 @@ function NotificationsSection({ lang, api }) {
               type="button"
               onClick={() => {
                 if (form.message) {
-                  showToast(lang.draftSaved, 'success');
+                  showToast(t('admin.draftSaved'), 'success');
                 } else {
-                  showToast(lang.typeMsgFirst, 'error');
+                  showToast(t('admin.typeMsgFirst'), 'error');
                 }
               }}
               className="px-4 py-2 border border-gray-255 hover:bg-(--surface-secondary) rounded-xl text-xs font-bold text-(--text-primary) transition cursor-pointer"
             >
-              {lang.saveDraft}
+              {t('admin.saveDraft')}
             </button>
             <button
               type="submit"
@@ -192,7 +194,7 @@ function NotificationsSection({ lang, api }) {
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
               </svg>
-              <span>{sending ? lang.sending : lang.sendBroadcast}</span>
+              <span>{sending ? t('admin.sending') : t('admin.sendBroadcast')}</span>
             </button>
           </div>        </form>
 
@@ -204,7 +206,7 @@ function NotificationsSection({ lang, api }) {
               <svg className="w-4.5 h-4.5 text-(--text-secondary)" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <h3 className="text-xs font-bold text-(--text-primary) uppercase tracking-wider">Broadcast History</h3>
+              <h3 className="text-xs font-bold text-(--text-primary) uppercase tracking-wider">{t('admin.broadcastHistory')}</h3>
             </div>
             <div className="relative">
               <svg className="w-3.5 h-3.5 text-(--text-tertiary) absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -212,7 +214,7 @@ function NotificationsSection({ lang, api }) {
               </svg>
               <input
                 type="text"
-                placeholder="Search history..."
+                placeholder={t('admin.searchHistory')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -224,7 +226,7 @@ function NotificationsSection({ lang, api }) {
           <div className="flex-1 overflow-y-auto divide-y divide-(--border-light)">
             {filteredHistory.length === 0 ? (
               <div className="px-5 py-12 text-center text-(--text-tertiary) text-xs font-medium">
-                {bhLoading ? `${lang.loading || 'Loading'}...` : lang.noBroadcastHistory}
+                {bhLoading ? `${t('admin.loading') || 'Loading'}...` : t('admin.noBroadcastHistory')}
               </div>
             ) : filteredHistory.map((h) => (
               <div key={h.id} className="px-5 py-3.5 hover:bg-(--surface-secondary)/50 transition cursor-pointer" onClick={() => setActiveHistoryDetail(h)}>
@@ -235,8 +237,8 @@ function NotificationsSection({ lang, api }) {
                     {h.audience}
                   </span>
                   <div className="flex items-center gap-1">
-                    <span className={`w-1.5 h-1.5 rounded-full ${h.status === lang.delivered ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                    <span className={`text-[9px] font-bold ${h.status === lang.delivered ? 'text-emerald-700' : 'text-(--text-secondary)'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${h.status === t('admin.delivered') ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                    <span className={`text-[9px] font-bold ${h.status === t('admin.delivered') ? 'text-emerald-700' : 'text-(--text-secondary)'}`}>
                       {h.status}
                     </span>
                   </div>
@@ -248,7 +250,7 @@ function NotificationsSection({ lang, api }) {
 
           {/* Footer */}
           <div className="px-5 py-2.5 border-t border-gray-150 bg-(--surface-secondary)/50 text-[10px] font-semibold text-(--text-secondary) shrink-0">
-            {lang.showingLogs.replace('{shown}', filteredHistory.length).replace('{total}', displayHistory.length)}
+            {t('admin.showingLogs', { shown: filteredHistory.length, total: displayHistory.length })}
           </div>
         </div>
       </div>
@@ -265,7 +267,7 @@ function NotificationsSection({ lang, api }) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2m0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </div>
-                <h3 className="font-bold text-(--text-primary) text-sm">Broadcast Delivery Analytics</h3>
+                <h3 className="font-bold text-(--text-primary) text-sm">{t('admin.broadcastDeliveryAnalytics')}</h3>
               </div>
               <button
                 onClick={() => setActiveHistoryDetail(null)}
@@ -280,32 +282,32 @@ function NotificationsSection({ lang, api }) {
             {/* Modal Body */}
             <div className="px-6 py-5 space-y-4 text-xs">
               <div>
-                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-1">Message Content</span>
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-1">{t('admin.messageContent')}</span>
                 <p className="font-bold text-(--text-primary) break-all">{activeHistoryDetail.title}</p>
                 <p className="text-[11px] text-(--text-secondary) font-semibold leading-relaxed mt-1">{activeHistoryDetail.detail}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-1">Target Audience</span>
+                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-1">{t('admin.targetAudience')}</span>
                   <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
                     {activeHistoryDetail.audience}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-1">Total Recipients</span>
+                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-1">{t('admin.totalRecipients')}</span>
                   <p className="font-bold text-(--text-primary)">{activeHistoryDetail.recipients} accounts</p>
                 </div>
               </div>
 
               <div>
-                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-1">Broadcast Timestamp</span>
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-1">{t('admin.broadcastTimestamp')}</span>
                 <p className="font-semibold text-(--text-secondary)">{activeHistoryDetail.timestamp}</p>
               </div>
 
               <div className="bg-(--surface-secondary) border border-(--border-light) rounded-xl p-3.5 mt-2">
-                <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-1">Delivery Insights Summary</span>
-                <p className="text-[11px] text-(--text-secondary) font-semibold mt-2">No delivery analytics data available</p>
+                <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-1">{t('admin.deliveryInsightsSummary')}</span>
+                <p className="text-[11px] text-(--text-secondary) font-semibold mt-2">{t('admin.noDeliveryAnalytics')}</p>
               </div>
             </div>
 
@@ -315,7 +317,7 @@ function NotificationsSection({ lang, api }) {
                 onClick={() => setActiveHistoryDetail(null)}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
               >
-                {lang.close}
+                {t('admin.close')}
               </button>
             </div>
           </div>

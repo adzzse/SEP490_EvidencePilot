@@ -202,7 +202,7 @@ export default function InstructorDashboard() {
               <div className="text-2xl lg:text-3xl font-black text-(--text-primary) flex items-center gap-2">
                 {loadingMetrics ? <span className="inline-block w-8 h-8 bg-(--surface-tertiary) rounded-lg animate-pulse" /> : metrics.pendingRequestsCount}
                 {!loadingMetrics && metrics.pendingRequestsCount > 0 && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-600">Action Required</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-600">{t.actionRequired}</span>
                 )}
               </div>
               <p className="text-[11px] text-(--text-tertiary) mt-1 font-medium">{t.reviewSubmissions} &rarr;</p>
@@ -224,7 +224,7 @@ export default function InstructorDashboard() {
               <div className="text-2xl lg:text-3xl font-black text-(--text-primary)">
                 {loadingMetrics ? <span className="inline-block w-8 h-8 bg-(--surface-tertiary) rounded-lg animate-pulse" /> : metrics.sourcesCount}
               </div>
-              <p className="text-[11px] text-(--text-tertiary) mt-1 font-medium">{t.viewSourceLibrary || 'Explore Library'} &rarr;</p>
+              <p className="text-[11px] text-(--text-tertiary) mt-1 font-medium">{t.viewSourceLibrary} &rarr;</p>
             </div>
           </div>
 
@@ -234,7 +234,7 @@ export default function InstructorDashboard() {
         <div id="operational-hub" className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-black text-(--brand-foreground)">
-              {language === 'vi' ? 'Trung tâm điều hành' : 'Operational Hub'}
+              {t.operationalHub}
             </h2>
           </div>
 
@@ -292,7 +292,7 @@ export default function InstructorDashboard() {
                 <p className="text-xs text-(--text-secondary) leading-relaxed mb-3 line-clamp-2">{t.sourceLibraryDesc || 'Manage research papers and source documents.'}</p>
               </div>
               <Link to="/instructor/source-library" className="inline-flex items-center text-xs font-bold text-(--brand) hover:underline gap-1 pt-2 border-t border-(--border-light)">
-                {t.viewSourceLibrary || 'Explore Library'} &rarr;
+                {t.viewSourceLibrary} &rarr;
               </Link>
             </div>
 

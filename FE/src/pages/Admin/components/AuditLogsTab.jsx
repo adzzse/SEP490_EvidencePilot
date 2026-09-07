@@ -2,7 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { driver } from 'driver.js';
 import Modal from '../../../components/ui/Modal.jsx';
 import { ErrorBlock, JsonTree } from './shared.jsx';
-function AuditLogsSection({ lang, api }) {
+import SearchBar from '../../../components/ui/SearchBar.jsx';
+import { useTranslation } from 'react-i18next';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function AuditLogsSection({ api }) {
+  const { t } = useTranslation();
   const [logs, setLogs] = useState({ content: [], page: 0, totalElements: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -11,38 +17,52 @@ function AuditLogsSection({ lang, api }) {
 
   const [q, setQ] = useState('');
   const [actionFilter, setActionFilter] = useState('');
-  const [userFilter, setUserFilter] = useState('');
+  const [severityFilter, setSeverityFilter] = useState('');
+  const [actorInput, setActorInput] = useState('');
+  const [actorId, setActorId] = useState('');
 
-  const fetch = useCallback(async (p, actorId, signal) => {
+  const fetch = useCallback(async (p, filters, signal) => {
     setLoading(true); setError(null);
     try {
       const params = { page: p, size: 5 };
-      if (actorId) params.actorId = actorId;
+      if (filters.actorId) params.actorId = filters.actorId;
+      if (filters.action) params.action = filters.action;
+      if (filters.severity) params.severity = filters.severity;
       const r = await api.get('/api/admin/audit-logs', { params, signal });
       setLogs(r.data);
     } catch (e) {
       if (signal && signal.aborted) return;
-      setError(e.message || lang.loadFailed);
+      setError(e.message || t('admin.loadFailed'));
     } finally {
       if (!signal || !signal.aborted) setLoading(false);
     }
-  }, [api, lang.loadFailed]);
+  }, [api, t('admin.loadFailed')]);
 
   useEffect(() => {
     const ac = new AbortController();
-    fetch(page, userFilter, ac.signal);
+    fetch(page, { actorId, action: actionFilter, severity: severityFilter }, ac.signal);
     return () => ac.abort();
-  }, [fetch, page, userFilter]);
+  }, [fetch, page, actorId, actionFilter, severityFilter]);
+
+  const applyActorInput = () => {
+    const v = actorInput.trim();
+    if (v !== '' && !UUID_RE.test(v)) {
+      setError(t('admin.invalidActorId'));
+      return;
+    }
+    setPage(0);
+    setActorId(v);
+  };
 
   const startProcessGuide = () => {
     setTimeout(() => {
       driver({
         animate: true, showProgress: true,
         steps: [
-          { popover: { title: lang.processGuide, description: lang.guideAuditDesc, side: 'center' } },
-          { element: '[data-guide="logs-filter"]', popover: { title: lang.filter, description: lang.guideAuditFilter, side: 'bottom' } },
-          { element: '[data-guide="logs-table"]', popover: { title: lang.auditLogs, description: lang.guideAuditTable, side: 'left' } },
-          { popover: { title: lang.done, description: lang.guideAuditDone, side: 'center' } },
+          { popover: { title: t('admin.processGuide'), description: t('admin.guideAuditDesc'), side: 'center' } },
+          { element: '[data-guide="logs-filter"]', popover: { title: t('admin.filter'), description: t('admin.guideAuditFilter'), side: 'bottom' } },
+          { element: '[data-guide="logs-table"]', popover: { title: t('admin.auditLogs'), description: t('admin.guideAuditTable'), side: 'left' } },
+          { popover: { title: t('admin.done'), description: t('admin.guideAuditDone'), side: 'center' } },
         ],
       }).drive();
     }, 300);
@@ -67,17 +87,30 @@ function AuditLogsSection({ lang, api }) {
     }
   };
 
+  const getSeverityBadge = (severity) => {
+    const styles = {
+      CRITICAL: 'bg-rose-50 text-rose-700 border-rose-100',
+      WARN: 'bg-amber-50 text-amber-700 border-amber-100',
+      INFO: 'bg-blue-50 text-blue-700 border-blue-100',
+    };
+    return (
+      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${styles[severity] || 'bg-(--surface-secondary) text-(--text-primary) border-(--border-light)'}`}>
+        {severity || '—'}
+      </span>
+    );
+  };
+
   const getActionBadge = (action) => {
     switch (action) {
       case 'PROJECT_UPDATED':
       case 'UPDATE':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">PROJECT_UPDATED</span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">{t('admin.logActionProjectUpdated')}</span>;
       case 'PROJECT_CREATED':
       case 'CREATE':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">PROJECT_CREATED</span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">{t('admin.logActionProjectCreated')}</span>;
       case 'USER_BANNED':
       case 'BAN':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-100">USER_BANNED</span>;
+        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-100">{t('admin.logActionUserBanned')}</span>;
       default:
         return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-(--surface-secondary) text-(--text-primary) border border-(--border-light)">{action}</span>;
     }
@@ -91,13 +124,10 @@ function AuditLogsSection({ lang, api }) {
   };
 
   const filteredLogs = displayLogs.content.filter(log => {
-    const matchesQ = q.trim() === '' || 
-      ((log.actorEmail ?? '').toLowerCase().includes(q.toLowerCase()) || 
-      ((log.entityType ?? '') + '#' + (log.entityId ?? '')).toLowerCase().includes(q.toLowerCase()));
-    
-    const matchesAction = actionFilter === '' || log.action === actionFilter;
-
-    return matchesQ && matchesAction;
+    if (q.trim() === '') return true;
+    const needle = q.toLowerCase();
+    return (log.actorEmail ?? '').toLowerCase().includes(needle)
+      || ((log.entityType ?? '') + '#' + (log.entityId ?? '')).toLowerCase().includes(needle);
   });
 
   return (
@@ -105,113 +135,86 @@ function AuditLogsSection({ lang, api }) {
       {/* Title Area */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-(--border) pb-5">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{lang.auditLogs}</h1>
-          <p className="text-(--text-secondary) text-xs mt-1">{lang.auditSub}</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{t('admin.auditLogs')}</h1>
+          <p className="text-(--text-secondary) text-xs mt-1">{t('admin.auditSub')}</p>
         </div>
         <div className="flex items-center gap-2.5">
-          <button onClick={() => fetch(page, userFilter)} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#0c162e] hover:bg-[#152447] rounded-xl transition shadow-sm">
+          <button onClick={() => fetch(page, { actorId, action: actionFilter, severity: severityFilter })} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#0c162e] hover:bg-[#152447] rounded-xl transition shadow-sm">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <span>{lang.refreshLogs}</span>
+            <span>{t('admin.refreshLogs')}</span>
           </button>
-        </div>
-      </div>
-
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Total Logs */}
-        <div className="bg-(--surface) rounded-xl border border-(--border) p-5 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-(--surface-secondary) flex items-center justify-center shrink-0 border border-(--border-light)">
-            <svg className="w-6 h-6 text-(--text-secondary)" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">TOTAL LOGS</span>
-            <span className="text-2xl font-extrabold text-(--text-primary)">{logs.totalElements ?? '—'}</span>
-          </div>
-        </div>
-
-        {/* Security Alerts */}
-        <div className="bg-(--surface) rounded-xl border border-(--border) p-5 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-rose-50 flex items-center justify-center shrink-0 border border-rose-100">
-            <svg className="w-6 h-6 text-rose-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">SECURITY ALERTS</span>
-            <span className="text-2xl font-extrabold text-(--text-primary)">—</span>
-          </div>
-        </div>
-
-        {/* System Events */}
-        <div className="bg-(--surface) rounded-xl border border-(--border) p-5 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center shrink-0 border border-blue-100">
-            <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">SYSTEM EVENTS</span>
-            <span className="text-2xl font-extrabold text-(--text-primary)">—</span>
-          </div>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
-        <div className="flex flex-1 w-full gap-3 items-center">
-          {/* Search Input */}
-          <div className="flex-1 relative">
-            <svg className="w-4 h-4 text-(--text-tertiary) absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input 
-              type="text" 
-              placeholder={lang.searchLogs} 
-              value={q}
-              onChange={(e) => { setQ(e.target.value); setPage(0); }}
-              className="w-full pl-9 pr-4 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold" 
+      <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col gap-3">
+        <div className="flex flex-1 w-full gap-3 items-center flex-col sm:flex-row">
+          <SearchBar
+            onDebouncedChange={(v) => { setQ(v); setPage(0); }}
+            placeholder={t('admin.searchLogs')}
+            className="w-full sm:flex-1"
+          />
+
+          {/* Severity Filter Dropdown (server-side) */}
+          <select
+            value={severityFilter}
+            onChange={(e) => { setSeverityFilter(e.target.value); setPage(0); }}
+            aria-label={t('admin.filterBySeverity')}
+            className="w-full sm:w-36 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none cursor-pointer"
+          >
+            <option value="">{t('admin.allSeverities')}</option>
+            <option value="INFO">{t('admin.severityInfo')}</option>
+            <option value="WARN">{t('admin.severityWarn')}</option>
+            <option value="CRITICAL">{t('admin.severityCritical')}</option>
+          </select>
+
+          {/* Action Filter (server-side exact match) */}
+          <input
+            type="text"
+            value={actionFilter}
+            onChange={(e) => { setActionFilter(e.target.value.trim()); setPage(0); }}
+            placeholder={t('admin.filterByAction')}
+            aria-label={t('admin.filterByAction')}
+            spellCheck={false}
+            className="w-full sm:w-44 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-(--text-tertiary)"
+          />
+        </div>
+
+        <div className="flex w-full gap-3 items-center flex-col sm:flex-row">
+          {/* Actor ID search (server-side) */}
+          <div className="flex flex-1 gap-2 w-full">
+            <input
+              type="text"
+              value={actorInput}
+              onChange={(e) => setActorInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') applyActorInput(); }}
+              placeholder={t('admin.filterByActor')}
+              aria-label={t('admin.filterByActor')}
+              spellCheck={false}
+              className="flex-1 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-mono text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-(--text-tertiary) placeholder:font-sans"
             />
+            <button
+              onClick={applyActorInput}
+              className="px-4 py-2 text-xs font-bold text-(--brand-foreground) bg-(--surface) border border-(--border) rounded-xl hover:bg-(--surface-secondary) transition shadow-sm shrink-0"
+            >
+              {t('admin.filter')}
+            </button>
+            {actorId && (
+              <button
+                onClick={() => { setActorInput(''); setActorId(''); setPage(0); }}
+                className="px-3 py-2 text-xs font-bold text-(--text-tertiary) hover:text-(--text-primary) transition shrink-0"
+                title={t('admin.clearFilter')}
+              >
+                ×
+              </button>
+            )}
           </div>
-
-          {/* Action Filter Dropdown */}
-          <select 
-            value={actionFilter} 
-            onChange={(e) => { setActionFilter(e.target.value); setPage(0); }}
-            className="w-36 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none cursor-pointer"
-          >
-            <option value="">{lang.actionAll}</option>
-            <option value="PROJECT_UPDATED">{lang.actionUpdated}</option>
-            <option value="PROJECT_CREATED">{lang.actionCreated}</option>
-            <option value="USER_BANNED">{lang.actionBanned}</option>
-          </select>
-
-          {/* User Filter Dropdown (server-side actorId filter) */}
-          <select 
-            value={userFilter} 
-            onChange={(e) => { setUserFilter(e.target.value); setPage(0); }}
-            className="w-40 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none cursor-pointer"
-          >
-            <option value="">{lang.userAll}</option>
-            {[...new Map(logs.content.map(l => [l.actorId, l.actorEmail ?? 'System']).filter(([id]) => id))].map(([id, email]) => (
-              <option key={id} value={id}>{email}</option>
-            ))}
-          </select>
-
-          {/* Settings Filter Button */}
-          <button className="p-2 bg-(--surface) border border-(--border) rounded-xl hover:bg-(--surface-secondary) shadow-sm transition shrink-0">
-            <svg className="w-4 h-4 text-(--text-secondary)" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-            </svg>
-          </button>
         </div>
       </div>
 
-      {error && <ErrorBlock msg={error} onRetry={() => fetch(page, userFilter, new AbortController().signal)} />}
+      {error && <ErrorBlock msg={error} onRetry={() => fetch(page, { actorId, action: actionFilter, severity: severityFilter }, new AbortController().signal)} />}
 
       {/* Table Card */}
       <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border) overflow-hidden">
@@ -219,20 +222,21 @@ function AuditLogsSection({ lang, api }) {
           <table data-guide="logs-table" className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-(--surface-secondary) text-(--text-tertiary) font-bold uppercase border-b border-(--border-light)">
-                <th className="px-6 py-3.5 font-bold tracking-wider">Timestamp</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider">Actor</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider">Action</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider">Entity</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider">{lang.details}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.timestamp')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.actor')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.action')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.severity')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.entity')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.details')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-(--border-light) text-(--text-primary) font-semibold">
               {loading ? Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} className="animate-pulse">{Array.from({ length: 5 }).map((_, j) => (
+                <tr key={i} className="animate-pulse">{Array.from({ length: 6 }).map((_, j) => (
                   <td key={j} className="px-6 py-5"><div className="h-4 bg-gray-200 rounded w-full" /></td>
                 ))}</tr>
               )) : filteredLogs.length === 0 ? (
-                <tr><td colSpan={5} className="px-6 py-12 text-center text-(--text-tertiary) font-medium">{lang.noLogs}</td></tr>
+                <tr><td colSpan={6} className="px-6 py-12 text-center text-(--text-tertiary) font-medium">{t('admin.noLogs')}</td></tr>
               ) : filteredLogs.map((log, i) => {
                 const dateObj = new Date(log.occurredAt);
                 const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' }) + `, ` + dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
@@ -255,6 +259,11 @@ function AuditLogsSection({ lang, api }) {
                       {getActionBadge(log.action)}
                     </td>
 
+                    {/* Severity Badge (backend-owned) */}
+                    <td className="px-6 py-4">
+                      {getSeverityBadge(log.severity)}
+                    </td>
+
                     {/* Entity */}
                     <td className="px-6 py-4 text-(--text-secondary) font-mono font-medium">
                       {(log.entityType ?? '—')}#{log.entityId ?? ''}
@@ -262,9 +271,9 @@ function AuditLogsSection({ lang, api }) {
 
                     {/* Details */}
                     <td className="px-6 py-4 text-right">
-                      <button onClick={() => setDetailLog(log)} title={lang.details}
+                      <button onClick={() => setDetailLog(log)} title={t('admin.details')}
                         className="px-3 py-1.5 text-[10px] font-bold text-(--text-secondary) bg-(--surface-secondary) border border-(--border) rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition shadow-sm cursor-pointer">
-                        {lang.details}
+                        {t('admin.details')}
                       </button>
                     </td>
                   </tr>
@@ -276,53 +285,57 @@ function AuditLogsSection({ lang, api }) {
 
         {/* Footer / Pagination */}
         <div className="flex items-center justify-between px-6 py-3.5 border-t border-(--border-light) bg-(--surface-secondary)/50 text-xs font-semibold text-(--text-secondary)">
-          <span>{lang.showingLogs.replace('{shown}', filteredLogs.length).replace('{total}', logs.totalElements ?? 0)}</span>
+          <span>{t('admin.showingLogs', { shown: filteredLogs.length, total: logs.totalElements ?? 0 })}</span>
           {logs.totalPages > 1 && (
             <div className="flex items-center gap-1.5">
               <button onClick={() => setPage(page - 1)} disabled={page === 0}
                 className="px-3 py-1.5 rounded-lg border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
-                {lang.prev}
+                {t('admin.prev')}
               </button>
-              <span>{lang.page} {page + 1} / {logs.totalPages}</span>
+              <span>{t('admin.page')} {page + 1} / {logs.totalPages}</span>
               <button onClick={() => setPage(page + 1)} disabled={page >= logs.totalPages - 1}
                 className="px-3 py-1.5 rounded-lg border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
-                {lang.next}
+                {t('admin.next')}
               </button>
             </div>
           )}
         </div>
       </div>
 
-      <Modal open={!!detailLog} onClose={() => setDetailLog(null)} title={lang.details} closeLabel={lang.close}>
+      <Modal open={!!detailLog} onClose={() => setDetailLog(null)} title={t('admin.details')} closeLabel={t('admin.close')}>
         {detailLog && (
           <div className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{lang.actor}</span>
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('admin.actor')}</span>
                 <span className="font-bold text-(--text-primary)">{detailLog.actorEmail || 'System'}</span>
               </div>
               <div>
-                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{lang.action}</span>
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('admin.action')}</span>
                 <span className="font-bold text-(--text-primary)">{detailLog.action}</span>
               </div>
               <div>
-                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{lang.entity}</span>
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('admin.severity')}</span>
+                <span className="font-bold text-(--text-primary)">{getSeverityBadge(detailLog.severity)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('admin.entity')}</span>
                 <span className="font-bold text-(--text-primary) font-mono">{(detailLog.entityType ?? '—')}#{detailLog.entityId ?? ''}</span>
               </div>
               <div>
-                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{lang.timestamp}</span>
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('admin.timestamp')}</span>
                 <span className="font-bold text-(--text-primary)">{new Date(detailLog.occurredAt).toLocaleString()}</span>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-4">
               <div className="bg-(--surface-secondary) border border-(--border) rounded-xl p-4 min-w-0">
-                <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-2">Previous value</span>
+                <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-2">{t('admin.previousValue')}</span>
                 <div className="text-xs font-mono text-(--text-primary) whitespace-pre-wrap break-words max-h-60 overflow-y-auto pr-1">
                   <JsonTree data={parseMaybe(detailLog.oldValue)} />
                 </div>
               </div>
               <div className="bg-(--surface-secondary) border border-(--border) rounded-xl p-4 min-w-0">
-                <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-2">New value</span>
+                <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-2">{t('admin.newValue')}</span>
                 <div className="text-xs font-mono text-(--text-primary) whitespace-pre-wrap break-words max-h-60 overflow-y-auto pr-1">
                   <JsonTree data={parseMaybe(detailLog.newValue)} />
                 </div>

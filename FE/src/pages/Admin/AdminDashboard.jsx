@@ -6,7 +6,9 @@ import { useTheme } from '../../context/ThemeContext';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import api from '../../services/api.js';
-import { t, SectionBoundary } from './components/shared.jsx';
+import i18n from '../../i18n';
+import { useTranslation } from 'react-i18next';
+import { SectionBoundary } from './components/shared.jsx';
 import { DashboardSection } from './components/DashboardMetricsTab.jsx';
 import { UsersSection } from './components/UsersTab.jsx';
 import { ProjectsSection } from './components/ProjectsTab.jsx';
@@ -14,27 +16,25 @@ import { PapersSection } from './components/DocumentsTab.jsx';
 import { AuditLogsSection } from './components/AuditLogsTab.jsx';
 import { InfraSection } from './components/InfrastructureTab.jsx';
 import { QueueSection } from './components/ExtractionQueueTab.jsx';
-import { CollectionsSection } from './components/CollectionsTab.jsx';
 import { NotificationsSection } from './components/NotificationsTab.jsx';
 import { SettingsSection } from './components/SettingsTab.jsx';
 import NotificationBell from '../../components/ui/NotificationBell.jsx';
 import ProfileModal from '../../components/ui/ProfileModal.jsx';
 const NAV_ITEMS = [
-  { key: 'dashboard', labelEn: 'Dashboard', labelVi: 'Bảng điều khiển' },
-  { key: 'users', labelEn: 'Users', labelVi: 'Người dùng' },
-  { key: 'projects', labelEn: 'Projects', labelVi: 'Dự án' },
-  { key: 'papers', labelEn: 'Documents', labelVi: 'Tài liệu' },
-  { key: 'audit', labelEn: 'Audit Logs', labelVi: 'Nhật ký' },
-  { key: 'infra', labelEn: 'Infrastructure', labelVi: 'Hạ tầng' },
-  { key: 'extraction', labelEn: 'Extraction Queue', labelVi: 'Hàng đợi' },
-  { key: 'collections', labelEn: 'Collections', labelVi: 'Bộ sưu tập' },
-  { key: 'notifications', labelEn: 'Notifications', labelVi: 'Thông báo' },
-  { key: 'settings', labelEn: 'Settings', labelVi: 'Cài đặt' },
+  { key: 'dashboard', labelKey: 'dashboard' },
+  { key: 'users', labelKey: 'users' },
+  { key: 'projects', labelKey: 'projects' },
+  { key: 'papers', labelKey: 'papers' },
+  { key: 'audit', labelKey: 'audit' },
+  { key: 'infra', labelKey: 'infra' },
+  { key: 'extraction', labelKey: 'extractionQueue' },
+  { key: 'notifications', labelKey: 'notifications' },
+  { key: 'settings', labelKey: 'settings' },
 ];
 
 const SECTIONS = {
   dashboard: DashboardSection, users: UsersSection, projects: ProjectsSection, papers: PapersSection,
-  audit: AuditLogsSection, infra: InfraSection, extraction: QueueSection, collections: CollectionsSection, notifications: NotificationsSection,
+  audit: AuditLogsSection, infra: InfraSection, extraction: QueueSection, notifications: NotificationsSection,
   settings: SettingsSection,
 };
 
@@ -83,12 +83,6 @@ const getIcon = (key, isActive) => {
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
         </svg>
       );
-    case 'collections':
-      return (
-        <svg className={cls} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-        </svg>
-      );
     case 'notifications':
       return (
         <svg className={cls} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -112,14 +106,17 @@ export default function AdminDashboard() {
   const { logout, user: authUser } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
-  const L = t[language] || t.en;
-  const label = (item) => language === 'vi' ? item.labelVi : item.labelEn;
+  const { t } = useTranslation();
+  const label = (item) => t(`admin.${item.labelKey}`);
   const [navQuery, setNavQuery] = useState('');
   const filteredNav = useMemo(() => {
     const q = navQuery.trim().toLowerCase();
     if (!q) return NAV_ITEMS;
+    const enT = i18n.getFixedT('en');
+    const viT = i18n.getFixedT('vi');
     return NAV_ITEMS.filter((item) =>
-      item.labelEn.toLowerCase().includes(q) || item.labelVi.toLowerCase().includes(q));
+      enT(`admin.${item.labelKey}`).toLowerCase().includes(q)
+      || viT(`admin.${item.labelKey}`).toLowerCase().includes(q));
   }, [navQuery]);
 
   const [active, setActive] = useState(() => {
@@ -143,9 +140,7 @@ export default function AdminDashboard() {
       element: `[data-tour="nav-${item.key}"]`,
       popover: {
         title: label(item),
-        description: language === 'vi'
-          ? `Nhấp để xem ${item.labelVi.toLowerCase()}. Tại đây bạn có thể quản lý và theo dõi các hoạt động liên quan.`
-          : `Click to view ${item.labelEn.toLowerCase()}. Here you can manage and monitor related activities.`,
+        description: t('admin.tourNavItemDesc', { label: label(item).toLowerCase() }),
         side: 'right',
         align: 'start',
       }
@@ -158,20 +153,16 @@ export default function AdminDashboard() {
       steps: [
         {
           popover: {
-            title: language === 'vi' ? 'Chào mừng đến với Trang Quản trị' : 'Welcome to Admin Panel',
-            description: language === 'vi'
-              ? 'Hướng dẫn này sẽ giới thiệu các chức năng chính. Nhấp "Tiếp theo" để bắt đầu.'
-              : 'This guide will introduce the main features. Click "Next" to start.',
+            title: t('admin.tourWelcomeTitle'),
+            description: t('admin.tourWelcomeDesc'),
             side: 'center',
           }
         },
         {
           element: '[data-tour="sidebar"]',
           popover: {
-            title: language === 'vi' ? 'Thanh điều hướng' : 'Sidebar Navigation',
-            description: language === 'vi'
-              ? 'Sử dụng thanh bên để chuyển đổi giữa các chức năng quản trị.'
-              : 'Use the sidebar to switch between admin functions.',
+            title: t('admin.tourSidebarTitle'),
+            description: t('admin.tourSidebarDesc'),
             side: 'right',
           }
         },
@@ -179,39 +170,31 @@ export default function AdminDashboard() {
         {
           element: '[data-tour="header"]',
           popover: {
-            title: language === 'vi' ? 'Thanh tiêu đề' : 'Header Bar',
-            description: language === 'vi'
-              ? 'Chứa nút chuyển ngôn ngữ, chế độ sáng/tối, hướng dẫn, thông tin quản trị viên và đăng xuất.'
-              : 'Contains language toggle, dark/light mode, guide, admin profile info, and sign out.',
+            title: t('admin.tourHeaderTitle'),
+            description: t('admin.tourHeaderDesc'),
             side: 'bottom',
           }
         },
         {
           element: '[data-tour="content"]',
           popover: {
-            title: language === 'vi' ? 'Khu vực nội dung' : 'Content Area',
-            description: language === 'vi'
-              ? 'Nội dung của chức năng đang chọn sẽ hiển thị tại đây.'
-              : 'Content for the selected function is displayed here.',
+            title: t('admin.tourContentTitle'),
+            description: t('admin.tourContentDesc'),
             side: 'left',
           }
         },
         {
           element: '[data-tour="footer"]',
           popover: {
-            title: language === 'vi' ? 'Chân trang' : 'Footer',
-            description: language === 'vi'
-              ? 'Chuyển đổi ngôn ngữ giữa Tiếng Việt và English tại đây.'
-              : 'Switch language between Vietnamese and English here.',
+            title: t('admin.tourFooterTitle'),
+            description: t('admin.tourFooterDesc'),
             side: 'top',
           }
         },
         {
           popover: {
-            title: language === 'vi' ? 'Bắt đầu sử dụng' : 'Ready to Go',
-            description: language === 'vi'
-              ? 'Bạn đã sẵn sàng! Nhấp "Kết thúc" để bắt đầu quản trị hệ thống.'
-              : "You're all set! Click 'Finish' to start managing the system.",
+            title: t('admin.tourReadyTitle'),
+            description: t('admin.tourReadyDesc'),
           }
         },
       ],
@@ -219,7 +202,7 @@ export default function AdminDashboard() {
     });
 
     driverObj.drive();
-  }, [language]);
+  }, [t]);
 
   return (
     <div className="min-h-screen bg-(--page-bg) font-sans flex text-(--text-primary)">
@@ -239,15 +222,17 @@ export default function AdminDashboard() {
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="text-sm font-bold text-white tracking-tight leading-none truncate">EvidencePilot</span>
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 truncate">ADMIN CONSOLE</span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 truncate">
+                  {i18n.language === 'vi' ? 'BẢNG QUẢN TRỊ' : 'ADMIN CONSOLE'}
+                </span>
               </div>
             </div>
           )}
           <button
             onClick={() => setCollapsed(p => !p)}
-            title={collapsed ? 'Expand' : 'Collapse'}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="hidden lg:flex w-7 h-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition shrink-0"
+            title={collapsed ? (i18n.language === 'vi' ? 'Mở rộng' : 'Expand') : (i18n.language === 'vi' ? 'Thu gọn' : 'Collapse')}
+            aria-label={collapsed ? (i18n.language === 'vi' ? 'Mở rộng thanh bên' : 'Expand sidebar') : (i18n.language === 'vi' ? 'Thu gọn thanh bên' : 'Collapse sidebar')}
+            className="hidden lg:flex w-7 h-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition shrink-0 cursor-pointer"
           >
             <span className="text-xs">{collapsed ? '\u25B6' : '\u25C0'}</span>
           </button>
@@ -264,8 +249,8 @@ export default function AdminDashboard() {
                 type="text"
                 value={navQuery}
                 onChange={(e) => setNavQuery(e.target.value)}
-                placeholder={language === 'vi' ? 'Tìm chức năng...' : 'Search functions...'}
-                aria-label={language === 'vi' ? 'Tìm chức năng' : 'Search functions'}
+                placeholder={t('admin.navSearch')}
+                aria-label={t('admin.navSearch')}
                 className="w-full pl-8 pr-2 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
@@ -290,7 +275,7 @@ export default function AdminDashboard() {
             <button
               type="button"
               onClick={() => setProfileModalOpen(true)}
-              title={language === 'vi' ? 'Hồ sơ cá nhân' : 'My Profile'}
+              title={t('admin.myProfile')}
               className={`flex items-center gap-3 rounded-lg hover:bg-white/5 transition-colors p-1 -m-1 text-left flex-1 min-w-0 ${collapsed ? 'justify-center' : ''}`}
             >
               <div className="w-8 h-8 rounded-lg overflow-hidden bg-[#1e3a8a] flex items-center justify-center text-xs text-white font-bold shadow-sm shrink-0">
@@ -302,16 +287,16 @@ export default function AdminDashboard() {
               </div>
               {!collapsed && (
                 <div className="flex-1 min-w-0 text-left">
-                  <p className="text-xs font-bold text-white leading-none truncate">{L.adminUser}</p>
-                  <p className="text-[10px] text-slate-400 font-bold mt-1 truncate">{L.systemManager}</p>
+                  <p className="text-xs font-bold text-white leading-none truncate">{t('admin.adminUser')}</p>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1 truncate">{t('admin.systemManager')}</p>
                 </div>
               )}
             </button>
             {!collapsed && (
               <button
                 onClick={handleLogout}
-                title={L.signOut}
-                aria-label={L.signOut}
+                title={t('admin.signOut')}
+                aria-label={t('admin.signOut')}
                 className="p-2 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition shrink-0"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -323,8 +308,8 @@ export default function AdminDashboard() {
           {collapsed && (
             <button
               onClick={handleLogout}
-              title={L.signOut}
-              aria-label={L.signOut}
+              title={t('admin.signOut')}
+              aria-label={t('admin.signOut')}
               className="w-full flex items-center justify-center p-2 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -346,7 +331,7 @@ export default function AdminDashboard() {
             
             {/* Breadcrumb breadcrumb */}
             <div className="flex items-center gap-1.5 text-xs font-semibold text-(--text-tertiary)">
-              <span>{L.admin}</span>
+              <span>{t('admin.admin')}</span>
               <span>{'\u203A'}</span>
               <span className="text-(--text-primary) font-bold">{label(NAV_ITEMS.find(n => n.key === active))}</span>
             </div>
@@ -359,7 +344,7 @@ export default function AdminDashboard() {
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636-.707.707M21 12h-1M4 12H3m3.343-5.657-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
-              <span>{L.tourGuide}</span>
+              <span>{t('admin.tourGuide')}</span>
             </button>
 
             {/* Language buttons EN | VN */}
@@ -395,9 +380,9 @@ export default function AdminDashboard() {
         </header>
 
         {/* Content */}
-        <main data-tour="content" className="flex-1 overflow-y-auto w-full max-w-[1600px] mx-auto">
+        <main data-tour="content" style={{ backgroundColor: collapsed ? 'var(--content-canvas)' : 'var(--page-bg)' }} className={`flex-1 overflow-y-auto w-full max-w-[1600px] mx-auto transition-colors duration-200`}>
           <SectionBoundary>
-            <Section lang={L} api={api} />
+            <Section api={api} />
           </SectionBoundary>
         </main>
 

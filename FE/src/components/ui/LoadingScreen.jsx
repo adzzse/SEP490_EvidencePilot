@@ -30,7 +30,9 @@ export default function LoadingScreen({ onFinish }) {
         </div>
         <div className="text-center">
           <h1 className="text-white font-bold text-2xl tracking-tight">Evidence Pilot</h1>
-          <p className="text-indigo-300/60 text-sm mt-1 font-medium">Empowering evidence-based research</p>
+          <p className="text-indigo-300/60 text-sm mt-1 font-medium">
+            {localStorage.getItem('app_lang') === 'vi' ? 'Đồng hành nghiên cứu dựa trên bằng chứng' : 'Empowering evidence-based research'}
+          </p>
         </div>
       </div>
     </div>

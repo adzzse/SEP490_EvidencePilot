@@ -4,13 +4,10 @@ import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.UserRepository;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +26,7 @@ import java.util.HexFormat;
 public class PasswordResetService {
 
     private final UserRepository userRepository;
-    private final JavaMailSender mailSender;
+    private final HtmlMailService htmlMail;
     private final PasswordEncoder passwordEncoder;
     private final String resetUrl;
     private final Duration tokenTtl;
@@ -39,24 +36,24 @@ public class PasswordResetService {
     @Autowired
     public PasswordResetService(
             UserRepository userRepository,
-            ObjectProvider<JavaMailSender> mailSenderProvider,
+            HtmlMailService htmlMail,
             PasswordEncoder passwordEncoder,
             @Value("${app.password-reset.url:}") String resetUrl,
             @Value("${app.password-reset.token-ttl-minutes:60}") long tokenTtlMinutes,
             @Value("${app.password-reset.request-cooldown-seconds:60}") long requestCooldownSeconds) {
-        this(userRepository, mailSenderProvider.getIfAvailable(), passwordEncoder, resetUrl,
+        this(userRepository, htmlMail, passwordEncoder, resetUrl,
                 Duration.ofMinutes(tokenTtlMinutes), Duration.ofSeconds(requestCooldownSeconds));
     }
 
     PasswordResetService(
             UserRepository userRepository,
-            JavaMailSender mailSender,
+            HtmlMailService htmlMail,
             PasswordEncoder passwordEncoder,
             String resetUrl,
             Duration tokenTtl,
             Duration requestCooldown) {
         this.userRepository = userRepository;
-        this.mailSender = mailSender;
+        this.htmlMail = htmlMail;
         this.passwordEncoder = passwordEncoder;
         this.resetUrl = resetUrl;
         this.tokenTtl = tokenTtl;
@@ -85,7 +82,7 @@ public class PasswordResetService {
     }
 
     private void issueReset(User user) {
-        if (resetUrl == null || resetUrl.isBlank() || mailSender == null) {
+        if (resetUrl == null || resetUrl.isBlank() || !htmlMail.isConfigured()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Password reset email is not configured");
         }
@@ -93,14 +90,15 @@ public class PasswordResetService {
         byte[] tokenBytes = new byte[32];
         secureRandom.nextBytes(tokenBytes);
         String rawToken = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(user.getEmail());
-        message.setSubject("Reset your Evidence Pilot password");
-        message.setText("Reset your Evidence Pilot password by opening this link:\n\n"
-                + resetUrl + "?token=" + rawToken);
 
         try {
-            mailSender.send(message);
+            htmlMail.send(user.getEmail(),
+                    "Reset your Evidence Pilot password",
+                    "Reset your password",
+                    "Open the link below to choose a new password.",
+                    resetUrl + "?token=" + rawToken,
+                    "Reset my password",
+                    "This link expires in " + tokenTtl.toMinutes() + " minutes.");
         } catch (MailException exception) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Password reset email could not be sent", exception);

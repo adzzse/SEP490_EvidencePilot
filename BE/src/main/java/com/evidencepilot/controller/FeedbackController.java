@@ -1,6 +1,8 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.request.AnswerFeedbackRequest;
+import com.evidencepilot.dto.request.FeedbackReplyRequest;
+import com.evidencepilot.dto.request.FeedbackStateRequest;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.dto.response.FeedbackRequestResponseDto;
@@ -159,7 +161,32 @@ public class FeedbackController {
     public InstructorFeedbackResponseDto answerFeedback(
             @Parameter(description = "Instructor feedback item UUID") @PathVariable UUID id,
             @Valid @RequestBody AnswerFeedbackRequest request) {
-        return feedbackService.answerFeedback(id, request.content());
+        return feedbackService.answerFeedback(id, request.content(), request.idempotencyKey());
+    }
+
+    @PostMapping("/instructor-feedback/{id}/replies")
+    public InstructorFeedbackResponseDto createInstructorReply(
+            @PathVariable UUID id, @Valid @RequestBody FeedbackReplyRequest request) {
+        return feedbackService.createInstructorReply(id, request);
+    }
+
+    @PatchMapping("/instructor-feedback/{id}/replies/{replyId}")
+    public InstructorFeedbackResponseDto updateInstructorReply(
+            @PathVariable UUID id, @PathVariable UUID replyId,
+            @Valid @RequestBody FeedbackReplyRequest request) {
+        return feedbackService.updateInstructorReply(id, replyId, request);
+    }
+
+    @DeleteMapping("/instructor-feedback/{id}/replies/{replyId}")
+    public ResponseEntity<Void> deleteInstructorReply(@PathVariable UUID id, @PathVariable UUID replyId) {
+        feedbackService.deleteInstructorReply(id, replyId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/instructor-feedback/{id}/state")
+    public InstructorFeedbackResponseDto prepareFeedbackState(
+            @PathVariable UUID id, @Valid @RequestBody FeedbackStateRequest request) {
+        return feedbackService.prepareFeedbackState(id, request);
     }
 
     @Operation(summary = "Update feedback request status",

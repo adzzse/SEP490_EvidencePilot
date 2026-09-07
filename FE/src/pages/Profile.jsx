@@ -651,7 +651,7 @@ export function ProfileContent({ embedded = false }) {
         {!embedded && (
           <Breadcrumb
             items={[
-              { label: role === 'INSTRUCTOR' ? 'Dashboard' : (role === 'ADMIN' ? 'Admin' : 'Projects'), path: role === 'INSTRUCTOR' ? '/instructor/dashboard' : (role === 'ADMIN' ? '/admin/dashboard' : '/student/projects') },
+              { label: role === 'INSTRUCTOR' ? t.dashboard : (role === 'ADMIN' ? t.admin : t.projects), path: role === 'INSTRUCTOR' ? '/instructor/dashboard' : (role === 'ADMIN' ? '/admin/dashboard' : '/student/projects') },
               { label: t.profile }
             ]}
           />

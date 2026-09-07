@@ -11,10 +11,19 @@ public interface SystemNotificationService {
     List<SystemNotificationResponse> getCurrentUserNotifications();
     long countCurrentUserUnreadNotifications();
     Optional<SystemNotificationResponse> markCurrentUserNotificationRead(UUID notificationId);
+    default SystemNotificationResponse createNotification(
+            User recipient,
+            User actor,
+            String actionType,
+            UUID entityId,
+            String message) {
+        return createNotification(recipient, actor, actionType, entityId, null, message);
+    }
     SystemNotificationResponse createNotification(
             User recipient,
             User actor,
             String actionType,
             UUID entityId,
+            UUID feedbackId,
             String message);
 }

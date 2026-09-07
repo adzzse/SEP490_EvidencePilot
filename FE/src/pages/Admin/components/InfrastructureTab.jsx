@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PageSkeleton } from './shared.jsx';
+import { useTranslation } from 'react-i18next';
 
 let healthRequest = null;
 const fetchHealth = (api) => {
@@ -10,7 +11,8 @@ const fetchHealth = (api) => {
   return healthRequest;
 };
 
-function InfraSection({ lang, api }) {
+function InfraSection({ api }) {
+  const { t } = useTranslation();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -68,12 +70,12 @@ function InfraSection({ lang, api }) {
     return isUp ? (
       <span className="flex items-center gap-1.5 font-bold text-emerald-600">
         <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-        <span>Online</span>
+        <span>{t('admin.online')}</span>
       </span>
     ) : (
       <span className="flex items-center gap-1.5 font-bold text-rose-600">
         <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-        <span>Offline</span>
+        <span>{t('admin.offline')}</span>
       </span>
     );
   };
@@ -85,8 +87,8 @@ function InfraSection({ lang, api }) {
       {/* Header Area */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-(--border) pb-5">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{lang.systemHealth}</h1>
-          <p className="text-(--text-secondary) text-xs mt-1">{lang.healthSub}</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{t('admin.systemHealth')}</h1>
+          <p className="text-(--text-secondary) text-xs mt-1">{t('admin.healthSub')}</p>
         </div>
         <div>
           <button 
@@ -97,7 +99,7 @@ function InfraSection({ lang, api }) {
             <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <span>{refreshing ? lang.refreshing : lang.refreshMetrics}</span>
+            <span>{refreshing ? t('admin.refreshing') : t('admin.refreshMetrics')}</span>
           </button>
         </div>
       </div>
@@ -114,14 +116,14 @@ function InfraSection({ lang, api }) {
             </div>
             {irServices.length > 0 && (
               <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider ${allUp ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
-                {allUp ? 'OPERATIONAL' : 'DEGRADED'}
+                {allUp ? t('admin.operational') : t('admin.degraded')}
               </span>
             )}
           </div>
           <div className="mt-4">
-            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">System Status</span>
-            <span className="text-xl font-extrabold text-(--text-primary)">{irServices.length > 0 ? `${upCount} / ${irServices.length} Services Online` : 'No data'}</span>
-            <p className="text-[10px] text-(--text-tertiary) italic mt-1 leading-snug">From /api/health.</p>
+            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">{t('admin.systemStatus')}</span>
+            <span className="text-xl font-extrabold text-(--text-primary)">{irServices.length > 0 ? t('admin.servicesOnline', { up: upCount, total: irServices.length }) : t('admin.noData')}</span>
+            <p className="text-[10px] text-(--text-tertiary) italic mt-1 leading-snug">{t('admin.fromHealthEndpoint')}</p>
           </div>
         </div>
 
@@ -135,12 +137,12 @@ function InfraSection({ lang, api }) {
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">Queue Status</span>
-            <span className="text-xl font-extrabold text-(--text-primary)">{queueTotal} Documents</span>
+            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">{t('admin.queueStatus')}</span>
+            <span className="text-xl font-extrabold text-(--text-primary)">{queueTotal} {t('admin.documentsWord')}</span>
             <p className="text-[10px] text-(--text-tertiary) italic mt-1 leading-snug">
-              {typeof counts.QUEUED === 'number' ? `${counts.QUEUED} Queued · ` : ''}
-              {typeof counts.PROCESSING === 'number' ? `${counts.PROCESSING} Processing · ` : ''}
-              {typeof counts.FAILED === 'number' ? `${counts.FAILED} Failed` : ''}
+              {typeof counts.QUEUED === 'number' ? `${counts.QUEUED} ${t('admin.tabPending')} · ` : ''}
+              {typeof counts.PROCESSING === 'number' ? `${counts.PROCESSING} ${t('admin.tabProcessing')} · ` : ''}
+              {typeof counts.FAILED === 'number' ? `${counts.FAILED} ${t('admin.tabFailed')}` : ''}
             </p>
           </div>
         </div>
@@ -155,12 +157,12 @@ function InfraSection({ lang, api }) {
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">Documents</span>
+            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">{t('admin.documentsWord')}</span>
             <span className="text-xl font-extrabold text-(--text-primary)">
-              {(dash.activePaperDocuments ?? 0) + (dash.activeSourceDocuments ?? 0)} Active
+              {(dash.activePaperDocuments ?? 0) + (dash.activeSourceDocuments ?? 0)} {t('admin.active')}
             </span>
             <p className="text-[10px] text-(--text-tertiary) italic mt-1 leading-snug">
-              {dash.activePaperDocuments ?? 0} Papers · {dash.activeSourceDocuments ?? 0} Sources
+              {dash.activePaperDocuments ?? 0} {t('admin.paperDocs')} · {dash.activeSourceDocuments ?? 0} {t('admin.sourceFiles')}
             </p>
           </div>
         </div>
@@ -175,9 +177,9 @@ function InfraSection({ lang, api }) {
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">Collections</span>
-            <span className="text-xl font-extrabold text-(--text-primary)">{dash.activeCollections ?? 0} Active</span>
-            <p className="text-[10px] text-(--text-tertiary) italic mt-1 leading-snug">{dash.activeCollectionCategories ?? 0} Categories</p>
+            <span className="text-[10px] font-bold text-(--text-tertiary) block tracking-wider uppercase">{t('admin.collections')}</span>
+            <span className="text-xl font-extrabold text-(--text-primary)">{dash.activeCollections ?? 0} {t('admin.active')}</span>
+            <p className="text-[10px] text-(--text-tertiary) italic mt-1 leading-snug">{dash.activeCollectionCategories ?? 0} {t('admin.categories')}</p>
           </div>
         </div>
       </div>
@@ -185,22 +187,22 @@ function InfraSection({ lang, api }) {
       {/* Services Table Card */}
       <div className="bg-(--surface) rounded-2xl border border-(--border) shadow-sm overflow-hidden">
         <div className="px-6 py-4.5 border-b border-(--border-light)">
-          <h3 className="text-xs font-bold text-(--text-primary) uppercase tracking-wider">ACTIVE SERVICES INVENTORY</h3>
+          <h3 className="text-xs font-bold text-(--text-primary) uppercase tracking-wider">{t('admin.activeServicesInventory')}</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-(--surface-secondary) text-(--text-tertiary) font-bold uppercase border-b border-(--border-light)">
-                <th className="px-6 py-3.5">Service Node</th>
-                <th className="px-6 py-3.5">Status</th>
-                <th className="px-6 py-3.5">Response Time</th>
-                <th className="px-6 py-3.5">Uptime</th>
+                <th className="px-6 py-3.5">{t('admin.serviceNode')}</th>
+                <th className="px-6 py-3.5">{t('admin.status')}</th>
+                <th className="px-6 py-3.5">{t('admin.responseTime')}</th>
+                <th className="px-6 py-3.5">{t('admin.uptime')}</th>
                 <th className="px-6 py-3.5 text-right"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-(--border-light) text-(--text-primary) font-semibold">
               {irServices.length === 0 ? (
-                <tr><td colSpan={5} className="px-6 py-12 text-center text-(--text-tertiary) font-medium">No infrastructure data available</td></tr>
+                <tr><td colSpan={5} className="px-6 py-12 text-center text-(--text-tertiary) font-medium">{t('admin.noInfraData')}</td></tr>
               ) : irServices.map(s => (
                 <tr key={s.name} className="hover:bg-(--surface-secondary)/50 transition">
                   <td className="px-6 py-4">

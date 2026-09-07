@@ -1,4 +1,6 @@
 import './UserReflectiveCard.css';
+import { useLanguage } from '../../context/LanguageContext.jsx';
+import { commonText } from '../../locales';
 
 export default function UserReflectiveCard({
   user,
@@ -12,12 +14,21 @@ export default function UserReflectiveCard({
   grayscale = 0.2,
   glassDistortion = 0,
 }) {
+  const { language } = useLanguage();
+  const ct = commonText[language] || commonText.en;
+
   if (!user) return null;
 
-  const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || 'Unknown User';
+  const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || (ct.unknown || 'Unknown User');
   const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase() || user.email?.[0]?.toUpperCase() || '?';
   const baseFrequency = 0.03 / Math.max(0.1, noiseScale);
   const saturation = 1 - Math.max(0, Math.min(1, grayscale));
+
+  const roleLabel = {
+    ADMIN: ct.roleAdmin,
+    INSTRUCTOR: ct.roleInstructor,
+    STUDENT: ct.roleStudent,
+  }[user.role] || user.role;
 
   const cssVariables = {
     '--blur-strength': `${blurStrength}px`,
@@ -104,7 +115,7 @@ export default function UserReflectiveCard({
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
-            <span>SECURE ACCESS</span>
+            <span>{language === 'vi' ? 'TRUY CẬP AN TOÀN' : 'SECURE ACCESS'}</span>
           </div>
           <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${statusColor}`}>{user.accountStatus}</span>
         </div>
@@ -112,22 +123,22 @@ export default function UserReflectiveCard({
         <div className="card-body">
           <div className="user-info">
             <h2 className="user-name">{fullName.toUpperCase()}</h2>
-            <p className="user-role">{user.role}</p>
+            <p className="user-role">{roleLabel}</p>
             <p className="user-email">{user.email}</p>
           </div>
           <div className="detail-extra w-full">
             {user.studentCode && (
               <div className="detail-extra-row">
-                <span>Student Code</span>
+                <span>{ct.studentCode || 'Student Code'}</span>
                 <span className="font-mono font-bold">{user.studentCode}</span>
               </div>
             )}
             <div className="detail-extra-row">
-              <span>Created</span>
+              <span>{ct.createdAt || 'Created'}</span>
               <span className="font-mono">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}</span>
             </div>
             <div className="detail-extra-row">
-              <span>User ID</span>
+              <span>{ct.userId || 'User ID'}</span>
               <span className="font-mono text-[9px] truncate max-w-[160px]">{user.id}</span>
             </div>
           </div>
@@ -135,7 +146,7 @@ export default function UserReflectiveCard({
 
         <div className="card-footer">
           <div className="id-section">
-            <span className="label">ID Number</span>
+            <span className="label">{language === 'vi' ? 'Mã định danh' : 'ID Number'}</span>
             <span className="value">{String(user.id).slice(0, 14).toUpperCase()}</span>
           </div>
           <div className="fingerprint-section">

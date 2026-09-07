@@ -35,6 +35,10 @@ public class SystemNotification {
     @JdbcTypeCode(java.sql.Types.BINARY)
     private UUID entityId;
 
+    @Column(name = "feedback_id", columnDefinition = "BINARY(16)")
+    @JdbcTypeCode(java.sql.Types.BINARY)
+    private UUID feedbackId;
+
     @Column(nullable = false, columnDefinition = "TEXT")
     private String message;
 

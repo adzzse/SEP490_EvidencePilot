@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
@@ -52,6 +53,9 @@ class ProjectServiceImplLifecycleTest {
 
     @Mock
     private AuditService auditService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @Test
     void completeActiveProjectMarksCompleted() {
@@ -385,7 +389,8 @@ class ProjectServiceImplLifecycleTest {
                 userRepository,
                 currentUserService,
                 systemNotificationService,
-                auditService);
+                auditService,
+                eventPublisher);
     }
 
     private void assertReadOnly(org.assertj.core.api.ThrowableAssert.ThrowingCallable action) {

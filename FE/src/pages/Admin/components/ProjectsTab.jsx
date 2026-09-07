@@ -1,202 +1,148 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { driver } from 'driver.js';
-import Modal from '../../../components/ui/Modal.jsx';
-import { ErrorBlock } from './shared.jsx';
-import DeleteConfirm from '../../../components/ui/DeleteConfirm.jsx';
-import useUndoDelete, { UndoToast } from '../../../components/ui/UndoDelete.jsx';
-function ProjectsSection({ lang, api }) {
-  const [projects, setProjects] = useState({ content: [], page: 0, totalElements: 0, totalPages: 0 });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [page, setPage] = useState(0);
-  const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete({ onUndo: () => fetch(page) });
+import { useToast } from '../../../components/ui/Toast.jsx';
+import { useTranslation } from 'react-i18next';
+import Tabs from '../../../components/ui/Tabs.jsx';
+import ProjectAvatar from '../../../components/ui/ProjectAvatar.jsx';
+import { useLanguage } from '../../../context/LanguageContext';
 
+function MemberAvatar({ email, firstName, lastName, avatarUrl, size = 'w-8 h-8', text = 'text-[10px]' }) {
+  const initial = `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase()
+    || email?.[0]?.toUpperCase() || '?';
+  return (
+    <div className={`${size} rounded-full overflow-hidden bg-[#1e3a8a]/10 text-(--brand-foreground) flex items-center justify-center ${text} font-black shrink-0 ring-2 ring-(--surface)`} aria-hidden="true">
+      {avatarUrl ? (
+        <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+      ) : (
+        initial
+      )}
+    </div>
+  );
+}
+
+function ProjectsSection({ api }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [instructorFilter, setInstructorFilter] = useState('');
 
-  // Modals and Forms
-  const [showMembersModal, setShowMembersModal] = useState(false);
   const [activeProject, setActiveProject] = useState(null);
-  const [projectErr, setProjectErr] = useState('');
-  const [toast, setToast] = useState(null);
-
-  // Detail modal state
-  const [detailProject, setDetailProject] = useState(null);
-  const [detailMembers, setDetailMembers] = useState([]);
-  const [detailDocs, setDetailDocs] = useState([]);
-  const [detailLoading, setDetailLoading] = useState(false);
-
-  // Membership state
-  const [members, setMembers] = useState([]);
-  const [membersLoading, setMembersLoading] = useState(false);
-  const [allUsers, setAllUsers] = useState([]);
+  const [showMembersModal, setShowMembersModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState('');
   const [selectedRole, setSelectedRole] = useState('MEMBER');
   const [updatingMemberId, setUpdatingMemberId] = useState(null);
   const [memberErr, setMemberErr] = useState('');
 
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+  const [detailProject, setDetailProject] = useState(null);
+  const [detailTab, setDetailTab] = useState('members');
 
-  const fetch = useCallback(async (p, signal) => {
-    setLoading(true); setError(null);
-    try {
-      const params = { page: p, size: 20 };
-      if (q.trim()) params.q = q.trim();
-      if (statusFilter) params.status = statusFilter;
+  const params = { page, size: 20 };
+  if (q.trim()) params.q = q.trim();
+  if (statusFilter) params.status = statusFilter;
+  if (instructorFilter) params.instructor = instructorFilter;
+
+  const projectsQuery = useQuery({
+    queryKey: ['projects', 'admin', { page, q, statusFilter, instructorFilter }],
+    queryFn: async ({ signal }) => {
       const r = await api.get('/api/admin/projects', { params, signal });
-      setProjects(r.data);
-    } catch (e) {
-      if (signal && signal.aborted) return;
-      setError(e.message || lang.loadFailed);
-    } finally {
-      if (!signal || !signal.aborted) setLoading(false);
-    }
-  }, [api, q, statusFilter, lang.loadFailed]);
+      return r.data;
+    },
+    placeholderData: (prev) => prev,
+  });
 
-  useEffect(() => {
-    const ac = new AbortController();
-    fetch(page, ac.signal);
-    return () => ac.abort();
-  }, [fetch, page]);
+  const instructorsQuery = useQuery({
+    queryKey: ['users', 'instructors'],
+    queryFn: async ({ signal }) => {
+      const r = await api.get('/api/admin/users', { params: { size: 100 }, signal });
+      return r.data?.content || [];
+    },
+  });
 
-  useEffect(() => {
-    setPage(0);
-  }, [q, statusFilter]);
+  const detailMembersQuery = useQuery({
+    queryKey: ['project', detailProject?.id, 'members'],
+    queryFn: ({ signal }) => api.get(`/api/projects/${detailProject.id}/members`, { signal }).then(r => r.data || []),
+    enabled: !!detailProject,
+  });
 
-  const doUnarchive = async (p) => {
-    try {
-      await api.patch(`/api/projects/${p.id}/unarchive`);
-      showToast(lang.unarchiveSuccess, "success");
-      fetch(page);
-    } catch (e) {
-      showToast(e.response?.data?.message || lang.unarchiveFailed, "error");
-    }
-  };
+  const detailDocsQuery = useQuery({
+    queryKey: ['project', detailProject?.id, 'documents'],
+    queryFn: ({ signal }) => api.get(`/api/projects/${detailProject.id}/documents`, { params: { page: 0, size: 100 }, signal }).then(r => r.data?.content || []),
+    enabled: !!detailProject,
+  });
 
-  const doDelete = async (id) => {
-    try {
-      await api.delete(`/api/projects/${id}`);
-      showToast(lang.projectDeletedSuccess, "success");
-      await fetch(page);
-    }
-    catch (e) { setError(e.message); }
-  };
+  const detailSectionsQuery = useQuery({
+    queryKey: ['project', detailProject?.id, 'sections'],
+    queryFn: ({ signal }) => api.get(`/api/admin/projects/${detailProject.id}/sections`, { signal }).then(r => r.data || []),
+    enabled: !!detailProject,
+  });
 
-  const handleDelete = (p) => {
-    setProjects(prev => ({ ...prev, content: prev.content.filter(x => x.id !== p.id) }));
-    startDelete({
-      entityName: p.title,
-      entityDetails: p.id,
-      header: lang.undoHeader,
-      bodyTemplate: lang.undoBodyTemplate,
-      caution: lang.undoCaution,
-      undoLabel: lang.undoLabel,
-      undoRemaining: lang.undoRemaining,
-      dismissLabel: lang.dismissLabel,
-    }, () => doDelete(p.id));
-  };
+  const membersQuery = useQuery({
+    queryKey: ['project', activeProject?.id, 'members-modal'],
+    queryFn: ({ signal }) => api.get(`/api/projects/${activeProject.id}/members`, { signal }).then(r => r.data || []),
+    enabled: showMembersModal && !!activeProject,
+  });
 
-  const openDetail = async (p) => {
-    setDetailProject(p);
-    setDetailMembers([]);
-    setDetailDocs([]);
-    setDetailLoading(true);
-    try {
-      const [m, d] = await Promise.all([
-        api.get(`/api/projects/${p.id}/members`),
-        api.get(`/api/projects/${p.id}/documents`, { params: { page: 0, size: 100 } }),
-      ]);
-      setDetailMembers(m.data || []);
-      setDetailDocs(d.data?.content || []);
-    } catch { /* silent */ } finally {
-      setDetailLoading(false);
-    }
-  };
+  const allUsersQuery = useQuery({
+    queryKey: ['users', 'all-students'],
+    queryFn: ({ signal }) => api.get('/api/admin/users?size=100', { signal }).then(r => r.data?.content || []),
+    enabled: showMembersModal,
+  });
 
-  // Membership Handlers
-  const handleOpenMembers = async (p) => {
-    setActiveProject(p);
-    setMembers([]);
-    setSelectedUser('');
-    setMemberErr('');
-    setShowMembersModal(true);
-    setMembersLoading(true);
+  const unarchiveMutation = useMutation({
+    mutationFn: (p) => api.patch(`/api/admin/projects/${p.id}/unarchive`),
+    onSuccess: () => {
+      toast.success(t('admin.unarchiveSuccess'));
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+    onError: (e) => toast.error(e.response?.data?.message || t('admin.unarchiveFailed')),
+  });
 
-    try {
-      // 1. Fetch current members
-      const resMembers = await api.get(`/api/projects/${p.id}/members`);
-      setMembers(resMembers.data || []);
-
-      // 2. Fetch all system users to select from
-      const resUsers = await api.get('/api/admin/users?size=100');
-      setAllUsers(resUsers.data?.content || []);
-    } catch (err) {
-      setMemberErr(lang.memberLoadFailed);
-    } finally {
-      setMembersLoading(false);
-    }
-  };
-
-  const doAddMember = async (e) => {
-    e.preventDefault();
-    if (!selectedUser) {
-      setMemberErr(lang.selectUserFirst);
-      return;
-    }
-    setMemberErr('');
-    try {
-      await api.post(`/api/projects/${activeProject.id}/members?userId=${selectedUser}&role=${selectedRole}`);
-      showToast(lang.memberAdded, "success");
+  const addMemberMutation = useMutation({
+    mutationFn: ({ projectId, userId, role }) =>
+      api.post(`/api/projects/${projectId}/members`, null, { params: { userId, role } }),
+    onSuccess: () => {
+      toast.success(t('admin.memberAdded'));
       setSelectedUser('');
-      
-      // Refresh member list
-      const resMembers = await api.get(`/api/projects/${activeProject.id}/members`);
-      setMembers(resMembers.data || []);
-    } catch (err) {
-      setMemberErr(err.response?.data?.message || lang.memberAddFailed);
-    }
-  };
+      queryClient.invalidateQueries({ queryKey: ['project', activeProject.id, 'members-modal'] });
+      queryClient.invalidateQueries({ queryKey: ['project', activeProject.id, 'members'] });
+    },
+    onError: (e) => setMemberErr(e.response?.data?.message || t('admin.memberAddFailed')),
+  });
 
-  const doRemoveMember = async (userId) => {
-    setMemberErr('');
-    try {
-      await api.delete(`/api/projects/${activeProject.id}/members/${userId}`);
-      showToast(lang.memberRemoved, "success");
-      
-      // Refresh member list
-      const resMembers = await api.get(`/api/projects/${activeProject.id}/members`);
-      setMembers(resMembers.data || []);
-    } catch (err) {
-      setMemberErr(err.response?.data?.message || lang.memberRemoveFailed);
-    }
-  };
+  const removeMemberMutation = useMutation({
+    mutationFn: ({ projectId, userId }) => api.delete(`/api/projects/${projectId}/members/${userId}`),
+    onSuccess: () => {
+      toast.success(t('admin.memberRemoved'));
+      queryClient.invalidateQueries({ queryKey: ['project', activeProject.id, 'members-modal'] });
+      queryClient.invalidateQueries({ queryKey: ['project', activeProject.id, 'members'] });
+    },
+    onError: (e) => setMemberErr(e.response?.data?.message || t('admin.memberRemoveFailed')),
+  });
 
-  const doUpdateMemberRole = async (userId, role) => {
-    setMemberErr('');
-    setUpdatingMemberId(userId);
-    try {
-      await api.patch(`/api/projects/${activeProject.id}/members/${userId}`, null, { params: { role } });
-      const resMembers = await api.get(`/api/projects/${activeProject.id}/members`);
-      setMembers(resMembers.data || []);
-      showToast(lang.memberRoleUpdated, "success");
-    } catch (err) {
-      setMemberErr(err.response?.data?.message || err.response?.data?.detail || lang.memberRoleUpdateFailed);
-    } finally {
-      setUpdatingMemberId(null);
-    }
-  };
+  const updateRoleMutation = useMutation({
+    mutationFn: ({ projectId, userId, role }) =>
+      api.patch(`/api/projects/${projectId}/members/${userId}`, null, { params: { role } }),
+    onSuccess: () => {
+      toast.success(t('admin.memberRoleUpdated'));
+      queryClient.invalidateQueries({ queryKey: ['project', activeProject.id, 'members-modal'] });
+    },
+    onError: (e) => setMemberErr(e.response?.data?.message || e.response?.data?.detail || t('admin.memberRoleUpdateFailed')),
+    onSettled: () => setUpdatingMemberId(null),
+  });
 
   const startProcessGuide = () => {
     setTimeout(() => {
       driver({
         animate: true, showProgress: true,
         steps: [
-          { popover: { title: lang.processGuide, description: lang.guideProjectsDesc, side: 'center' } },
-          { element: '[data-guide="projects-table"]', popover: { title: lang.projects, description: lang.guideProjectsTable, side: 'left' } },
-          { popover: { title: lang.done, description: lang.guideProjectsDone, side: 'center' } },
+          { popover: { title: t('admin.processGuide'), description: t('admin.guideProjectsDesc'), side: 'center' } },
+          { element: '[data-guide="projects-table"]', popover: { title: t('admin.projects'), description: t('admin.guideProjectsTable'), side: 'left' } },
+          { popover: { title: t('admin.done'), description: t('admin.guideProjectsDone'), side: 'center' } },
         ],
       }).drive();
     }, 300);
@@ -213,13 +159,13 @@ function ProjectsSection({ lang, api }) {
       ARCHIVED: 'bg-(--surface-secondary) text-(--text-secondary)'
     };
     const labels = {
-      CREATED: 'Created',
-      ASSIGNED: 'Assigned',
-      IN_PROGRESS: 'In Progress',
-      SUBMITTED_FOR_REVIEW: 'Under Review',
-      RETURNED: 'Returned',
-      APPROVED: 'Approved',
-      ARCHIVED: 'Archived'
+      CREATED: t('admin.statusCreated'),
+      ASSIGNED: t('admin.statusAssigned'),
+      IN_PROGRESS: t('admin.statusInProgress'),
+      SUBMITTED_FOR_REVIEW: t('admin.statusUnderReview'),
+      RETURNED: t('admin.statusReturned'),
+      APPROVED: t('admin.statusApproved'),
+      ARCHIVED: t('admin.statusArchived')
     };
     return (
       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${styles[status] || 'bg-(--surface-tertiary) text-(--text-primary)'}`}>
@@ -228,232 +174,155 @@ function ProjectsSection({ lang, api }) {
     );
   };
 
-  const collaboratorsTotal = projects.content.reduce((a, p) => a + (p.collaboratorCount ?? 0), 0);
-  const papersTotal = projects.content.reduce((a, p) => a + (p.papersProcessed ?? 0), 0);
-  const completionAvg = projects.content.length
-    ? Math.round(projects.content.reduce((a, p) => a + (p.completionRate ?? 0), 0) / projects.content.length)
-    : 0;
-
   const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—';
+
+  const projects = projectsQuery.data || { content: [], page: 0, totalElements: 0, totalPages: 0 };
+  const loading = projectsQuery.isLoading;
+  const error = projectsQuery.error;
+  const instructors = (instructorsQuery.data || []).filter((u) => u.role === 'INSTRUCTOR');
+  const detailMembers = detailMembersQuery.data || [];
+  const detailDocs = detailDocsQuery.data || [];
+  const detailSections = detailSectionsQuery.data || [];
+  const sourceDocs = detailDocs.filter((d) => d.docType === 'SOURCE');
+  const members = membersQuery.data || [];
+  const allUsers = allUsersQuery.data || [];
 
   return (
     <div className="p-8 space-y-6 bg-(--page-bg)">
-      {/* Title Area */}
+      {/* Header — title left, metric badge right */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-(--border) pb-5">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{lang.projects}</h1>
-          <p className="text-gray-550 text-xs mt-1">{lang.projectsSub}</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{t('admin.projects')}</h1>
+          <p className="text-gray-550 text-xs mt-1">{t('admin.projectsSub')}</p>
         </div>
+        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-(--surface) border border-(--border) text-xs font-bold text-(--text-secondary) self-start sm:self-auto">
+          {t('admin.totalProjectsInline', { count: projects.totalElements ?? 0 })}
+        </span>
       </div>
 
-      {/* Mini KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Active */}
-        <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col justify-between h-28">
-          <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">TOTAL PROJECTS</span>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-3xl font-extrabold text-(--text-primary)">{projects.totalElements ?? '—'}</span>
-          </div>
-        </div>
-
-        {/* Collaborators */}
-        <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col justify-between h-28">
-          <div className="flex justify-between items-start">
-            <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">COLLABORATORS</span>
-            <svg className="w-4 h-4 text-(--text-tertiary)" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-          </div>
-          <span className="text-3xl font-extrabold text-(--text-primary) mt-1">{collaboratorsTotal}</span>
-        </div>
-
-        {/* Papers Processed */}
-        <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col justify-between h-28">
-          <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">PAPERS PROCESSED</span>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-3xl font-extrabold text-(--text-primary)">{papersTotal}</span>
-          </div>
-        </div>
-
-        {/* Completion Rate */}
-        <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col justify-between h-28">
-          <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">COMPLETION RATE</span>
-          <span className="text-3xl font-extrabold text-(--text-primary) mt-1">{completionAvg}%</span>
-        </div>
-      </div>
-
-      {/* Filter and Search Bar */}
       <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
         <div className="flex flex-1 w-full gap-3 items-center">
-          {/* Search Input */}
-          <div className="flex-1 relative">
-            <svg className="w-4 h-4 text-(--text-tertiary) absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input 
-              type="text" 
-              placeholder="Search projects..." 
-              value={q}
-              onChange={(e) => { setQ(e.target.value); setPage(0); }}
-              className="w-full pl-9 pr-4 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold" 
-            />
-          </div>
+          <input
+            type="text"
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setPage(0); }}
+            placeholder={t('admin.searchProjects')}
+            className="flex-1 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--brand)"
+          />
 
-          {/* Status Dropdown */}
-          <select 
-            value={statusFilter} 
+          <select
+            value={instructorFilter}
+            onChange={(e) => { setInstructorFilter(e.target.value); setPage(0); }}
+            aria-label={t('admin.filterByInstructor')}
+            className="w-44 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none cursor-pointer"
+          >
+            <option value="">{t('admin.allInstructors')}</option>
+            {instructors.map((u) => (
+              <option key={u.id} value={u.email}>
+                {u.firstName} {u.lastName} ({u.email})
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
+            aria-label={t('admin.filterByStatus')}
             className="w-36 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none cursor-pointer"
           >
-            <option value="">All Statuses</option>
-            <option value="CREATED">Created</option>
-            <option value="ASSIGNED">Assigned</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="SUBMITTED_FOR_REVIEW">Under Review</option>
-            <option value="RETURNED">Returned</option>
-            <option value="APPROVED">Approved</option>
-            <option value="ARCHIVED">Archived</option>
+            <option value="">{t('admin.allStatuses')}</option>
+            <option value="CREATED">{t('admin.statusCreated')}</option>
+            <option value="ASSIGNED">{t('admin.statusAssigned')}</option>
+            <option value="IN_PROGRESS">{t('admin.statusInProgress')}</option>
+            <option value="SUBMITTED_FOR_REVIEW">{t('admin.statusUnderReview')}</option>
+            <option value="RETURNED">{t('admin.statusReturned')}</option>
+            <option value="APPROVED">{t('admin.statusApproved')}</option>
+            <option value="ARCHIVED">{t('admin.statusArchived')}</option>
           </select>
         </div>
 
         <span className="text-xs text-(--text-tertiary) font-bold self-end sm:self-center shrink-0">
-          Showing {projects.content.length} of {projects.totalElements || projects.content.length} Projects
+          {t('admin.showingProjects', { shown: projects.content.length, total: projects.totalElements || projects.content.length })}
         </span>
       </div>
 
-      {error && <ErrorBlock msg={error} onRetry={() => fetch(page, new AbortController().signal)} />}
+      {error && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3 rounded-xl text-xs font-semibold flex items-center justify-between">
+          <span>{error.message || t('admin.loadFailed')}</span>
+          <button onClick={() => projectsQuery.refetch()} className="text-rose-800 underline">{t('admin.retry')}</button>
+        </div>
+      )}
 
-      {/* Table Card */}
       <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border) overflow-hidden">
         <div className="overflow-x-auto">
           <table data-guide="projects-table" className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-(--surface-secondary) text-(--text-tertiary) font-bold uppercase border-b border-(--border-light)">
-                <th className="px-6 py-3.5 font-bold tracking-wider">Project Title</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider">Instructor</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider">Collaborators</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider">Papers</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider">Completion</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider">Status</th>
-                <th className="px-6 py-3.5 font-bold tracking-wider text-right">Actions</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.projectTitle')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.totalMembers')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.totalSources')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.projectStatus')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.lastUpdate')}</th>
+                <th className="px-6 py-3.5 font-bold tracking-wider text-right">{t('admin.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-(--border-light) text-(--text-primary) font-semibold">
               {loading ? Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} className="animate-pulse">{Array.from({ length: 7 }).map((_, j) => (
+                <tr key={i} className="animate-pulse">{Array.from({ length: 6 }).map((_, j) => (
                   <td key={j} className="px-6 py-5"><div className="h-4 bg-gray-200 rounded w-full" /></td>
                 ))}</tr>
               )) : projects.content.length === 0 ? (
-                <tr><td colSpan={7} className="px-6 py-12 text-center text-(--text-tertiary) font-medium">No projects found</td></tr>
-              ) : projects.content.map(p => {
-                const projCode = p.projCode || '—';
+                <tr><td colSpan={6} className="px-6 py-12 text-center text-(--text-tertiary) font-medium">{t('admin.noProjects')}</td></tr>
+              ) : projects.content.map(p => (
+                <tr key={p.id} className="hover:bg-(--surface-secondary)/50 transition">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <ProjectAvatar name={p.title} size="w-9 h-9" />
+                      <span className="font-bold text-(--text-primary) max-w-xs truncate">{p.title}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-(--text-secondary) font-bold">{p.collaboratorCount ?? '—'}</td>
+                  <td className="px-6 py-4 text-(--text-secondary) font-bold">{p.totalSources ?? '—'}</td>
+                  <td className="px-6 py-4">{getStatusBadge(p.status)}</td>
+                  <td className="px-6 py-4 text-(--text-secondary) font-semibold whitespace-nowrap">{fmtDate(p.updatedAt)}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button onClick={() => { setDetailProject(p); setDetailTab('members'); }} title={t('admin.viewDetails')} className="p-1.5 rounded-lg hover:bg-(--surface-tertiary) text-(--text-secondary) hover:text-(--text-primary) transition cursor-pointer">
+                        <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </button>
 
-                return (
-                  <tr key={p.id} className="hover:bg-(--surface-secondary)/50 transition">
-                    {/* Project Title */}
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-(--text-primary) max-w-xs truncate">{p.title}</span>
-                        <span className="text-[10px] text-(--text-tertiary) font-bold mt-0.5">{projCode}</span>
-                      </div>
-                    </td>
+                      <button onClick={() => { setActiveProject(p); setShowMembersModal(true); setSelectedUser(''); setMemberErr(''); }} title={t('admin.manageMembers')} className="p-1.5 rounded-lg hover:bg-(--surface-tertiary) text-blue-600 hover:text-blue-800 transition cursor-pointer">
+                        <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                          <circle cx="9" cy="7" r="4" />
+                          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                      </button>
 
-                    {/* Principal Investigator with Avatar */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-white font-bold shrink-0 bg-(--surface-secondary)0">
-                          {(p.instructorName || '?').charAt(0).toUpperCase()}
-                        </div>
-                        <span className="text-(--text-primary) font-semibold">{p.instructorName || '—'}</span>
-                      </div>
-                    </td>
-
-                    {/* Collaborators */}
-                    <td className="px-6 py-4 text-(--text-secondary) font-bold">
-                      {p.collaboratorCount ?? '—'}
-                    </td>
-
-                    {/* Papers */}
-                    <td className="px-6 py-4 text-(--text-secondary) font-bold">
-                      {p.papersProcessed ?? '—'}
-                    </td>
-
-                    {/* Completion */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 h-1.5 bg-(--surface-secondary) rounded-full overflow-hidden">
-                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, p.completionRate ?? 0)}%` }} />
-                        </div>
-                        <span className="text-(--text-secondary) font-bold">{p.completionRate ?? 0}%</span>
-                      </div>
-                    </td>
-
-                    {/* Status badge */}
-                    <td className="px-6 py-4">
-                      {getStatusBadge(p.status)}
-                    </td>
-
-                    {/* Actions icons */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {/* View Details Icon */}
-                        <button onClick={() => openDetail(p)} title="View Project Details" className="p-1.5 rounded-lg hover:bg-(--surface-tertiary) text-(--text-secondary) hover:text-(--text-primary) transition cursor-pointer">
+                      {p.status === 'ARCHIVED' && (
+                        <button onClick={() => unarchiveMutation.mutate(p)} title={t('admin.unarchiveTitle')} className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 hover:text-emerald-800 transition cursor-pointer">
                           <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                           </svg>
                         </button>
-
-                        {/* Manage Members Icon */}
-                        <button onClick={() => handleOpenMembers(p)} title="Manage Members" className="p-1.5 rounded-lg hover:bg-(--surface-tertiary) text-blue-600 hover:text-blue-800 transition cursor-pointer">
-                          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                            <circle cx="9" cy="7" r="4" />
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                          </svg>
-                        </button>
-
-                        {/* Unarchive Icon (Restore to Active) */}
-                        {p.status === 'ARCHIVED' && (
-                          <button onClick={() => doUnarchive(p)} title="Unarchive Project (Restore to Active)" className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 hover:text-emerald-800 transition cursor-pointer">
-                            <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                          </button>
-                        )}
-
-                        {/* Delete Icon */}
-                        <DeleteConfirm
-                          message={lang.confirmDeleteProject}
-                          onConfirm={() => handleDelete(p)}
-                          triggerLabel={lang.delete}
-                          confirmLabel={lang.delete}
-                          cancelLabel={lang.cancel}
-                          className="p-1.5 rounded-lg hover:bg-(--surface-tertiary) text-rose-600 hover:text-rose-800 transition cursor-pointer"
-                        >
-                          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                            <path d="M3 6h18" />
-                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                          </svg>
-                        </DeleteConfirm>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
-        {/* Footer / Pagination */}
         <div className="flex items-center justify-between px-6 py-3.5 border-t border-(--border-light) bg-(--surface-secondary)/50 text-xs font-semibold text-(--text-secondary)">
           {projects.totalPages > 1 ? (
             <>
               <div className="flex items-center gap-1.5">
-                <button onClick={() => setPage(page - 1)} disabled={page === 0}
-                  className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
+                <button onClick={() => setPage(page - 1)} disabled={page === 0} className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                   </svg>
@@ -462,262 +331,214 @@ function ProjectsSection({ lang, api }) {
                   if (i === 0 || i === projects.totalPages - 1 || (i >= page - 1 && i <= page + 1)) {
                     const isActive = page === i;
                     return (
-                      <button key={i} onClick={() => setPage(i)}
-                        className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold transition ${isActive ? 'bg-[#1e3a8a] text-white shadow-sm' : 'border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary)'}`}>
-                        {i + 1}
-                      </button>
+                      <button key={i} onClick={() => setPage(i)} className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold transition ${isActive ? 'bg-[#1e3a8a] text-white shadow-sm' : 'border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary)'}`}>{i + 1}</button>
                     );
                   } else if (i === 1 || i === projects.totalPages - 2) {
                     return <span key={i} className="text-(--text-tertiary) text-xs px-0.5">...</span>;
                   }
                   return null;
                 })}
-                <button onClick={() => setPage(page + 1)} disabled={page >= projects.totalPages - 1}
-                  className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
+                <button onClick={() => setPage(page + 1)} disabled={page >= projects.totalPages - 1} className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
               </div>
-              <span>Page {page + 1} of {projects.totalPages}</span>
+              <span>{t('admin.pageOf', { page: page + 1, total: projects.totalPages })}</span>
             </>
           ) : (
             <>
               <div className="w-1" />
-              <span>Page 1 of 1</span>
+              <span>{t('admin.pageOf', { page: 1, total: 1 })}</span>
             </>
           )}
         </div>
       </div>
 
-      {/* Project Detail Modal Overlay */}
+      {/* Project Detail Modal — max-w-4xl, tabbed, no nested modals */}
       {detailProject && (
         <div className="fixed inset-0 z-55 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-(--surface) rounded-2xl shadow-2xl w-full max-w-2xl border border-gray-150 overflow-hidden transform scale-100 transition-all duration-300 max-h-[90vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="bg-(--surface-secondary) border-b border-gray-150 px-6 py-4 flex items-center justify-between">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2.5">
-                  <h3 className="font-bold text-(--text-primary) text-sm truncate">{detailProject.title}</h3>
-                  {getStatusBadge(detailProject.status)}
+          <div className="bg-(--surface) rounded-2xl shadow-2xl w-full max-w-4xl border border-gray-150 overflow-hidden transform scale-100 transition-all duration-300 max-h-[90vh] flex flex-col">
+            <div className="bg-(--surface-secondary) border-b border-gray-150 px-6 py-4 flex items-center justify-between shrink-0">
+              <div className="min-w-0 flex items-center gap-3">
+                <ProjectAvatar name={detailProject.title} size="w-10 h-10" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2.5">
+                    <h3 className="font-bold text-(--text-primary) text-sm truncate">{detailProject.title}</h3>
+                    {getStatusBadge(detailProject.status)}
+                  </div>
+                  <p className="text-(--text-tertiary) text-[10px] mt-0.5 font-mono truncate">{detailProject.id}</p>
                 </div>
-                <p className="text-(--text-tertiary) text-[10px] mt-0.5 font-mono truncate">{detailProject.id}</p>
               </div>
-              <button
-                onClick={() => setDetailProject(null)}
-                className="text-(--text-tertiary) hover:text-(--text-secondary) transition cursor-pointer shrink-0"
-              >
+              <button onClick={() => setDetailProject(null)} className="text-(--text-tertiary) hover:text-(--text-secondary) transition cursor-pointer shrink-0">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-6 space-y-5 overflow-y-auto">
-              {/* General Information */}
-              <div>
-                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-3">General Information</span>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  <div>
-                    <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Instructor</span>
-                    <span className="font-bold text-(--text-primary)">{detailProject.instructorName || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Target Standard</span>
-                    <span className="font-bold text-(--text-primary)">{detailProject.targetStandard || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Created</span>
-                    <span className="font-bold text-(--text-primary)">{fmtDate(detailProject.createdAt)}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Collaborators</span>
-                    <span className="font-bold text-(--text-primary)">{detailProject.collaboratorCount ?? 0}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Papers Processed</span>
-                    <span className="font-bold text-(--text-primary)">{detailProject.papersProcessed ?? 0}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Completion Rate</span>
-                    <span className="font-bold text-(--text-primary)">{detailProject.completionRate ?? 0}%</span>
-                  </div>
+              {/* Project Description */}
+              <p className="text-sm text-(--text-secondary) leading-relaxed">
+                {detailProject.description || t('admin.projectDescriptionEmpty')}
+              </p>
+
+              {/* Header metadata strip — no "General Information" wrapper */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 border-y border-(--border) py-4">
+                <div>
+                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('admin.projectStatus')}</span>
+                  <span className="font-bold text-(--text-primary)">{getStatusBadge(detailProject.status)}</span>
                 </div>
-                <div className="mt-4">
-                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-1">Description</span>
-                  <p className="bg-(--surface-secondary) border border-(--border) rounded-xl px-3 py-2 font-semibold text-(--text-primary)">
-                    {detailProject.description || 'No description provided.'}
-                  </p>
+                <div>
+                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('admin.standard')}</span>
+                  <span className="font-bold text-(--text-primary)">{detailProject.targetStandard || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('admin.createDate')}</span>
+                  <span className="font-bold text-(--text-primary)">{fmtDate(detailProject.createdAt)}</span>
                 </div>
               </div>
 
-              {/* Project Structure */}
-              <div>
-                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block mb-3">Project Structure</span>
-                {detailLoading ? (
-                  <div className="animate-pulse space-y-2 py-4">
-                    <div className="h-8 bg-gray-200 rounded w-full" />
-                    <div className="h-8 bg-gray-200 rounded w-full" />
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Members */}
-                    <div>
-                      <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-1.5">Members ({detailMembers.length})</span>
-                      {detailMembers.length === 0 ? (
-                        <p className="text-xs text-(--text-tertiary) italic border border-dashed border-(--border) rounded-xl px-3 py-2 bg-(--surface-secondary)/20">No members assigned.</p>
-                      ) : (
-                        <div className="divide-y divide-(--border-light) border border-(--border) rounded-xl overflow-hidden bg-(--surface)">
-                          {detailMembers.map(m => (
-                            <div key={m.id} className="px-4 py-2 flex items-center justify-between text-xs">
-                              <div className="min-w-0">
-                                <p className="font-bold text-(--text-primary) truncate">{(m.firstName || '') + ' ' + (m.lastName || '')}</p>
-                                <p className="text-[10px] text-(--text-tertiary) font-mono mt-0.5 truncate">{m.email}</p>
-                              </div>
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold border shrink-0 ml-3 ${
-                                m.role === 'INSTRUCTOR'
-                                  ? 'bg-amber-50 text-amber-700 border-amber-100'
-                                  : m.role === 'LEADER'
-                                  ? 'bg-blue-50 text-blue-700 border-blue-100'
-                                  : 'bg-(--surface-secondary) text-(--text-secondary) border-(--border-light)'
-                              }`}>
-                                {m.role}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+              <Tabs
+                value={detailTab}
+                onChange={setDetailTab}
+                tabs={[
+                  { key: 'members', label: t('admin.tabMembers'), count: detailMembers.length },
+                  { key: 'sources', label: t('admin.tabSources'), count: sourceDocs.length },
+                  { key: 'sections', label: t('admin.tabSections'), count: detailSections.length },
+                ]}
+              />
 
-                    {/* Documents */}
-                    <div>
-                      <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block mb-1.5">Documents ({detailDocs.length})</span>
-                      {detailDocs.length === 0 ? (
-                        <p className="text-xs text-(--text-tertiary) italic border border-dashed border-(--border) rounded-xl px-3 py-2 bg-(--surface-secondary)/20">No documents in this project.</p>
-                      ) : (
-                        <div className="divide-y divide-(--border-light) border border-(--border) rounded-xl overflow-hidden bg-(--surface) max-h-56 overflow-y-auto">
-                          {detailDocs.map(d => (
-                            <div key={d.id} className="px-4 py-2 flex items-center justify-between gap-3 text-xs">
-                              <div className="min-w-0">
-                                <p className="font-bold text-(--text-primary) truncate">{d.title || d.originalFilename || 'Untitled'}</p>
-                                <p className="text-[10px] text-(--text-tertiary) font-medium mt-0.5 truncate">{d.docType || ''}{d.doi ? ` · ${d.doi}` : ''}</p>
-                              </div>
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold border shrink-0 ${
-                                ['COMPLETED', 'READY'].includes(d.processingStatus)
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                  : ['FAILED', 'PARTIAL'].includes(d.processingStatus)
-                                  ? 'bg-rose-50 text-rose-700 border-rose-100'
-                                  : ['PROCESSING', 'QUEUED'].includes(d.processingStatus)
-                                  ? 'bg-amber-50 text-amber-700 border-amber-100'
-                                  : 'bg-(--surface-secondary) text-(--text-secondary) border-(--border-light)'
-                              }`}>
-                                {d.processingStatus || '—'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+              <div className="max-h-[40vh] overflow-y-auto border border-(--border) rounded-xl bg-(--surface)">
+                {detailTab === 'members' && (
+                  detailMembersQuery.isLoading ? (
+                    <div className="p-4 space-y-2 animate-pulse">
+                      <div className="h-10 bg-gray-200 rounded" />
+                      <div className="h-10 bg-gray-200 rounded" />
                     </div>
-                  </div>
+                  ) : detailMembers.length === 0 ? (
+                    <p className="p-6 text-center text-xs text-(--text-tertiary) italic">{t('admin.noMembers')}</p>
+                  ) : (
+                    <ul className="divide-y divide-(--border-light)">
+                      {detailMembers.map((m) => (
+                        <li key={m.id || m.userId} className="px-4 py-3 flex items-center gap-3 text-xs">
+                          <MemberAvatar email={m.email} firstName={m.firstName} lastName={m.lastName} />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-(--text-primary) truncate">{m.firstName} {m.lastName}</p>
+                            <p className="text-[10px] text-(--text-tertiary) font-mono truncate">{m.email}</p>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-(--surface-secondary) text-(--text-secondary) border border-(--border) shrink-0">{m.role}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                )}
+
+                {detailTab === 'sources' && (
+                  detailDocsQuery.isLoading ? (
+                    <div className="p-4 space-y-2 animate-pulse">
+                      <div className="h-10 bg-gray-200 rounded" />
+                      <div className="h-10 bg-gray-200 rounded" />
+                    </div>
+                  ) : sourceDocs.length === 0 ? (
+                    <p className="p-6 text-center text-xs text-(--text-tertiary) italic">{t('admin.noSources')}</p>
+                  ) : (
+                    <ul className="divide-y divide-(--border-light)">
+                      {sourceDocs.map((d) => (
+                        <li key={d.id} className="px-4 py-3 flex items-center gap-3 text-xs">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-(--text-primary) truncate">{d.title || d.originalFilename}</p>
+                            <p className="text-[10px] text-(--text-tertiary) font-mono truncate">{d.doi || d.originalFilename || '—'}</p>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-(--surface-secondary) text-(--text-secondary) border border-(--border) shrink-0">{d.processingStatus || '—'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                )}
+
+                {detailTab === 'sections' && (
+                  detailSectionsQuery.isLoading ? (
+                    <div className="p-4 space-y-2 animate-pulse">
+                      <div className="h-10 bg-gray-200 rounded" />
+                      <div className="h-10 bg-gray-200 rounded" />
+                    </div>
+                  ) : detailSections.length === 0 ? (
+                    <p className="p-6 text-center text-xs text-(--text-tertiary) italic">{t('admin.noSections')}</p>
+                  ) : (
+                    <ul className="divide-y divide-(--border-light)">
+                      {detailSections.map((s) => (
+                        <li key={s.id} className="px-4 py-3 flex items-center gap-3 text-xs">
+                          <span className="font-mono text-[10px] text-(--text-tertiary) w-6 shrink-0 text-right">#{s.sectionOrder}</span>
+                          <p className="font-bold text-(--text-primary) truncate flex-1">{s.sectionTitle || t('admin.untitledSection')}</p>
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-(--surface-secondary) text-(--text-secondary) border border-(--border) shrink-0">{t('admin.revN', { n: s.revision ?? 0 })}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )
                 )}
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="bg-(--surface-secondary) px-6 py-3.5 border-t border-gray-150 flex items-center justify-end">
-              <button
-                onClick={() => setDetailProject(null)}
-                className="px-4 py-2 bg-[#0c162e] hover:bg-[#152447] text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
-              >
-                Close
-              </button>
+            <div className="bg-(--surface-secondary) px-6 py-3.5 border-t border-gray-150 flex items-center justify-end shrink-0">
+              <button onClick={() => setDetailProject(null)} className="px-4 py-2 bg-[#0c162e] hover:bg-[#152447] text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer">{t('admin.close')}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Workspace Membership Management Modal Overlay */}
+      {/* Membership Management Modal — flat, no nested modals */}
       {showMembersModal && activeProject && (
         <div className="fixed inset-0 z-55 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <div className="bg-(--surface) rounded-2xl shadow-2xl w-full max-w-lg border border-gray-150 overflow-hidden transform scale-100 transition-all duration-300">
-            {/* Modal Header */}
             <div className="bg-(--surface-secondary) border-b border-gray-150 px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-(--text-primary) text-sm">Manage Workspace Members</h3>
+                <h3 className="font-bold text-(--text-primary) text-sm">{t('admin.manageWorkspaceMembers')}</h3>
                 <p className="text-(--text-tertiary) text-[10px] mt-0.5 truncate max-w-xs">{activeProject.title}</p>
               </div>
-              <button 
-                onClick={() => setShowMembersModal(false)}
-                className="text-(--text-tertiary) hover:text-(--text-secondary) transition cursor-pointer"
-              >
+              <button onClick={() => setShowMembersModal(false)} className="text-(--text-tertiary) hover:text-(--text-secondary) transition cursor-pointer">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-6 space-y-5">
-              {/* Form to add a new member */}
-              <form onSubmit={doAddMember} className="bg-(--surface-secondary)/50 border border-(--border) rounded-xl p-4.5 space-y-3">
-                <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block">Add Workspace Member</span>
-                
+              <form
+                onSubmit={(e) => { e.preventDefault(); if (!selectedUser) { setMemberErr(t('admin.selectUserFirst')); return; } setMemberErr(''); addMemberMutation.mutate({ projectId: activeProject.id, userId: selectedUser, role: selectedRole }); }}
+                className="bg-(--surface-secondary)/50 border border-(--border) rounded-xl p-4.5 space-y-3"
+              >
+                <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block">{t('admin.addWorkspaceMember')}</span>
                 <div className="flex flex-col sm:flex-row gap-3">
-                  {/* Select User */}
-                  <div className="flex-1">
-                    <select 
-                      value={selectedUser} 
-                      onChange={e => setSelectedUser(e.target.value)} 
-                      className="w-full px-3 py-2 bg-(--surface) border border-gray-255 rounded-xl font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs cursor-pointer"
-                    >
-                      <option value="">{lang.chooseUserAccounts}</option>
-                      {allUsers
-                        .filter(u => u.role === 'STUDENT' && !members.some(m => m.userId === u.id))
-                        .map(u => (
-                          <option key={u.id} value={u.id}>
-                            {u.firstName} {u.lastName} ({u.email} - {u.role})
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-
-                  {/* Select Project Role */}
-                  <div className="w-full sm:w-36">
-                    <select 
-                      value={selectedRole} 
-                      onChange={e => setSelectedRole(e.target.value)} 
-                      className="w-full px-3 py-2 bg-(--surface) border border-gray-255 rounded-xl font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs cursor-pointer"
-                    >
-                      <option value="MEMBER">Member</option>
-                      <option value="LEADER">Leader</option>
-                    </select>
-                  </div>
-
-                  <button 
-                    type="submit" 
-                    className="px-4 py-2 bg-[#0c162e] hover:bg-[#152447] text-white rounded-xl text-xs font-bold transition shadow-sm shrink-0 cursor-pointer"
-                  >
-                    Add
+                  <select value={selectedUser} onChange={e => setSelectedUser(e.target.value)} className="flex-1 px-3 py-2 bg-(--surface) border border-gray-255 rounded-xl font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs cursor-pointer">
+                    <option value="">{t('admin.chooseUserAccounts')}</option>
+                    {allUsers
+                      .filter(u => u.role === 'STUDENT' && !members.some(m => m.userId === u.id))
+                      .map(u => (
+                        <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email} - {u.role})</option>
+                      ))}
+                  </select>
+                  <select value={selectedRole} onChange={e => setSelectedRole(e.target.value)} className="w-full sm:w-36 px-3 py-2 bg-(--surface) border border-gray-255 rounded-xl font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs cursor-pointer">
+                    <option value="MEMBER">{t('admin.member')}</option>
+                    <option value="LEADER">{t('admin.leader')}</option>
+                  </select>
+                  <button type="submit" disabled={addMemberMutation.isPending} className="px-4 py-2 bg-[#0c162e] hover:bg-[#152447] text-white rounded-xl text-xs font-bold transition shadow-sm shrink-0 cursor-pointer disabled:opacity-50">
+                    {t('admin.add')}
                   </button>
                 </div>
               </form>
 
               {memberErr && <div className="text-xs text-rose-700 bg-rose-50 p-2.5 rounded-lg border border-rose-100 font-semibold">{memberErr}</div>}
 
-              {/* Members List */}
               <div className="space-y-2">
-                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">Current Members ({members.length})</span>
-                
-                {membersLoading ? (
+                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('admin.currentMembers', { n: members.length })}</span>
+                {membersQuery.isLoading ? (
                   <div className="animate-pulse space-y-2 py-4">
-                    <div className="h-8 bg-gray-200 rounded w-full"></div>
-                    <div className="h-8 bg-gray-200 rounded w-full"></div>
+                    <div className="h-8 bg-gray-200 rounded w-full" />
+                    <div className="h-8 bg-gray-200 rounded w-full" />
                   </div>
                 ) : members.length === 0 ? (
-                  <div className="text-xs text-(--text-tertiary) py-6 text-center italic border border-dashed border-gray-255 rounded-xl bg-(--surface-secondary)/20">
-                    No members assigned to this project workspace.
-                  </div>
+                  <div className="text-xs text-(--text-tertiary) py-6 text-center italic border border-dashed border-gray-255 rounded-xl bg-(--surface-secondary)/20">{t('admin.noMembersWorkspace')}</div>
                 ) : (
                   <div className="divide-y divide-gray-150 border border-(--border) rounded-xl max-h-56 overflow-y-auto bg-(--surface)">
                     {members.map(m => (
@@ -728,34 +549,29 @@ function ProjectsSection({ lang, api }) {
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           {m.role === 'INSTRUCTOR' ? (
-                            <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-amber-50 text-amber-700 border-amber-100">
-                              {m.role}
-                            </span>
+                            <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-amber-50 text-amber-700 border-amber-100">{m.role}</span>
                           ) : (
                             <select
                               value={m.role}
-                              onChange={e => doUpdateMemberRole(m.userId, e.target.value)}
-                              disabled={updatingMemberId !== null}
-                              aria-label={`${lang.role}: ${m.firstName} ${m.lastName}`}
+                              onChange={e => { setUpdatingMemberId(m.userId); updateRoleMutation.mutate({ projectId: activeProject.id, userId: m.userId, role: e.target.value }); }}
+                              disabled={updatingMemberId !== null || updateRoleMutation.isPending}
                               className="cursor-pointer rounded-lg border border-(--border) bg-(--surface) px-2 py-1 text-[10px] font-bold text-(--text-secondary) outline-none transition focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              <option value="MEMBER">Member</option>
-                              <option value="LEADER">Leader</option>
+                              <option value="MEMBER">{t('admin.member')}</option>
+                              <option value="LEADER">{t('admin.leader')}</option>
                             </select>
                           )}
                           {m.role !== 'INSTRUCTOR' && (
-                            <DeleteConfirm
-                              message={lang.confirmRemoveMember}
-                              onConfirm={() => doRemoveMember(m.userId)}
-                              triggerLabel={lang.delete}
-                              confirmLabel={lang.delete}
-                              cancelLabel={lang.cancel}
-                              className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition cursor-pointer"
+                            <button
+                              onClick={() => removeMemberMutation.mutate({ projectId: activeProject.id, userId: m.userId })}
+                              disabled={removeMemberMutation.isPending}
+                              title={t('admin.delete')}
+                              className="p-1 text-(--text-tertiary) hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer disabled:opacity-50"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                               </svg>
-                            </DeleteConfirm>
+                            </button>
                           )}
                         </div>
                       </div>
@@ -765,44 +581,14 @@ function ProjectsSection({ lang, api }) {
               </div>
             </div>
 
-            {/* Modal Footer */}
             <div className="bg-(--surface-secondary) px-6 py-3.5 border-t border-gray-150 flex items-center justify-end">
-              <button 
-                onClick={() => setShowMembersModal(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
-              >
-                Close
-              </button>
+              <button onClick={() => setShowMembersModal(false)} className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer">{t('admin.close')}</button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Custom Toast Notification Popup */}
-      {toast && (
-        <div className="fixed top-4 right-4 z-55 flex items-center gap-2.5 px-4.5 py-3 rounded-2xl shadow-xl border animate-slide-in-right bg-(--surface) border-(--border-light)">
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-            toast.type === 'error' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
-          }`}>
-            {toast.type === 'error' ? (
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-          </div>
-          <span className="text-xs font-bold text-(--text-primary)">{toast.message}</span>
-        </div>
-      )}
-
-      {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
     </div>
   );
 }
-
-
 
 export { ProjectsSection };

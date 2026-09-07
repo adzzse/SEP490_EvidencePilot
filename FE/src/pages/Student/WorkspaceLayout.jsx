@@ -280,31 +280,44 @@ export default function WorkspaceLayout() {
     return true;
   };
 
-  const openFeedback = requestId => {
+  const openFeedback = (requestId, feedbackId = null, items = feedback.items) => {
+    const target = feedbackId && items.find(item => String(item.id) === String(feedbackId));
+    if (target) return handleSelectFeedback(target);
+    if (feedbackId) { showToast(t('studentFeedback.reviewUnavailable')); return false; }
     setFeedbackRequestId(requestId || null);
     setFeedbackScope('project');
     setFeedbackOpen(true);
+    return true;
   };
 
   const reviewLink = new URLSearchParams(location.search).get('review');
+  const feedbackLink = new URLSearchParams(location.search).get('feedback');
   useEffect(() => {
     if (!reviewLink || feedback.loading || !feedback.requests.some(round => round.id === reviewLink)) return;
-    openFeedback(reviewLink);
+    if (feedbackLink && !feedback.items.some(item => String(item.id) === String(feedbackLink))) return;
+    openFeedback(reviewLink, feedbackLink);
     const search = new URLSearchParams(location.search);
     search.delete('review');
+    search.delete('feedback');
     navigate({ pathname: location.pathname, search: search.toString() }, { replace: true });
-  }, [reviewLink, feedback.loading, feedback.requests, location.pathname, location.search, navigate]);
+  }, [reviewLink, feedbackLink, feedback.loading, feedback.requests, feedback.items, location.pathname, location.search, navigate]);
 
   const handleOpenNotification = async notification => {
-    if (!['INSTRUCTOR_FEEDBACK_ADDED', 'REVIEW_STATUS_CHANGED'].includes(notification.actionType)) return;
+    if (!['INSTRUCTOR_FEEDBACK_ADDED', 'REVIEW_STATUS_CHANGED', 'REVIEW_RETURNED', 'INSTRUCTOR_FEEDBACK_PUBLISHED'].includes(notification.actionType)) return;
     try {
       const response = await api.get('/api/feedback-requests');
       const round = (response.data || []).find(item => item.id === notification.entityId);
       if (!round) { showToast(t('studentFeedback.reviewUnavailable')); return; }
-      if (String(round.projectId) === String(project?.id)) openFeedback(round.id);
+      if (String(round.projectId) === String(project?.id)) {
+        const items = await feedback.refresh();
+        if (!items || String(projectRef.current?.id) !== String(round.projectId)) return;
+        if (!await openFeedback(round.id, notification.feedbackId, items)) return;
+      }
       else {
         if (dirtySectionsRef.current.has(selectedSectionIdRef.current) && !window.confirm(t('unsavedPaperSwitch'))) return;
-        navigate(`/student/projects/${encodeURIComponent(round.projectId)}?review=${encodeURIComponent(round.id)}`);
+        const query = new URLSearchParams({ review: round.id });
+        if (notification.feedbackId) query.set('feedback', notification.feedbackId);
+        navigate(`/student/projects/${encodeURIComponent(round.projectId)}?${query.toString()}`);
       }
       setShowNotifications(false);
     } catch { showToast(t('studentFeedback.loadError')); }

@@ -11,7 +11,6 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
@@ -32,7 +31,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @SpringBootTest
-@TestPropertySource(properties = "app.password-reset.url=https://app.test/reset")
+@TestPropertySource(properties = {
+        "app.password-reset.url=https://app.test/reset",
+        "app.mail.from=test@example.com"
+})
 class PasswordResetConcurrencyIntegrationTest {
 
     @Autowired
@@ -63,6 +65,7 @@ class PasswordResetConcurrencyIntegrationTest {
         User user = saveUser(UserRole.STUDENT, AccountStatus.ACTIVE);
         AtomicInteger sends = new AtomicInteger();
         CountDownLatch secondSend = new CountDownLatch(1);
+        when(mail.createMimeMessage()).thenReturn(new jakarta.mail.internet.MimeMessage((jakarta.mail.Session) null));
         doAnswer(invocation -> {
             if (sends.incrementAndGet() == 1) {
                 secondSend.await(1, TimeUnit.SECONDS);
@@ -70,7 +73,7 @@ class PasswordResetConcurrencyIntegrationTest {
                 secondSend.countDown();
             }
             return null;
-        }).when(mail).send(any(SimpleMailMessage.class));
+        }).when(mail).send(any(jakarta.mail.internet.MimeMessage.class));
 
         runTogether(
                 () -> service.requestReset(user.getEmail()),

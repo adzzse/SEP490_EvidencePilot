@@ -336,8 +336,8 @@ export default function Projects() {
                     <th className="px-6 py-3.5 font-bold">{t.projectName}</th>
                     <th className="px-6 py-3.5 font-bold">{t.targetStandardLabel}</th>
                     <th className="px-6 py-3.5 font-bold">{t.roleLabel}</th>
-                    <th className="px-6 py-3.5 font-bold">Status</th>
-                    <th className="px-6 py-3.5 font-bold text-right">Action</th>
+                    <th className="px-6 py-3.5 font-bold">{ct.status}</th>
+                    <th className="px-6 py-3.5 font-bold text-right">{ct.actions}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-(--border) text-(--text-primary) font-medium">

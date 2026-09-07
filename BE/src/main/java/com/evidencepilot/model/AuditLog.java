@@ -8,6 +8,8 @@ import org.hibernate.annotations.JdbcTypeCode;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import com.evidencepilot.model.enums.AuditSeverity;
+
 @Entity
 @Table(name = "audit_logs")
 @Getter
@@ -25,6 +27,10 @@ public class AuditLog {
 
     @Column(nullable = false, length = 50)
     private String action;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AuditSeverity severity = AuditSeverity.INFO;
 
     @Column(name = "entity_type", nullable = false, length = 50)
     private String entityType;

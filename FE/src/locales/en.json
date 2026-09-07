@@ -11,6 +11,9 @@
     "thisSection": "This section",
     "wholeProject": "Whole project",
     "filter": "Reply status",
+    "threadFilter": "Thread state",
+    "open": "Open",
+    "done": "Done",
     "filters": "Filters",
     "all": "All feedback",
     "unanswered": "Unanswered",
@@ -28,6 +31,9 @@
     "original": "View original passage",
     "goToText": "Go to passage",
     "reply": "Student reply",
+    "conversation": "Feedback conversation",
+    "you": "You",
+    "done": "This feedback thread is marked done.",
     "replyHint": "Sending a reply does not save your draft or mark the feedback as resolved.",
     "replyConflict": "This feedback changed. Refresh and check the existing reply before retrying.",
     "replyUnavailable": "Replies are available to the assigned student while this review is returned and the project is editable.",
@@ -105,7 +111,14 @@
   "back": "Back",
   "confirm": "Confirm",
   "noData": "No data found",
-
+  "evidenceStrength": "Evidence strength",
+  "evidenceStrengthBreakdown": "Evidence strength breakdown",
+  "hideReviewHighlights": "Hide review highlights",
+  "showReviewHighlights": "Show review highlights",
+  "viewFullPaper": "View full paper",
+  "searchMedia": "Search media...",
+  "pageNotFound": "Page Not Found",
+  "unsavedSectionsBlockSubmission": "{{count}} section(s) have unsaved changes. Save before submitting.",
   "sources": "Sources",
   "feedback": "Feedback",
   "info": "Info",
@@ -116,8 +129,7 @@
   "history": "History",
   "feedbacks": "feedbacks",
   "paperDrafts": "Paper Drafts",
-
-  "insertSource": "Insert Source",
+  "insertSource": "Insert source",
   "fromDOI": "From DOI",
   "fromFile": "From File",
   "doiPlusFile": "DOI + File",
@@ -138,7 +150,6 @@
   "failedToAddSource": "Failed to add source.",
   "doiLookupFailed": "DOI lookup failed.",
   "oaPdfAvailable": "Open Access PDF available",
-
   "sections": "Sections",
   "noSections": "No sections yet.",
   "uploadNewPaper": "Upload new paper",
@@ -151,7 +162,6 @@
   "readOnly": "Read-only (unassigned)",
   "noContent": "No content.",
   "noPaper": "Select a paper from the file panel to start editing.",
-
   "scanCitations": "Scan Citations",
   "scanCitationsTitle": "Scan citations against project sources",
   "scanFormat": "Scan Format",
@@ -191,17 +201,14 @@
   "insertCitationHelp": "Insert a \\cite{...} command at the cursor using the citation key you enter.",
   "insertFigure": "Insert figure",
   "insertTable": "Insert table",
-
   "preview": "Preview",
   "noContentToPreview": "No content to preview.",
-
   "mediaAssets": "Media Assets",
   "noMedia": "No media uploaded.",
   "uploadMedia": "Upload media",
   "mediaUploaded": "Media uploaded.",
   "mediaDeleted": "Media deleted.",
   "mediaInserted": "Inserted",
-
   "notifications": "Notifications",
   "noNotifications": "No notifications yet.",
   "versionHistory": "Undo previous save",
@@ -209,18 +216,15 @@
   "noPreviousSave": "There is no previous save to restore yet.",
   "previousSave": "Previous save",
   "currentVersion": "(current)",
-
   "darkMode": "Dark Mode",
   "lightMode": "Light Mode",
   "language": "Language",
   "switchToEnglish": "Switch to English",
   "switchToVietnamese": "Switch to Vietnamese",
-
   "uploadFailed": "Upload failed.",
   "deleteFailed": "Delete failed.",
   "deleteConfirm": "Delete this source?",
   "deleteMediaConfirm": "Delete this media?",
-
   "undoHeader": "Item permanently deleted",
   "undoHeaderUser": "User account permanently deleted",
   "undoCaution": "Caution: This action will become permanent once the countdown expires.",
@@ -229,16 +233,13 @@
   "undoLabel": "Undo",
   "undoRemaining": "({seconds}s remaining)",
   "dismissLabel": "Dismiss",
-
   "downloadedTex": "Downloaded .tex",
-
   "export": "Export",
   "exportTex": "Export as TEX (.zip)",
   "exportTraceability": "Traceability Report (JSON)",
   "exportTraceabilityCsv": "Traceability Report (CSV)",
   "exportFailed": "Export failed.",
   "exportLocked": "Export is available once the project is Approved or Archived",
-
   "tour": {
     "filePanel": "Sections",
     "filePanelDesc": "Choose a paper and a section assigned to you; its content opens in the editor.",
@@ -337,16 +338,15 @@
   "created": "Created",
   "category": "Category",
   "summary": "Summary",
-  "pdfPreview": "PDF preview"
-  ,"coverage": "Coverage"
-  ,"insertSource": "Insert source"
-  ,"working": "Working..."
-  ,"fileUrlUnavailable": "File URL is not available."
-  ,"unknown": "Unknown"
-  ,"instructor": "Instructor"
-  ,"sectionLabel": "Section {{name}}"
-  ,"myAnswer": "My answer: {{answer}}"
-  ,"status": {
+  "pdfPreview": "PDF preview",
+  "coverage": "Coverage",
+  "working": "Working...",
+  "fileUrlUnavailable": "File URL is not available.",
+  "unknown": "Unknown",
+  "instructor": "Instructor",
+  "sectionLabel": "Section {{name}}",
+  "myAnswer": "My answer: {{answer}}",
+  "status": {
     "DRAFT": "Draft",
     "ASSIGNED": "Assigned",
     "IN_PROGRESS": "In progress",
@@ -358,80 +358,80 @@
     "COMPLETED": "Completed",
     "ARCHIVED": "Archived",
     "PENDING": "Pending"
-  }
-  ,"unsavedSectionSwitch": "You have unsaved changes in this section. Switch anyway?"
-  ,"unsavedPaperSwitch": "You have unsaved changes. Switch paper anyway?"
-  ,"unsavedChanges": "You have unsaved changes."
-  ,"aiEvaluationFailed": "AI evaluation failed."
-  ,"readOnlySection": "This section is read-only."
-  ,"exportReady": "Export is ready for download."
-  ,"newNotification": "New notification"
-  ,"markNotificationFailed": "Failed to mark notification as read."
-  ,"paperArchiveDownloaded": "Downloaded paper archive."
-  ,"uploadingFile": "Uploading {{name}}..."
-  ,"paperUploaded": "Paper uploaded."
-  ,"deletePaperConfirm": "Delete this draft?"
-  ,"paperDeleted": "Paper deleted."
-  ,"projectLocked": "Project is locked."
-  ,"sourceDeleted": "Source deleted."
-  ,"selectSectionFirst": "Select a section first."
-  ,"restoreConfirm": "Replace the current content with the previous save? Unsaved edits will be lost, and a new revision will be created."
-  ,"versionRestored": "Previous save restored as a new revision."
-  ,"restoreFailed": "Restore failed."
-  ,"noSectionSelected": "No section selected."
-  ,"traceabilityDownloaded": "Downloaded traceability report."
-  ,"traceabilityCsvDownloaded": "Downloaded traceability CSV."
-  ,"selectPaperFirst": "Select a paper first."
-  ,"formatScanFailed": "Format scan failed."
-  ,"aiReviewComplete": "Citation Review complete."
-  ,"aiReviewPartial": "Citation Review partially completed: {{failedBatches}} batch(es) could not be reviewed."
-  ,"aiProviderRateLimited": "The AI provider is rate limiting requests. Please retry later."
-  ,"aiWorkerUnavailable": "The Citation Review worker is unavailable or timed out."
-  ,"aiInvalidResponse": "Citation Review returned an invalid response after retrying."
-  ,"aiReviewFailed": "Citation Review failed. Please retry."
-  ,"saveSubmissionCancelled": "Save failed — submission cancelled."
-  ,"submittedForReview": "Submitted for review."
-  ,"submitFailed": "Submission failed."
-  ,"replacedAll": "Replaced all."
-  ,"notFound": "Not found."
-  ,"notFoundMessage": "The page you are looking for does not exist or has been moved."
-  ,"backToHome": "Back to Home"
-  ,"submitReviewDescription": "This will lock your paper while the instructor reviews it. You can edit again if the instructor returns it. Continue?"
-  ,"sectionAssigned": "Section assigned."
-  ,"sectionUnassigned": "Section unassigned."
-  ,"assignFailed": "Assignment failed."
-  ,"versionLabel": "Version {{version}}"
-  ,"currentVersionLabel": "Version {{version}} (current)"
-  ,"updatedAtLabel": "Updated at: {{date}}"
-  ,"citationReview": "Citation Review"
-  ,"reviewing": "Reviewing..."
-  ,"runReview": "Review"
-  ,"citationReviewDescription": "Save the current section, find statements that may need citations, then show highlights and related sources for you to verify."
-  ,"reviewStale": "The section changed after this review. Rerun the review for current highlights; unchanged excerpts can still receive citations."
-  ,"openCitationReviewFindings": "Open {{count}} Citation Review findings"
-  ,"rerunReview": "Review again"
-  ,"previousFinding": "Previous finding"
-  ,"nextFinding": "Next finding"
-  ,"citationFindingDiscrepancy": "Source discrepancy"
-  ,"citationFindingNoEvidence": "No supporting evidence"
-  ,"citationFindingNeedsReview": "Review needed"
-  ,"findingConfidence": "Alert confidence: {{level}}"
-  ,"confidenceHigh": "High"
-  ,"confidenceMedium": "Medium"
-  ,"confidenceLow": "Low"
-  ,"flaggedExcerpt": "Flagged excerpt"
-  ,"reviewConclusion": "Conclusion"
-  ,"reviewEvidence": "Evidence"
-  ,"relationSupports": "Supports"
-  ,"relationContradicts": "Contradicts"
-  ,"relationNotFound": "Not found"
-  ,"searchingRelatedSources": "Searching related project sources..."
-  ,"retrievalSimilarity": "Retrieval similarity {{score}}%"
-  ,"retrievalSimilarityHelp": "Semantic retrieval similarity only; this is not citation accuracy or evidence strength."
-  ,"reviewLimitations": "Review limitations"
-  ,"sectionNotReviewed": "This section has not been reviewed yet."
-  ,"citationInserted": "Citation inserted"
-  ,"relatedSources": "Related sources",
+  },
+  "unsavedSectionSwitch": "You have unsaved changes in this section. Switch anyway?",
+  "unsavedPaperSwitch": "You have unsaved changes. Switch paper anyway?",
+  "unsavedChanges": "You have unsaved changes.",
+  "aiEvaluationFailed": "AI evaluation failed.",
+  "readOnlySection": "This section is read-only.",
+  "exportReady": "Export is ready for download.",
+  "newNotification": "New notification",
+  "markNotificationFailed": "Failed to mark notification as read.",
+  "paperArchiveDownloaded": "Downloaded paper archive.",
+  "uploadingFile": "Uploading {{name}}...",
+  "paperUploaded": "Paper uploaded.",
+  "deletePaperConfirm": "Delete this draft?",
+  "paperDeleted": "Paper deleted.",
+  "projectLocked": "Project is locked.",
+  "sourceDeleted": "Source deleted.",
+  "selectSectionFirst": "Select a section first.",
+  "restoreConfirm": "Replace the current content with the previous save? Unsaved edits will be lost, and a new revision will be created.",
+  "versionRestored": "Previous save restored as a new revision.",
+  "restoreFailed": "Restore failed.",
+  "noSectionSelected": "No section selected.",
+  "traceabilityDownloaded": "Downloaded traceability report.",
+  "traceabilityCsvDownloaded": "Downloaded traceability CSV.",
+  "selectPaperFirst": "Select a paper first.",
+  "formatScanFailed": "Format scan failed.",
+  "aiReviewComplete": "Citation Review complete.",
+  "aiReviewPartial": "Citation Review partially completed: {{failedBatches}} batch(es) could not be reviewed.",
+  "aiProviderRateLimited": "The AI provider is rate limiting requests. Please retry later.",
+  "aiWorkerUnavailable": "The Citation Review worker is unavailable or timed out.",
+  "aiInvalidResponse": "Citation Review returned an invalid response after retrying.",
+  "aiReviewFailed": "Citation Review failed. Please retry.",
+  "saveSubmissionCancelled": "Save failed — submission cancelled.",
+  "submittedForReview": "Submitted for review.",
+  "submitFailed": "Submission failed.",
+  "replacedAll": "Replaced all.",
+  "notFound": "Not found.",
+  "notFoundMessage": "The page you are looking for does not exist or has been moved.",
+  "backToHome": "Back to Home",
+  "submitReviewDescription": "This will lock your paper while the instructor reviews it. You can edit again if the instructor returns it. Continue?",
+  "sectionAssigned": "Section assigned.",
+  "sectionUnassigned": "Section unassigned.",
+  "assignFailed": "Assignment failed.",
+  "versionLabel": "Version {{version}}",
+  "currentVersionLabel": "Version {{version}} (current)",
+  "updatedAtLabel": "Updated at: {{date}}",
+  "citationReview": "Citation Review",
+  "reviewing": "Reviewing...",
+  "runReview": "Review",
+  "citationReviewDescription": "Save the current section, find statements that may need citations, then show highlights and related sources for you to verify.",
+  "reviewStale": "The section changed after this review. Rerun the review for current highlights; unchanged excerpts can still receive citations.",
+  "openCitationReviewFindings": "Open {{count}} Citation Review findings",
+  "rerunReview": "Review again",
+  "previousFinding": "Previous finding",
+  "nextFinding": "Next finding",
+  "citationFindingDiscrepancy": "Source discrepancy",
+  "citationFindingNoEvidence": "No supporting evidence",
+  "citationFindingNeedsReview": "Review needed",
+  "findingConfidence": "Alert confidence: {{level}}",
+  "confidenceHigh": "High",
+  "confidenceMedium": "Medium",
+  "confidenceLow": "Low",
+  "flaggedExcerpt": "Flagged excerpt",
+  "reviewConclusion": "Conclusion",
+  "reviewEvidence": "Evidence",
+  "relationSupports": "Supports",
+  "relationContradicts": "Contradicts",
+  "relationNotFound": "Not found",
+  "searchingRelatedSources": "Searching related project sources...",
+  "retrievalSimilarity": "Retrieval similarity {{score}}%",
+  "retrievalSimilarityHelp": "Semantic retrieval similarity only; this is not citation accuracy or evidence strength.",
+  "reviewLimitations": "Review limitations",
+  "sectionNotReviewed": "This section has not been reviewed yet.",
+  "citationInserted": "Citation inserted",
+  "relatedSources": "Related sources",
   "sourceEvidence": "Sources and evidence",
   "usedInConclusion": "Used in conclusion",
   "checkedInReview": "Checked",
@@ -448,112 +448,621 @@
   "chunkLabel": "Extracted chunk {{index}}",
   "extractedPassageNotice": "This is extracted source text. Use Original file to inspect the document itself.",
   "passageQuoteNotLocated": "The selected quote was not found verbatim in this chunk; the full chunk is shown.",
-  "noEvidenceInSources": "No evidence found in project sources."
-  ,"noRelatedSources": "No related project sources found."
-  ,"insertCitation": "Insert citation"
-  ,"noCitationFindings": "No statements requiring citations were found in this section."
-  ,"retrySourceSearch": "Retry source search"
-  ,"sourceSearchFailed": "The citation review succeeded, but related-source search failed."
-  ,"reviewSectionChanged": "The saved section or source corpus changed while Citation Review was running. Save and run it again."
-  ,"reviewExcerptChanged": "This excerpt changed or is ambiguous. Run Citation Review again."
-  ,"citationAlreadyInserted": "This source citation is already next to the excerpt."
-  ,"cachedReviewFailed": "Could not load the cached review for this section."
-  ,"unknown": "Unknown"
-  ,"projectForbiddenTitle": "Access denied"
-  ,"projectForbiddenMessage": "You do not have permission to open this project."
-  ,"projectNotFoundTitle": "Project not found"
-  ,"projectNotFoundMessage": "This project does not exist or its identifier is invalid."
-  ,"projectLoadErrorTitle": "Could not load this project"
-  ,"projectLoadErrorMessage": "Something went wrong while loading the project. Please try again."
-  ,"backToProjects": "Back to projects"
-  ,"retry": "Retry"
-  ,"tracesLoadFailed": "Failed to load evidence traces."
-  ,"traceDecisionSaved": "Decision saved."
-  ,"traceSectionChanged": "The section changed. Please run Citation Review again before deciding."
-  ,"traceAlreadyJudged": "The instructor has already judged this trace. Continue changes in a new review round."
-  ,"traceSectionNotChanged": "Save a section change before recording this action. Use Dismiss with reason if no edit is needed."
-  ,"traceSectionVersionChanged": "The section changed again. Reload it and select the revised passage again."
-  ,"traceDecisionConflict": "This trace can no longer be updated. Refresh and try again."
-  ,"traceDecisionFailed": "Failed to save the decision. Try again."
-  ,"revisedPassageSelectionRequired": "Select the revised passage in the editor before saving. For Remove, place the cursor where the text was deleted."
-  ,"runReviewAgain": "Run Citation Review again"
-  ,"editTraceDecision": "Edit decision"
-  ,"recordTraceDecision": "Record decision"
-  ,"studentAction": "Action"
-  ,"selectAction": "Select action..."
-  ,"bindSource": "Bind source"
-  ,"selectSource": "Select source..."
-  ,"evidenceQuote": "Evidence quote"
-  ,"explanation": "Explanation"
-  ,"explanationPlaceholder": "Required: explain what you changed or why the current citation is already appropriate..."
-  ,"citationInsertTraceExplanation": "Inserted a citation from {{source}} for this finding."
-  ,"reviewCompletedStatus": "Review completed"
-  ,"savedTraceStatus": "Saved trace history"
-  ,"sourceMatchesLoadingStatus": "Source matches loading"
-  ,"sourceMatchesFailedStatus": "Source matches failed"
-  ,"sourceMatchesReadyStatus": "Source matches ready"
-  ,"sourceMatchesUnavailableStatus": "Source matches not loaded"
-  ,"aiComparisonReadyStatus": "AI comparison available"
-  ,"aiComparisonPendingStatus": "AI comparison not available"
-  ,"savedTraceDecisions": "Saved decisions"
-  ,"notAddressed": "Not addressed"
-  ,"aiAdvisory": "AI advisory"
-  ,"instructorJudgment": "Instructor judgment"
-  ,"traceJudgedLocked": "Locked after instructor judgment"
-  ,"saveDecision": "Save decision"
-  ,"requirements": "Requirements"
-  ,"selfCheckLoadFailed": "Could not load the section requirements."
-  ,"selfCheckCompleted": "Section self-check completed."
-  ,"selfCheckFailed": "The section self-check failed. Please try again."
-  ,"handoffConfirmed": "This saved section version is confirmed for handoff."
-  ,"handoffRevoked": "Section handoff confirmation removed."
-  ,"handoffFailed": "Could not update the section handoff."
-  ,"handoffInputChanged": "This section changed in another session. Reload and review the saved content before confirming it."
-  ,"selectSectionForRequirements": "Select a section to view its requirements."
-  ,"selfCheckAdvisory": "AI feedback is advisory. It checks each requirement separately and never decides whether the project may be submitted for instructor review."
-  ,"saveBeforeSelfCheck": "Save this section first. Self-check and handoff always use the saved version."
-  ,"sectionRequirements": "Section requirements"
-  ,"checkingRequirements": "Checking..."
-  ,"checkAgain": "Check again"
-  ,"checkRequirements": "Check content"
-  ,"requirementsNotConfigured": "The instructor has not configured requirements for this section."
-  ,"selfCheckSystemError": "The AI result could not be validated. No academic conclusion was recorded."
-  ,"selfCheckStale": "This result belongs to an older section version. Run the check again to refresh it."
-  ,"selfCheckVerdictMET": "Met"
-  ,"selfCheckVerdictPARTIAL": "Partially met"
-  ,"selfCheckVerdictNOT_MET": "Not met"
-  ,"selfCheckVerdictUNVERIFIABLE": "Cannot verify"
-  ,"reason": "Reason"
-  ,"missingContent": "Missing"
-  ,"suggestion": "Suggestion"
-  ,"limitations": "Limitations"
-  ,"sectionHandoff": "Section handoff"
-  ,"handoffDescription": "Confirm only that your assigned section's current saved version is ready to hand off. This is not an academic-quality approval."
-  ,"handoffConfirmedDescription": "Confirmed by {{name}} for the current saved version."
-  ,"handoffStateConfirmed": "Confirmed"
-  ,"handoffStateUnconfirmed": "Not confirmed"
-  ,"handoffAssigneeOnly": "Only the assigned student can confirm this section."
-  ,"handoffBlocked": "Complete the section body and assignment requirements before confirming."
-  ,"revokeHandoff": "Remove confirmation"
-  ,"confirmHandoff": "Confirm saved version"
-  ,"readinessLoadFailed": "Could not load review-submission readiness."
-  ,"submissionInputChanged": "The project changed after this checklist was loaded. Review the updated conditions and submit again."
-  ,"submitReadinessDescription": "Submission is enabled only when every objective project condition passes. AI self-check results are not submission conditions."
-  ,"unsavedSectionsBlockSubmission_one": "There is {{count}} section with unsaved changes. Save it before submitting."
-  ,"unsavedSectionsBlockSubmission_other": "There are {{count}} sections with unsaved changes. Save them before submitting."
-  ,"reviewReady": "Ready to submit for review"
-  ,"reviewNotReady": "Not ready to submit"
-  ,"leaderSubmissionOnly": "Only the project leader can submit the review round."
-  ,"submissionChecks": "Objective submission conditions"
-  ,"reviewCheckProjectEditable": "The project is in an editable submission state."
-  ,"reviewCheckInstructorAssigned": "An instructor is assigned to the project."
-  ,"reviewCheckPaperPresent": "At least one active paper is present."
-  ,"reviewCheckPaperReady": "Every active paper has completed processing."
-  ,"reviewCheckSectionsPresent": "Every active paper contains at least one section."
-  ,"reviewCheckSectionBodyPresent": "Every active section has saved content."
-  ,"reviewCheckAssigneeValid": "Every active section is assigned to an active student member."
-  ,"reviewCheckSectionConfirmed": "Every active section's current saved version is confirmed by its assignee."
-  ,"sectionBlockerBodyMissing": "This section has no saved content."
-  ,"sectionBlockerAssigneeInvalid": "This section has no active student assignee."
-  ,"sectionBlockerHandoffMissing": "The assignee has not confirmed this saved version."
+  "noEvidenceInSources": "No evidence found in project sources.",
+  "noRelatedSources": "No related project sources found.",
+  "noCitationFindings": "No statements requiring citations were found in this section.",
+  "retrySourceSearch": "Retry source search",
+  "sourceSearchFailed": "The citation review succeeded, but related-source search failed.",
+  "reviewSectionChanged": "The saved section or source corpus changed while Citation Review was running. Save and run it again.",
+  "reviewExcerptChanged": "This excerpt changed or is ambiguous. Run Citation Review again.",
+  "citationAlreadyInserted": "This source citation is already next to the excerpt.",
+  "cachedReviewFailed": "Could not load the cached review for this section.",
+  "projectForbiddenTitle": "Access denied",
+  "projectForbiddenMessage": "You do not have permission to open this project.",
+  "projectNotFoundTitle": "Project not found",
+  "projectNotFoundMessage": "This project does not exist or its identifier is invalid.",
+  "projectLoadErrorTitle": "Could not load this project",
+  "projectLoadErrorMessage": "Something went wrong while loading the project. Please try again.",
+  "backToProjects": "Back to projects",
+  "tracesLoadFailed": "Failed to load evidence traces.",
+  "traceDecisionSaved": "Decision saved.",
+  "traceSectionChanged": "The section changed. Please run Citation Review again before deciding.",
+  "traceAlreadyJudged": "The instructor has already judged this trace. Continue changes in a new review round.",
+  "traceSectionNotChanged": "Save a section change before recording this action. Use Dismiss with reason if no edit is needed.",
+  "traceSectionVersionChanged": "The section changed again. Reload it and select the revised passage again.",
+  "traceDecisionConflict": "This trace can no longer be updated. Refresh and try again.",
+  "traceDecisionFailed": "Failed to save the decision. Try again.",
+  "revisedPassageSelectionRequired": "Select the revised passage in the editor before saving. For Remove, place the cursor where the text was deleted.",
+  "runReviewAgain": "Run Citation Review again",
+  "editTraceDecision": "Edit decision",
+  "recordTraceDecision": "Record decision",
+  "studentAction": "Action",
+  "selectAction": "Select action...",
+  "bindSource": "Bind source",
+  "selectSource": "Select source...",
+  "evidenceQuote": "Evidence quote",
+  "explanation": "Explanation",
+  "explanationPlaceholder": "Required: explain what you changed or why the current citation is already appropriate...",
+  "citationInsertTraceExplanation": "Inserted a citation from {{source}} for this finding.",
+  "reviewCompletedStatus": "Review completed",
+  "savedTraceStatus": "Saved trace history",
+  "sourceMatchesLoadingStatus": "Source matches loading",
+  "sourceMatchesFailedStatus": "Source matches failed",
+  "sourceMatchesReadyStatus": "Source matches ready",
+  "sourceMatchesUnavailableStatus": "Source matches not loaded",
+  "aiComparisonReadyStatus": "AI comparison available",
+  "aiComparisonPendingStatus": "AI comparison not available",
+  "savedTraceDecisions": "Saved decisions",
+  "notAddressed": "Not addressed",
+  "aiAdvisory": "AI advisory",
+  "instructorJudgment": "Instructor judgment",
+  "traceJudgedLocked": "Locked after instructor judgment",
+  "saveDecision": "Save decision",
+  "requirements": "Requirements",
+  "selfCheckLoadFailed": "Could not load the section requirements.",
+  "selfCheckCompleted": "Section self-check completed.",
+  "selfCheckFailed": "The section self-check failed. Please try again.",
+  "handoffConfirmed": "This saved section version is confirmed for handoff.",
+  "handoffRevoked": "Section handoff confirmation removed.",
+  "handoffFailed": "Could not update the section handoff.",
+  "handoffInputChanged": "This section changed in another session. Reload and review the saved content before confirming it.",
+  "selectSectionForRequirements": "Select a section to view its requirements.",
+  "selfCheckAdvisory": "AI feedback is advisory. It checks each requirement separately and never decides whether the project may be submitted for instructor review.",
+  "saveBeforeSelfCheck": "Save this section first. Self-check and handoff always use the saved version.",
+  "sectionRequirements": "Section requirements",
+  "checkingRequirements": "Checking...",
+  "checkAgain": "Check again",
+  "checkRequirements": "Check content",
+  "requirementsNotConfigured": "The instructor has not configured requirements for this section.",
+  "selfCheckSystemError": "The AI result could not be validated. No academic conclusion was recorded.",
+  "selfCheckStale": "This result belongs to an older section version. Run the check again to refresh it.",
+  "selfCheckVerdictMET": "Met",
+  "selfCheckVerdictPARTIAL": "Partially met",
+  "selfCheckVerdictNOT_MET": "Not met",
+  "selfCheckVerdictUNVERIFIABLE": "Cannot verify",
+  "reason": "Reason",
+  "missingContent": "Missing",
+  "suggestion": "Suggestion",
+  "sectionHandoff": "Section handoff",
+  "handoffDescription": "Confirm only that your assigned section's current saved version is ready to hand off. This is not an academic-quality approval.",
+  "handoffConfirmedDescription": "Confirmed by {{name}} for the current saved version.",
+  "handoffStateConfirmed": "Confirmed",
+  "handoffStateUnconfirmed": "Not confirmed",
+  "handoffAssigneeOnly": "Only the assigned student can confirm this section.",
+  "handoffBlocked": "Complete the section body and assignment requirements before confirming.",
+  "revokeHandoff": "Remove confirmation",
+  "confirmHandoff": "Confirm saved version",
+  "readinessLoadFailed": "Could not load review-submission readiness.",
+  "submissionInputChanged": "The project changed after this checklist was loaded. Review the updated conditions and submit again.",
+  "submitReadinessDescription": "Submission is enabled only when every objective project condition passes. AI self-check results are not submission conditions.",
+  "unsavedSectionsBlockSubmission_one": "There is {{count}} section with unsaved changes. Save it before submitting.",
+  "unsavedSectionsBlockSubmission_other": "There are {{count}} sections with unsaved changes. Save them before submitting.",
+  "reviewReady": "Ready to submit for review",
+  "reviewNotReady": "Not ready to submit",
+  "leaderSubmissionOnly": "Only the project leader can submit the review round.",
+  "submissionChecks": "Objective submission conditions",
+  "reviewCheckProjectEditable": "The project is in an editable submission state.",
+  "reviewCheckInstructorAssigned": "An instructor is assigned to the project.",
+  "reviewCheckPaperPresent": "At least one active paper is present.",
+  "reviewCheckPaperReady": "Every active paper has completed processing.",
+  "reviewCheckSectionsPresent": "Every active paper contains at least one section.",
+  "reviewCheckSectionBodyPresent": "Every active section has saved content.",
+  "reviewCheckAssigneeValid": "Every active section is assigned to an active student member.",
+  "reviewCheckSectionConfirmed": "Every active section's current saved version is confirmed by its assignee.",
+  "sectionBlockerBodyMissing": "This section has no saved content.",
+  "sectionBlockerAssigneeInvalid": "This section has no active student assignee.",
+  "sectionBlockerHandoffMissing": "The assignee has not confirmed this saved version.",
+  "admin": {
+    "dashboard": "Dashboard",
+    "users": "Users",
+    "papers": "Documents",
+    "audit": "Audit Logs",
+    "infra": "Infrastructure",
+    "notifications": "Notifications",
+    "settings": "System Settings",
+    "adminPanel": "Admin Panel",
+    "profile": "Profile",
+    "signOut": "Sign Out",
+    "totalUsers": "Total Users",
+    "activeProjects": "Active Projects",
+    "activeDocuments": "Active Documents",
+    "students": "Students",
+    "instructors": "Instructors",
+    "admins": "Admins",
+    "sourceFiles": "source files",
+    "paperDocs": "paper docs",
+    "categories": "categories",
+    "collections": "Collections",
+    "userAccounts": "User Accounts",
+    "createUser": "Create User",
+    "sendInvitation": "Send Invitation",
+    "sending": "Sending...",
+    "invitationSent": "Invitation sent successfully.",
+    "email": "Email",
+    "fullName": "Full Name",
+    "role": "Role",
+    "status": "Status",
+    "actions": "Actions",
+    "active": "Active",
+    "banned": "Banned",
+    "ban": "Ban",
+    "activate": "Activate",
+    "resetPassword": "Reset Password",
+    "delete": "Delete",
+    "saving": "Saving...",
+    "resetSent": "Reset email sent",
+    "resetFailed": "Reset failed",
+    "noUsers": "No users found",
+    "noLogs": "No audit logs found",
+    "auditLogs": "Audit Logs",
+    "timestamp": "Timestamp",
+    "actor": "Actor",
+    "action": "Action",
+    "entity": "Entity",
+    "details": "Details",
+    "papersOverview": "Documents Overview",
+    "drafts": "Drafts",
+    "submitted": "Submitted",
+    "inReview": "In Review",
+    "published": "Published",
+    "rejected": "Rejected",
+    "systemHealth": "System Health",
+    "storage": "Storage",
+    "uptime": "Uptime",
+    "services": "Services",
+    "online": "Online",
+    "offline": "Offline",
+    "broadcast": "Broadcast Notification",
+    "message": "Message",
+    "send": "Send",
+    "targetRole": "Target Role",
+    "all": "All",
+    "sent": "Sent",
+    "appName": "Application Name",
+    "save": "Save",
+    "saved": "Saved",
+    "maintenance": "Maintenance Mode",
+    "total": "total",
+    "prev": "Prev",
+    "next": "Next",
+    "page": "Page",
+    "loadFailed": "Failed to load data",
+    "retry": "Retry",
+    "langSwitch": "Tiếng Việt",
+    "copyright": "Evidence Pilot © 2026. All rights reserved.",
+    "tourGuide": "Guide",
+    "guide": "Tour Guide",
+    "processGuide": "Process Guide",
+    "createNew": "Create New",
+    "filter": "Filter",
+    "close": "Close",
+    "firstName": "First Name",
+    "lastName": "Last Name",
+    "cancel": "Cancel",
+    "password": "Password",
+    "confirmDelete": "Delete this user?",
+    "userDeleted": "User deleted",
+    "undoHeader": "Item permanently deleted",
+    "undoHeaderUser": "User account permanently deleted",
+    "undoCaution": "Caution: This action will become permanent once the countdown expires.",
+    "undoBodyTemplate": "The item {entityName}{entityDetails} was deleted{actorPart} at {timestamp}.",
+    "undoBodyTemplateUser": "The account for user {entityName}{entityDetails} was deleted{actorPart} at {timestamp}.",
+    "undoLabel": "Undo",
+    "undoRemaining": "({{seconds}}s remaining)",
+    "dismissLabel": "Dismiss",
+    "done": "Done",
+    "pipeline": "Pipeline",
+    "documentCount": "Document Count",
+    "admin": "Admin",
+    "searchPlaceholder": "Search data, logs, or infrastructure...",
+    "refreshLogs": "Refresh Logs",
+    "refreshMetrics": "Refresh Metrics",
+    "refreshQueue": "Refresh Queue",
+    "refreshing": "Refreshing...",
+    "adminUser": "Admin User",
+    "systemManager": "System Manager",
+    "loading": "Loading",
+    "collectionsLibrary": "Collections Library",
+    "failedDocuments": "Failed Documents",
+    "noDocuments": "No documents found",
+    "searchDocuments": "Search documents...",
+    "searchLogs": "Search logs by actor, entity or details...",
+    "userAll": "User: All",
+    "actionAll": "Action: All",
+    "actionUpdated": "Action: Updated",
+    "actionCreated": "Action: Created",
+    "actionBanned": "Action: Banned",
+    "title": "Title",
+    "project": "Project",
+    "author": "Author",
+    "recentDocuments": "Recent Documents",
+    "noPipelineData": "No document pipeline data available",
+    "footerTagline": "EvidencePilot Admin v2.4.1. Crafted for academic excellence and data integrity.",
+    "usersSub": "Manage institutional access and user permissions across the Evidence Pilot ecosystem.",
+    "projectsSub": "Central terminal for managing all active and archived academic research initiatives.",
+    "papersSub": "Manage and monitor research paper progress across all active projects.",
+    "auditSub": "Review system activities and security events across the platform.",
+    "healthSub": "Real-time infrastructure monitoring and resource allocation.",
+    "queueSub": "Monitor and manage the document data extraction pipeline.",
+    "broadcastSub": "Send system-wide announcements or targeted messages to your research groups. Messages will appear in the user's notification center and as in-app banners.",
+    "collectionsSub": "Manage and organize research data clusters across your organization.",
+    "settingsSub": "Configure application parameters, categories, and review deployment variables.",
+    "papersBannerTitle": "Current Active Documents",
+    "papersBannerText": "Total volume across current session:",
+    "activeDocsLabel": "active documents",
+    "chooseUserAccounts": "-- Choose User Accounts --",
+    "showingLogs": "Showing {{shown}} of {{total}} logs",
+    "guideDashDesc": "Overview of the platform at a glance.",
+    "guideDashUsers": "Total registered users broken down by role.",
+    "guideDashProjects": "Active projects with categories and collections.",
+    "guideDashDocuments": "Total active documents including source files and paper docs.",
+    "guideDashOverviewProjects": "Active projects now live here, next to Collections in the Platform Overview panel.",
+    "activeProjectsHint": "live projects",
+    "guideDashStatus": "User status breakdown: active vs banned accounts.",
+    "guideDashDone": "Dashboard overview complete.",
+    "guideUsersDesc": "User management: create, ban, reset password, or delete accounts.",
+    "guideUsersCreate": "Create one Student or Instructor. The temporary password comes from the email.",
+    "guideUsersImport": "Upload one JSON file containing up to 200 users of one role.",
+    "guideUsersTable": "Lists users with email, name, student code, immutable role, status, and actions.",
+    "guideUsersActions": "Ban/activate, reset password, or delete a user.",
+    "guideUsersDone": "Users walkthrough complete.",
+    "guidePapersDesc": "Paper pipeline overview. Each card represents a stage.",
+    "guidePapersFlow": "Drafts → Submitted → In Review → Published → Rejected. Shows paper flow through the system.",
+    "guidePapersCount": "Total paper documents and source files in the system.",
+    "guidePapersDone": "Papers overview complete.",
+    "guideAuditDesc": "Audit trail of all system activities.",
+    "guideAuditFilter": "Filter logs by entity type, such as USER, PROJECT, and DOCUMENT.",
+    "guideAuditTable": "Each row shows when, who, what action, which entity, and changed values.",
+    "guideAuditDone": "Audit logs walkthrough complete.",
+    "guideInfraDesc": "Infrastructure health monitoring.",
+    "guideInfraServices": "Each service shows online/offline status. Red indicates attention needed.",
+    "guideInfraStorage": "Storage usage bar. Monitor capacity to avoid service disruption.",
+    "guideInfraDone": "Infrastructure overview complete.",
+    "guideNotifDesc": "Broadcast notifications to users.",
+    "guideNotifForm": "Type your message, select target role, and send. All users receive it in real-time.",
+    "guideNotifHistory": "Previously sent notifications appear here with timestamp and target role.",
+    "guideNotifDone": "Notifications walkthrough complete.",
+    "guideSettingsDesc": "System settings management.",
+    "guideSettingsForm": "Configure application name and other system preferences.",
+    "guideSettingsDone": "Settings walkthrough complete.",
+    "collapse": "Collapse",
+    "projects": "Projects",
+    "projectTitle": "Title",
+    "projectStatus": "Status",
+    "createdAt": "Created",
+    "noProjects": "No projects found",
+    "projectDeleted": "Project deleted",
+    "guideProjectsDesc": "View and manage all projects in the system.",
+    "guideProjectsTable": "Each row shows project title, status, and creation date. Admins can delete projects.",
+    "guideProjectsDone": "Projects walkthrough complete.",
+    "collectionCategories": "Collection Categories",
+    "categoryName": "Name",
+    "categoryDescription": "Description",
+    "sourceCategories": "Source Categories",
+    "categoryCode": "Code",
+    "addCategory": "Add Category",
+    "editCategory": "Edit Category",
+    "addCollectionCategory": "Add Collection Category",
+    "editCollectionCategory": "Edit Collection Category",
+    "saveChanges": "Save Changes",
+    "systemSettingsHint": "Read-only. Values are injected via environment variables and cannot be modified through the UI.",
+    "categoryNamePlaceholder": "e.g. Computer Science",
+    "categoryDescPlaceholder": "Describe this category group...",
+    "noCategories": "No categories",
+    "categorySaved": "Category saved",
+    "categoryDeleted": "Category deleted",
+    "guideCategoriesDesc": "Manage collection categories used to organize evidence collections.",
+    "guideCategoriesList": "List of all categories. Each shows name, description, and active status.",
+    "guideCategoriesForm": "Add or edit a category. Name is required, description is optional.",
+    "guideCategoriesDone": "Categories walkthrough complete.",
+    "systemConfig": "System Configuration",
+    "configKey": "Setting",
+    "configValue": "Value",
+    "configNote": "Read-only. Configured via environment variables.",
+    "guideConfigDesc": "View current system configuration values.",
+    "guideConfigTable": "Each row shows a setting name and its current value. Loaded at startup.",
+    "guideConfigDone": "Configuration walkthrough complete.",
+    "extractionQueue": "Extraction Queue",
+    "extractionStatus": "Status",
+    "queueSummary": "Queue Summary",
+    "noFailedDocuments": "No failed documents",
+    "queueRetry": "Retry",
+    "guideQueueDesc": "Monitor document extraction progress and retry failed jobs.",
+    "guideQueueCards": "Summary cards show counts per processing status.",
+    "guideQueueFailed": "List of failed documents. Click Retry to re-queue.",
+    "guideQueueDone": "Extraction queue walkthrough complete.",
+    "broadcastHistory": "Broadcast History",
+    "recipients": "Recipients",
+    "noBroadcastHistory": "No broadcast history",
+    "guideHistoryDesc": "View past broadcast notifications sent to users.",
+    "guideHistoryTable": "Each entry shows message, target role, recipient count, and sent time.",
+    "guideHistoryDone": "Broadcast history walkthrough complete.",
+    "instructor": "Instructor",
+    "sourceCount": "Sources",
+    "noCollections": "No collections found",
+    "guideCollectionsDesc": "Browse all instructor evidence collections.",
+    "guideCollectionsTable": "List of collections with instructor email and source count.",
+    "guideCollectionsDone": "Collections walkthrough complete.",
+    "searchUsers": "Search by email, name, or student code...",
+    "allRoles": "All Roles",
+    "allStatuses": "All Statuses",
+    "emailAddress": "Email Address",
+    "userRole": "User Role",
+    "studentCode": "Student Code",
+    "importUsers": "Import Users",
+    "jsonFile": "JSON file",
+    "importUsersHint": "Use { role, users } with one STUDENT or INSTRUCTOR role and no more than 200 users. Any invalid item cancels the entire import.",
+    "temporaryPasswordHint": "The temporary password is the lowercase part before @ in the email. The user will be prompted to change it after the first login.",
+    "importing": "Importing...",
+    "importSuccess": "Import complete: {{created}} created, {{updated}} updated.",
+    "importFailed": "Nothing was imported. Fix these errors and try again:",
+    "item": "Item",
+    "jsonFileRequired": "Select a .json file.",
+    "verifying": "Verifying",
+    "confirmPassword": "Confirm Password",
+    "passwordsNoMatch": "Passwords do not match.",
+    "passwordMin": "Password must be at least 8 characters.",
+    "verifyEmail": "Verify Email",
+    "verifyEmailHint": "Send a set-password link instead. The user sets their own password; password fields are disabled.",
+    "devBypass": "Dev bypass (local only)",
+    "devBypassHint": "Skip the invitation email and activate immediately with the fixed dev password. Never available in production.",
+    "resendInvitation": "Resend invitation",
+    "resendSent": "Invitation resent successfully.",
+    "resendFailed": "Failed to resend invitation.",
+    "downloadTemplate": "Download .xlsx template",
+    "xlsxFile": "Excel file (.xlsx)",
+    "xlsxFileRequired": "Select a .xlsx file.",
+    "preflightTitle": "Validation Summary",
+    "preflightRow": "Row",
+    "preflightValid": "{{n}} valid users ready to import.",
+    "preflightNoValid": "No valid rows to import.",
+    "cancelFixFile": "Cancel and Fix File",
+    "skipErrorsImport": "Skip Errors and Import {{n}} Valid Users",
+    "errInvalidCode": "Invalid Student Code format (expected AB123456)",
+    "errAdminRole": "Cannot import Admin roles",
+    "errEmail": "Invalid email address",
+    "errName": "First and last name are required",
+    "errDuplicate": "Duplicate email in file",
+    "errMissingCode": "Student code is required for STUDENT",
+    "guideUsersPassword": "Set an initial password, or check Verify Email to send a set-password link instead.",
+    "guideUsersVerify": "When checked, password fields are disabled and the new user receives a verification link.",
+    "guideUsersPreflight": "Rows are validated before sending. Fix the file or skip the flagged rows.",
+    "banUser": "Ban User",
+    "activateUser": "Activate User",
+    "deleteUser": "Delete User",
+    "showingUsers": "Showing {{shown}} of {{total}} users",
+    "unarchiveSuccess": "Project workspace unarchived and restored to active state!",
+    "unarchiveFailed": "Failed to unarchive project.",
+    "confirmDeleteProject": "Are you sure you want to delete this project?",
+    "projectDeletedSuccess": "Project deleted successfully!",
+    "memberAdded": "Member added successfully!",
+    "confirmRemoveMember": "Are you sure you want to remove this member?",
+    "memberRemoved": "Member removed successfully!",
+    "memberRoleUpdated": "Member role updated successfully!",
+    "memberLoadFailed": "Failed to load members or users list.",
+    "selectUserFirst": "Please select a user to add.",
+    "memberAddFailed": "Failed to add member. Double check if they are already in the project.",
+    "memberRemoveFailed": "Failed to remove member.",
+    "memberRoleUpdateFailed": "Failed to update member role.",
+    "confirmDeleteCollection": "Are you sure you want to delete this collection?",
+    "collectionDeleted": "Collection deleted successfully!",
+    "collectionDeleteFailed": "Failed to delete collection.",
+    "unnamedCollection": "Unnamed Collection",
+    "reQueueSuccess": "Document extraction job re-queued successfully!",
+    "reQueueFailed": "Failed to re-queue document.",
+    "errorDetails": "Error details",
+    "showingDocs": "Showing {{shown}} of {{total}} documents",
+    "notifMsgRequired": "Please enter a notification message.",
+    "broadcastSent": "Broadcast sent successfully!",
+    "broadcastFailed": "Failed to send broadcast.",
+    "draftSaved": "Draft saved successfully!",
+    "typeMsgFirst": "Please type a message first.",
+    "messageComposer": "Message Composer",
+    "notifBody": "Notification Body",
+    "recipientSegment": "Recipient Segment",
+    "urgencyLevel": "Urgency Level",
+    "allUsers": "All Users",
+    "studentsOpt": "Students",
+    "instructorsOpt": "Instructors",
+    "standard": "Standard",
+    "urgent": "Urgent",
+    "saveDraft": "Save Draft",
+    "sendBroadcast": "Send Broadcast",
+    "sending": "Sending...",
+    "announceDraftPlaceholder": "Draft your system announcement here...",
+    "delivered": "Delivered",
+    "searchHistory": "Search history...",
+    "sentAnnouncementTo": "Sent announcement to {{count}} active {{role}} accounts.",
+    "sentTo": "Sent to {{role}}.",
+    "settingsSaved": "System settings saved successfully!",
+    "categoryUpdated": "Category updated successfully!",
+    "categoryCreated": "Category created successfully!",
+    "categorySaveFailed": "Failed to save category.",
+    "categoryDeletedOk": "Category deleted successfully!",
+    "categoryDeleteFailed": "Failed to delete category.",
+    "envExported": "Environment file exported successfully!",
+    "confirmDeleteCategory": "Are you sure you want to delete this category?",
+    "secretLabel": "SECRET",
+    "internalLabel": "INTERNAL",
+    "publicLabel": "PUBLIC",
+    "navSearch": "Search functions...",
+    "myProfile": "My Profile",
+    "tourWelcomeTitle": "Welcome to Admin Panel",
+    "tourWelcomeDesc": "This guide will introduce the main features. Click \"Next\" to start.",
+    "tourSidebarTitle": "Sidebar Navigation",
+    "tourSidebarDesc": "Use the sidebar to switch between admin functions.",
+    "tourNavItemDesc": "Click to view {{label}}. Here you can manage and monitor related activities.",
+    "tourHeaderTitle": "Header Bar",
+    "tourHeaderDesc": "Contains language toggle, dark/light mode, guide, admin profile info, and sign out.",
+    "tourContentTitle": "Content Area",
+    "tourContentDesc": "Content for the selected function is displayed here.",
+    "tourFooterTitle": "Footer",
+    "tourFooterDesc": "Switch language between Vietnamese and English here.",
+    "tourReadyTitle": "Ready to Go",
+    "tourReadyDesc": "You're all set! Click \"Finish\" to start managing the system.",
+    "totalProjects": "Total Projects",
+    "totalProjectsInline": "Total Projects: {{count}}",
+    "totalProjectsSub": "Every research initiative across the platform in one place.",
+    "searchProjects": "Search projects...",
+    "filterByInstructor": "Filter by Instructor",
+    "filterByStatus": "Filter by Status",
+    "allInstructors": "All Instructors",
+    "allStatuses": "All Statuses",
+    "projectTitle": "Project Title",
+    "totalMembers": "Total Members",
+    "totalSources": "Total Sources",
+    "lastUpdate": "Last Update",
+    "showingProjects": "Showing {{shown}} of {{total}} projects",
+    "pageOf": "Page {{page}} of {{total}}",
+    "viewDetails": "View project details",
+    "manageMembers": "Manage members",
+    "unarchiveTitle": "Unarchive Project (Restore to Active)",
+    "statusCreated": "Created",
+    "statusAssigned": "Assigned",
+    "statusInProgress": "In Progress",
+    "statusUnderReview": "Under Review",
+    "statusReturned": "Returned",
+    "statusApproved": "Approved",
+    "statusArchived": "Archived",
+    "archive": "Archive",
+    "archiveProject": "Archive Project",
+    "confirmArchiveProject": "Archive this project? It will be hidden from active lists but can be restored later.",
+    "projectArchived": "Project archived successfully!",
+    "archiveFailed": "Failed to archive project.",
+    "generalInfo": "General Information",
+    "resourceInfo": "Resource Information",
+    "tabMembers": "Members",
+    "tabSources": "Sources",
+    "tabSections": "Sections",
+    "projectDescriptionEmpty": "No description provided.",
+    "noSections": "No sections yet.",
+    "noSources": "No sources yet.",
+    "untitledSection": "Untitled section",
+    "revN": "Rev {{n}}",
+    "standard": "Standard",
+    "createDate": "Create Date",
+    "members": "Members",
+    "sources": "Sources",
+    "sections": "Sections",
+    "noMembers": "No members assigned.",
+    "manageWorkspaceMembers": "Manage Workspace Members",
+    "addWorkspaceMember": "Add Workspace Member",
+    "add": "Add",
+    "member": "Member",
+    "leader": "Leader",
+    "currentMembers": "Current Members ({{n}})",
+    "noMembersWorkspace": "No members assigned to this project workspace.",
+    "totalDocuments": "Total Documents",
+    "totalDocumentsInline": "Total Documents: {{count}}",
+    "totalDocumentsSub": "{{papers}} papers · {{sources}} sources across all projects.",
+    "projectAll": "Project: All",
+    "collectionAll": "Collection: All",
+    "diagnostics": "Diagnostics",
+    "viewDocumentDetails": "Detail",
+    "extractionError": "Extraction error",
+    "openAlexError": "OpenAlex metadata error",
+    "openAlexMeta": "OpenAlex metadata (live re-fetch)",
+    "extractionOutput": "System extraction output (MinIO)",
+    "docMeta": "Document metadata",
+    "noDoi": "No DOI — no OpenAlex lookup.",
+    "noCheckpoint": "No extraction checkpoint stored.",
+    "severity": "Severity",
+    "filterBySeverity": "Filter by Severity",
+    "allSeverities": "All Severities",
+    "filterByAction": "Action type (e.g. USER_BANNED)",
+    "filterByActor": "Actor ID (user UUID)",
+    "invalidActorId": "Actor ID must be a valid UUID.",
+    "clearFilter": "Clear filter",
+    "tabPending": "Pending",
+    "tabProcessing": "Processing",
+    "tabFailed": "Failed / Dead Letter",
+    "tabReady": "Ready",
+    "totalInQueue": "Total in Queue",
+    "readyForExtraction": "Ready for Extraction",
+    "currentlyProcessing": "Currently Processing",
+    "totalFailed": "Total Failed",
+    "allDocuments": "All Documents",
+    "documentsWord": "Documents",
+    "dateRange": "Date range",
+    "dateFrom": "From date",
+    "dateTo": "To date",
+    "externalUpdates": "{{n}} updates outside current filters — view",
+    "docName": "Document Name",
+    "errorType": "Error Type",
+    "attempts": "Attempts",
+    "timestamp": "Timestamp",
+    "retryExtraction": "Retry Extraction",
+    "viewErrorDetails": "View Error Details",
+    "docDetails": "Document details",
+    "platformOverview": "Platform Overview",
+    "platformOverviewSub": "Research data and collection summary",
+    "viewGuide": "View Guide",
+    "collections": "Collections",
+    "activeProjectsHint": "across active workspaces",
+    "activeDocumentsHint": "source · paper",
+    "systemHealth": "System Health",
+    "operational": "OPERATIONAL",
+    "degraded": "DEGRADED",
+    "servicesOnline": "{{up}} / {{total}} services online",
+    "noHealthData": "No health data",
+    "noData": "No data",
+    "inQueue": "in queue",
+    "userDistribution": "User Distribution",
+    "userDistributionSub": "Faculty to Student engagement ratio",
+    "siRatio": "S:I RATIO",
+    "studentsLabel": "Students",
+    "instructorsLabel": "Instructors",
+    "recentSystemLogs": "Recent System Logs",
+    "feedUnavailable": "Feed unavailable",
+    "latestEvents": "{{n}} latest events",
+    "couldNotLoadLogs": "Could not load recent system logs.",
+    "noSystemLogsYet": "No system logs recorded yet.",
+    "logTime": "Time",
+    "logActor": "Actor",
+    "logAction": "Action",
+    "logEntity": "Entity",
+    "logSystemActor": "System",
+    "srOnlyAvatar": "Avatar",
+    "sectionCrashedTitle": "This section hit an unexpected error",
+    "sectionCrashedBody": "The rest of the admin console is unaffected. Reload the section to try again.",
+    "reloadSection": "Reload Section",
+    "noCategoryYet": "No categories created yet",
+    "noCategoryYetHint": "Define logical groups for your research collections to improve organization.",
+    "edit": "Edit",
+    "systemConfiguration": "System Configuration",
+    "exportEnvFile": "Export Env File",
+    "variableName": "Variable Name",
+    "runtimeValue": "Runtime Value",
+    "security": "Security",
+    "categoryName": "Category Name",
+    "categoryNameRequired": "Category Name *",
+    "description": "Description",
+    "broadcastHistory": "Broadcast History",
+    "broadcastDeliveryAnalytics": "Broadcast Delivery Analytics",
+    "messageContent": "Message Content",
+    "targetAudience": "Target Audience",
+    "totalRecipients": "Total Recipients",
+    "broadcastTimestamp": "Broadcast Timestamp",
+    "deliveryInsightsSummary": "Delivery Insights Summary",
+    "noDeliveryAnalytics": "No delivery analytics data available",
+    "fontBold": "B",
+    "fontItalic": "I",
+    "systemStatus": "System Status",
+    "queueStatus": "Queue Status",
+    "fromHealthEndpoint": "From /api/health.",
+    "activeServicesInventory": "ACTIVE SERVICES INVENTORY",
+    "serviceNode": "Service Node",
+    "responseTime": "Response Time",
+    "uptime": "Uptime",
+    "noInfraData": "No infrastructure data available",
+    "previousValue": "Previous value",
+    "newValue": "New value",
+    "logActionProjectUpdated": "PROJECT_UPDATED",
+    "logActionProjectCreated": "PROJECT_CREATED",
+    "logActionUserBanned": "USER_BANNED",
+    "severityInfo": "INFO",
+    "severityWarn": "WARN",
+    "severityCritical": "CRITICAL",
+    "columnDoi": "DOI"
+  }
 }

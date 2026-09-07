@@ -11,6 +11,9 @@
     "thisSection": "Section hiện tại",
     "wholeProject": "Toàn bài",
     "filter": "Trạng thái trả lời",
+    "threadFilter": "Trạng thái hội thoại",
+    "open": "Đang mở",
+    "done": "Đã xong",
     "filters": "Bộ lọc",
     "all": "Tất cả nhận xét",
     "unanswered": "Chưa trả lời",
@@ -28,6 +31,9 @@
     "original": "Xem đoạn gốc",
     "goToText": "Đến đoạn văn",
     "reply": "Phản hồi của sinh viên",
+    "conversation": "Hội thoại nhận xét",
+    "you": "Bạn",
+    "done": "Hội thoại nhận xét này đã được đánh dấu xong.",
     "replyHint": "Gửi phản hồi không lưu bản nháp và không đánh dấu nhận xét đã được giải quyết.",
     "replyConflict": "Nhận xét đã thay đổi. Tải lại và kiểm tra phản hồi hiện có trước khi thử lại.",
     "replyUnavailable": "Sinh viên được giao section có thể trả lời khi vòng xét duyệt được trả về và project cho phép chỉnh sửa.",
@@ -43,12 +49,12 @@
   },
   "sourceMap": {
     "title": "Bản đồ nguồn",
-    "graphLabel": "Các nguồn của project và quan hệ trích dẫn",
-    "project": "Project",
+    "graphLabel": "Các nguồn của dự án và quan hệ trích dẫn",
+    "project": "Dự án",
     "source": "Nguồn",
-    "membership": "Nguồn của project",
+    "membership": "Nguồn của dự án",
     "citation": "Trích dẫn",
-    "membershipDescription": "Các nguồn này được thêm hoặc chia sẻ vào project. Điều này không đồng nghĩa chúng đã được trích dẫn trong bài.",
+    "membershipDescription": "Các nguồn này được thêm hoặc chia sẻ vào dự án. Điều này không đồng nghĩa chúng đã được trích dẫn trong bài.",
     "counts": "{{sources}} nguồn · {{citations}} quan hệ trích dẫn",
     "search": "Tìm theo tên, tác giả hoặc DOI",
     "zoomIn": "Phóng to",
@@ -57,32 +63,32 @@
     "reload": "Tải lại bản đồ",
     "retry": "Thử lại",
     "loadError": "Không tải được bản đồ nguồn. Vui lòng thử lại.",
-    "accessDenied": "Bạn không có quyền xem bản đồ nguồn của project này.",
-    "empty": "Project chưa có nguồn tài liệu.",
+    "accessDenied": "Bạn không có quyền xem bản đồ nguồn của dự án này.",
+    "empty": "Dự án chưa có nguồn tài liệu.",
     "noCitations": "Chưa ghi nhận quan hệ trích dẫn giữa các nguồn trong metadata hiện có.",
-    "noRecordedLinks": "Chưa ghi nhận trong project này.",
+    "noRecordedLinks": "Chưa ghi nhận trong dự án này.",
     "noMatches": "Không tìm thấy nguồn phù hợp.",
     "details": "Thông tin nguồn và các quan hệ",
-    "allSources": "Tất cả nguồn của project",
+    "allSources": "Tất cả nguồn của dự án",
     "outgoing": "Trích dẫn",
     "incoming": "Được trích dẫn bởi",
     "authors": "Tác giả",
     "year": "Năm xuất bản",
     "status": "Trạng thái tài liệu",
-    "openSource": "Mở nguồn",
-    "fileUnavailable": "Chưa có tệp nguồn để mở.",
-    "unnamed": "Nguồn chưa có tên",
+    "openSource": "Nguồn mở",
+    "fileUnavailable": "Tệp nguồn hiện chưa khả dụng.",
+    "unnamed": "Nguồn chưa đặt tên",
     "limitations": {
-      "SAVED_METADATA_ONLY": "Quan hệ dựa trên metadata trích dẫn đã lưu. Thiếu đường nối không có nghĩa là các nguồn không liên quan.",
-      "SOURCES_WITHOUT_DOI": "Một số nguồn chưa có DOI hợp lệ nên có thể chưa xác định được quan hệ trích dẫn.",
-      "AMBIGUOUS_SOURCE_DOI": "Một số nguồn có cùng DOI. Bản đồ không vẽ cạnh trích dẫn khi chưa xác định được chính xác nguồn đích."
+      "SAVED_METADATA_ONLY": "Quan hệ được lấy từ metadata trích dẫn đã lưu. Việc thiếu liên kết không có nghĩa là các nguồn không liên quan.",
+      "SOURCES_WITHOUT_DOI": "Một số nguồn không có DOI hợp lệ nên có thể không xác định được quan hệ trích dẫn.",
+      "AMBIGUOUS_SOURCE_DOI": "Một số nguồn dùng chung DOI. Liên kết trích dẫn có đích đến không rõ ràng sẽ không được vẽ."
     },
     "processing": {
       "PENDING_UPLOAD": "Chờ tải lên",
       "UPLOADED": "Đã tải lên",
-      "METADATA_FETCHED": "Đã có metadata",
+      "METADATA_FETCHED": "Đã lấy metadata",
       "PDF_DOWNLOADED": "Đã tải PDF",
-      "QUEUED": "Đang chờ xử lý",
+      "QUEUED": "Đang chờ",
       "PROCESSING": "Đang xử lý",
       "RAW_EXTRACTED": "Đã trích xuất văn bản",
       "READY": "Sẵn sàng",
@@ -105,18 +111,24 @@
   "back": "Quay lại",
   "confirm": "Xác nhận",
   "noData": "Không có dữ liệu",
-
+  "evidenceStrength": "Độ mạnh của bằng chứng",
+  "evidenceStrengthBreakdown": "Chi tiết độ mạnh bằng chứng",
+  "hideReviewHighlights": "Ẩn làm nổi bật đánh giá",
+  "showReviewHighlights": "Hiện làm nổi bật đánh giá",
+  "viewFullPaper": "Xem toàn bộ bài viết",
+  "searchMedia": "Tìm kiếm phương tiện...",
+  "pageNotFound": "Không tìm thấy trang",
+  "unsavedSectionsBlockSubmission": "Có {{count}} phần chưa lưu. Vui lòng lưu tất cả các phần trước khi gửi.",
   "sources": "Tài nguyên",
   "feedback": "Nhận xét",
   "info": "Thông tin",
-  "aiReview": "Citation Review",
-  "citationReviewUnavailable": "Chọn bài viết và một phần được giao cho bạn trước khi chạy Citation Review.",
+  "aiReview": "Đánh giá trích dẫn",
+  "citationReviewUnavailable": "Chọn bài viết và một phần được giao cho bạn trước khi chạy Đánh giá trích dẫn.",
   "submitReview": "Gửi đánh giá",
   "revise": "Chỉnh sửa",
   "history": "Lịch sử",
   "feedbacks": "phản hồi",
   "paperDrafts": "Bài viết",
-
   "insertSource": "Thêm nguồn",
   "fromDOI": "Từ DOI",
   "fromFile": "Từ tệp",
@@ -138,7 +150,6 @@
   "failedToAddSource": "Không thể thêm nguồn.",
   "doiLookupFailed": "Tra cứu DOI thất bại.",
   "oaPdfAvailable": "Có PDF truy cập mở",
-
   "sections": "Phần bài viết",
   "noSections": "Chưa có phần nào.",
   "uploadNewPaper": "Tải lên bài viết mới",
@@ -151,7 +162,6 @@
   "readOnly": "Chỉ đọc (chưa được giao)",
   "noContent": "Không có nội dung.",
   "noPaper": "Chọn một bài viết từ bảng điều khiển để bắt đầu chỉnh sửa.",
-
   "scanCitations": "Quét trích dẫn",
   "scanCitationsTitle": "Quét trích dẫn theo nguồn dự án",
   "scanFormat": "Quét định dạng",
@@ -191,17 +201,14 @@
   "insertCitationHelp": "Chèn lệnh \\cite{...} tại con trỏ bằng khóa trích dẫn bạn nhập.",
   "insertFigure": "Chèn hình",
   "insertTable": "Chèn bảng",
-
   "preview": "Xem trước",
   "noContentToPreview": "Không có nội dung để xem trước.",
-
   "mediaAssets": "Phương tiện",
   "noMedia": "Chưa có phương tiện.",
   "uploadMedia": "Tải lên phương tiện",
   "mediaUploaded": "Đã tải lên phương tiện.",
   "mediaDeleted": "Đã xóa phương tiện.",
   "mediaInserted": "Đã chèn",
-
   "notifications": "Thông báo",
   "noNotifications": "Chưa có thông báo.",
   "versionHistory": "Khôi phục lần lưu trước",
@@ -209,18 +216,15 @@
   "noPreviousSave": "Chưa có lần lưu trước để khôi phục.",
   "previousSave": "Lần lưu trước",
   "currentVersion": "(hiện tại)",
-
   "darkMode": "Chế độ tối",
   "lightMode": "Chế độ sáng",
   "language": "Ngôn ngữ",
   "switchToEnglish": "Chuyển sang Tiếng Anh",
   "switchToVietnamese": "Chuyển sang Tiếng Việt",
-
   "uploadFailed": "Tải lên thất bại.",
   "deleteFailed": "Xóa thất bại.",
   "deleteConfirm": "Xóa nguồn này?",
   "deleteMediaConfirm": "Xóa phương tiện này?",
-
   "undoHeader": "Mục đã bị xóa vĩnh viễn",
   "undoHeaderUser": "Tài khoản người dùng đã bị xóa vĩnh viễn",
   "undoCaution": "Cảnh báo: Hành động này sẽ trở nên vĩnh viễn khi hết thời gian đếm ngược.",
@@ -229,21 +233,18 @@
   "undoLabel": "Hoàn tác",
   "undoRemaining": "(còn {seconds} giây)",
   "dismissLabel": "Bỏ qua",
-
   "downloadedTex": "Đã tải .tex",
-
   "export": "Xuất",
   "exportTex": "Xuất dưới dạng TEX (.zip)",
   "exportTraceability": "Báo cáo Traceability (JSON)",
   "exportTraceabilityCsv": "Báo cáo Traceability (CSV)",
   "exportFailed": "Xuất tệp thất bại.",
   "exportLocked": "Xuất chỉ khả dụng khi dự án ở trạng thái Đã duyệt hoặc Đã lưu trữ",
-
   "tour": {
     "filePanel": "Phần bài viết",
     "filePanelDesc": "Chọn bài viết và phần được giao; nội dung của phần sẽ mở trong trình soạn thảo.",
     "editorToolbar": "Thanh công cụ",
-    "aiReview": "Citation Review",
+    "aiReview": "Đánh giá trích dẫn",
     "contextPanel": "Bảng ngữ cảnh",
     "contextPanelDesc": "Quản lý nguồn, yêu cầu section, nộp bài và lịch sử xét duyệt. Mở Nhận xét cạnh editor để đọc và trả lời giảng viên."
   },
@@ -337,16 +338,15 @@
   "created": "Đã tạo",
   "category": "Danh mục",
   "summary": "Tóm tắt",
-  "pdfPreview": "Xem trước PDF"
-  ,"coverage": "Độ bao phủ"
-  ,"insertSource": "Thêm nguồn"
-  ,"working": "Đang xử lý..."
-  ,"fileUrlUnavailable": "Không có URL của tệp."
-  ,"unknown": "Không xác định"
-  ,"instructor": "Giảng viên"
-  ,"sectionLabel": "Phần {{name}}"
-  ,"myAnswer": "Câu trả lời của tôi: {{answer}}"
-  ,"status": {
+  "pdfPreview": "Xem trước PDF",
+  "coverage": "Độ bao phủ",
+  "working": "Đang xử lý...",
+  "fileUrlUnavailable": "Không có URL của tệp.",
+  "unknown": "Không xác định",
+  "instructor": "Giảng viên",
+  "sectionLabel": "Phần {{name}}",
+  "myAnswer": "Câu trả lời của tôi: {{answer}}",
+  "status": {
     "DRAFT": "Bản nháp",
     "ASSIGNED": "Đã phân công",
     "IN_PROGRESS": "Đang thực hiện",
@@ -358,199 +358,719 @@
     "COMPLETED": "Đã hoàn tất",
     "ARCHIVED": "Đã lưu trữ",
     "PENDING": "Đang chờ"
+  },
+  "unsavedSectionSwitch": "Phần này có thay đổi chưa lưu. Vẫn chuyển phần?",
+  "unsavedPaperSwitch": "Bạn có thay đổi chưa lưu. Vẫn chuyển bài viết?",
+  "unsavedChanges": "Bạn có thay đổi chưa lưu.",
+  "aiEvaluationFailed": "Đánh giá AI thất bại.",
+  "readOnlySection": "Phần này chỉ có thể đọc.",
+  "exportReady": "Tệp xuất đã sẵn sàng để tải xuống.",
+  "newNotification": "Thông báo mới",
+  "markNotificationFailed": "Không thể đánh dấu thông báo là đã đọc.",
+  "paperArchiveDownloaded": "Đã tải gói bài viết xuống.",
+  "uploadingFile": "Đang tải {{name}} lên...",
+  "paperUploaded": "Đã tải bài viết lên.",
+  "deletePaperConfirm": "Xóa bản nháp này?",
+  "paperDeleted": "Đã xóa bài viết.",
+  "projectLocked": "Dự án đang bị khóa.",
+  "sourceDeleted": "Đã xóa nguồn.",
+  "selectSectionFirst": "Hãy chọn một phần trước.",
+  "restoreConfirm": "Thay nội dung hiện tại bằng lần lưu trước? Mọi chỉnh sửa chưa lưu sẽ bị mất và một revision mới sẽ được tạo.",
+  "versionRestored": "Đã khôi phục lần lưu trước thành một revision mới.",
+  "restoreFailed": "Khôi phục thất bại.",
+  "noSectionSelected": "Chưa chọn phần nào.",
+  "traceabilityDownloaded": "Đã tải báo cáo truy vết xuống.",
+  "traceabilityCsvDownloaded": "Đã tải CSV truy vết xuống.",
+  "selectPaperFirst": "Hãy chọn một bài viết trước.",
+  "formatScanFailed": "Quét định dạng thất bại.",
+  "aiReviewComplete": "Citation Review hoàn tất.",
+  "aiReviewPartial": "Citation Review chỉ hoàn thành một phần: {{failedBatches}} batch không thể kiểm tra.",
+  "aiProviderRateLimited": "Nhà cung cấp AI đang giới hạn lượt gọi. Vui lòng thử lại sau.",
+  "aiWorkerUnavailable": "Dịch vụ Citation Review không sẵn sàng hoặc đã hết thời gian chờ.",
+  "aiInvalidResponse": "Citation Review trả về phản hồi không hợp lệ sau khi thử lại.",
+  "aiReviewFailed": "Citation Review thất bại. Vui lòng thử lại.",
+  "saveSubmissionCancelled": "Lưu thất bại — đã hủy gửi đánh giá.",
+  "submittedForReview": "Đã gửi để đánh giá.",
+  "submitFailed": "Gửi đánh giá thất bại.",
+  "replacedAll": "Đã thay thế tất cả.",
+  "notFound": "Không tìm thấy.",
+  "notFoundMessage": "Trang bạn đang tìm không tồn tại hoặc đã bị di chuyển.",
+  "backToHome": "Về trang chủ",
+  "submitReviewDescription": "Thao tác này sẽ khóa bài viết trong khi giảng viên đánh giá. Bạn có thể sửa lại nếu giảng viên trả về. Tiếp tục?",
+  "sectionAssigned": "Đã phân công phần.",
+  "sectionUnassigned": "Đã bỏ phân công phần.",
+  "assignFailed": "Phân công thất bại.",
+  "versionLabel": "Phiên bản {{version}}",
+  "currentVersionLabel": "Phiên bản {{version}} (hiện tại)",
+  "updatedAtLabel": "Cập nhật lúc: {{date}}",
+  "citationReview": "Đánh giá trích dẫn",
+  "reviewing": "Đang kiểm tra...",
+  "runReview": "Kiểm tra",
+  "citationReviewDescription": "Lưu phần hiện tại, tìm các phát biểu có thể cần trích dẫn, rồi hiển thị đánh dấu và nguồn liên quan để bạn xác minh.",
+  "reviewStale": "Nội dung đã thay đổi sau lần kiểm tra này. Hãy chạy lại để cập nhật đánh dấu; các đoạn không đổi vẫn có thể được chèn trích dẫn.",
+  "openCitationReviewFindings": "Mở {{count}} cảnh báo Citation Review",
+  "rerunReview": "Kiểm tra lại",
+  "previousFinding": "Cảnh báo trước",
+  "nextFinding": "Cảnh báo tiếp theo",
+  "citationFindingDiscrepancy": "Nguồn mâu thuẫn",
+  "citationFindingNoEvidence": "Chưa tìm thấy bằng chứng",
+  "citationFindingNeedsReview": "Cần kiểm tra",
+  "findingConfidence": "Mức chắc chắn cảnh báo: {{level}}",
+  "confidenceHigh": "Cao",
+  "confidenceMedium": "Vừa",
+  "confidenceLow": "Thấp",
+  "flaggedExcerpt": "Đoạn được phát hiện",
+  "reviewConclusion": "Kết luận",
+  "reviewEvidence": "Bằng chứng",
+  "relationSupports": "Ủng hộ",
+  "relationContradicts": "Mâu thuẫn",
+  "relationNotFound": "Không tìm thấy",
+  "searchingRelatedSources": "Đang tìm nguồn liên quan trong dự án...",
+  "retrievalSimilarity": "Tương đồng truy hồi {{score}}%",
+  "retrievalSimilarityHelp": "Chỉ là độ tương đồng khi truy hồi ngữ nghĩa, không phải độ chính xác của trích dẫn hoặc độ mạnh bằng chứng.",
+  "reviewLimitations": "Giới hạn của lần kiểm tra",
+  "sectionNotReviewed": "Phần này chưa được AI kiểm tra.",
+  "citationInserted": "Đã chèn trích dẫn",
+  "relatedSources": "Nguồn liên quan",
+  "sourceEvidence": "Nguồn và bằng chứng",
+  "usedInConclusion": "Dùng trong kết luận",
+  "checkedInReview": "Đã kiểm tra",
+  "relatedSource": "Liên quan",
+  "otherRelatedPassages": "{{count}} đoạn liên quan khác",
+  "openPassage": "Mở đoạn",
+  "sourceViewMode": "Chế độ xem nguồn",
+  "extractedPassage": "Đoạn đã trích xuất",
+  "originalSourceFile": "Tệp gốc",
+  "openOriginalSourceFile": "Mở tệp gốc",
+  "loadingPassage": "Đang tải đoạn đã trích xuất...",
+  "passageUnavailable": "Đoạn đã trích xuất này không còn khả dụng.",
+  "selectedSourcePassage": "Đoạn nguồn đã chọn",
+  "chunkLabel": "Đoạn trích xuất {{index}}",
+  "extractedPassageNotice": "Đây là văn bản được trích xuất từ nguồn. Chọn Tệp gốc để kiểm tra trực tiếp tài liệu.",
+  "passageQuoteNotLocated": "Không tìm thấy nguyên văn đoạn đã chọn trong chunk này; hệ thống đang hiển thị toàn bộ chunk.",
+  "noEvidenceInSources": "Không tìm thấy bằng chứng trong các nguồn của dự án.",
+  "noRelatedSources": "Không tìm thấy nguồn liên quan trong dự án.",
+  "noCitationFindings": "Không phát hiện nội dung cần bổ sung trích dẫn trong phần này.",
+  "retrySourceSearch": "Tìm nguồn lại",
+  "sourceSearchFailed": "Citation Review đã hoàn tất nhưng bước tìm nguồn liên quan thất bại.",
+  "reviewSectionChanged": "Phần đã lưu hoặc tập nguồn thay đổi trong lúc Citation Review xử lý. Hãy lưu và chạy lại.",
+  "reviewExcerptChanged": "Đoạn văn đã thay đổi hoặc xuất hiện nhiều lần. Hãy chạy Citation Review lại.",
+  "citationAlreadyInserted": "Trích dẫn nguồn này đã nằm cạnh đoạn văn.",
+  "cachedReviewFailed": "Không thể tải kết quả Citation Review đã lưu của phần này.",
+  "projectForbiddenTitle": "Từ chối truy cập",
+  "projectForbiddenMessage": "Bạn không có quyền mở dự án này.",
+  "projectNotFoundTitle": "Không tìm thấy dự án",
+  "projectNotFoundMessage": "Dự án này không tồn tại hoặc định danh không hợp lệ.",
+  "projectLoadErrorTitle": "Không thể tải dự án",
+  "projectLoadErrorMessage": "Đã xảy ra lỗi khi tải dự án. Vui lòng thử lại.",
+  "backToProjects": "Quay lại danh sách dự án",
+  "tracesLoadFailed": "Không thể tải dấu vết bằng chứng.",
+  "traceDecisionSaved": "Đã lưu quyết định.",
+  "traceSectionChanged": "Phần đã thay đổi. Hãy chạy Citation Review lại trước khi ghi quyết định.",
+  "traceAlreadyJudged": "Giảng viên đã đánh giá dấu vết này. Các thay đổi tiếp theo thuộc vòng review mới.",
+  "traceSectionNotChanged": "Hãy lưu thay đổi nội dung trước khi ghi hành động này. Chọn Bỏ qua kèm lý do nếu không cần sửa.",
+  "traceSectionVersionChanged": "Nội dung phần đã thay đổi lần nữa. Hãy tải lại và chọn lại đoạn đã sửa.",
+  "traceDecisionConflict": "Không thể cập nhật dấu vết này nữa. Hãy tải lại và thử lại.",
+  "traceDecisionFailed": "Không thể lưu quyết định. Vui lòng thử lại.",
+  "revisedPassageSelectionRequired": "Hãy chọn đoạn đã sửa trong trình soạn thảo trước khi lưu. Với Xóa, đặt con trỏ tại vị trí đoạn văn đã bị xóa.",
+  "runReviewAgain": "Chạy Citation Review lại",
+  "editTraceDecision": "Sửa quyết định",
+  "recordTraceDecision": "Ghi quyết định",
+  "studentAction": "Hành động",
+  "selectAction": "Chọn hành động...",
+  "bindSource": "Gắn nguồn",
+  "selectSource": "Chọn nguồn...",
+  "evidenceQuote": "Trích dẫn bằng chứng",
+  "explanation": "Giải thích",
+  "explanationPlaceholder": "Bắt buộc: giải thích bạn đã thay đổi gì hoặc vì sao citation hiện tại đã phù hợp...",
+  "citationInsertTraceExplanation": "Đã chèn citation từ {{source}} cho nhận xét này.",
+  "reviewCompletedStatus": "Review đã hoàn tất",
+  "savedTraceStatus": "Lịch sử dấu vết đã lưu",
+  "sourceMatchesLoadingStatus": "Đang tải nguồn liên quan",
+  "sourceMatchesFailedStatus": "Tải nguồn liên quan thất bại",
+  "sourceMatchesReadyStatus": "Nguồn liên quan đã sẵn sàng",
+  "sourceMatchesUnavailableStatus": "Chưa tải nguồn liên quan",
+  "aiComparisonReadyStatus": "Đã có so sánh AI",
+  "aiComparisonPendingStatus": "Chưa có so sánh AI",
+  "savedTraceDecisions": "Quyết định đã lưu",
+  "notAddressed": "Chưa xử lý",
+  "aiAdvisory": "Nhận định tham khảo của AI",
+  "instructorJudgment": "Đánh giá của giảng viên",
+  "traceJudgedLocked": "Đã khóa sau đánh giá của giảng viên",
+  "saveDecision": "Lưu quyết định",
+  "requirements": "Yêu cầu",
+  "selfCheckLoadFailed": "Không thể tải yêu cầu của section.",
+  "selfCheckCompleted": "Đã tự kiểm tra nội dung section.",
+  "selfCheckFailed": "Tự kiểm tra section thất bại. Vui lòng thử lại.",
+  "handoffConfirmed": "Đã xác nhận bàn giao phiên bản section được lưu hiện tại.",
+  "handoffRevoked": "Đã gỡ xác nhận bàn giao section.",
+  "handoffFailed": "Không thể cập nhật xác nhận bàn giao section.",
+  "handoffInputChanged": "Section đã thay đổi trong phiên khác. Hãy tải lại và xem bản đã lưu trước khi xác nhận.",
+  "selectSectionForRequirements": "Chọn một section để xem yêu cầu.",
+  "selfCheckAdvisory": "Nhận định của AI chỉ mang tính tham khảo. AI kiểm tra riêng từng yêu cầu và không quyết định dự án có được nộp cho giảng viên review hay không.",
+  "saveBeforeSelfCheck": "Hãy lưu section trước. Tự kiểm tra và bàn giao luôn dùng phiên bản đã lưu.",
+  "sectionRequirements": "Yêu cầu của section",
+  "checkingRequirements": "Đang kiểm tra...",
+  "checkAgain": "Kiểm tra lại",
+  "checkRequirements": "Kiểm tra nội dung",
+  "requirementsNotConfigured": "Giảng viên chưa cấu hình yêu cầu cho section này.",
+  "selfCheckSystemError": "Không thể xác thực kết quả AI. Hệ thống không ghi nhận kết luận học thuật nào.",
+  "selfCheckStale": "Kết quả này thuộc phiên bản section cũ. Hãy kiểm tra lại để cập nhật.",
+  "selfCheckVerdictMET": "Đã đáp ứng",
+  "selfCheckVerdictPARTIAL": "Đáp ứng một phần",
+  "selfCheckVerdictNOT_MET": "Chưa đáp ứng",
+  "selfCheckVerdictUNVERIFIABLE": "Không thể xác minh",
+  "reason": "Lý do",
+  "missingContent": "Còn thiếu",
+  "suggestion": "Gợi ý",
+  "sectionHandoff": "Bàn giao section",
+  "handoffDescription": "Chỉ xác nhận phiên bản đã lưu hiện tại của section được giao đã sẵn sàng bàn giao. Đây không phải phê duyệt chất lượng học thuật.",
+  "handoffConfirmedDescription": "{{name}} đã xác nhận phiên bản được lưu hiện tại.",
+  "handoffStateConfirmed": "Đã xác nhận",
+  "handoffStateUnconfirmed": "Chưa xác nhận",
+  "handoffAssigneeOnly": "Chỉ sinh viên được giao section này mới có thể xác nhận.",
+  "handoffBlocked": "Cần có nội dung và người được giao hợp lệ trước khi xác nhận.",
+  "revokeHandoff": "Gỡ xác nhận",
+  "confirmHandoff": "Xác nhận phiên bản đã lưu",
+  "readinessLoadFailed": "Không thể tải điều kiện nộp review.",
+  "submissionInputChanged": "Dự án đã thay đổi sau khi danh sách điều kiện được tải. Hãy xem lại điều kiện mới rồi nộp lại.",
+  "submitReadinessDescription": "Chỉ cho phép nộp khi mọi điều kiện khách quan của dự án đều đạt. Kết quả tự kiểm tra bằng AI không phải điều kiện nộp.",
+  "unsavedSectionsBlockSubmission_one": "Có {{count}} phần còn thay đổi chưa lưu. Hãy lưu trước khi nộp.",
+  "unsavedSectionsBlockSubmission_other": "Có {{count}} phần còn thay đổi chưa lưu. Hãy lưu trước khi nộp.",
+  "reviewReady": "Đã sẵn sàng nộp review",
+  "reviewNotReady": "Chưa sẵn sàng nộp",
+  "leaderSubmissionOnly": "Chỉ nhóm trưởng mới có thể nộp vòng review.",
+  "submissionChecks": "Điều kiện nộp khách quan",
+  "reviewCheckProjectEditable": "Dự án đang ở trạng thái cho phép chuẩn bị nộp.",
+  "reviewCheckInstructorAssigned": "Dự án đã được gán giảng viên.",
+  "reviewCheckPaperPresent": "Dự án có ít nhất một paper đang hoạt động.",
+  "reviewCheckPaperReady": "Mọi paper đang hoạt động đã xử lý xong.",
+  "reviewCheckSectionsPresent": "Mỗi paper đang hoạt động có ít nhất một section.",
+  "reviewCheckSectionBodyPresent": "Mọi section đang hoạt động đều có nội dung đã lưu.",
+  "reviewCheckAssigneeValid": "Mọi section đang hoạt động đã được giao cho thành viên sinh viên đang hoạt động.",
+  "reviewCheckSectionConfirmed": "Phiên bản đã lưu hiện tại của mọi section đã được người phụ trách xác nhận.",
+  "sectionBlockerBodyMissing": "Section này chưa có nội dung đã lưu.",
+  "sectionBlockerAssigneeInvalid": "Section này chưa có sinh viên đang hoạt động phụ trách.",
+  "sectionBlockerHandoffMissing": "Người phụ trách chưa xác nhận phiên bản đã lưu này.",
+  "admin": {
+    "dashboard": "Bảng điều khiển",
+    "users": "Người dùng",
+    "papers": "Tài liệu",
+    "audit": "Nhật ký",
+    "infra": "Hạ tầng",
+    "notifications": "Thông báo",
+    "settings": "Cài đặt hệ thống",
+    "adminPanel": "Quản trị hệ thống",
+    "profile": "Hồ sơ",
+    "signOut": "Đăng xuất",
+    "totalUsers": "Tổng người dùng",
+    "activeProjects": "Dự án đang hoạt động",
+    "activeDocuments": "Tài liệu đang hoạt động",
+    "students": "Sinh viên",
+    "instructors": "Giảng viên",
+    "admins": "Quản trị viên",
+    "sourceFiles": "tệp nguồn",
+    "paperDocs": "bài báo",
+    "categories": "danh mục",
+    "collections": "Bộ sưu tập",
+    "userAccounts": "Tài khoản người dùng",
+    "createUser": "Tạo người dùng",
+    "sendInvitation": "Gửi lời mời",
+    "sending": "Đang gửi...",
+    "invitationSent": "Đã gửi lời mời thành công.",
+    "email": "Email",
+    "fullName": "Họ tên",
+    "role": "Vai trò",
+    "status": "Trạng thái",
+    "actions": "Thao tác",
+    "active": "Hoạt động",
+    "banned": "Bị khóa",
+    "ban": "Khóa",
+    "activate": "Kích hoạt",
+    "resetPassword": "Đặt lại mật khẩu",
+    "delete": "Xóa",
+    "saving": "Đang lưu...",
+    "resetSent": "Đã gửi email đặt lại",
+    "resetFailed": "Đặt lại thất bại",
+    "noUsers": "Không tìm thấy người dùng",
+    "noLogs": "Không có nhật ký",
+    "auditLogs": "Nhật ký hệ thống",
+    "timestamp": "Thời gian",
+    "actor": "Người thực hiện",
+    "action": "Hành động",
+    "entity": "Đối tượng",
+    "details": "Chi tiết",
+    "papersOverview": "Tổng quan tài liệu",
+    "drafts": "Bản nháp",
+    "submitted": "Đã gửi",
+    "inReview": "Đang đánh giá",
+    "published": "Đã xuất bản",
+    "rejected": "Từ chối",
+    "systemHealth": "Sức khỏe hệ thống",
+    "storage": "Lưu trữ",
+    "uptime": "Thời gian hoạt động",
+    "services": "Dịch vụ",
+    "online": "Trực tuyến",
+    "offline": "Ngoại tuyến",
+    "broadcast": "Gửi thông báo",
+    "message": "Nội dung",
+    "send": "Gửi",
+    "targetRole": "Đối tượng",
+    "all": "Tất cả",
+    "sent": "Đã gửi",
+    "appName": "Tên ứng dụng",
+    "save": "Lưu",
+    "saved": "Đã lưu",
+    "maintenance": "Chế độ bảo trì",
+    "total": "tổng",
+    "prev": "Trước",
+    "next": "Sau",
+    "page": "Trang",
+    "loadFailed": "Tải dữ liệu thất bại",
+    "retry": "Thử lại",
+    "langSwitch": "English",
+    "copyright": "Evidence Pilot © 2026. Bảo lưu mọi quyền.",
+    "tourGuide": "Hướng dẫn",
+    "guide": "Hướng dẫn sử dụng",
+    "processGuide": "Quy trình",
+    "createNew": "Tạo mới",
+    "filter": "Lọc",
+    "close": "Đóng",
+    "firstName": "Tên",
+    "lastName": "Họ",
+    "cancel": "Hủy",
+    "password": "Mật khẩu",
+    "confirmDelete": "Xóa người dùng này?",
+    "userDeleted": "Đã xóa người dùng",
+    "undoHeader": "Mục đã bị xóa vĩnh viễn",
+    "undoHeaderUser": "Tài khoản người dùng đã bị xóa vĩnh viễn",
+    "undoCaution": "Cảnh báo: Hành động này sẽ trở nên vĩnh viễn khi hết thời gian đếm ngược.",
+    "undoBodyTemplate": "Mục {entityName}{entityDetails} đã bị xóa{actorPart} lúc {timestamp}.",
+    "undoBodyTemplateUser": "Tài khoản của người dùng {entityName}{entityDetails} đã bị xóa{actorPart} lúc {timestamp}.",
+    "undoLabel": "Hoàn tác",
+    "undoRemaining": "(còn {{seconds}} giây)",
+    "dismissLabel": "Bỏ qua",
+    "done": "Hoàn tất",
+    "pipeline": "Quy trình",
+    "documentCount": "Số lượng tài liệu",
+    "admin": "Quản trị",
+    "searchPlaceholder": "Tìm kiếm dữ liệu, nhật ký hoặc hạ tầng...",
+    "refreshLogs": "Làm mới nhật ký",
+    "refreshMetrics": "Làm mới chỉ số",
+    "refreshQueue": "Làm mới hàng đợi",
+    "refreshing": "Đang làm mới...",
+    "adminUser": "Quản trị viên",
+    "systemManager": "Quản lý hệ thống",
+    "loading": "Đang tải",
+    "collectionsLibrary": "Thư viện bộ sưu tập",
+    "failedDocuments": "Tài liệu thất bại",
+    "noDocuments": "Không tìm thấy tài liệu",
+    "searchDocuments": "Tìm kiếm tài liệu...",
+    "searchLogs": "Tìm kiếm nhật ký theo người thực hiện, đối tượng hoặc chi tiết...",
+    "userAll": "Người dùng: Tất cả",
+    "actionAll": "Hành động: Tất cả",
+    "actionUpdated": "Hành động: Đã cập nhật",
+    "actionCreated": "Hành động: Đã tạo",
+    "actionBanned": "Hành động: Đã khóa",
+    "title": "Tiêu đề",
+    "project": "Dự án",
+    "author": "Tác giả",
+    "recentDocuments": "Tài liệu gần đây",
+    "noPipelineData": "Không có dữ liệu quy trình tài liệu",
+    "footerTagline": "EvidencePilot Admin v2.4.1. Phục vụ học thuật xuất sắc và tính toàn vẹn dữ liệu.",
+    "usersSub": "Quản lý quyền truy cập và phân quyền người dùng trên toàn hệ thống Evidence Pilot.",
+    "projectsSub": "Trung tâm quản lý tất cả các sáng kiến nghiên cứu học thuật đang hoạt động và đã lưu trữ.",
+    "papersSub": "Quản lý và theo dõi tiến trình tài liệu nghiên cứu trong tất cả dự án đang hoạt động.",
+    "auditSub": "Xem lại các hoạt động và sự kiện bảo mật trên toàn nền tảng.",
+    "healthSub": "Giám sát hạ tầng và phân bổ tài nguyên theo thời gian thực.",
+    "queueSub": "Theo dõi và quản lý quy trình trích xuất dữ liệu tài liệu.",
+    "broadcastSub": "Gửi thông báo toàn hệ thống hoặc thông báo có mục tiêu đến các nhóm nghiên cứu. Thông báo sẽ xuất hiện trong trung tâm thông báo của người dùng và dưới dạng banner.",
+    "collectionsSub": "Quản lý và sắp xếp các cụm dữ liệu nghiên cứu trong tổ chức của bạn.",
+    "settingsSub": "Cấu hình tham số ứng dụng, danh mục và xem lại biến triển khai.",
+    "papersBannerTitle": "Tài liệu đang hoạt động",
+    "papersBannerText": "Tổng khối lượng trong phiên hiện tại:",
+    "activeDocsLabel": "tài liệu đang hoạt động",
+    "guideDashDesc": "Tổng quan nền tảng trong một cái nhìn.",
+    "guideDashUsers": "Tổng số người dùng đã đăng ký, phân loại theo vai trò.",
+    "guideDashProjects": "Dự án đang hoạt động với danh mục và bộ sưu tập.",
+    "guideDashDocuments": "Tổng số tài liệu đang hoạt động bao gồm tệp nguồn và bài báo.",
+    "guideDashOverviewProjects": "Dự án đang hoạt động nay nằm tại đây, cạnh Bộ sưu tập trong panel Tổng quan nền tảng.",
+    "activeProjectsHint": "dự án đang chạy",
+    "guideDashStatus": "Phân loại trạng thái người dùng: hoạt động và bị khóa.",
+    "guideDashDone": "Đã hoàn thành tổng quan bảng điều khiển.",
+    "guideUsersDesc": "Quản lý người dùng: tạo, khóa, đặt lại mật khẩu hoặc xóa tài khoản.",
+    "guideUsersCreate": "Tạo một Sinh viên hoặc Giảng viên. Mật khẩu tạm được lấy từ email.",
+    "guideUsersImport": "Tải lên một tệp JSON chứa tối đa 200 người dùng cùng vai trò.",
+    "guideUsersTable": "Danh sách người dùng với email, tên, mã sinh viên, vai trò cố định, trạng thái và thao tác.",
+    "guideUsersActions": "Khóa/kích hoạt, đặt lại mật khẩu hoặc xóa người dùng.",
+    "guideUsersDone": "Đã hoàn thành hướng dẫn quản lý người dùng.",
+    "guidePapersDesc": "Tổng quan quy trình bài báo. Mỗi thẻ đại diện cho một giai đoạn.",
+    "guidePapersFlow": "Bản nháp → Đã gửi → Đang đánh giá → Đã xuất bản → Từ chối.",
+    "guidePapersCount": "Tổng số bài báo và tệp nguồn trong hệ thống.",
+    "guidePapersDone": "Đã hoàn thành tổng quan bài báo.",
+    "guideAuditDesc": "Nhật ký kiểm tra tất cả hoạt động hệ thống.",
+    "guideAuditFilter": "Lọc nhật ký theo loại đối tượng, như USER, PROJECT và DOCUMENT.",
+    "guideAuditTable": "Mỗi dòng hiển thị thời gian, ai thực hiện, hành động gì, đối tượng nào và giá trị thay đổi.",
+    "guideAuditDone": "Đã hoàn thành hướng dẫn nhật ký kiểm tra.",
+    "guideInfraDesc": "Giám sát sức khỏe hạ tầng.",
+    "guideInfraServices": "Mỗi dịch vụ hiển thị trạng thái trực tuyến/ngoại tuyến. Màu đỏ cần chú ý.",
+    "guideInfraStorage": "Thanh sử dụng bộ nhớ. Theo dõi dung lượng để tránh gián đoạn dịch vụ.",
+    "guideInfraDone": "Đã hoàn thành tổng quan hạ tầng.",
+    "guideNotifDesc": "Gửi thông báo đến người dùng.",
+    "guideNotifForm": "Nhập nội dung, chọn đối tượng và gửi. Người dùng nhận thông báo theo thời gian thực.",
+    "guideNotifHistory": "Các thông báo đã gửi hiển thị tại đây với thời gian và đối tượng nhận.",
+    "guideNotifDone": "Đã hoàn thành hướng dẫn thông báo.",
+    "guideSettingsDesc": "Quản lý cài đặt hệ thống.",
+    "guideSettingsForm": "Cấu hình tên ứng dụng và các tùy chọn hệ thống khác.",
+    "guideSettingsDone": "Đã hoàn thành hướng dẫn cài đặt.",
+    "collapse": "Đóng tab",
+    "projects": "Dự án",
+    "projectTitle": "Tiêu đề",
+    "projectStatus": "Trạng thái",
+    "createdAt": "Ngày tạo",
+    "noProjects": "Không có dự án",
+    "projectDeleted": "Đã xóa dự án",
+    "guideProjectsDesc": "Xem và quản lý tất cả dự án trong hệ thống.",
+    "guideProjectsTable": "Mỗi dòng hiển thị tiêu đề, trạng thái và ngày tạo. Quản trị viên có thể xóa dự án.",
+    "guideProjectsDone": "Đã hoàn thành hướng dẫn dự án.",
+    "collectionCategories": "Danh mục bộ sưu tập",
+    "categoryName": "Tên",
+    "categoryDescription": "Mô tả",
+    "sourceCategories": "Thể loại nguồn",
+    "categoryCode": "Mã",
+    "addCategory": "Thêm danh mục",
+    "editCategory": "Sửa danh mục",
+    "addCollectionCategory": "Thêm danh mục bộ sưu tập",
+    "editCollectionCategory": "Sửa danh mục bộ sưu tập",
+    "saveChanges": "Lưu thay đổi",
+    "systemSettingsHint": "Chỉ đọc. Các giá trị được truyền qua biến môi trường và không thể sửa đổi qua giao diện người dùng.",
+    "categoryNamePlaceholder": "ví dụ: Khoa học máy tính",
+    "categoryDescPlaceholder": "Mô tả nhóm danh mục này...",
+    "noCategories": "Không có danh mục",
+    "categorySaved": "Đã lưu danh mục",
+    "categoryDeleted": "Đã xóa danh mục",
+    "guideCategoriesDesc": "Quản lý danh mục bộ sưu tập dùng để phân loại bộ sưu tập bằng chứng.",
+    "guideCategoriesList": "Danh sách tất cả danh mục. Mỗi danh mục hiển thị tên, mô tả và trạng thái.",
+    "guideCategoriesForm": "Thêm hoặc sửa danh mục. Tên là bắt buộc, mô tả không bắt buộc.",
+    "guideCategoriesDone": "Đã hoàn thành hướng dẫn danh mục.",
+    "systemConfig": "Cấu hình hệ thống",
+    "configKey": "Cài đặt",
+    "configValue": "Giá trị",
+    "configNote": "Chỉ đọc. Cấu hình qua biến môi trường.",
+    "guideConfigDesc": "Xem các giá trị cấu hình hệ thống hiện tại.",
+    "guideConfigTable": "Mỗi dòng hiển thị tên cài đặt và giá trị hiện tại. Được tải khi khởi động.",
+    "guideConfigDone": "Đã hoàn thành hướng dẫn cấu hình.",
+    "extractionQueue": "Hàng đợi trích xuất",
+    "extractionStatus": "Trạng thái",
+    "queueSummary": "Tóm tắt hàng đợi",
+    "noFailedDocuments": "Không có tài liệu thất bại",
+    "queueRetry": "Thử lại",
+    "guideQueueDesc": "Theo dõi tiến trình trích xuất tài liệu và thử lại các tác vụ thất bại.",
+    "guideQueueCards": "Thẻ tóm tắt hiển thị số lượng theo từng trạng thái xử lý.",
+    "guideQueueFailed": "Danh sách tài liệu thất bại. Nhấp Thử lại để xếp hàng lại.",
+    "guideQueueDone": "Đã hoàn thành hướng dẫn hàng đợi trích xuất.",
+    "broadcastHistory": "Lịch sử thông báo",
+    "recipients": "Người nhận",
+    "noBroadcastHistory": "Không có lịch sử thông báo",
+    "guideHistoryDesc": "Xem các thông báo đã gửi trước đây đến người dùng.",
+    "guideHistoryTable": "Mỗi mục hiển thị nội dung, đối tượng nhận, số lượng người nhận và thời gian gửi.",
+    "guideHistoryDone": "Đã hoàn thành hướng dẫn lịch sử thông báo.",
+    "instructor": "Giảng viên",
+    "sourceCount": "Nguồn",
+    "noCollections": "Không tìm thấy bộ sưu tập",
+    "guideCollectionsDesc": "Xem tất cả bộ sưu tập bằng chứng của giảng viên.",
+    "guideCollectionsTable": "Danh sách bộ sưu tập với email giảng viên và số lượng nguồn.",
+    "guideCollectionsDone": "Đã hoàn thành hướng dẫn bộ sưu tập.",
+    "chooseUserAccounts": "-- Chọn tài khoản người dùng --",
+    "showingLogs": "Hiển thị {{shown}} trong tổng số {{total}} bản ghi",
+    "searchUsers": "Tìm theo email, tên hoặc mã sinh viên...",
+    "allRoles": "Tất cả vai trò",
+    "allStatuses": "Tất cả trạng thái",
+    "emailAddress": "Địa chỉ Email",
+    "userRole": "Vai trò người dùng",
+    "studentCode": "Mã số sinh viên",
+    "importUsers": "Nhập người dùng",
+    "jsonFile": "Tệp JSON",
+    "importUsersHint": "Dùng cấu trúc { role, users } với một vai trò STUDENT hoặc INSTRUCTOR và tối đa 200 người dùng. Một phần tử sai sẽ hủy toàn bộ lần import.",
+    "temporaryPasswordHint": "Mật khẩu tạm là phần trước @ trong email, viết thường. Người dùng sẽ được nhắc đổi mật khẩu sau lần đăng nhập đầu.",
+    "importing": "Đang import...",
+    "importSuccess": "Import hoàn tất: tạo {{created}}, cập nhật {{updated}}.",
+    "importFailed": "Không có dữ liệu nào được import. Hãy sửa các lỗi sau:",
+    "item": "Phần tử",
+    "jsonFileRequired": "Hãy chọn tệp .json.",
+    "verifying": "Đang xác thực",
+    "confirmPassword": "Xác nhận mật khẩu",
+    "passwordsNoMatch": "Mật khẩu xác nhận không khớp.",
+    "passwordMin": "Mật khẩu phải có ít nhất 8 ký tự.",
+    "verifyEmail": "Xác thực Email",
+    "verifyEmailHint": "Gửi liên kết đặt mật khẩu thay thế. Người dùng tự đặt mật khẩu; các ô mật khẩu sẽ bị tắt.",
+    "devBypass": "Bỏ qua dev (chỉ local)",
+    "devBypassHint": "Bỏ qua email mời và kích hoạt ngay bằng mật khẩu dev cố định. Không khả dụng ở production.",
+    "resendInvitation": "Gửi lại lời mời",
+    "resendSent": "Đã gửi lại lời mời thành công.",
+    "resendFailed": "Gửi lại lời mời thất bại.",
+    "downloadTemplate": "Tải mẫu .xlsx",
+    "xlsxFile": "Tệp Excel (.xlsx)",
+    "xlsxFileRequired": "Hãy chọn tệp .xlsx.",
+    "preflightTitle": "Tổng hợp kiểm tra",
+    "preflightRow": "Dòng",
+    "preflightValid": "{{n}} người dùng hợp lệ, sẵn sàng import.",
+    "preflightNoValid": "Không có dòng hợp lệ để import.",
+    "cancelFixFile": "Hủy và sửa tệp",
+    "skipErrorsImport": "Bỏ qua lỗi và import {{n}} người dùng hợp lệ",
+    "errInvalidCode": "Sai định dạng Mã sinh viên (cần dạng AB123456)",
+    "errAdminRole": "Không được import vai trò Admin",
+    "errEmail": "Địa chỉ email không hợp lệ",
+    "errName": "Họ và tên là bắt buộc",
+    "errDuplicate": "Email trùng lặp trong tệp",
+    "errMissingCode": "Mã sinh viên là bắt buộc với STUDENT",
+    "guideUsersPassword": "Đặt mật khẩu ban đầu, hoặc tích Xác thực Email để gửi liên kết đặt mật khẩu.",
+    "guideUsersVerify": "Khi được tích, các ô mật khẩu bị tắt và người dùng mới nhận liên kết xác thực.",
+    "guideUsersPreflight": "Các dòng được kiểm tra trước khi gửi. Sửa tệp hoặc bỏ qua các dòng lỗi.",
+    "banUser": "Khóa người dùng",
+    "activateUser": "Kích hoạt người dùng",
+    "deleteUser": "Xóa người dùng",
+    "showingUsers": "Hiển thị {{shown}} trong tổng số {{total}} người dùng",
+    "unarchiveSuccess": "Không gian làm việc đã được khôi phục về trạng thái hoạt động!",
+    "unarchiveFailed": "Khôi phục dự án thất bại.",
+    "confirmDeleteProject": "Bạn có chắc muốn xóa dự án này?",
+    "projectDeletedSuccess": "Đã xóa dự án thành công!",
+    "memberAdded": "Đã thêm thành viên thành công!",
+    "confirmRemoveMember": "Bạn có chắc muốn xóa thành viên này?",
+    "memberRemoved": "Đã xóa thành viên thành công!",
+    "memberRoleUpdated": "Đã cập nhật vai trò thành viên!",
+    "memberLoadFailed": "Không thể tải danh sách thành viên hoặc người dùng.",
+    "selectUserFirst": "Vui lòng chọn người dùng để thêm.",
+    "memberAddFailed": "Thêm thành viên thất bại. Kiểm tra xem họ đã trong dự án chưa.",
+    "memberRemoveFailed": "Xóa thành viên thất bại.",
+    "memberRoleUpdateFailed": "Cập nhật vai trò thành viên thất bại.",
+    "confirmDeleteCollection": "Bạn có chắc muốn xóa bộ sưu tập này?",
+    "collectionDeleted": "Đã xóa bộ sưu tập thành công!",
+    "collectionDeleteFailed": "Xóa bộ sưu tập thất bại.",
+    "unnamedCollection": "Bộ sưu tập không có tên",
+    "reQueueSuccess": "Đã xếp lại hàng đợi trích xuất tài liệu thành công!",
+    "reQueueFailed": "Xếp lại hàng đợi thất bại.",
+    "errorDetails": "Chi tiết lỗi",
+    "showingDocs": "Hiển thị {{shown}} trong tổng số {{total}} tài liệu",
+    "notifMsgRequired": "Vui lòng nhập nội dung thông báo.",
+    "broadcastSent": "Đã gửi thông báo thành công!",
+    "broadcastFailed": "Gửi thông báo thất bại.",
+    "draftSaved": "Đã lưu bản nháp thành công!",
+    "typeMsgFirst": "Vui lòng nhập nội dung trước.",
+    "messageComposer": "Soạn thông báo",
+    "notifBody": "Nội dung thông báo",
+    "recipientSegment": "Đối tượng nhận",
+    "urgencyLevel": "Mức độ khẩn cấp",
+    "allUsers": "Tất cả người dùng",
+    "studentsOpt": "Sinh viên",
+    "instructorsOpt": "Giảng viên",
+    "standard": "Tiêu chuẩn",
+    "urgent": "Khẩn cấp",
+    "saveDraft": "Lưu bản nháp",
+    "sendBroadcast": "Gửi thông báo",
+    "sending": "Đang gửi...",
+    "announceDraftPlaceholder": "Soạn thông báo hệ thống tại đây...",
+    "delivered": "Đã giao",
+    "searchHistory": "Tìm kiếm lịch sử...",
+    "sentAnnouncementTo": "Đã gửi thông báo đến {{count}} tài khoản {{role}} đang hoạt động.",
+    "sentTo": "Đã gửi đến {{role}}.",
+    "settingsSaved": "Đã lưu cài đặt hệ thống thành công!",
+    "categoryUpdated": "Đã cập nhật danh mục thành công!",
+    "categoryCreated": "Đã tạo danh mục thành công!",
+    "categorySaveFailed": "Lưu danh mục thất bại.",
+    "categoryDeletedOk": "Đã xóa danh mục thành công!",
+    "categoryDeleteFailed": "Xóa danh mục thất bại.",
+    "envExported": "Đã xuất file cấu hình môi trường thành công!",
+    "confirmDeleteCategory": "Bạn có chắc muốn xóa danh mục này?",
+    "secretLabel": "BÍ MẬT",
+    "internalLabel": "NỘI BỘ",
+    "publicLabel": "CÔNG KHAI",
+    "navSearch": "Tìm chức năng...",
+    "myProfile": "Hồ sơ cá nhân",
+    "tourWelcomeTitle": "Chào mừng đến với Trang Quản trị",
+    "tourWelcomeDesc": "Hướng dẫn này sẽ giới thiệu các chức năng chính. Nhấp \"Tiếp theo\" để bắt đầu.",
+    "tourSidebarTitle": "Thanh điều hướng",
+    "tourSidebarDesc": "Sử dụng thanh bên để chuyển đổi giữa các chức năng quản trị.",
+    "tourNavItemDesc": "Nhấp để xem {{label}}. Tại đây bạn có thể quản lý và theo dõi các hoạt động liên quan.",
+    "tourHeaderTitle": "Thanh tiêu đề",
+    "tourHeaderDesc": "Chứa nút chuyển ngôn ngữ, chế độ sáng/tối, hướng dẫn, thông tin quản trị viên và đăng xuất.",
+    "tourContentTitle": "Khu vực nội dung",
+    "tourContentDesc": "Nội dung của chức năng đang chọn sẽ hiển thị tại đây.",
+    "tourFooterTitle": "Chân trang",
+    "tourFooterDesc": "Chuyển đổi ngôn ngữ giữa Tiếng Việt và English tại đây.",
+    "tourReadyTitle": "Bắt đầu sử dụng",
+    "tourReadyDesc": "Bạn đã sẵn sàng! Nhấp \"Kết thúc\" để bắt đầu quản trị hệ thống.",
+    "totalProjects": "Tổng số dự án",
+    "totalProjectsInline": "Tổng số dự án: {{count}}",
+    "totalProjectsSub": "Mọi sáng kiến nghiên cứu trên toàn nền tảng tại một nơi.",
+    "searchProjects": "Tìm kiếm dự án...",
+    "filterByInstructor": "Lọc theo giảng viên",
+    "filterByStatus": "Lọc theo trạng thái",
+    "allInstructors": "Tất cả giảng viên",
+    "allStatuses": "Tất cả trạng thái",
+    "projectTitle": "Tiêu đề dự án",
+    "totalMembers": "Tổng thành viên",
+    "totalSources": "Tổng số nguồn",
+    "lastUpdate": "Cập nhật cuối",
+    "showingProjects": "Hiển thị {{shown}} trong tổng số {{total}} dự án",
+    "pageOf": "Trang {{page}} / {{total}}",
+    "viewDetails": "Xem chi tiết dự án",
+    "manageMembers": "Quản lý thành viên",
+    "unarchiveTitle": "Khôi phục dự án",
+    "statusCreated": "Đã tạo",
+    "statusAssigned": "Đã giao",
+    "statusInProgress": "Đang thực hiện",
+    "statusUnderReview": "Chờ đánh giá",
+    "statusReturned": "Trả về",
+    "statusApproved": "Đã duyệt",
+    "statusArchived": "Đã lưu trữ",
+    "archive": "Lưu trữ",
+    "archiveProject": "Lưu trữ dự án",
+    "confirmArchiveProject": "Lưu trữ dự án này? Dự án sẽ bị ẩn khỏi danh sách hoạt động nhưng có thể khôi phục sau.",
+    "projectArchived": "Đã lưu trữ dự án thành công!",
+    "archiveFailed": "Lưu trữ dự án thất bại.",
+    "generalInfo": "Thông tin chung",
+    "resourceInfo": "Thông tin tài nguyên",
+    "tabMembers": "Thành viên",
+    "tabSources": "Nguồn",
+    "tabSections": "Mục",
+    "projectDescriptionEmpty": "Chưa có mô tả.",
+    "noSections": "Chưa có mục nào.",
+    "noSources": "Chưa có nguồn nào.",
+    "untitledSection": "Mục chưa đặt tên",
+    "revN": "Bản {{n}}",
+    "tabMembers": "Thành viên",
+    "tabSources": "Nguồn",
+    "tabSections": "Mục",
+    "projectDescriptionEmpty": "Chưa có mô tả.",
+    "noSections": "Chưa có mục nào.",
+    "noSources": "Chưa có nguồn nào.",
+    "untitledSection": "Mục chưa đặt tên",
+    "revN": "Bản {{n}}",
+    "standard": "Tiêu chuẩn",
+    "createDate": "Ngày tạo",
+    "members": "Thành viên",
+    "sources": "Nguồn",
+    "sections": "Phần",
+    "noMembers": "Chưa có thành viên.",
+    "manageWorkspaceMembers": "Quản lý thành viên dự án",
+    "addWorkspaceMember": "Thêm thành viên",
+    "add": "Thêm",
+    "member": "Thành viên",
+    "leader": "Nhóm trưởng",
+    "currentMembers": "Thành viên hiện tại ({{n}})",
+    "noMembersWorkspace": "Chưa có thành viên nào trong dự án này.",
+    "totalDocuments": "Tổng số tài liệu",
+    "totalDocumentsInline": "Tổng số tài liệu: {{count}}",
+    "totalDocumentsSub": "{{papers}} bài báo · {{sources}} nguồn trên toàn nền tảng.",
+    "projectAll": "Dự án: Tất cả",
+    "collectionAll": "Bộ sưu tập: Tất cả",
+    "diagnostics": "Chẩn đoán",
+    "viewDocumentDetails": "Chi tiết",
+    "extractionError": "Lỗi trích xuất",
+    "openAlexError": "Lỗi siêu dữ liệu OpenAlex",
+    "openAlexMeta": "Siêu dữ liệu OpenAlex (tải trực tiếp)",
+    "extractionOutput": "Kết quả trích xuất hệ thống (MinIO)",
+    "docMeta": "Siêu dữ liệu tài liệu",
+    "noDoi": "Không có DOI — không tra cứu OpenAlex.",
+    "noCheckpoint": "Chưa có checkpoint trích xuất.",
+    "severity": "Mức độ",
+    "filterBySeverity": "Lọc theo mức độ",
+    "allSeverities": "Mọi mức độ",
+    "filterByAction": "Loại hành động (vd. USER_BANNED)",
+    "filterByActor": "ID người thực hiện (UUID)",
+    "invalidActorId": "ID phải là UUID hợp lệ.",
+    "clearFilter": "Xóa bộ lọc",
+    "tabPending": "Đang chờ",
+    "tabProcessing": "Đang xử lý",
+    "tabFailed": "Thất bại / Dead Letter",
+    "tabReady": "Sẵn sàng",
+    "totalInQueue": "Tổng hàng đợi",
+    "readyForExtraction": "Sẵn sàng trích xuất",
+    "currentlyProcessing": "Đang xử lý",
+    "totalFailed": "Tổng thất bại",
+    "allDocuments": "Tất cả tài liệu",
+    "documentsWord": "tài liệu",
+    "dateRange": "Khoảng ngày",
+    "dateFrom": "Từ ngày",
+    "dateTo": "Đến ngày",
+    "externalUpdates": "{{n}} cập nhật ngoài bộ lọc — xem",
+    "docName": "Tên tài liệu",
+    "errorType": "Loại lỗi",
+    "attempts": "Lần thử",
+    "timestamp": "Thời gian",
+    "retryExtraction": "Thử trích xuất lại",
+    "viewErrorDetails": "Xem chi tiết lỗi",
+    "docDetails": "Chi tiết tài liệu",
+    "platformOverview": "Tổng quan nền tảng",
+    "platformOverviewSub": "Tóm tắt dữ liệu nghiên cứu và bộ sưu tập",
+    "viewGuide": "Xem hướng dẫn",
+    "collections": "Bộ sưu tập",
+    "activeProjectsHint": "trên các không gian làm việc đang hoạt động",
+    "activeDocumentsHint": "nguồn · bài báo",
+    "systemHealth": "Tình trạng hệ thống",
+    "operational": "ĐANG HOẠT ĐỘNG",
+    "degraded": "SUY GIẢM",
+    "servicesOnline": "{{up}} / {{total}} dịch vụ trực tuyến",
+    "noHealthData": "Không có dữ liệu sức khỏe",
+    "noData": "Không có dữ liệu",
+    "inQueue": "trong hàng đợi",
+    "userDistribution": "Phân bố người dùng",
+    "userDistributionSub": "Tỉ lệ giảng viên trên sinh viên",
+    "siRatio": "TỈ LỆ S:I",
+    "studentsLabel": "Sinh viên",
+    "instructorsLabel": "Giảng viên",
+    "recentSystemLogs": "Nhật ký hệ thống gần đây",
+    "feedUnavailable": "Nguồn cấp không khả dụng",
+    "latestEvents": "{{n}} sự kiện mới nhất",
+    "couldNotLoadLogs": "Không thể tải nhật ký hệ thống gần đây.",
+    "noSystemLogsYet": "Chưa có nhật ký hệ thống nào.",
+    "logTime": "Thời gian",
+    "logActor": "Người thực hiện",
+    "logAction": "Hành động",
+    "logEntity": "Thực thể",
+    "logSystemActor": "Hệ thống",
+    "srOnlyAvatar": "Ảnh đại diện",
+    "sectionCrashedTitle": "Phần này gặp lỗi không mong muốn",
+    "sectionCrashedBody": "Phần còn lại của bảng điều khiển quản trị không bị ảnh hưởng. Tải lại phần này để thử lại.",
+    "reloadSection": "Tải lại phần",
+    "noCategoryYet": "Chưa có danh mục nào",
+    "noCategoryYetHint": "Tạo nhóm logic cho các bộ sưu tập nghiên cứu để tổ chức tốt hơn.",
+    "edit": "Sửa",
+    "systemConfiguration": "Cấu hình hệ thống",
+    "exportEnvFile": "Xuất tệp Env",
+    "variableName": "Tên biến",
+    "runtimeValue": "Giá trị runtime",
+    "security": "Bảo mật",
+    "categoryName": "Tên danh mục",
+    "categoryNameRequired": "Tên danh mục *",
+    "description": "Mô tả",
+    "broadcastHistory": "Lịch sử phát sóng",
+    "broadcastDeliveryAnalytics": "Phân tích giao hàng phát sóng",
+    "messageContent": "Nội dung thông điệp",
+    "targetAudience": "Đối tượng",
+    "totalRecipients": "Tổng số người nhận",
+    "broadcastTimestamp": "Thời gian phát sóng",
+    "deliveryInsightsSummary": "Tóm tắt phân tích giao hàng",
+    "noDeliveryAnalytics": "Không có dữ liệu phân tích giao hàng",
+    "fontBold": "B",
+    "fontItalic": "I",
+    "systemStatus": "Trạng thái hệ thống",
+    "queueStatus": "Trạng thái hàng đợi",
+    "fromHealthEndpoint": "Từ /api/health.",
+    "activeServicesInventory": "DANH SÁCH DỊCH VỤ ĐANG HOẠT ĐỘNG",
+    "serviceNode": "Nút dịch vụ",
+    "responseTime": "Thời gian phản hồi",
+    "uptime": "Thời gian hoạt động",
+    "noInfraData": "Không có dữ liệu hạ tầng",
+    "previousValue": "Giá trị trước",
+    "newValue": "Giá trị mới",
+    "logActionProjectUpdated": "DỰ ÁN ĐÃ CẬP NHẬT",
+    "logActionProjectCreated": "DỰ ÁN ĐÃ TẠO",
+    "logActionUserBanned": "NGƯỜI DÙNG ĐÃ BỊ CẤM",
+    "severityInfo": "THÔNG TIN",
+    "severityWarn": "CẢNH BÁO",
+    "severityCritical": "NGHIÊM TRỌNG",
+    "columnDoi": "DOI"
   }
-  ,"unsavedSectionSwitch": "Phần này có thay đổi chưa lưu. Vẫn chuyển phần?"
-  ,"unsavedPaperSwitch": "Bạn có thay đổi chưa lưu. Vẫn chuyển bài viết?"
-  ,"unsavedChanges": "Bạn có thay đổi chưa lưu."
-  ,"aiEvaluationFailed": "Đánh giá AI thất bại."
-  ,"readOnlySection": "Phần này chỉ có thể đọc."
-  ,"exportReady": "Tệp xuất đã sẵn sàng để tải xuống."
-  ,"newNotification": "Thông báo mới"
-  ,"markNotificationFailed": "Không thể đánh dấu thông báo là đã đọc."
-  ,"paperArchiveDownloaded": "Đã tải gói bài viết xuống."
-  ,"uploadingFile": "Đang tải {{name}} lên..."
-  ,"paperUploaded": "Đã tải bài viết lên."
-  ,"deletePaperConfirm": "Xóa bản nháp này?"
-  ,"paperDeleted": "Đã xóa bài viết."
-  ,"projectLocked": "Dự án đang bị khóa."
-  ,"sourceDeleted": "Đã xóa nguồn."
-  ,"selectSectionFirst": "Hãy chọn một phần trước."
-  ,"restoreConfirm": "Thay nội dung hiện tại bằng lần lưu trước? Mọi chỉnh sửa chưa lưu sẽ bị mất và một revision mới sẽ được tạo."
-  ,"versionRestored": "Đã khôi phục lần lưu trước thành một revision mới."
-  ,"restoreFailed": "Khôi phục thất bại."
-  ,"noSectionSelected": "Chưa chọn phần nào."
-  ,"traceabilityDownloaded": "Đã tải báo cáo truy vết xuống."
-  ,"traceabilityCsvDownloaded": "Đã tải CSV truy vết xuống."
-  ,"selectPaperFirst": "Hãy chọn một bài viết trước."
-  ,"formatScanFailed": "Quét định dạng thất bại."
-  ,"aiReviewComplete": "Citation Review hoàn tất."
-  ,"aiReviewPartial": "Citation Review chỉ hoàn thành một phần: {{failedBatches}} batch không thể kiểm tra."
-  ,"aiProviderRateLimited": "Nhà cung cấp AI đang giới hạn lượt gọi. Vui lòng thử lại sau."
-  ,"aiWorkerUnavailable": "Dịch vụ Citation Review không sẵn sàng hoặc đã hết thời gian chờ."
-  ,"aiInvalidResponse": "Citation Review trả về phản hồi không hợp lệ sau khi thử lại."
-  ,"aiReviewFailed": "Citation Review thất bại. Vui lòng thử lại."
-  ,"saveSubmissionCancelled": "Lưu thất bại — đã hủy gửi đánh giá."
-  ,"submittedForReview": "Đã gửi để đánh giá."
-  ,"submitFailed": "Gửi đánh giá thất bại."
-  ,"replacedAll": "Đã thay thế tất cả."
-  ,"notFound": "Không tìm thấy.", "notFoundMessage": "Trang bạn đang tìm không tồn tại hoặc đã bị di chuyển.", "backToHome": "Về trang chủ"
-  ,"submitReviewDescription": "Thao tác này sẽ khóa bài viết trong khi giảng viên đánh giá. Bạn có thể sửa lại nếu giảng viên trả về. Tiếp tục?"
-  ,"sectionAssigned": "Đã phân công phần."
-  ,"sectionUnassigned": "Đã bỏ phân công phần."
-  ,"assignFailed": "Phân công thất bại."
-  ,"versionLabel": "Phiên bản {{version}}"
-  ,"currentVersionLabel": "Phiên bản {{version}} (hiện tại)"
-  ,"updatedAtLabel": "Cập nhật lúc: {{date}}"
-  ,"citationReview": "Citation Review"
-  ,"reviewing": "Đang kiểm tra..."
-  ,"runReview": "Kiểm tra"
-  ,"citationReviewDescription": "Lưu phần hiện tại, tìm các phát biểu có thể cần trích dẫn, rồi hiển thị đánh dấu và nguồn liên quan để bạn xác minh."
-  ,"reviewStale": "Nội dung đã thay đổi sau lần kiểm tra này. Hãy chạy lại để cập nhật đánh dấu; các đoạn không đổi vẫn có thể được chèn trích dẫn."
-  ,"openCitationReviewFindings": "Mở {{count}} cảnh báo Citation Review"
-  ,"rerunReview": "Kiểm tra lại"
-  ,"previousFinding": "Cảnh báo trước"
-  ,"nextFinding": "Cảnh báo tiếp theo"
-  ,"citationFindingDiscrepancy": "Nguồn mâu thuẫn"
-  ,"citationFindingNoEvidence": "Chưa tìm thấy bằng chứng"
-  ,"citationFindingNeedsReview": "Cần kiểm tra"
-  ,"findingConfidence": "Mức chắc chắn cảnh báo: {{level}}"
-  ,"confidenceHigh": "Cao"
-  ,"confidenceMedium": "Vừa"
-  ,"confidenceLow": "Thấp"
-  ,"flaggedExcerpt": "Đoạn được phát hiện"
-  ,"reviewConclusion": "Kết luận"
-  ,"reviewEvidence": "Bằng chứng"
-  ,"relationSupports": "Ủng hộ"
-  ,"relationContradicts": "Mâu thuẫn"
-  ,"relationNotFound": "Không tìm thấy"
-  ,"searchingRelatedSources": "Đang tìm nguồn liên quan trong dự án..."
-  ,"retrievalSimilarity": "Tương đồng truy hồi {{score}}%"
-  ,"retrievalSimilarityHelp": "Chỉ là độ tương đồng khi truy hồi ngữ nghĩa, không phải độ chính xác của trích dẫn hoặc độ mạnh bằng chứng."
-  ,"reviewLimitations": "Giới hạn của lần kiểm tra"
-  ,"sectionNotReviewed": "Phần này chưa được AI kiểm tra."
-  ,"citationInserted": "Đã chèn trích dẫn"
-  ,"relatedSources": "Nguồn liên quan"
-  ,"sourceEvidence": "Nguồn và bằng chứng"
-  ,"usedInConclusion": "Dùng trong kết luận"
-  ,"checkedInReview": "Đã kiểm tra"
-  ,"relatedSource": "Liên quan"
-  ,"otherRelatedPassages": "{{count}} đoạn liên quan khác"
-  ,"openPassage": "Mở đoạn"
-  ,"sourceViewMode": "Chế độ xem nguồn"
-  ,"extractedPassage": "Đoạn đã trích xuất"
-  ,"originalSourceFile": "Tệp gốc"
-  ,"openOriginalSourceFile": "Mở tệp gốc"
-  ,"loadingPassage": "Đang tải đoạn đã trích xuất..."
-  ,"passageUnavailable": "Đoạn đã trích xuất này không còn khả dụng."
-  ,"selectedSourcePassage": "Đoạn nguồn đã chọn"
-  ,"chunkLabel": "Đoạn trích xuất {{index}}"
-  ,"extractedPassageNotice": "Đây là văn bản được trích xuất từ nguồn. Chọn Tệp gốc để kiểm tra trực tiếp tài liệu."
-  ,"passageQuoteNotLocated": "Không tìm thấy nguyên văn đoạn đã chọn trong chunk này; hệ thống đang hiển thị toàn bộ chunk."
-  ,"noEvidenceInSources": "Không tìm thấy bằng chứng trong các nguồn của dự án."
-  ,"noRelatedSources": "Không tìm thấy nguồn liên quan trong dự án."
-  ,"insertCitation": "Chèn trích dẫn"
-  ,"noCitationFindings": "Không phát hiện nội dung cần bổ sung trích dẫn trong phần này."
-  ,"retrySourceSearch": "Tìm nguồn lại"
-  ,"sourceSearchFailed": "Citation Review đã hoàn tất nhưng bước tìm nguồn liên quan thất bại."
-  ,"reviewSectionChanged": "Phần đã lưu hoặc tập nguồn thay đổi trong lúc Citation Review xử lý. Hãy lưu và chạy lại."
-  ,"reviewExcerptChanged": "Đoạn văn đã thay đổi hoặc xuất hiện nhiều lần. Hãy chạy Citation Review lại."
-  ,"citationAlreadyInserted": "Trích dẫn nguồn này đã nằm cạnh đoạn văn."
-  ,"cachedReviewFailed": "Không thể tải kết quả Citation Review đã lưu của phần này."
-  ,"unknown": "Không xác định"
-  ,"projectForbiddenTitle": "Từ chối truy cập"
-  ,"projectForbiddenMessage": "Bạn không có quyền mở dự án này."
-  ,"projectNotFoundTitle": "Không tìm thấy dự án"
-  ,"projectNotFoundMessage": "Dự án này không tồn tại hoặc định danh không hợp lệ."
-  ,"projectLoadErrorTitle": "Không thể tải dự án"
-  ,"projectLoadErrorMessage": "Đã xảy ra lỗi khi tải dự án. Vui lòng thử lại."
-  ,"backToProjects": "Quay lại danh sách dự án"
-  ,"retry": "Thử lại"
-  ,"tracesLoadFailed": "Không thể tải dấu vết bằng chứng."
-  ,"traceDecisionSaved": "Đã lưu quyết định."
-  ,"traceSectionChanged": "Phần đã thay đổi. Hãy chạy Citation Review lại trước khi ghi quyết định."
-  ,"traceAlreadyJudged": "Giảng viên đã đánh giá dấu vết này. Các thay đổi tiếp theo thuộc vòng review mới."
-  ,"traceSectionNotChanged": "Hãy lưu thay đổi nội dung trước khi ghi hành động này. Chọn Bỏ qua kèm lý do nếu không cần sửa."
-  ,"traceSectionVersionChanged": "Nội dung phần đã thay đổi lần nữa. Hãy tải lại và chọn lại đoạn đã sửa."
-  ,"traceDecisionConflict": "Không thể cập nhật dấu vết này nữa. Hãy tải lại và thử lại."
-  ,"traceDecisionFailed": "Không thể lưu quyết định. Vui lòng thử lại."
-  ,"revisedPassageSelectionRequired": "Hãy chọn đoạn đã sửa trong trình soạn thảo trước khi lưu. Với Xóa, đặt con trỏ tại vị trí đoạn văn đã bị xóa."
-  ,"runReviewAgain": "Chạy Citation Review lại"
-  ,"editTraceDecision": "Sửa quyết định"
-  ,"recordTraceDecision": "Ghi quyết định"
-  ,"studentAction": "Hành động"
-  ,"selectAction": "Chọn hành động..."
-  ,"bindSource": "Gắn nguồn"
-  ,"selectSource": "Chọn nguồn..."
-  ,"evidenceQuote": "Trích dẫn bằng chứng"
-  ,"explanation": "Giải thích"
-  ,"explanationPlaceholder": "Bắt buộc: giải thích bạn đã thay đổi gì hoặc vì sao citation hiện tại đã phù hợp..."
-  ,"citationInsertTraceExplanation": "Đã chèn citation từ {{source}} cho nhận xét này."
-  ,"reviewCompletedStatus": "Review đã hoàn tất"
-  ,"savedTraceStatus": "Lịch sử dấu vết đã lưu"
-  ,"sourceMatchesLoadingStatus": "Đang tải nguồn liên quan"
-  ,"sourceMatchesFailedStatus": "Tải nguồn liên quan thất bại"
-  ,"sourceMatchesReadyStatus": "Nguồn liên quan đã sẵn sàng"
-  ,"sourceMatchesUnavailableStatus": "Chưa tải nguồn liên quan"
-  ,"aiComparisonReadyStatus": "Đã có so sánh AI"
-  ,"aiComparisonPendingStatus": "Chưa có so sánh AI"
-  ,"savedTraceDecisions": "Quyết định đã lưu"
-  ,"notAddressed": "Chưa xử lý"
-  ,"aiAdvisory": "Nhận định tham khảo của AI"
-  ,"instructorJudgment": "Đánh giá của giảng viên"
-  ,"traceJudgedLocked": "Đã khóa sau đánh giá của giảng viên"
-  ,"saveDecision": "Lưu quyết định"
-  ,"requirements": "Yêu cầu"
-  ,"selfCheckLoadFailed": "Không thể tải yêu cầu của section."
-  ,"selfCheckCompleted": "Đã tự kiểm tra nội dung section."
-  ,"selfCheckFailed": "Tự kiểm tra section thất bại. Vui lòng thử lại."
-  ,"handoffConfirmed": "Đã xác nhận bàn giao phiên bản section được lưu hiện tại."
-  ,"handoffRevoked": "Đã gỡ xác nhận bàn giao section."
-  ,"handoffFailed": "Không thể cập nhật xác nhận bàn giao section."
-  ,"handoffInputChanged": "Section đã thay đổi trong phiên khác. Hãy tải lại và xem bản đã lưu trước khi xác nhận."
-  ,"selectSectionForRequirements": "Chọn một section để xem yêu cầu."
-  ,"selfCheckAdvisory": "Nhận định của AI chỉ mang tính tham khảo. AI kiểm tra riêng từng yêu cầu và không quyết định dự án có được nộp cho giảng viên review hay không."
-  ,"saveBeforeSelfCheck": "Hãy lưu section trước. Tự kiểm tra và bàn giao luôn dùng phiên bản đã lưu."
-  ,"sectionRequirements": "Yêu cầu của section"
-  ,"checkingRequirements": "Đang kiểm tra..."
-  ,"checkAgain": "Kiểm tra lại"
-  ,"checkRequirements": "Kiểm tra nội dung"
-  ,"requirementsNotConfigured": "Giảng viên chưa cấu hình yêu cầu cho section này."
-  ,"selfCheckSystemError": "Không thể xác thực kết quả AI. Hệ thống không ghi nhận kết luận học thuật nào."
-  ,"selfCheckStale": "Kết quả này thuộc phiên bản section cũ. Hãy kiểm tra lại để cập nhật."
-  ,"selfCheckVerdictMET": "Đã đáp ứng"
-  ,"selfCheckVerdictPARTIAL": "Đáp ứng một phần"
-  ,"selfCheckVerdictNOT_MET": "Chưa đáp ứng"
-  ,"selfCheckVerdictUNVERIFIABLE": "Không thể xác minh"
-  ,"reason": "Lý do"
-  ,"missingContent": "Còn thiếu"
-  ,"suggestion": "Gợi ý"
-  ,"limitations": "Giới hạn"
-  ,"sectionHandoff": "Bàn giao section"
-  ,"handoffDescription": "Chỉ xác nhận phiên bản đã lưu hiện tại của section được giao đã sẵn sàng bàn giao. Đây không phải phê duyệt chất lượng học thuật."
-  ,"handoffConfirmedDescription": "{{name}} đã xác nhận phiên bản được lưu hiện tại."
-  ,"handoffStateConfirmed": "Đã xác nhận"
-  ,"handoffStateUnconfirmed": "Chưa xác nhận"
-  ,"handoffAssigneeOnly": "Chỉ sinh viên được giao section này mới có thể xác nhận."
-  ,"handoffBlocked": "Cần có nội dung và người được giao hợp lệ trước khi xác nhận."
-  ,"revokeHandoff": "Gỡ xác nhận"
-  ,"confirmHandoff": "Xác nhận phiên bản đã lưu"
-  ,"readinessLoadFailed": "Không thể tải điều kiện nộp review."
-  ,"submissionInputChanged": "Dự án đã thay đổi sau khi danh sách điều kiện được tải. Hãy xem lại điều kiện mới rồi nộp lại."
-  ,"submitReadinessDescription": "Chỉ cho phép nộp khi mọi điều kiện khách quan của dự án đều đạt. Kết quả tự kiểm tra bằng AI không phải điều kiện nộp."
-  ,"unsavedSectionsBlockSubmission": "Có {{count}} section còn thay đổi chưa lưu. Hãy lưu trước khi nộp."
-  ,"reviewReady": "Đã sẵn sàng nộp review"
-  ,"reviewNotReady": "Chưa sẵn sàng nộp"
-  ,"leaderSubmissionOnly": "Chỉ nhóm trưởng mới có thể nộp vòng review."
-  ,"submissionChecks": "Điều kiện nộp khách quan"
-  ,"reviewCheckProjectEditable": "Dự án đang ở trạng thái cho phép chuẩn bị nộp."
-  ,"reviewCheckInstructorAssigned": "Dự án đã được gán giảng viên."
-  ,"reviewCheckPaperPresent": "Dự án có ít nhất một paper đang hoạt động."
-  ,"reviewCheckPaperReady": "Mọi paper đang hoạt động đã xử lý xong."
-  ,"reviewCheckSectionsPresent": "Mỗi paper đang hoạt động có ít nhất một section."
-  ,"reviewCheckSectionBodyPresent": "Mọi section đang hoạt động đều có nội dung đã lưu."
-  ,"reviewCheckAssigneeValid": "Mọi section đang hoạt động đã được giao cho thành viên sinh viên đang hoạt động."
-  ,"reviewCheckSectionConfirmed": "Phiên bản đã lưu hiện tại của mọi section đã được người phụ trách xác nhận."
-  ,"sectionBlockerBodyMissing": "Section này chưa có nội dung đã lưu."
-  ,"sectionBlockerAssigneeInvalid": "Section này chưa có sinh viên đang hoạt động phụ trách."
-  ,"sectionBlockerHandoffMissing": "Người phụ trách chưa xác nhận phiên bản đã lưu này."
 }

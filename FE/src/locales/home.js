@@ -161,7 +161,7 @@ export const homeText = {
       heading: 'Tính năng chính',
       subheading: 'Công cụ tập trung cho dự án và đánh giá dựa trên bằng chứng',
       structuredData: { title: 'Nguồn có cấu trúc', desc: 'Tổ chức tài liệu tải lên, metadata DOI, liên kết và quan hệ nguồn trong từng dự án.' },
-      citationReview: { title: 'Citation Review', desc: 'Phát hiện nội dung có thể cần trích dẫn, cảnh báo sai lệch nguồn và tìm nguồn liên quan trong dự án.' },
+      citationReview: { title: 'Đánh giá trích dẫn', desc: 'Phát hiện nội dung có thể cần trích dẫn, cảnh báo sai lệch nguồn và tìm nguồn liên quan trong dự án.' },
       feedback: { title: 'Phản hồi trực tiếp', desc: 'Cộng tác liền mạch qua yêu cầu đánh giá tương tác, nhận xét và phản hồi từ giảng viên.' },
       documentExtraction: { title: 'Trích xuất tài liệu', desc: 'Trích xuất văn bản và hình ảnh có thể tìm kiếm từ tài liệu nghiên cứu đã tải lên.' },
       vectorSearch: { title: 'Tìm kiếm ngữ nghĩa', desc: 'Tìm bằng chứng liên quan trên tất cả nguồn tài liệu với tìm kiếm ngữ nghĩa vector dựa trên Qdrant.' },

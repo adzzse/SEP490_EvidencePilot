@@ -12,16 +12,17 @@ export default class ErrorBoundary extends Component {
 
   render() {
     if (this.state.hasError) {
+      const isVi = localStorage.getItem('app_lang') === 'vi';
       return (
         <div className="min-h-screen flex items-center justify-center bg-(--page-bg) text-(--text-primary)">
           <div className="max-w-md w-full bg-(--surface) rounded-2xl border border-(--border) shadow-sm p-8 text-center space-y-4">
-            <div className="text-3xl font-black text-rose-600">Something went wrong</div>
+            <div className="text-3xl font-black text-rose-600">{isVi ? 'Đã xảy ra lỗi' : 'Something went wrong'}</div>
             <p className="text-xs text-gray-500">{this.state.message}</p>
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-[#1e3a8a] text-white text-xs font-bold rounded-lg hover:bg-blue-800 transition"
+              className="px-4 py-2 bg-[#1e3a8a] text-white text-xs font-bold rounded-lg hover:bg-blue-800 transition cursor-pointer"
             >
-              Reload page
+              {isVi ? 'Tải lại trang' : 'Reload page'}
             </button>
           </div>
         </div>

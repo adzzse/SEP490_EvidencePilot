@@ -137,7 +137,7 @@ class AdminControllerTest {
                         .param("actorId", actorId.toString())
                         .param("entityType", "USER").param("entityId", entityId.toString()))
                 .andExpect(status().isOk());
-        verify(service).getAuditLogs(1, 10, actorId, "USER", entityId);
+        verify(service).getAuditLogs(1, 10, actorId, "USER", entityId, null, null);
 
         org.mockito.Mockito.when(service.broadcast(any(AdminBroadcastRequest.class))).thenReturn(2L);
         mockMvc.perform(post("/api/admin/notifications/broadcast")
@@ -145,6 +145,16 @@ class AdminControllerTest {
                         .content("{\"message\":\"Maintenance soon\",\"role\":\"STUDENT\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recipientCount").value(2));
+    }
+
+    @Test
+    void auditLogsBindActionAndSeverityFilters() throws Exception {
+        mockMvc.perform(get("/api/admin/audit-logs")
+                        .param("action", "USER_BANNED")
+                        .param("severity", "CRITICAL"))
+                .andExpect(status().isOk());
+        verify(service).getAuditLogs(0, 20, null, null, null, "USER_BANNED",
+                com.evidencepilot.model.enums.AuditSeverity.CRITICAL);
     }
 
     @Test
@@ -163,5 +173,27 @@ class AdminControllerTest {
                 .andExpect(jsonPath("$.processed").value(1100))
                 .andExpect(jsonPath("$.failed").value(12));
         verify(service).getDocumentCounts("query", projectId, collectionId);
+    }
+
+    @Test
+    void listProjectsBindsInstructorFilterAndReturnsOk() throws Exception {
+        mockMvc.perform(get("/api/admin/projects")
+                        .param("page", "1").param("size", "10")
+                        .param("q", "capstone")
+                        .param("status", "IN_PROGRESS")
+                        .param("instructor", "ada@test.com"))
+                .andExpect(status().isOk());
+        verify(service).getProjects(1, 10, "capstone",
+                com.evidencepilot.model.enums.ProjectStatus.IN_PROGRESS, "ada@test.com");
+    }
+
+    @Test
+    void projectSectionsCountReturnsCount() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(service.countProjectSections(id)).thenReturn(42L);
+        mockMvc.perform(get("/api/admin/projects/{id}/sections-count", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sectionsCount").value(42));
+        verify(service).countProjectSections(id);
     }
 }

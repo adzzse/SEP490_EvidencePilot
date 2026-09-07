@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useNotification } from '../../context/NotificationContext';
+import api from '../../services/api.js';
 import { NOTIFICATION_HOVER_DEBOUNCE_MS } from '../../utils/constants';
 import { formatDateTime } from '../../utils/formatters/date';
 
 export default function NotificationBell({ onOpen }) {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
+  const navigate = useNavigate();
   const { language } = useLanguage();
   const { t } = useTranslation();
   const { notifications, unreadCount, markRead } = useNotification();
@@ -50,13 +53,33 @@ export default function NotificationBell({ onOpen }) {
     }
   };
 
-  const handleClick = (notification) => {
+  const handleClick = async (notification) => {
     if (!notification.read) {
       if (hoverTimersRef.current.has(notification.id)) {
         clearTimeout(hoverTimersRef.current.get(notification.id));
         hoverTimersRef.current.delete(notification.id);
       }
       markRead(notification.id);
+    }
+    const reviewAction = ['REVIEW_SUBMITTED', 'REVIEW_RETURNED', 'INSTRUCTOR_FEEDBACK_PUBLISHED', 'REVIEW_STATUS_CHANGED']
+      .includes(notification.actionType);
+    if (!reviewAction || !notification.entityId) {
+      setOpen(false);
+      return;
+    }
+    try {
+      const { data: requests } = await api.get('/api/feedback-requests');
+      const request = (requests || []).find(item => String(item.id) === String(notification.entityId));
+      if (!request?.projectId) return;
+      const query = new URLSearchParams({ review: request.id });
+      if (notification.feedbackId) query.set('feedback', notification.feedbackId);
+      navigate(role === 'STUDENT'
+        ? `/student/projects/${encodeURIComponent(request.projectId)}?${query}`
+        : `/instructor/requests/${encodeURIComponent(request.projectId)}?${query}`);
+    } catch {
+      // Reading the destination is best-effort; the notification was still handled.
+    } finally {
+      setOpen(false);
     }
   };
 

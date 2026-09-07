@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -48,6 +49,9 @@ class ProjectServiceImplFlowTest {
 
     @Mock
     private AuditService auditService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @Test
     void createProjectRequiresInstructorAndStoresInstructorMembership() {
@@ -166,7 +170,8 @@ class ProjectServiceImplFlowTest {
                 userRepository,
                 currentUserService,
                 systemNotificationService,
-                auditService);
+                auditService,
+                eventPublisher);
     }
 
     private User user(UserRole role) {

@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -51,6 +52,9 @@ class ProjectServiceImplPagingTest {
     @Mock
     private AuditService auditService;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     @Test
     void getAllProjectsReturnsPagedMetadataAndWhitelistedSort() {
         User admin = new User();
@@ -79,7 +83,8 @@ class ProjectServiceImplPagingTest {
                 userRepository,
                 currentUserService,
                 systemNotificationService,
-                auditService);
+                auditService,
+                eventPublisher);
 
         var response = service.getAllProjects(
                 1,
@@ -118,7 +123,8 @@ class ProjectServiceImplPagingTest {
                 userRepository,
                 currentUserService,
                 systemNotificationService,
-                auditService);
+                auditService,
+                eventPublisher);
 
         var response = service.getAllProjects(0, 10, "createdAt,desc", null, null, null);
 

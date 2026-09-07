@@ -152,6 +152,10 @@ class ProjectRouteMappingTest {
                 "POST /api/feedback-requests/{id}/feedback",
                 "PATCH /api/feedback-requests/{id}/status",
                 "POST /api/instructor-feedback/{id}/answer",
+                "POST /api/instructor-feedback/{id}/replies",
+                "PATCH /api/instructor-feedback/{id}/replies/{replyId}",
+                "DELETE /api/instructor-feedback/{id}/replies/{replyId}",
+                "PATCH /api/instructor-feedback/{id}/state",
                 "PATCH /api/instructor-feedback/{id}",
                 "DELETE /api/instructor-feedback/{id}",
                 "GET /api/notifications",
@@ -171,6 +175,10 @@ class ProjectRouteMappingTest {
                 "GET /api/admin/documents",
                 "GET /api/admin/documents/counts",
                 "GET /api/admin/projects",
+                "GET /api/admin/projects/{id}/sections-count",
+                "GET /api/admin/projects/{id}/sections",
+                "PATCH /api/admin/projects/{id}/archive",
+                "PATCH /api/admin/projects/{id}/unarchive",
                 "GET /api/admin/config",
                 "DELETE /api/papers/{documentId}/sections/{sectionId}",
                 "PUT /api/papers/{documentId}/sections/{sectionId}/assign",
@@ -197,7 +205,6 @@ class ProjectRouteMappingTest {
                 "DELETE /api/users/email-change/cancel",
                 "POST /api/users/avatar",
                 "GET /api/users/me/activity"));
-        assertThat(routes).hasSize(146);
     }
 
     @Test

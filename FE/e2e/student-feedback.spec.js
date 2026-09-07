@@ -53,7 +53,7 @@ async function setup(page, options = {}) {
       json = [{ id: 'round-one', projectId: project.id, status: 'RETURNED', requestedAt: '2026-09-06T10:00:00' },
         { id: 'round-old', projectId: project.id, status: 'REJECTED', requestedAt: '2026-09-05T10:00:00' }];
     } else if (/\/feedback-requests\/[^/]+\/feedback$/.test(path)) json = state.items.filter(item => item.requestId === path.split('/').at(-2));
-    else if (path === '/api/notifications') json = [{ id: 'notice-one', actionType: 'INSTRUCTOR_FEEDBACK_ADDED', entityId: 'round-one', message: 'Open review feedback', read: true }];
+    else if (path === '/api/notifications') json = options.notifications || [{ id: 'notice-one', actionType: 'INSTRUCTOR_FEEDBACK_ADDED', entityId: 'round-one', message: 'Open review feedback', read: true }];
     else if (path === '/api/notifications/unread-count') json = { count: 0 };
     else if (path.endsWith('/section-one/rollback')) {
       const previous = state.sections[0];
@@ -88,6 +88,37 @@ async function setup(page, options = {}) {
   await expect(page.locator('.cm-content')).toContainText('Opening paragraph');
   return state;
 }
+
+test('a new feedback notification refreshes its thread and preserves drafts when navigation is cancelled', async ({ page }) => {
+  let feedbackLoads = 0;
+  page.on('response', response => {
+    if (/\/feedback-requests\/[^/]+\/feedback$/.test(new URL(response.url()).pathname)) feedbackLoads++;
+  });
+  const state = await setup(page, { notifications: [{ id: 'fresh-notice',
+    actionType: 'INSTRUCTOR_FEEDBACK_PUBLISHED', entityId: 'round-one', feedbackId: 'fresh-feedback',
+    message: 'Open fresh feedback', read: true }] });
+  await expect.poll(() => feedbackLoads).toBeGreaterThanOrEqual(2);
+  const initialLoads = feedbackLoads;
+  state.items.push({ ...state.items.find(item => item.id === 'other-section'), id: 'fresh-feedback',
+    requestId: 'round-old', content: 'Newly published Methods feedback.', answered: false, threadState: 'OPEN' });
+  await page.locator('[data-tour="editor-feedback"]').click();
+  await page.getByRole('combobox', { name: 'Go to feedback', exact: true }).selectOption('feedback-0');
+  await page.locator('[data-feedback-card="feedback-0"] textarea').fill('Keep my unsent reply');
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+Home');
+  await page.keyboard.insertText('Unsaved source ');
+  await page.locator('[data-tour="header-notifications"]').click();
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.getByRole('button', { name: 'Open fresh feedback' }).click();
+  await expect.poll(() => feedbackLoads).toBeGreaterThan(initialLoads);
+  await expect(page.locator('.cm-content')).toContainText('Unsaved source ');
+  await expect(page.locator('[data-feedback-card="feedback-0"] textarea')).toHaveValue('Keep my unsent reply');
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Open fresh feedback' }).click();
+  await expect(page.locator('[data-feedback-card="fresh-feedback"]')).toBeVisible();
+  await expect(page.locator('.cm-content')).toContainText('Methods description');
+  expect(state.errors).toEqual([]);
+});
 
 async function openFeedback(page) {
   const context = page.locator('[data-tour="context-panel"]');
@@ -203,6 +234,20 @@ test('load failure/retry and cross-section navigation respect unsaved changes', 
   state.failLoad = 403; await page.getByRole('button', { name: 'Refresh feedback' }).click();
   await expect(page.locator('#student-feedback-panel [role="alert"]')).toContainText('no longer have access');
   await expect(page.locator('[data-feedback-card]')).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('open threads are the default, while a direct feedback link reveals a done thread', async ({ page }) => {
+  const state = await setup(page);
+  state.items[0].threadState = 'DONE';
+  await page.reload();
+  await page.locator('[data-tour="sidebar-left"] button').nth(1).click();
+  await page.locator('[data-tour="editor-feedback"]').click();
+  await expect(page.getByRole('combobox', { name: 'Thread state', exact: true })).toHaveValue('OPEN');
+  await expect(page.locator('[data-feedback-card="feedback-0"]')).toHaveCount(0);
+
+  await page.goto(`${root}?review=round-one&feedback=feedback-0`);
+  await expect(page.locator('[data-feedback-card="feedback-0"]')).toBeVisible();
   expect(state.errors).toEqual([]);
 });
 

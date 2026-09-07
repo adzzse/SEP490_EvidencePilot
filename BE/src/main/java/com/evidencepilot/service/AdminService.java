@@ -11,11 +11,15 @@ import com.evidencepilot.dto.response.AdminProjectResponse;
 import com.evidencepilot.dto.response.AdminUserResponse;
 import com.evidencepilot.dto.response.AdminUserImportResponse;
 import com.evidencepilot.dto.response.PagedResponse;
+import com.evidencepilot.dto.response.PaperSectionResponse;
+import com.evidencepilot.dto.response.ProjectResponse;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
+import com.evidencepilot.model.enums.AuditSeverity;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.ProjectStatus;
@@ -23,12 +27,14 @@ import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.AuditLogRepository;
 import com.evidencepilot.repository.CollectionRepository;
 import com.evidencepilot.repository.DocumentRepository;
+import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -38,6 +44,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -65,6 +72,7 @@ public class AdminService {
     private final CollectionCategoryRepository collectionCategories;
     private final CollectionRepository collections;
     private final DocumentRepository documents;
+    private final PaperSectionRepository paperSections;
     private final AuditLogRepository auditLogs;
     private final CurrentUserService currentUsers;
     private final PasswordResetService passwordResets;
@@ -76,6 +84,7 @@ public class AdminService {
     private final UserAvatarService avatars;
     // Empty unless the dev profile is active — DevBypassPolicy is @Profile("dev").
     private final ObjectProvider<DevBypassPolicy> devBypassPolicies;
+    private final ApplicationEventPublisher events;
 
     @Transactional(readOnly = true)
     public PagedResponse<AdminUserResponse> getUsers(
@@ -144,6 +153,7 @@ public class AdminService {
         }
         user.setCreatedAt(LocalDateTime.now());
         user = users.save(user);
+        events.publishEvent(new EntityChangedEvent("USER", user.getId(), "CREATED", null));
 
         audit.record("USER_CREATED", "USER", user.getId(), currentUsers.requireCurrentUser(), null, auditValue);
         if (!devBypass) {
@@ -281,6 +291,7 @@ public class AdminService {
         users.saveAll(changedUsers);
         User actor = currentUsers.requireCurrentUser();
         for (User user : changedUsers) {
+            events.publishEvent(new EntityChangedEvent("USER", user.getId(), "CREATED", null));
             Map<String, Object> newValue = safeUser(user);
             if (devBypass) {
                 newValue.put("devBypass", true);
@@ -309,6 +320,7 @@ public class AdminService {
         user.setAccountStatus(request.status());
         user.setTokenVersion(user.getTokenVersion() + 1);
         users.save(user);
+        events.publishEvent(new EntityChangedEvent("USER", id, "STATUS_CHANGED", null));
         audit.record("USER_STATUS_UPDATED", "USER", id, currentUsers.requireCurrentUser(),
                 Map.of("accountStatus", oldStatus), Map.of("accountStatus", user.getAccountStatus()));
         return AdminUserResponse.from(user, avatars.resolveAvatarUrl(user));
@@ -327,6 +339,7 @@ public class AdminService {
         user.setPasswordResetRequestedAt(null);
         user.setTokenVersion(user.getTokenVersion() + 1);
         users.save(user);
+        events.publishEvent(new EntityChangedEvent("USER", id, "STATUS_CHANGED", null));
         audit.record("USER_DELETED", "USER", id, currentUsers.requireCurrentUser(),
                 Map.of("accountStatus", oldStatus), Map.of("accountStatus", AccountStatus.DELETED));
     }
@@ -382,16 +395,32 @@ public class AdminService {
 
     @Transactional(readOnly = true)
     public PagedResponse<AdminAuditLogResponse> getAuditLogs(
-            int page, int size, UUID actorId, String entityType, UUID entityId) {
+            int page, int size, UUID actorId, String entityType, UUID entityId,
+            String action, AuditSeverity severity) {
         Pageable pageable = PagingRequest.pageable(page, size, "occurredAt,desc", Set.of("occurredAt"), "occurredAt,desc");
         Page<com.evidencepilot.model.AuditLog> result;
-        if (actorId != null && entityType != null && !entityType.isBlank() && entityId != null) {
+        boolean hasEntity = entityType != null && !entityType.isBlank() && entityId != null;
+        boolean hasAction = action != null && !action.isBlank();
+        if (hasEntity && actorId == null && !hasAction && severity == null) {
+            result = auditLogs.findByEntityTypeAndEntityIdOrderByOccurredAtDesc(entityType, entityId, pageable);
+        } else if (hasEntity && actorId != null && !hasAction && severity == null) {
             result = auditLogs.findByActorIdAndEntityTypeAndEntityIdOrderByOccurredAtDesc(
                     actorId, entityType, entityId, pageable);
+        } else if (actorId != null && hasAction && severity != null) {
+            result = auditLogs.findByActorIdAndActionAndSeverityOrderByOccurredAtDesc(
+                    actorId, action, severity, pageable);
+        } else if (actorId != null && hasAction) {
+            result = auditLogs.findByActorIdAndActionOrderByOccurredAtDesc(actorId, action, pageable);
+        } else if (actorId != null && severity != null) {
+            result = auditLogs.findByActorIdAndSeverityOrderByOccurredAtDesc(actorId, severity, pageable);
+        } else if (hasAction && severity != null) {
+            result = auditLogs.findByActionAndSeverityOrderByOccurredAtDesc(action, severity, pageable);
         } else if (actorId != null) {
             result = auditLogs.findByActorIdOrderByOccurredAtDesc(actorId, pageable);
-        } else if (entityType != null && !entityType.isBlank() && entityId != null) {
-            result = auditLogs.findByEntityTypeAndEntityIdOrderByOccurredAtDesc(entityType, entityId, pageable);
+        } else if (hasAction) {
+            result = auditLogs.findByActionOrderByOccurredAtDesc(action, pageable);
+        } else if (severity != null) {
+            result = auditLogs.findBySeverityOrderByOccurredAtDesc(severity, pageable);
         } else {
             result = auditLogs.findAllByOrderByOccurredAtDesc(pageable);
         }
@@ -418,20 +447,28 @@ public class AdminService {
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> getExtractionQueue() {
+    public Map<String, Object> getExtractionQueue(LocalDate from, LocalDate to) {
         Map<String, Long> counts = new LinkedHashMap<>();
         for (ProcessingStatus s : ProcessingStatus.values()) {
             counts.put(s.name(), documents.countByProcessingStatus(s));
         }
-        List<Map<String, Object>> queued = queueRows(ProcessingStatus.QUEUED);
-        List<Map<String, Object>> processing = queueRows(ProcessingStatus.PROCESSING);
-        List<Map<String, Object>> ready = queueRows(ProcessingStatus.READY);
-        List<Map<String, Object>> failed = queueRows(ProcessingStatus.FAILED);
+        List<Map<String, Object>> queued = queueRows(ProcessingStatus.QUEUED, from, to);
+        List<Map<String, Object>> processing = queueRows(ProcessingStatus.PROCESSING, from, to);
+        List<Map<String, Object>> ready = queueRows(ProcessingStatus.READY, from, to);
+        List<Map<String, Object>> failed = queueRows(ProcessingStatus.FAILED, from, to);
         return Map.of("counts", counts, "queued", queued, "processing", processing, "ready", ready, "failed", failed);
     }
 
-    private List<Map<String, Object>> queueRows(ProcessingStatus status) {
-        return documents.findByProcessingStatusAndActiveTrue(status).stream().limit(50).map(d -> {
+    private List<Map<String, Object>> queueRows(ProcessingStatus status, LocalDate from, LocalDate to) {
+        // ponytail: date filtering happens in memory — the four status lists are
+        // small by design (50 live / 500 history cap), so no extra query needed.
+        var stream = documents.findByProcessingStatusAndActiveTrue(status).stream()
+                .filter(d -> from == null
+                        || (d.getCreatedAt() != null && !d.getCreatedAt().toLocalDate().isBefore(from)))
+                .filter(d -> to == null
+                        || (d.getCreatedAt() != null && !d.getCreatedAt().toLocalDate().isAfter(to)));
+        long limit = (from != null || to != null) ? 500 : 50;
+        return stream.limit(limit).map(d -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", d.getId());
             m.put("originalFilename", d.getOriginalFilename());
@@ -481,7 +518,8 @@ public class AdminService {
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<AdminProjectResponse> getProjects(int page, int size, String q, ProjectStatus status) {
+    public PagedResponse<AdminProjectResponse> getProjects(int page, int size, String q, ProjectStatus status,
+            String instructor) {
         Pageable pageable = PagingRequest.pageable(page, size, "createdAt,desc",
                 Set.of("createdAt", "title", "status"), "createdAt,desc");
         Specification<Project> spec = (root, query, cb) -> {
@@ -496,9 +534,62 @@ public class AdminService {
                         cb.like(cb.lower(root.get("title")), like),
                         cb.like(cb.lower(root.get("description")), like)));
             }
+            if (instructor != null && !instructor.isBlank()) {
+                // Instructor is derived from INSTRUCTOR-role members, not a direct FK.
+                query.distinct(true);
+                String like = "%" + instructor.trim().toLowerCase(Locale.ROOT) + "%";
+                var members = root.join("projectMembers", jakarta.persistence.criteria.JoinType.LEFT);
+                var user = members.join("user", jakarta.persistence.criteria.JoinType.LEFT);
+                predicates.add(cb.or(
+                        cb.like(cb.lower(user.get("email")), like),
+                        cb.like(cb.lower(user.get("firstName")), like),
+                        cb.like(cb.lower(user.get("lastName")), like)));
+            }
             return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
         };
         return PagedResponse.from(projects.findAll(spec, pageable).map(AdminProjectResponse::from));
+    }
+
+    @Transactional(readOnly = true)
+    public long countProjectSections(UUID projectId) {
+        return paperSections.countByDocument_Project_Id(projectId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PaperSectionResponse> listProjectSections(UUID projectId) {
+        return paperSections
+                .findByDocument_Project_IdOrderByDocument_IdAscSectionOrderAsc(projectId)
+                .stream()
+                .map(PaperSectionResponse::from)
+                .toList();
+    }
+
+    @Transactional
+    public ProjectResponse adminArchiveProject(UUID id) {
+        // ponytail: admins are restricted to un-archive only — they cannot archive
+        // a project. The archive path lives on the instructor endpoint and the
+        // existing per-membership guard. The admin endpoint stays wired so the
+        // FE doesn't 404, but every call is rejected with 403.
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Admins cannot archive projects; use the instructor endpoint.");
+    }
+
+    @Transactional
+    public ProjectResponse adminUnarchiveProject(UUID id) {
+        Project project = projects.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
+        if (project.getStatus() != ProjectStatus.ARCHIVED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only ARCHIVED projects can be unarchived.");
+        }
+        ProjectStatus previous = project.getStatus();
+        project.setStatus(ProjectStatus.APPROVED);
+        project.setUpdatedAt(LocalDateTime.now());
+        Project saved = projects.save(project);
+        audit.record("PROJECT_UNARCHIVED", "PROJECT", saved.getId(),
+                currentUsers.requireCurrentUser(), previous, ProjectStatus.APPROVED);
+        events.publishEvent(new EntityChangedEvent("PROJECT", saved.getId(), "STATUS_CHANGED", null));
+        return ProjectResponse.from(saved);
     }
 
     private Map<String, Object> documentRow(Document d) {

@@ -22,6 +22,7 @@ public record AdminProjectResponse(
         String instructorName,
         int collaboratorCount,
         int papersProcessed,
+        int totalSources,
         int completionRate) {
 
     public static AdminProjectResponse from(Project project) {
@@ -32,6 +33,7 @@ public record AdminProjectResponse(
                 .filter(d -> d.getProcessingStatus() == ProcessingStatus.COMPLETED
                         || d.getProcessingStatus() == ProcessingStatus.READY)
                 .count();
+        int totalSources = (int) docs.stream().filter(d -> d.getDocType() == DocumentType.SOURCE).count();
         int completionRate = totalPapers > 0 ? (int) Math.round(processed * 100.0 / totalPapers) : 0;
         return new AdminProjectResponse(
                 project.getId(),
@@ -44,6 +46,7 @@ public record AdminProjectResponse(
                 project.getInstructor() != null ? project.getInstructor().getEmail() : null,
                 project.getProjectMembers() == null ? 0 : project.getProjectMembers().size(),
                 processed,
+                totalSources,
                 completionRate);
     }
 }

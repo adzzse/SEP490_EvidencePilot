@@ -8,14 +8,6 @@ import { useTheme } from '../context/ThemeContext';
 import { AuroraBackground } from '../components/ui/aurora-background';
 import { PasswordInput } from '../components/ui/PasswordInput.jsx';
 
-// ponytail: local copy of loginOrigin.js defaultWorkspace — kept private there to gate
-// redirects through getPostLoginDestination. Onboarding skips that gate (no prior origin).
-const defaultWorkspace = {
-  ADMIN: '/admin/dashboard',
-  INSTRUCTOR: '/instructor/dashboard',
-  STUDENT: '/student/projects',
-};
-
 const EASE = [0.23, 1, 0.32, 1];
 
 function SunIcon({ className = 'w-4 h-4' }) {
@@ -202,7 +194,7 @@ export default function SetPassword() {
         }
       }
 
-      navigate(defaultWorkspace[role] || defaultWorkspace.STUDENT, { replace: true });
+      navigate('/', { replace: true });
     } catch (requestError) {
       setError(requestError.response?.data?.message
         ?? (language === 'vi' ? 'Liên kết không hợp lệ hoặc đã hết hạn.' : 'Invalid or expired link.'));

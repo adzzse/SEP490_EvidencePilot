@@ -16,6 +16,7 @@ import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.DocumentRepository;
+import com.evidencepilot.repository.FeedbackReplyRepository;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
@@ -84,6 +85,9 @@ class ProjectStatusConcurrencyIntegrationTest {
     private FeedbackRequestRepository feedbackRequests;
 
     @Autowired
+    private FeedbackReplyRepository feedbackReplies;
+
+    @Autowired
     private InstructorFeedbackRepository feedbackItems;
 
     @MockBean
@@ -103,6 +107,7 @@ class ProjectStatusConcurrencyIntegrationTest {
 
     @AfterEach
     void clean() {
+        feedbackReplies.deleteAll();
         feedbackItems.deleteAll();
         feedbackRequests.deleteAll();
         sections.deleteAll();

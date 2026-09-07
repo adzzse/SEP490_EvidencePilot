@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { StatusBadge, LoadingSkeleton, AppHeader, Modal, Breadcrumb } from '../../components';
 import api from '../../services/api.js';
 // ponytail: diff-match-patch removed — see LatexEditor.jsx
@@ -7,9 +7,12 @@ import { renderLatexToHtml } from '../../utils/formatters/latexHtml.js';
 import { formatDateTime } from '../../utils/formatters/date.js';
 import { commonText, instructorText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 import useUndoDelete, { UndoToast } from '../../components/ui/UndoDelete.jsx';
 import FileViewerModal from '../../components/features/FileViewerModal';
 import DeleteConfirm from '../../components/ui/DeleteConfirm.jsx';
+import LatexEditor from '../../components/features/LatexEditor.jsx';
+import { normalizeSource, resolveAnchor, sourceFingerprint } from '../../utils/student/feedbackAnchors.js';
 
 function wrapLatexLines(latex) {
   if (!latex) return '';
@@ -101,6 +104,8 @@ const ACTION_LABELS = {
 export default function ReviewSpace() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
   const { language } = useLanguage();
   const t = instructorText[language];
   const ct = commonText[language];
@@ -129,10 +134,24 @@ export default function ReviewSpace() {
   const [diffEnabled, setDiffEnabled] = useState(false);
   const [baseline, setBaseline] = useState(null);
   const [baselineSectionId, setBaselineSectionId] = useState(null);
-  const [feedbackDraft, setFeedbackDraft] = useState('');
-  const [feedbackLineRef, setFeedbackLineRef] = useState('');
-  const [editingFeedbackId, setEditingFeedbackId] = useState(null);
+  const [feedbackDrafts, setFeedbackDrafts] = useState({});
+  const draftKey = JSON.stringify([projectId, activeRequestId, selectedSectionId]);
+  const { content: feedbackDraft = '', lineReference: feedbackLineRef = '',
+    anchor: selectedAnchor = null, editingId: editingFeedbackId = null } = feedbackDrafts[draftKey] || {};
+  const updateFeedbackDraft = change => setFeedbackDrafts(previous => ({
+    ...previous, [draftKey]: { ...previous[draftKey], ...change },
+  }));
+  const clearFeedbackDraft = () => setFeedbackDrafts(previous => ({ ...previous, [draftKey]: {} }));
   const [savingFeedback, setSavingFeedback] = useState(false);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [replyFeedbackId, setReplyFeedbackId] = useState(null);
+  const [editingReplyId, setEditingReplyId] = useState(null);
+  const [replyIdempotencyKey, setReplyIdempotencyKey] = useState(null);
+  const [savingReply, setSavingReply] = useState(false);
+  const [feedbackFilter, setFeedbackFilter] = useState('OPEN');
+  const [activeFeedbackId, setActiveFeedbackId] = useState(null);
+  const [viewMode, setViewMode] = useState('submitted');
+  const sourceEditorRef = useRef(null);
   const [mediaUrlMap, setMediaUrlMap] = useState({});
   const [transitioningRequestId, setTransitioningRequestId] = useState(null);
   const [pendingTransition, setPendingTransition] = useState(null);
@@ -199,13 +218,19 @@ export default function ReviewSpace() {
     return () => { cancelled = true; };
   }, [projectId]);
 
-  const activeRequest = requests.find(r => r.id === activeRequestId) || requests[0] || null;
-  const latestRequest = requests[0] || null;
+  const orderedRequests = useMemo(() => [...requests].sort((left, right) =>
+    new Date(right.requestedAt || 0) - new Date(left.requestedAt || 0)), [requests]);
+  const reviewLink = new URLSearchParams(location.search).get('review');
+  const feedbackLink = new URLSearchParams(location.search).get('feedback');
+  const activeRequest = orderedRequests.find(r => r.id === activeRequestId) || orderedRequests[0] || null;
+  const latestRequest = orderedRequests[0] || null;
   const requestLocked = !activeRequest
     || activeRequest.id !== latestRequest?.id
-    || (activeRequest.status !== 'PENDING' && activeRequest.status !== 'RETURNED')
+    || !['PENDING', 'RETURNED'].includes(activeRequest.status)
     || project?.status === 'APPROVED'
     || project?.status === 'ARCHIVED';
+  const canReturn = !requestLocked && activeRequest.status === 'PENDING';
+  const canCreateRoot = canReturn && viewMode === 'submitted';
 
   useEffect(() => {
     let cancelled = false;
@@ -236,13 +261,10 @@ export default function ReviewSpace() {
   }, [requests, activeRequestId]);
 
   useEffect(() => {
-    if (!activeRequestId) { setFeedbackItems([]); return; }
-    let cancelled = false;
-    api.get(`/api/feedback-requests/${activeRequestId}/feedback`)
-      .then(r => { if (!cancelled) setFeedbackItems(r.data || []); })
-      .catch(() => { if (!cancelled) setFeedbackItems([]); });
-    return () => { cancelled = true; };
-  }, [activeRequestId]);
+    if (reviewLink && requests.some(request => String(request.id) === String(reviewLink))) {
+      setActiveRequestId(reviewLink);
+    }
+  }, [reviewLink, requests]);
 
   useEffect(() => {
     if (!activeRequestId) {
@@ -256,14 +278,12 @@ export default function ReviewSpace() {
     setSubmissionSnapshot(null);
     setPapers([]);
     setSections([]);
-    setSelectedPaperId(null);
-    setSelectedSectionId(null);
     api.get(`/api/feedback-requests/${activeRequestId}/submission-snapshot`)
       .then(response => {
         if (cancelled) return;
         const available = response.data?.state === 'AVAILABLE' && response.data?.snapshot;
         const snapshot = available ? response.data.snapshot : null;
-        const nextPapers = snapshot
+        const nextPapers = viewMode === 'submitted' && snapshot
           ? (snapshot.papers || []).map(paper => ({ ...paper, originalFilename: paper.title }))
           : livePapers;
         setSubmissionSnapshot(snapshot);
@@ -279,12 +299,12 @@ export default function ReviewSpace() {
         setPapers([]);
       });
     return () => { cancelled = true; };
-  }, [activeRequestId, livePapers, snapshotRetry]);
+  }, [activeRequestId, livePapers, snapshotRetry, viewMode]);
 
   useEffect(() => {
     if (!selectedPaperId) { setSections([]); setSelectedSectionId(null); return; }
     if (snapshotState === 'LOADING' || snapshotState === 'LOAD_ERROR') return;
-    if (snapshotState === 'AVAILABLE') {
+    if (viewMode === 'submitted' && snapshotState === 'AVAILABLE') {
       const paper = (submissionSnapshot?.papers || [])
         .find(candidate => String(candidate.id) === String(selectedPaperId));
       const snapshotSections = (paper?.sections || []).map(section => ({
@@ -313,7 +333,7 @@ export default function ReviewSpace() {
       } })
       .catch(() => { if (!cancelled) setSections([]); });
     return () => { cancelled = true; };
-  }, [selectedPaperId, snapshotState, submissionSnapshot]);
+  }, [selectedPaperId, snapshotState, submissionSnapshot, viewMode]);
 
   useEffect(() => {
     if (!diffEnabled || !projectId || !selectedSectionId) { setBaseline(null); setBaselineSectionId(null); return; }
@@ -366,45 +386,81 @@ export default function ReviewSpace() {
     return [[-1, a], [1, b]];
   }, [diffEnabled, baseline, baselineSectionId, selectedSection]);
 
-  const loadFeedback = useCallback(() => {
-    if (!activeRequestId) return;
-    api.get(`/api/feedback-requests/${activeRequestId}/feedback`)
-      .then(r => setFeedbackItems(r.data || []))
-      .catch(() => setErrorMessage(t.loadFeedbackFailed));
-  }, [activeRequestId, t.loadFeedbackFailed]);
+  const loadFeedback = useCallback(async () => {
+    if (orderedRequests.length === 0) {
+      setFeedbackItems([]);
+      return;
+    }
+    try {
+      const responses = await Promise.all(orderedRequests.map(request =>
+        api.get(`/api/feedback-requests/${request.id}/feedback`)));
+      setFeedbackItems(responses.flatMap(response => response.data || []));
+    } catch {
+      setErrorMessage(t.loadFeedbackFailed);
+    }
+  }, [orderedRequests, t.loadFeedbackFailed]);
+
+  useEffect(() => { loadFeedback(); }, [loadFeedback]);
 
   const handleSubmitFeedback = async (e) => {
     e.preventDefault();
-    if (!activeRequestId || !selectedSectionId || !feedbackDraft.trim()) return;
+    if (!canCreateRoot || !activeRequestId || !selectedSectionId || !feedbackDraft.trim()) return;
     setSavingFeedback(true); setErrorMessage('');
     try {
       const body = {
         sectionId: selectedSectionId,
-        lineReference: feedbackLineRef.trim() || null,
+        lineReference: selectedAnchor ? null : feedbackLineRef.trim() || null,
         content: feedbackDraft.trim(),
+        anchor: selectedAnchor ? {
+          from: selectedAnchor.from,
+          to: selectedAnchor.to,
+          contentVersion: selectedAnchor.contentVersion,
+          fingerprint: selectedAnchor.fingerprint,
+          representation: 'latex-source-lf-v1',
+          offsetUnit: 'utf16',
+        } : null,
       };
       if (editingFeedbackId) {
         await api.patch(`/api/instructor-feedback/${editingFeedbackId}`, body);
       } else {
         await api.post(`/api/feedback-requests/${activeRequestId}/feedback`, body);
       }
-      setFeedbackDraft(''); setFeedbackLineRef(''); setEditingFeedbackId(null);
-      loadFeedback();
+      clearFeedbackDraft();
+      await loadFeedback();
     } catch (err) {
       setErrorMessage(err?.response?.data?.message || t.saveFeedbackFailed);
     } finally { setSavingFeedback(false); }
   };
 
+  const captureSourceSelection = async () => {
+    if (!canCreateRoot || !selectedSection) return;
+    const range = sourceEditorRef.current?.getSelectionRange?.();
+    const source = normalizeSource(selectedSection.contentTex || '');
+    if (!range || range.to <= range.from || range.to > source.length || !Number.isInteger(selectedSection.version)) {
+      setErrorMessage(t.selectSourceRange);
+      return;
+    }
+    try {
+      updateFeedbackDraft({ anchor: {
+        from: range.from,
+        to: range.to,
+        contentVersion: selectedSection.version,
+        fingerprint: await sourceFingerprint(source),
+      }, lineReference: '' });
+      setPanelTab('manual');
+    } catch {
+      setErrorMessage(t.selectSourceRange);
+    }
+  };
+
   const handleEditFeedback = (item) => {
-    setEditingFeedbackId(item.id);
-    setFeedbackDraft(item.content || '');
-    setFeedbackLineRef(item.lineReference || '');
+    updateFeedbackDraft({ editingId: item.id, content: item.content || '',
+      lineReference: item.lineReference || '', anchor: null });
+    setPanelTab('manual');
   };
 
   const handleCancelEdit = () => {
-    setEditingFeedbackId(null);
-    setFeedbackDraft('');
-    setFeedbackLineRef('');
+    clearFeedbackDraft();
   };
 
   const handleDeleteFeedback = async (itemId) => {
@@ -426,12 +482,112 @@ export default function ReviewSpace() {
     }, () => { loadFeedback(); });
   };
 
+  const resetReplyComposer = () => {
+    setReplyDraft('');
+    setReplyFeedbackId(null);
+    setEditingReplyId(null);
+    setReplyIdempotencyKey(null);
+  };
+
+  const startReply = (feedback, message = null) => {
+    setReplyFeedbackId(feedback.id);
+    setEditingReplyId(message?.id || null);
+    setReplyDraft(message?.content || '');
+    setReplyIdempotencyKey(crypto.randomUUID());
+    setActiveFeedbackId(feedback.id);
+  };
+
+  const saveReply = async (feedback) => {
+    if (!replyDraft.trim() || !replyFeedbackId || savingReply) return;
+    setSavingReply(true); setErrorMessage('');
+    const key = replyIdempotencyKey || crypto.randomUUID();
+    try {
+      const body = { content: replyDraft.trim(), idempotencyKey: key };
+      if (editingReplyId) {
+        await api.patch(`/api/instructor-feedback/${feedback.id}/replies/${editingReplyId}`, body);
+      } else {
+        await api.post(`/api/instructor-feedback/${feedback.id}/replies`, body);
+      }
+      resetReplyComposer();
+      await loadFeedback();
+    } catch (err) {
+      setErrorMessage(err?.response?.data?.message || t.saveFeedbackFailed);
+      setReplyIdempotencyKey(key);
+    } finally { setSavingReply(false); }
+  };
+
+  const deleteReply = async (feedbackId, replyId) => {
+    setErrorMessage('');
+    try {
+      await api.delete(`/api/instructor-feedback/${feedbackId}/replies/${replyId}`);
+      if (editingReplyId === replyId) resetReplyComposer();
+      await loadFeedback();
+    } catch (err) {
+      setErrorMessage(err?.response?.data?.message || t.deleteFeedbackFailed);
+    }
+  };
+
+  const prepareState = async (feedback, state) => {
+    setErrorMessage('');
+    try {
+      await api.patch(`/api/instructor-feedback/${feedback.id}/state`, {
+        state,
+        expectedRevision: feedback.revision,
+      });
+      await loadFeedback();
+    } catch (err) {
+      setErrorMessage(err?.response?.data?.message || t.updateStatusFailed);
+    }
+  };
+
+  const selectFeedback = (feedback) => {
+    if (feedback.paperId && String(feedback.paperId) !== String(selectedPaperId)) {
+      setSelectedPaperId(feedback.paperId);
+    }
+    if (feedback.sectionId) setSelectedSectionId(feedback.sectionId);
+    setActiveFeedbackId(feedback.id);
+  };
+
+  useEffect(() => {
+    const feedback = feedbackItems.find(item => String(item.id) === String(activeFeedbackId));
+    if (!feedback || !selectedSection || String(feedback.sectionId) !== String(selectedSection.id)) return;
+    let cancelled = false;
+    const source = normalizeSource(selectedSection.contentTex || '');
+    sourceFingerprint(source).catch(() => null).then(hash => {
+      if (cancelled) return;
+      const anchor = resolveAnchor(feedback.anchor, source, selectedSection.version, hash).current;
+      if (anchor?.from != null && anchor?.to != null) sourceEditorRef.current?.selectRange?.(anchor.from, anchor.to);
+    });
+    return () => { cancelled = true; };
+  }, [activeFeedbackId, feedbackItems, selectedSection, activeRequestId, viewMode]);
+
+  useEffect(() => {
+    if (!feedbackLink) return;
+    const feedback = feedbackItems.find(item => String(item.id) === String(feedbackLink));
+    if (!feedback) return;
+    setFeedbackFilter('ALL');
+    setPanelTab('manual');
+    selectFeedback(feedback);
+    const search = new URLSearchParams(location.search);
+    search.delete('review');
+    search.delete('feedback');
+    navigate({ pathname: location.pathname, search: search.toString() }, { replace: true });
+  }, [feedbackLink, feedbackItems, location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (!reviewLink || feedbackLink || !requests.some(request => String(request.id) === String(reviewLink))) return;
+    const search = new URLSearchParams(location.search);
+    search.delete('review');
+    navigate({ pathname: location.pathname, search: search.toString() }, { replace: true });
+  }, [feedbackLink, location.pathname, location.search, navigate, requests, reviewLink]);
+
   const handleTransitionStatus = async (requestId, targetStatus) => {
     setErrorMessage(''); setSuccessMessage('');
     setTransitioningRequestId(requestId);
     try {
       const res = await api.patch(`/api/feedback-requests/${requestId}/status?status=${targetStatus}`);
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: res.data.status } : r));
+      await loadFeedback();
       setPendingTransition(null);
       setSuccessMessage(targetStatus === 'REVIEWED' ? t.reviewApproved : t.reviewReturned);
       if (targetStatus === 'REVIEWED') {
@@ -513,13 +669,11 @@ export default function ReviewSpace() {
   };
 
   const injectIntoFeedback = (lineRef, content) => {
-    setFeedbackDraft(prev => {
-      const existing = prev.trim();
-      const incoming = (content || '').trim();
-      if (!incoming) return prev;
-      return existing ? `${existing}\n\n${incoming}` : incoming;
-    });
-    if (lineRef) setFeedbackLineRef(lineRef);
+    const existing = feedbackDraft.trim();
+    const incoming = (content || '').trim();
+    if (!incoming) return;
+    updateFeedbackDraft({ content: existing ? `${existing}\n\n${incoming}` : incoming,
+      ...(lineRef ? { lineReference: lineRef } : {}) });
   };
 
   if (loading) {
@@ -531,7 +685,9 @@ export default function ReviewSpace() {
     );
   }
 
-  const sectionFeedback = feedbackItems.filter(fb => !selectedSectionId || String(fb.sectionId) === String(selectedSectionId));
+  const allSectionFeedback = feedbackItems.filter(fb => !selectedSectionId || String(fb.sectionId) === String(selectedSectionId));
+  const sectionFeedback = allSectionFeedback.filter(fb => feedbackFilter === 'ALL'
+    || (fb.pendingState || fb.threadState || 'OPEN') === feedbackFilter);
   const historyFeedback = [...feedbackItems].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
   return (
@@ -550,7 +706,7 @@ export default function ReviewSpace() {
             <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight mt-1">{project?.title || t.project}</h1>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <StatusBadge status={project?.status} />
-              {requests.map(req => (
+              {orderedRequests.map(req => (
                 <button key={req.id} onClick={() => setActiveRequestId(req.id)}
                   className={`text-xs font-bold px-2.5 py-1 rounded-full border transition-colors ${req.id === activeRequest?.id ? 'bg-(--brand) text-(--on-brand) border-(--brand)' : 'bg-(--surface) text-(--text-secondary) border-(--border) hover:border-(--brand)'}`}>
                   {req.requestedAt ? formatDateTime(req.requestedAt, language) : String(req.id).slice(0, 8)} · <StatusBadge status={req.status} />
@@ -565,11 +721,11 @@ export default function ReviewSpace() {
             </button>
             {activeRequest && !requestLocked && (
               <>
-                <button onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'RETURNED' })} disabled={transitioningRequestId === activeRequest.id}
+                {canReturn && <button onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'RETURNED' })} disabled={transitioningRequestId === activeRequest.id || savingFeedback || savingReply}
                   className={`px-3 py-2 text-xs font-bold text-white rounded-xl transition ${ACTION_LABELS.RETURNED.cls} disabled:opacity-50`}>
                   {t[ACTION_LABELS.RETURNED.key]}
-                </button>
-                <button onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'REVIEWED' })} disabled={transitioningRequestId === activeRequest.id}
+                </button>}
+                <button onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'REVIEWED' })} disabled={transitioningRequestId === activeRequest.id || savingFeedback || savingReply}
                   className={`px-3 py-2 text-xs font-bold text-white rounded-xl transition ${ACTION_LABELS.REVIEWED.cls} disabled:opacity-50`}>
                   {t[ACTION_LABELS.REVIEWED.key]}
                 </button>
@@ -630,15 +786,32 @@ export default function ReviewSpace() {
             </div>
           </aside>
 
-          {/* 2. Center canvas: paper (read-only) + diff + sources footer */}
+          {/* 2. Center canvas: submitted source or saved working source, always read-only. */}
           <div className="lg:col-span-7 bg-(--surface) rounded-2xl border border-(--border) shadow-sm p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold text-(--brand-foreground)">{t.paperReadOnly}</h2>
-              <label className="flex items-center gap-2 text-xs font-bold text-(--text-secondary) cursor-pointer select-none">
-                <input type="checkbox" checked={diffEnabled} onChange={e => setDiffEnabled(e.target.checked)}
-                  className="w-3.5 h-3.5 rounded border-gray-300 text-[#1e3a8a] focus:ring-[#1e3a8a]" />
-                {t.showChanges}
-              </label>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-sm font-bold text-(--brand-foreground)">{t.paperReadOnly}</h2>
+                <p className="mt-0.5 text-[10px] font-semibold text-(--text-tertiary)">
+                  {viewMode === 'submitted' ? t.submittedVersionLabel : t.workingCopyLabel}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex rounded-lg border border-(--border) bg-(--surface-secondary) p-0.5 text-[10px] font-bold">
+                  <button type="button" onClick={() => setViewMode('submitted')} disabled={!activeRequest}
+                    className={`rounded-md px-2.5 py-1.5 disabled:opacity-50 ${viewMode === 'submitted' ? 'bg-(--surface) text-(--brand-foreground) shadow-sm' : 'text-(--text-secondary)'}`}>
+                    {t.submittedVersion}
+                  </button>
+                  <button type="button" onClick={() => setViewMode('working')}
+                    className={`rounded-md px-2.5 py-1.5 ${viewMode === 'working' ? 'bg-(--surface) text-(--brand-foreground) shadow-sm' : 'text-(--text-secondary)'}`}>
+                    {t.workingCopy}
+                  </button>
+                </div>
+                <label className="flex items-center gap-2 text-xs font-bold text-(--text-secondary) cursor-pointer select-none">
+                  <input type="checkbox" checked={diffEnabled} onChange={e => setDiffEnabled(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-[#1e3a8a] focus:ring-[#1e3a8a]" />
+                  {t.showChanges}
+                </label>
+              </div>
             </div>
 
             {papers.length === 0 ? (
@@ -673,19 +846,36 @@ export default function ReviewSpace() {
                         </div>
                       )
                     ) : (
-                      <div className="max-h-[55vh] overflow-y-auto pr-1 whitespace-pre-wrap break-words preview-content hide-scrollbar"
-                        onMouseMove={handleMouseMove}
-                        onMouseLeave={handleMouseLeave}>
-                        {sectionLineRefs.length > 0 && (
-                          <div className="mb-2 flex flex-wrap gap-1">
-                            {sectionLineRefs.map(reference => (
-                              <span key={reference} className="bg-indigo-50 text-indigo-600 font-mono text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                {reference}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <div dangerouslySetInnerHTML={{ __html: renderLatexToHtml(wrapLatexLines(selectedSection.contentTex), mediaUrlMap) }} />
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-wide text-(--text-tertiary)">{t.sourceEditor}</span>
+                          <button type="button" onClick={() => setPanelTab('manual')}
+                            className="rounded-lg border border-(--border) bg-(--surface-secondary) px-2 py-1 text-[10px] font-bold text-(--text-secondary) hover:text-(--brand-foreground)">
+                            {t.openFeedbackPanel}
+                          </button>
+                        </div>
+                        <div className="h-[55vh] overflow-hidden rounded-xl border border-(--border-light) bg-(--surface-secondary)">
+                          <LatexEditor
+                            key={`${viewMode}-${activeRequestId || 'working'}-${selectedSection.id}`}
+                            ref={sourceEditorRef}
+                            content={normalizeSource(selectedSection.contentTex || '')}
+                            savedContent={normalizeSource(selectedSection.contentTex || '')}
+                            savedVersion={selectedSection.version}
+                            feedbackItems={allSectionFeedback}
+                            activeFeedbackId={activeFeedbackId}
+                            feedbackVisible
+                            onFeedbackClick={ids => {
+                              const feedback = allSectionFeedback.find(item => String(item.id) === String(ids[0]));
+                              if (feedback) selectFeedback(feedback);
+                            }}
+                            readOnly
+                            fontSize={13}
+                          />
+                        </div>
+                        <div className="max-h-40 overflow-y-auto rounded-xl border border-(--border-light) bg-(--surface-secondary) p-3 text-xs">
+                          <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-(--text-tertiary)">{t.preview}</p>
+                          <div className="preview-content whitespace-pre-wrap break-words" dangerouslySetInnerHTML={{ __html: renderLatexToHtml(wrapLatexLines(selectedSection.contentTex), mediaUrlMap) }} />
+                        </div>
                       </div>
                     )}
                   </>
@@ -718,17 +908,34 @@ export default function ReviewSpace() {
                       <p className="text-xs text-(--text-tertiary) italic">{t.selectSectionFeedback}</p>
                     ) : (
                       <>
-                        <div className="space-y-3 mb-4 max-h-[30vh] overflow-y-auto pr-1 hide-scrollbar">
+                        <div className="mb-3 flex gap-1 rounded-lg border border-(--border) bg-(--surface-secondary) p-0.5 text-[10px] font-bold">
+                          {[
+                            ['OPEN', t.openFeedback],
+                            ['DONE', t.doneFeedback],
+                            ['ALL', t.allFeedback],
+                          ].map(([value, label]) => (
+                            <button key={value} type="button" onClick={() => setFeedbackFilter(value)}
+                              className={`flex-1 rounded-md px-2 py-1.5 ${feedbackFilter === value ? 'bg-(--surface) text-(--brand-foreground) shadow-sm' : 'text-(--text-secondary)'}`}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="space-y-3 mb-4 max-h-[46vh] overflow-y-auto pr-1 hide-scrollbar">
                           {sectionFeedback.length === 0 ? (
                             <p className="text-xs text-(--text-tertiary) italic">{t.noSectionFeedback}</p>
                           ) : sectionFeedback.map(fb => (
-                            <div key={fb.id} className="bg-(--surface-secondary) border border-(--border-light) rounded-xl p-3 text-xs space-y-1">
+                            <div key={fb.id} onClick={() => selectFeedback(fb)}
+                              className={`cursor-pointer bg-(--surface-secondary) border rounded-xl p-3 text-xs space-y-2 transition-colors ${String(activeFeedbackId) === String(fb.id) ? 'border-(--brand) ring-1 ring-(--brand)/30' : 'border-(--border-light) hover:border-(--brand)/50'}`}>
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">{t.section} {fb.sectionTitle || ''}</span>
+                                <div className="flex min-w-0 items-center gap-1.5">
+                                  <span className="truncate text-[9px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">{t.section} {fb.sectionTitle || ''}</span>
+                                  {!fb.publishedAt && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{t.draft}</span>}
+                                  {(fb.pendingState || fb.threadState) === 'DONE' && <span className="text-[9px] font-bold bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">{t.doneFeedback}</span>}
+                                </div>
                                 <div className="flex items-center gap-1.5">
                                   {fb.stale && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{t.sectionChanged}</span>}
-                                  {fb.answered && <span className="text-[9px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">{t.answered}</span>}
-                                  {!fb.answered && !requestLocked && (
+                                  {fb.replyState === 'ANSWERED' && <span className="text-[9px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">{t.answered}</span>}
+                                  {fb.canEdit && (
                                     <>
                                       <button onClick={() => handleEditFeedback(fb)} className="text-(--text-tertiary) hover:text-(--brand) p-1" title={ct.edit} aria-label={ct.edit}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 13H9v-2.828l6.586-6.586z" /></svg></button>
                                       <DeleteConfirm message={t.deleteFeedbackConfirm} onConfirm={() => handleDeleteFeedback(fb.id)} triggerLabel={ct.delete} confirmLabel={ct.delete} cancelLabel={ct.cancel} className="text-(--text-tertiary) hover:text-rose-600 p-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M4 7h16" /></svg></DeleteConfirm>
@@ -736,22 +943,59 @@ export default function ReviewSpace() {
                                   )}
                                 </div>
                               </div>
-                              {fb.lineReference && <p className="text-[10px] text-gray-400 font-mono">{fb.lineReference}</p>}
-                              <p className="text-(--text-primary) leading-relaxed">{fb.content}</p>
-                              {fb.answered && fb.answerContent && (
-                                <p className="text-[10px] text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg p-2">{t.studentAnswer.replace('{{answer}}', fb.answerContent)}</p>
+                              {fb.anchor?.original?.exact && <p className="text-[10px] text-(--text-tertiary) italic line-clamp-2">“{fb.anchor.original.exact}”</p>}
+                              <div className="space-y-2">
+                                {(fb.messages || []).map(message => {
+                                  const ownDraft = message.draft && String(message.authorId) === String(user?.id);
+                                  return (
+                                    <div key={message.id} className={`rounded-lg p-2 ${message.draft ? 'border border-dashed border-amber-300 bg-amber-50/70 dark:bg-amber-950/20' : message.authorRole === 'STUDENT' ? 'bg-emerald-50 dark:bg-emerald-950/20' : 'bg-(--surface)'}`}>
+                                      <div className="mb-1 flex items-center justify-between gap-2 text-[9px] font-bold text-(--text-tertiary)">
+                                        <span>{message.authorName || (message.authorRole === 'STUDENT' ? t.student : t.instructor)}</span>
+                                        <span className="flex shrink-0 items-center gap-1">{message.draft ? t.draft : message.publishedAt ? formatDateTime(message.publishedAt, language) : ''}
+                                          {ownDraft && message.kind === 'REPLY' && <><button type="button" onClick={event => { event.stopPropagation(); startReply(fb, message); }} className="text-(--brand) hover:underline">{ct.edit}</button><button type="button" onClick={event => { event.stopPropagation(); deleteReply(fb.id, message.id); }} className="text-rose-600 hover:underline">{ct.delete}</button></>}
+                                        </span>
+                                      </div>
+                                      <p className="whitespace-pre-wrap leading-relaxed text-(--text-primary)">{message.content}</p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {fb.pendingState && <p className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 dark:bg-amber-950/20">{t.pendingState}: {fb.pendingState === 'DONE' ? t.doneFeedback : t.openFeedback}</p>}
+                              {fb.canDraftReply && (
+                                <div className="border-t border-(--border-light) pt-2">
+                                  {replyFeedbackId === fb.id ? (
+                                    <div className="space-y-2">
+                                      <textarea rows="3" value={replyDraft} onChange={event => setReplyDraft(event.target.value)} placeholder={t.replyPlaceholder}
+                                        className="w-full rounded-lg border border-(--border) bg-(--surface) px-2 py-1.5 text-xs text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)" />
+                                      <div className="flex gap-2">
+                                        <button type="button" onClick={resetReplyComposer} className="flex-1 rounded-lg bg-(--surface) px-2 py-1.5 text-[10px] font-bold text-(--text-secondary) hover:bg-(--surface-tertiary)">{ct.cancel}</button>
+                                        <button type="button" onClick={() => saveReply(fb)} disabled={savingReply || !replyDraft.trim()} className="flex-1 rounded-lg bg-(--brand) px-2 py-1.5 text-[10px] font-bold text-(--on-brand) hover:bg-(--brand-hover) disabled:opacity-50">{savingReply ? ct.saving : editingReplyId ? t.updateFeedback : t.saveDraft}</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button type="button" onClick={event => { event.stopPropagation(); startReply(fb); }} className="text-[10px] font-black text-(--brand) hover:underline">{t.replyAsDraft}</button>
+                                  )}
+                                </div>
+                              )}
+                              {(fb.canMarkDone || fb.canReopen) && (
+                                <div className="flex gap-2 border-t border-(--border-light) pt-2">
+                                  {fb.canMarkDone && <button type="button" onClick={event => { event.stopPropagation(); prepareState(fb, 'DONE'); }} className="flex-1 rounded-lg bg-emerald-50 px-2 py-1.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">{t.markDone}</button>}
+                                  {fb.canReopen && <button type="button" onClick={event => { event.stopPropagation(); prepareState(fb, 'OPEN'); }} className="flex-1 rounded-lg bg-amber-50 px-2 py-1.5 text-[10px] font-bold text-amber-700 hover:bg-amber-100">{t.reopenFeedback}</button>}
+                                </div>
                               )}
                             </div>
                           ))}
                         </div>
-                        {requestLocked ? (
-                          <p className="text-xs text-(--text-tertiary) italic">{t.reviewClosed}</p>
+                        {!canCreateRoot ? (
+                          <p className="text-xs text-(--text-tertiary) italic">{requestLocked ? t.reviewClosed : t.selectSubmittedSource}</p>
                         ) : (
                           <form onSubmit={handleSubmitFeedback} className="space-y-2 border-t border-(--border-light) pt-3">
-                            <input value={feedbackLineRef} onChange={e => setFeedbackLineRef(e.target.value.replace(/[^\d]/g, ''))}
-                              placeholder={t.lineReferencePlaceholder} maxLength={100} inputMode="numeric" pattern="[0-9]*"
-                              className="w-full px-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)" />
-                            <textarea rows="3" value={feedbackDraft} onChange={e => setFeedbackDraft(e.target.value)}
+                            <div className="flex gap-2">
+                              <button type="button" onClick={captureSourceSelection} className="flex-1 rounded-lg border border-(--border) bg-(--surface-secondary) px-2 py-1.5 text-[10px] font-bold text-(--text-secondary) hover:text-(--brand-foreground)">{t.commentSelection}</button>
+                              <button type="button" onClick={() => updateFeedbackDraft({ anchor: null, lineReference: '' })} className="flex-1 rounded-lg border border-(--border) bg-(--surface-secondary) px-2 py-1.5 text-[10px] font-bold text-(--text-secondary) hover:text-(--brand-foreground)">{t.wholeSection}</button>
+                            </div>
+                            {selectedAnchor && <p className="text-[10px] font-semibold text-(--brand)">{t.selectionReady.replace('{{from}}', selectedAnchor.from).replace('{{to}}', selectedAnchor.to)}</p>}
+                            <textarea rows="3" value={feedbackDraft} onChange={e => updateFeedbackDraft({ content: e.target.value })}
                               placeholder={t.sectionFeedbackPlaceholder}
                               className="w-full px-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)" />
                             <div className="flex gap-2">
@@ -817,17 +1061,13 @@ export default function ReviewSpace() {
                     {historyFeedback.length === 0 ? (
                       <p className="text-xs text-(--text-tertiary) italic">{t.historyEmpty}</p>
                     ) : historyFeedback.map(fb => (
-                      <div key={fb.id} className="bg-(--surface-secondary) border border-(--border-light) rounded-xl p-3 text-xs space-y-1">
+                      <button type="button" key={fb.id} onClick={() => { setFeedbackFilter('ALL'); setPanelTab('manual'); selectFeedback(fb); }} className="w-full bg-(--surface-secondary) border border-(--border-light) rounded-xl p-3 text-left text-xs space-y-1 hover:border-(--brand)/50">
                         <div className="flex items-center justify-between gap-2">
                           {fb.sectionTitle && <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">{fb.sectionTitle}</span>}
                           {fb.createdAt && <span className="text-[9px] text-(--text-tertiary)">{formatDateTime(fb.createdAt, language)}</span>}
                         </div>
-                        {fb.lineReference && <p className="text-[10px] text-gray-400 font-mono">{t.line}: {fb.lineReference}</p>}
-                        <p className="text-(--text-primary) leading-relaxed">{fb.content}</p>
-                        {fb.answered && fb.answerContent && (
-                          <p className="text-[10px] text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg p-2">{t.studentAnswer.replace('{{answer}}', fb.answerContent)}</p>
-                        )}
-                      </div>
+                        <p className="text-(--text-primary) leading-relaxed">{(fb.messages || []).map(message => `${message.authorName || message.authorRole}: ${message.content}`).join('\n')}</p>
+                      </button>
                     ))}
                   </div>
                 )}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
+import { useTranslation } from 'react-i18next';
 
 const HEADERS = ['First Name', 'Last Name', 'Student Code', 'Email', 'Role'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -21,7 +22,8 @@ function normalizeRow(raw, headerIndex) {
   };
 }
 
-export default function UserImportModal({ lang, api, onClose, onDone }) {
+export default function UserImportModal({ api, onClose, onDone }) {
+  const { t } = useTranslation();
   const [phase, setPhase] = useState('idle'); // idle | preflight | importing | done
   const [validRows, setValidRows] = useState([]);
   const [preflightErrors, setPreflightErrors] = useState([]);
@@ -47,17 +49,17 @@ export default function UserImportModal({ lang, api, onClose, onDone }) {
     rows.forEach((r, idx) => {
       const rowNumber = idx + 2; // +1 header, +1 one-based
       const rowErrors = [];
-      if (!EMAIL_RE.test(r.email)) rowErrors.push(lang.errEmail);
-      if (!r.firstName || !r.lastName) rowErrors.push(lang.errName);
+      if (!EMAIL_RE.test(r.email)) rowErrors.push(t('admin.errEmail'));
+      if (!r.firstName || !r.lastName) rowErrors.push(t('admin.errName'));
       if (r.role !== 'STUDENT' && r.role !== 'INSTRUCTOR') {
-        rowErrors.push(lang.errAdminRole);
+        rowErrors.push(t('admin.errAdminRole'));
       } else if (r.role === 'STUDENT') {
-        if (!r.studentCode) rowErrors.push(lang.errMissingCode);
-        else if (!CODE_RE.test(r.studentCode)) rowErrors.push(lang.errInvalidCode);
+        if (!r.studentCode) rowErrors.push(t('admin.errMissingCode'));
+        else if (!CODE_RE.test(r.studentCode)) rowErrors.push(t('admin.errInvalidCode'));
       } else if (r.studentCode) {
-        rowErrors.push(lang.errMissingCode);
+        rowErrors.push(t('admin.errMissingCode'));
       }
-      if (r.email && seenEmails.has(r.email)) rowErrors.push(lang.errDuplicate);
+      if (r.email && seenEmails.has(r.email)) rowErrors.push(t('admin.errDuplicate'));
       seenEmails.add(r.email);
       if (rowErrors.length === 0) valid.push(r);
       else errors.push({ row: rowNumber, email: r.email || '—', errors: rowErrors });
@@ -73,7 +75,7 @@ export default function UserImportModal({ lang, api, onClose, onDone }) {
       const wb = XLSX.read(buf, { type: 'array' });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-      if (matrix.length < 2) throw new Error(lang.preflightNoValid);
+      if (matrix.length < 2) throw new Error(t('admin.preflightNoValid'));
       const headerIndex = {};
       matrix[0].forEach((h, i) => { headerIndex[String(h).trim().toLowerCase()] = i; });
       const rows = matrix.slice(1)
@@ -84,7 +86,7 @@ export default function UserImportModal({ lang, api, onClose, onDone }) {
       setPreflightErrors(errors);
       setPhase('preflight');
     } catch (e) {
-      setError(e.message || lang.xlsxFileRequired);
+      setError(e.message || t('admin.xlsxFileRequired'));
       setPhase('idle');
     }
   };
@@ -134,14 +136,14 @@ export default function UserImportModal({ lang, api, onClose, onDone }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-xs" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-labelledby="import-users-title" className="m-auto max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-(--surface) p-6 shadow-xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between gap-4">
-          <h3 id="import-users-title" className="text-lg font-bold text-(--text-primary)">{lang.importUsers}</h3>
-          <button type="button" aria-label={lang.close} onClick={onClose} className="rounded-lg p-1 text-(--text-tertiary) hover:bg-(--surface-secondary) hover:text-(--text-secondary)">
+          <h3 id="import-users-title" className="text-lg font-bold text-(--text-primary)">{t('admin.importUsers')}</h3>
+          <button type="button" aria-label={t('admin.close')} onClick={onClose} className="rounded-lg p-1 text-(--text-tertiary) hover:bg-(--surface-secondary) hover:text-(--text-secondary)">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18 18 6M6 6l12 12" /></svg>
           </button>
         </div>
-        <p className="mt-2 text-xs leading-5 text-(--text-secondary)">{lang.importUsersHint}</p>
+        <p className="mt-2 text-xs leading-5 text-(--text-secondary)">{t('admin.importUsersHint')}</p>
         <button type="button" onClick={downloadTemplate} className="mt-2 text-xs font-bold text-(--brand-foreground) hover:underline">
-          {lang.downloadTemplate}
+          {t('admin.downloadTemplate')}
         </button>
 
         {/* ponytail: dev-only bypass — stripped from production builds by Vite */}
@@ -154,14 +156,14 @@ export default function UserImportModal({ lang, api, onClose, onDone }) {
             className="mt-0.5 accent-[#1e3a8a]"
           />
           <span>
-            <span className="block text-xs font-bold text-(--text-primary)">{lang.devBypass}</span>
-            <span className="block text-[11px] text-(--text-secondary) mt-0.5">{lang.devBypassHint}</span>
+            <span className="block text-xs font-bold text-(--text-primary)">{t('admin.devBypass')}</span>
+            <span className="block text-[11px] text-(--text-secondary) mt-0.5">{t('admin.devBypassHint')}</span>
           </span>
         </label>
         )}
 
         <label className="mt-4 block text-xs font-bold text-(--text-secondary)">
-          <span>{lang.xlsxFile}</span>
+          <span>{t('admin.xlsxFile')}</span>
           <input
             type="file"
             accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -176,22 +178,22 @@ export default function UserImportModal({ lang, api, onClose, onDone }) {
           <div data-guide="preflight" className="mt-4 space-y-3">
             <p className="text-xs font-bold text-(--text-primary)">
               {validRows.length > 0
-                ? lang.preflightValid.replace('{n}', validRows.length)
-                : lang.preflightNoValid}
+                ? t('admin.preflightValid', { n: validRows.length })
+                : t('admin.preflightNoValid')}
             </p>
             {preflightErrors.length > 0 && (
               <div className="overflow-x-auto rounded-xl border border-amber-200">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="bg-amber-50 text-amber-800">
-                      <th className="px-3 py-2">{lang.preflightTitle}</th>
+                      <th className="px-3 py-2">{t('admin.preflightTitle')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-amber-100">
                     {preflightErrors.map((e, i) => (
                       <tr key={i}>
                         <td className="px-3 py-2 text-(--text-primary)">
-                          <span className="font-bold">{lang.preflightRow} {e.row}</span>
+                          <span className="font-bold">{t('admin.preflightRow')} {e.row}</span>
                           {' · '}{e.email}
                           <ul className="mt-1 list-disc pl-5 text-rose-600">
                             {e.errors.map((msg, j) => <li key={j}>{msg}</li>)}
@@ -205,7 +207,7 @@ export default function UserImportModal({ lang, api, onClose, onDone }) {
             )}
             <div className="flex justify-end gap-2.5 pt-1">
               <button type="button" onClick={onClose} className="rounded-xl border border-(--border) px-4 py-2 text-xs font-bold text-(--text-secondary) hover:bg-(--surface-secondary)">
-                {lang.cancelFixFile}
+                {t('admin.cancelFixFile')}
               </button>
               <button
                 type="button"
@@ -213,19 +215,19 @@ export default function UserImportModal({ lang, api, onClose, onDone }) {
                 disabled={validRows.length === 0}
                 className="rounded-xl bg-[#0c162e] px-4 py-2 text-xs font-bold text-white hover:bg-[#152447] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {lang.skipErrorsImport.replace('{n}', validRows.length)}
+                {t('admin.skipErrorsImport', { n: validRows.length })}
               </button>
             </div>
           </div>
         )}
 
         {phase === 'importing' && (
-          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-800">{lang.importing}</div>
+          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-800">{t('admin.importing')}</div>
         )}
 
         {phase === 'done' && serverResult && (
           <div role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">
-            {lang.importSuccess.replace('{created}', serverResult.created).replace('{updated}', serverResult.updated)}
+            {t('admin.importSuccess', { created: serverResult.created, updated: serverResult.updated })}
           </div>
         )}
       </div>

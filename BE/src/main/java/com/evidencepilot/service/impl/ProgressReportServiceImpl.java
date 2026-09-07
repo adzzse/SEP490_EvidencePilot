@@ -78,7 +78,7 @@ public class ProgressReportServiceImpl implements ProgressReportService {
         // Single pass over all feedback items: no per-section re-scan (sections x feedback).
         Map<UUID, int[]> feedbackCounts = new HashMap<>();
         for (InstructorFeedback feedback : feedbackList) {
-            if (feedback.getSection() == null) continue;
+            if (feedback.getPublishedAt() == null || feedback.getSection() == null) continue;
             int[] counts = feedbackCounts.computeIfAbsent(feedback.getSection().getId(), k -> new int[2]);
             if (feedback.isAnswered()) counts[0]++; else counts[1]++;
         }

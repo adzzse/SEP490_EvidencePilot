@@ -63,6 +63,7 @@ public class CheckpointServiceImpl implements CheckpointService {
             int answered = 0;
             int unanswered = 0;
             for (InstructorFeedback feedback : instructorFeedbackRepository.findByRequestProjectId(projectId)) {
+                if (feedback.getPublishedAt() == null) continue;
                 if (feedback.isAnswered()) answered++; else unanswered++;
             }
             snapshot.set("feedback", objectMapper.createObjectNode()

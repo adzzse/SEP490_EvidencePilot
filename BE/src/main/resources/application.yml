@@ -113,6 +113,9 @@ app:
   invitation:
     url: ${APP_INVITATION_URL:}
     ttl-hours: ${APP_INVITATION_TTL_HOURS:24}
+  mail:
+    # Visible sender for all branded emails. Falls back to the SMTP username.
+    from: ${MAIL_FROM:${MAIL_USERNAME:}}
   # Dev-only user-creation bypass (fixed password, no email). The bypass code
   # path is additionally gated behind the dev Spring profile — this flag alone
   # can never enable it in production.

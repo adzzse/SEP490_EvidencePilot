@@ -567,15 +567,23 @@ export default function UniversalDocumentIngestionModal({
             )}
             {batchFailedDetails && batchFailedDetails.length > 0 && (
               <div className="space-y-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
-                <p className="font-bold">{batchFailedDetails.length} file(s) failed — {pendingBatchFiles?.length || 0} remaining in queue</p>
+                <p className="font-bold">
+                  {language === 'vi'
+                    ? `${batchFailedDetails.length} tệp thất bại — còn lại ${pendingBatchFiles?.length || 0} tệp trong hàng đợi`
+                    : `${batchFailedDetails.length} file(s) failed — ${pendingBatchFiles?.length || 0} remaining in queue`}
+                </p>
                 <ul className="list-disc pl-4 space-y-1 text-[11px]">
                   {batchFailedDetails.map((f) => (
-                    <li key={f.index}><span className="font-mono">{f.filename}</span> [{f.errorCode}] {f.errorMessage} {f.retryable ? '' : '(not retryable)'}</li>
+                    <li key={f.index}><span className="font-mono">{f.filename}</span> [{f.errorCode}] {f.errorMessage} {f.retryable ? '' : (language === 'vi' ? '(không thể thử lại)' : '(not retryable)')}</li>
                   ))}
                 </ul>
                 <div className="flex gap-2">
-                  <button type="button" onClick={handleRetryBatch} disabled={uploadingFiles || !batchFailedDetails.some(f=>f.retryable)} className="px-3 py-1.5 bg-(--brand) text-(--on-brand) rounded-lg text-xs font-bold disabled:opacity-50">Retry Failed</button>
-                  <button type="button" onClick={() => { setBatchFailedDetails(null); setPendingBatchFiles(null); }} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg text-xs font-bold">Dismiss</button>
+                  <button type="button" onClick={handleRetryBatch} disabled={uploadingFiles || !batchFailedDetails.some(f=>f.retryable)} className="px-3 py-1.5 bg-(--brand) text-(--on-brand) rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer">
+                    {language === 'vi' ? 'Thử lại tệp lỗi' : 'Retry Failed'}
+                  </button>
+                  <button type="button" onClick={() => { setBatchFailedDetails(null); setPendingBatchFiles(null); }} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg text-xs font-bold cursor-pointer">
+                    {ct.dismiss || (language === 'vi' ? 'Bỏ qua' : 'Dismiss')}
+                  </button>
                 </div>
               </div>
             )}

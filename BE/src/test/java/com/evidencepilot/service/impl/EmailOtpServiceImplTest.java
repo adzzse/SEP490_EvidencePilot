@@ -36,9 +36,10 @@ class EmailOtpServiceImplTest {
         claimRepository = mock(EmailOtpClaimRepository.class);
         org.springframework.beans.factory.ObjectProvider<org.springframework.mail.javamail.JavaMailSender> mailProvider =
                 mock(org.springframework.beans.factory.ObjectProvider.class);
+        org.mockito.Mockito.when(mailProvider.getIfAvailable()).thenReturn(null);
         service = new EmailOtpServiceImpl(
                 userRepository, tokenRepository, claimRepository,
-                mailProvider, 5, 60, 10);
+                new com.evidencepilot.service.HtmlMailService(mailProvider, null), 5, 60, 10);
     }
 
     private User userWith(String email) {

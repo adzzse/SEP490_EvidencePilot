@@ -6,11 +6,16 @@ import com.evidencepilot.model.DocumentChunk;
 import com.evidencepilot.model.DocumentText;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.ProcessingStatus;
+import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.DocumentTextRepository;
+import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AuditService;
+import com.evidencepilot.service.SystemNotificationService;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.service.event.DocumentUploadedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -21,6 +26,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,6 +40,8 @@ public class DocumentPersistenceService {
     private final DocumentChunkRepository documentChunkRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditService auditService;
+    private final SystemNotificationService notifications;
+    private final UserRepository userRepository;
 
     @Transactional
     public Document savePendingDocument(
@@ -69,6 +77,9 @@ public class DocumentPersistenceService {
         document.setFileHashSha256(fileHashSha256);
         Document saved = documentRepository.save(document);
         eventPublisher.publishEvent(new DocumentUploadedEvent(saved.getId()));
+        eventPublisher.publishEvent(new EntityChangedEvent(
+                "DOCUMENT", saved.getId(), "CREATED",
+                saved.getProject() != null ? saved.getProject().getId() : null));
         // ponytail: write a "DOCUMENT_UPLOADED" row so the instructor's "My Activity"
         // tab can render a Source Library entry. Failure here must not roll back the
         // upload — wrap in try/catch to keep the primary write durable.
@@ -157,6 +168,11 @@ public class DocumentPersistenceService {
         document.setProcessedAt(LocalDateTime.now());
         document.setProcessingError(null);
         documentRepository.save(document);
+        eventPublisher.publishEvent(new EntityChangedEvent(
+                "DOCUMENT", document.getId(), "READY",
+                document.getProject() != null ? document.getProject().getId() : null));
+        notifyTerminal(document, "DOCUMENT_READY",
+                "Extraction complete: " + document.getOriginalFilename());
     }
 
     @Transactional
@@ -166,6 +182,39 @@ public class DocumentPersistenceService {
         document.setProcessingError(error);
         document.setProcessedAt(LocalDateTime.now());
         documentRepository.save(document);
+        eventPublisher.publishEvent(new EntityChangedEvent(
+                "DOCUMENT", document.getId(), "FAILED",
+                document.getProject() != null ? document.getProject().getId() : null));
+        notifyTerminal(document, "DOCUMENT_FAILED",
+                "Extraction failed: " + document.getOriginalFilename());
+    }
+
+    /**
+     * Best-effort fan-out to the owner plus every active admin (admins watch
+     * the extraction queue over the same per-user channel). Failures here must
+     * never roll back the terminal status write above.
+     */
+    private void notifyTerminal(Document document, String actionType, String message) {
+        try {
+            LinkedHashSet<User> recipients = new LinkedHashSet<>();
+            if (document.getUploadedBy() != null) {
+                recipients.add(document.getUploadedBy());
+            }
+            recipients.addAll(userRepository.findByAccountStatusAndRole(
+                    AccountStatus.ACTIVE, UserRole.ADMIN));
+            for (User recipient : recipients) {
+                try {
+                    notifications.createNotification(recipient, document.getUploadedBy(),
+                            actionType, document.getId(), message);
+                } catch (RuntimeException e) {
+                    org.slf4j.LoggerFactory.getLogger(DocumentPersistenceService.class)
+                            .warn("Failed to push {} notification for {}", actionType, document.getId(), e);
+                }
+            }
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(DocumentPersistenceService.class)
+                    .warn("Failed to resolve notification recipients for {}", document.getId(), e);
+        }
     }
 
     @Transactional

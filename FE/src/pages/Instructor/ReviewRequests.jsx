@@ -110,13 +110,13 @@ export default function ReviewRequests() {
             aria-label="Filter by project"
             className="w-full sm:w-48 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus) [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            <option value="">{t.allProjects || (language === 'vi' ? 'Tất cả đồ án' : 'All Projects')}</option>
+            <option value="">{t.allProjects}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>{p.title || `#${String(p.id).slice(0, 8)}`}</option>
             ))}
           </select>
           <label className="flex items-center gap-1 text-[10px] font-bold uppercase text-(--text-tertiary)">
-            <span>{t.fromDate || (language === 'vi' ? 'Từ' : 'From')}</span>
+            <span>{t.fromDate}</span>
             <input
               type="date"
               value={dateFrom}
@@ -125,7 +125,7 @@ export default function ReviewRequests() {
             />
           </label>
           <label className="flex items-center gap-1 text-[10px] font-bold uppercase text-(--text-tertiary)">
-            <span>{t.toDate || (language === 'vi' ? 'Đến' : 'To')}</span>
+            <span>{t.toDate}</span>
             <input
               type="date"
               value={dateTo}
@@ -139,7 +139,7 @@ export default function ReviewRequests() {
               onClick={clearFilters}
               className="text-[10px] font-bold text-(--brand) hover:underline px-2"
             >
-              {ct.cancel || (language === 'vi' ? 'Xóa lọc' : 'Clear')}
+              {ct.clear || ct.cancel}
             </button>
           )}
 
@@ -186,10 +186,10 @@ export default function ReviewRequests() {
                 <thead>
                   <tr className="bg-(--surface-secondary) text-(--text-tertiary) text-[10px] font-bold uppercase border-b border-(--border-light)">
                     <th className="px-6 py-4">{t.project}</th>
-                    <th className="px-6 py-4">{t.studentName || (language === 'vi' ? 'Sinh viên' : 'Student')}</th>
-                    <th className="px-6 py-4 whitespace-nowrap">{t.metadata || (language === 'vi' ? 'Thông tin' : 'Metadata')}</th>
+                    <th className="px-6 py-4">{t.studentName}</th>
+                    <th className="px-6 py-4 whitespace-nowrap">{t.metadata}</th>
                     <th className="px-6 py-4">{ct.status}</th>
-                    <th className="px-6 py-4">{t.requestedAt || (language === 'vi' ? 'Thời gian' : 'Requested')}</th>
+                    <th className="px-6 py-4">{t.requestedAt}</th>
                     <th className="px-6 py-4">{ct.actions}</th>
                   </tr>
                 </thead>
@@ -211,15 +211,15 @@ export default function ReviewRequests() {
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1.5">
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-[10px] font-bold text-(--text-secondary)">
-                              {t.members || 'Members'}: {proj?.memberCount ?? 0}
+                              {t.members}: {proj?.memberCount ?? 0}
                             </span>
                             {/* ponytail: ProjectResponse DTO only exposes memberCount today (BE: ProjectResponse.java).
                                 totalSections / totalSources not in the wire payload; revisit when BE enriches. */}
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-[10px] font-bold text-(--text-tertiary)">
-                              {t.sections || 'Sections'}: —
+                              {t.sections}: —
                             </span>
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-[10px] font-bold text-(--text-tertiary)">
-                              {t.sources || 'Sources'}: —
+                              {t.sources}: —
                             </span>
                           </div>
                         </td>

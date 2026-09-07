@@ -2,6 +2,7 @@ package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.request.ProjectCreateRequest;
 import com.evidencepilot.dto.request.ProjectUpdateRequest;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.dto.response.PagedResponse;
 import com.evidencepilot.dto.response.ProjectMemberResponse;
 import com.evidencepilot.dto.response.ProjectResponse;
@@ -25,6 +26,7 @@ import jakarta.persistence.criteria.Predicate;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -49,6 +51,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final CurrentUserService currentUserService;
     private final SystemNotificationService systemNotificationService;
     private final AuditService auditService;
+    private final ApplicationEventPublisher events;
 
     @Override
     public List<ProjectResponse> getAllProjects() {
@@ -138,6 +141,7 @@ public class ProjectServiceImpl implements ProjectService {
                 "PROJECT_CREATED",
                 saved.getId(),
                 "Project \"" + saved.getTitle() + "\" has been created.");
+        events.publishEvent(new EntityChangedEvent("PROJECT", saved.getId(), "CREATED", null));
 
         return ProjectResponse.from(saved);
     }
@@ -163,6 +167,7 @@ public class ProjectServiceImpl implements ProjectService {
         auditService.record("PROJECT_UPDATED", "PROJECT", saved.getId(), currentUser,
                 "title=" + oldTitle + ",description=" + oldDescription + ",targetStandard=" + oldTarget,
                 "title=" + saved.getTitle() + ",description=" + saved.getDescription() + ",targetStandard=" + saved.getTargetStandard());
+        events.publishEvent(new EntityChangedEvent("PROJECT", saved.getId(), "STATUS_CHANGED", null));
         return ProjectResponse.from(saved);
     }
 
@@ -190,6 +195,7 @@ public class ProjectServiceImpl implements ProjectService {
                 "PROJECT_COMPLETED",
                 saved.getId(),
                 "Project \"" + saved.getTitle() + "\" has been completed.");
+        events.publishEvent(new EntityChangedEvent("PROJECT", saved.getId(), "STATUS_CHANGED", null));
         return ProjectResponse.from(saved);
     }
 
@@ -208,6 +214,7 @@ public class ProjectServiceImpl implements ProjectService {
         auditService.record(
                 "PROJECT_ARCHIVED", "PROJECT", project.getId(), currentUser,
                 ProjectStatus.APPROVED, ProjectStatus.ARCHIVED);
+        events.publishEvent(new EntityChangedEvent("PROJECT", saved.getId(), "STATUS_CHANGED", null));
         return ProjectResponse.from(saved);
     }
 
@@ -226,6 +233,7 @@ public class ProjectServiceImpl implements ProjectService {
         auditService.record(
                 "PROJECT_UNARCHIVED", "PROJECT", project.getId(), currentUser,
                 ProjectStatus.ARCHIVED, ProjectStatus.APPROVED);
+        events.publishEvent(new EntityChangedEvent("PROJECT", saved.getId(), "STATUS_CHANGED", null));
         return ProjectResponse.from(saved);
     }
 
@@ -239,6 +247,7 @@ public class ProjectServiceImpl implements ProjectService {
         project.setActive(false);
         projectRepository.save(project);
         auditService.record("PROJECT_DELETED", "PROJECT", project.getId(), currentUser, null, null);
+        events.publishEvent(new EntityChangedEvent("PROJECT", project.getId(), "STATUS_CHANGED", null));
     }
 
     @Override
@@ -284,6 +293,7 @@ public class ProjectServiceImpl implements ProjectService {
         member.setJoinedAt(LocalDateTime.now());
         projectMemberRepository.save(member);
 
+        events.publishEvent(new EntityChangedEvent("PROJECT", project.getId(), "STATUS_CHANGED", null));
         systemNotificationService.createNotification(
                 user,
                 currentUser,
@@ -357,6 +367,7 @@ public class ProjectServiceImpl implements ProjectService {
                 project.getId(),
                 currentUser.getEmail() + " removed you from project \"" + project.getTitle() + "\"."));
         projectMemberRepository.deleteAll(members);
+        events.publishEvent(new EntityChangedEvent("PROJECT", project.getId(), "STATUS_CHANGED", null));
     }
 
     private void requireAnotherLeader(UUID projectId) {

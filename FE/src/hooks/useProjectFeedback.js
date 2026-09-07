@@ -10,6 +10,7 @@ export default function useProjectFeedback(projectId) {
   const [answerErrors, setAnswerErrors] = useState({});
   const [answeringId, setAnsweringId] = useState(null);
   const pendingAnswer = useRef(null);
+  const answerKeys = useRef({});
   const generation = useRef(0);
   const controller = useRef(null);
   const projectRef = useRef(projectId);
@@ -32,8 +33,10 @@ export default function useProjectFeedback(projectId) {
           requestStatus: round.status, instructorName: item.instructorName || round.instructorName }));
       }));
       if (requestGeneration !== generation.current) return;
+      const refreshedItems = groups.flat();
       setRequests(rounds);
-      setItems(groups.flat());
+      setItems(refreshedItems);
+      return refreshedItems;
     } catch (failure) {
       if (abort.signal.aborted || requestGeneration !== generation.current) return;
       setError(failure.response?.status || 'network');
@@ -49,6 +52,7 @@ export default function useProjectFeedback(projectId) {
     setDrafts({});
     setAnswerErrors({});
     setAnsweringId(null);
+    answerKeys.current = {};
     setError(null);
     refresh();
     return () => { generation.current++; controller.current?.abort(); };
@@ -62,10 +66,12 @@ export default function useProjectFeedback(projectId) {
     setAnsweringId(item.id);
     setAnswerErrors(previous => ({ ...previous, [item.id]: null }));
     try {
-      const response = await api.post(`/api/instructor-feedback/${item.id}/answer`, { content });
+      const idempotencyKey = answerKeys.current[item.id] ||= crypto.randomUUID();
+      const response = await api.post(`/api/instructor-feedback/${item.id}/answer`, { content, idempotencyKey });
       if (projectRef.current !== projectId) return false;
       setItems(previous => previous.map(existing => existing.id === item.id ? { ...existing, ...response.data } : existing));
       setDrafts(previous => ({ ...previous, [item.id]: '' }));
+      delete answerKeys.current[item.id];
       return true;
     } catch (failure) {
       if (projectRef.current === projectId) {

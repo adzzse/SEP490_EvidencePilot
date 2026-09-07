@@ -13,6 +13,7 @@ import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.AuditLogRepository;
 import com.evidencepilot.repository.CollectionRepository;
 import com.evidencepilot.repository.DocumentRepository;
+import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.repository.UserRepository;
@@ -23,6 +24,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -55,6 +57,7 @@ class AdminServiceTest {
     @Mock CollectionCategoryRepository collectionCategories;
     @Mock CollectionRepository collections;
     @Mock DocumentRepository documents;
+    @Mock PaperSectionRepository paperSections;
     @Mock AuditLogRepository auditLogs;
     @Mock CurrentUserService currentUsers;
     @Mock PasswordResetService passwordResets;
@@ -64,6 +67,7 @@ class AdminServiceTest {
     @Mock SystemNotificationService notifications;
     @Mock PasswordEncoder passwords;
     @Mock ObjectProvider<DevBypassPolicy> devBypassPolicies;
+    @Mock ApplicationEventPublisher events;
     @InjectMocks AdminService service;
 
     @Test
@@ -541,7 +545,7 @@ class AdminServiceTest {
         when(auditLogs.findByActorIdOrderByOccurredAtDesc(eq(actor.getId()), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(log), anyPage, 1));
 
-        var response = service.getAuditLogs(0, 20, actor.getId(), null, null);
+        var response = service.getAuditLogs(0, 20, actor.getId(), null, null, null, null);
 
         assertThat(response.content()).singleElement().satisfies(item -> {
             assertThat(item.actorId()).isEqualTo(actor.getId());
@@ -559,9 +563,33 @@ class AdminServiceTest {
                 eq(actor.getId()), eq("USER"), eq(entityId), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(combined)));
 
-        var response = service.getAuditLogs(0, 20, actor.getId(), "USER", entityId);
+        var response = service.getAuditLogs(0, 20, actor.getId(), "USER", entityId, null, null);
 
         assertThat(response.content()).singleElement().extracting("action").isEqualTo("COMBINED");
+    }
+
+    @Test
+    void auditLogsRouteSeverityActionAndActorCombinations() {
+        User actor = user(UserRole.ADMIN, AccountStatus.ACTIVE);
+        Pageable anyPage = Pageable.ofSize(20);
+        when(auditLogs.findBySeverityOrderByOccurredAtDesc(
+                eq(com.evidencepilot.model.enums.AuditSeverity.CRITICAL), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), anyPage, 0));
+        when(auditLogs.findByActorIdAndActionAndSeverityOrderByOccurredAtDesc(
+                eq(actor.getId()), eq("USER_BANNED"),
+                eq(com.evidencepilot.model.enums.AuditSeverity.CRITICAL), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), anyPage, 0));
+
+        service.getAuditLogs(0, 20, null, null, null, null,
+                com.evidencepilot.model.enums.AuditSeverity.CRITICAL);
+        verify(auditLogs).findBySeverityOrderByOccurredAtDesc(
+                eq(com.evidencepilot.model.enums.AuditSeverity.CRITICAL), any(Pageable.class));
+
+        service.getAuditLogs(0, 20, actor.getId(), null, null, "USER_BANNED",
+                com.evidencepilot.model.enums.AuditSeverity.CRITICAL);
+        verify(auditLogs).findByActorIdAndActionAndSeverityOrderByOccurredAtDesc(
+                eq(actor.getId()), eq("USER_BANNED"),
+                eq(com.evidencepilot.model.enums.AuditSeverity.CRITICAL), any(Pageable.class));
     }
 
     @Test

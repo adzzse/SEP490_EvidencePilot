@@ -14,10 +14,10 @@ export default function NotFound() {
       <div className="relative z-10">
         <Error404
           postcardImage="/404/404.jpg"
-          postcardAlt={t('Page Not Found') || 'Page Not Found'}
+          postcardAlt={t('pageNotFound') || 'Page Not Found'}
           curvedTextTop={curvedTop}
           curvedTextBottom={curvedBottom}
-          heading={t('Page Not Found') || 'Page Not Found'}
+          heading={t('pageNotFound') || 'Page Not Found'}
           subtext={t('notFoundMessage') || 'The page you are looking for does not exist or has been moved.'}
           backButtonLabel={t('backToHome') || 'Back to Home'}
           backButtonHref="/"
