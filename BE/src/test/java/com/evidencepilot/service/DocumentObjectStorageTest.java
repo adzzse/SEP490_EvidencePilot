@@ -116,9 +116,11 @@ class DocumentObjectStorageTest {
     void extractionCacheKeyUsesOnlyVersionedLowercaseSha256Paths() {
         String hash = "a".repeat(64);
 
-        assertThat(DocumentObjectStorage.extractionCacheKey(hash))
+        assertThat(DocumentObjectStorage.extractionCacheKey(hash, true))
                 .isEqualTo("documents/processed/cache/v2/sha256/" + hash + "/extraction.zip");
-        assertThatThrownBy(() -> DocumentObjectStorage.extractionCacheKey("../not-a-hash"))
+        assertThat(DocumentObjectStorage.extractionCacheKey(hash, false))
+                .isEqualTo("documents/processed/cache/v2/sha256/" + hash + "/source-extraction.zip");
+        assertThatThrownBy(() -> DocumentObjectStorage.extractionCacheKey("../not-a-hash", false))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

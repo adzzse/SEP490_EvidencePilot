@@ -17,7 +17,7 @@ public interface AiModelClient {
     <T> T generateValidated(String system, String prompt, Map<String, Object> jsonSchema,
             Function<GenerationResult, T> validator);
 
-    ExtractionBundle extractDocument(String filename, String downloadUrl);
+    ExtractionBundle extractDocument(String filename, String downloadUrl, boolean enrichHierarchy);
 
     List<Float> generateEmbedding(String text);
 

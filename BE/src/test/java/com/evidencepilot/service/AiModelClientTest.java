@@ -4,6 +4,8 @@ import com.evidencepilot.client.ai.gate.AiModelCallGate;
 import com.evidencepilot.service.impl.AiModelClientImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -68,8 +70,9 @@ class AiModelClientTest {
         server.verify();
     }
 
-    @Test
-    void extractDocumentStreamsExtractionZipAndDeletesItWhenClosed() throws IOException {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void extractDocumentStreamsExtractionZipAndDeletesItWhenClosed(boolean enrichHierarchy) throws IOException {
         RestClient.Builder builder = RestClient.builder()
                 .defaultHeader("ngrok-skip-browser-warning", "true");
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
@@ -80,14 +83,15 @@ class AiModelClientTest {
                 .andExpect(content().json("""
                         {
                           "filename":"source.pdf",
-                          "download_url":"https://storage.test/source.pdf"
+                          "download_url":"https://storage.test/source.pdf",
+                          "enrich_hierarchy":%s
                         }
-                        """, true))
+                        """.formatted(enrichHierarchy), true))
                 .andRespond(withSuccess(extractionZip(), MediaType.valueOf("application/zip")));
 
         AiModelClientImpl client = client(builder.build(), "http://ai.test");
 
-        ExtractionBundle bundle = client.extractDocument("source.pdf", "https://storage.test/source.pdf");
+        ExtractionBundle bundle = client.extractDocument("source.pdf", "https://storage.test/source.pdf", enrichHierarchy);
 
         assertThat(bundle.document().markdown()).isEqualTo("# Extracted\n\n![](images/figure.jpg)");
         assertThat(bundle.document().blocks()).extracting(AiModelClient.ExtractionBlock::type)
@@ -114,7 +118,7 @@ class AiModelClientTest {
 
         AiModelClientImpl client = client(builder.build(), "http://ai.test");
 
-        assertThatThrownBy(() -> client.extractDocument("source.pdf", "https://storage.test/source.pdf"))
+        assertThatThrownBy(() -> client.extractDocument("source.pdf", "https://storage.test/source.pdf", false))
                 .isInstanceOf(AiModelClient.AiApiException.class)
                 .hasMessageContaining("application/zip");
     }

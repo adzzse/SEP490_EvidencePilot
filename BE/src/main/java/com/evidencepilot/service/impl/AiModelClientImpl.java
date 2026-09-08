@@ -287,7 +287,7 @@ public class AiModelClientImpl implements AiModelClient {
     }
 
     @Override
-    public ExtractionBundle extractDocument(String filename, String downloadUrl) {
+    public ExtractionBundle extractDocument(String filename, String downloadUrl, boolean enrichHierarchy) {
         Path archivePath;
         try {
             archivePath = Files.createTempFile("evidencepilot-extraction-", ".zip");
@@ -302,7 +302,8 @@ public class AiModelClientImpl implements AiModelClient {
                     .accept(APPLICATION_ZIP)
                     .body(Map.of(
                             "filename", stringValue(filename, "document"),
-                            "download_url", downloadUrl))
+                            "download_url", downloadUrl,
+                            "enrich_hierarchy", enrichHierarchy))
                     .exchange((request, response) -> {
                         if (!response.getStatusCode().is2xxSuccessful()) {
                             throw new AiApiException("/extract", response.getStatusCode().value());

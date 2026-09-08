@@ -139,7 +139,7 @@ public class DocumentObjectStorage {
                 : prefix + fileHashSha256 + "/extraction.json";
     }
 
-    public static String extractionCacheKey(String fileHashSha256) {
+    public static String extractionCacheKey(String fileHashSha256, boolean enrichHierarchy) {
         if (fileHashSha256 == null
                 || fileHashSha256.length() != 64
                 || !fileHashSha256.chars().allMatch(character ->
@@ -147,7 +147,8 @@ public class DocumentObjectStorage {
                                 || character >= 'a' && character <= 'f')) {
             throw new IllegalArgumentException("Extraction cache requires a lowercase SHA-256 hash");
         }
-        return "documents/processed/cache/v2/sha256/" + fileHashSha256 + "/extraction.zip";
+        return "documents/processed/cache/v2/sha256/" + fileHashSha256
+                + (enrichHierarchy ? "/extraction.zip" : "/source-extraction.zip");
     }
 
     public void deleteExtractionCheckpoint(UUID documentId, String fileHashSha256) {

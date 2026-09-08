@@ -40,6 +40,7 @@ import java.util.zip.ZipOutputStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -84,7 +85,7 @@ class DocumentExtractionWorkerTest {
         worker().process(documentId);
 
         verify(documentRepository, never()).findById(documentId);
-        verify(aiModelClient, never()).extractDocument(any(), any());
+        verify(aiModelClient, never()).extractDocument(any(), any(), anyBoolean());
     }
 
     @Test
@@ -98,7 +99,7 @@ class DocumentExtractionWorkerTest {
 
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(documentObjectStorage.exists(checkpointKey)).thenReturn(false);
-        when(aiModelClient.extractDocument(eq("source.pdf"), anyString())).thenReturn(archive.bundle());
+        when(aiModelClient.extractDocument(eq("source.pdf"), anyString(), eq(false))).thenReturn(archive.bundle());
         when(aiModelClient.generateEmbeddings(List.of(markdown)))
                 .thenReturn(List.of(Collections.nCopies(768, 0.1f)));
         when(sparseVectorGenerator.generate(markdown))
@@ -132,7 +133,7 @@ class DocumentExtractionWorkerTest {
 
             when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
             when(documentObjectStorage.exists(checkpointKey)).thenReturn(false);
-            when(aiModelClient.extractDocument(eq("source.pdf"), anyString())).thenReturn(archive.bundle());
+            when(aiModelClient.extractDocument(eq("source.pdf"), anyString(), eq(docType == DocumentType.PAPER))).thenReturn(archive.bundle());
             when(aiModelClient.generateEmbeddings(List.of(markdown)))
                     .thenReturn(List.of(Collections.nCopies(768, 0.1f)));
             when(sparseVectorGenerator.generate(markdown))
@@ -160,7 +161,7 @@ class DocumentExtractionWorkerTest {
 
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(documentObjectStorage.exists(checkpointKey)).thenReturn(false);
-        when(aiModelClient.extractDocument(eq("source.pdf"), anyString()))
+        when(aiModelClient.extractDocument(eq("source.pdf"), anyString(), eq(false)))
                 .thenReturn(extractedBundle);
         when(aiModelClient.generateEmbeddings(List.of(markdown))).thenReturn(List.of(vector));
         when(sparseVectorGenerator.generate(markdown))
@@ -200,24 +201,28 @@ class DocumentExtractionWorkerTest {
 
         worker().process(documentId);
 
-        verify(aiModelClient, never()).extractDocument(any(), any());
+        verify(aiModelClient, never()).extractDocument(any(), any(), anyBoolean());
         verify(mediaAssetService, never()).importExtractedImage(
                 any(), anyString(), any(), any(Long.class), anyString());
         verify(persistence).markReady(documentId, 1);
     }
 
-    @Test
-    void processReusesExtractionBundleAcrossDocumentsWithTheSamePdfHash() throws Exception {
+    @ParameterizedTest
+    @CsvSource({"SOURCE", "PAPER"})
+    void processReusesExtractionBundleAcrossDocumentsWithTheSamePdfHash(DocumentType docType) throws Exception {
         UUID firstId = UUID.randomUUID();
         UUID secondId = UUID.randomUUID();
         Document first = projectSourceDocument(firstId);
         Document second = projectSourceDocument(secondId);
+        first.setDocType(docType);
+        second.setDocType(docType);
+        boolean enrichHierarchy = docType == DocumentType.PAPER;
         String hash = "a".repeat(64);
         first.setFileHashSha256(hash);
         second.setFileHashSha256(hash);
         String firstCheckpoint = DocumentObjectStorage.extractionCheckpointKey(firstId, hash);
         String secondCheckpoint = DocumentObjectStorage.extractionCheckpointKey(secondId, hash);
-        String cacheKey = DocumentObjectStorage.extractionCacheKey(hash);
+        String cacheKey = DocumentObjectStorage.extractionCacheKey(hash, enrichHierarchy);
         String markdown = "Extracted source.";
         TestBundle archive = bundleWithImage(markdown);
         AtomicReference<byte[]> cachedBundle = new AtomicReference<>();
@@ -227,7 +232,7 @@ class DocumentExtractionWorkerTest {
         when(documentObjectStorage.exists(firstCheckpoint)).thenReturn(false);
         when(documentObjectStorage.exists(secondCheckpoint)).thenReturn(false);
         when(documentObjectStorage.exists(cacheKey)).thenReturn(false, true);
-        when(aiModelClient.extractDocument(eq("source.pdf"), anyString()))
+        when(aiModelClient.extractDocument(eq("source.pdf"), anyString(), eq(enrichHierarchy)))
                 .thenReturn(archive.bundle());
         doAnswer(invocation -> {
             try (InputStream content = invocation.getArgument(1)) {
@@ -251,7 +256,7 @@ class DocumentExtractionWorkerTest {
         worker.process(firstId);
         worker.process(secondId);
 
-        verify(aiModelClient, times(1)).extractDocument(eq("source.pdf"), anyString());
+        verify(aiModelClient, times(1)).extractDocument(eq("source.pdf"), anyString(), eq(enrichHierarchy));
         verify(documentObjectStorage, times(1)).write(
                 eq(cacheKey), any(InputStream.class), anyLong(), eq("application/zip"));
         verify(documentObjectStorage).getStream(cacheKey);
@@ -263,6 +268,42 @@ class DocumentExtractionWorkerTest {
                 any(Document.class), eq("images/figure.jpg"), any(InputStream.class),
                 eq(3L), eq("image/jpeg"));
         assertThat(cachedBundle.get()).isNotEmpty();
+        assertThat(Files.exists(archive.path())).isFalse();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"SOURCE, PAPER", "PAPER, SOURCE"})
+    void processDoesNotReuseCacheFromAnotherDocumentType(DocumentType cachedType, DocumentType docType)
+            throws IOException {
+        UUID documentId = UUID.randomUUID();
+        Document document = projectSourceDocument(documentId);
+        document.setDocType(docType);
+        String hash = "a".repeat(64);
+        document.setFileHashSha256(hash);
+        boolean enrichHierarchy = docType == DocumentType.PAPER;
+        String oldCache = DocumentObjectStorage.extractionCacheKey(hash, cachedType == DocumentType.PAPER);
+        String newCache = DocumentObjectStorage.extractionCacheKey(hash, enrichHierarchy);
+        String markdown = "Extracted source.";
+        TestBundle archive = bundleWithImage(markdown);
+
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(documentObjectStorage.exists(anyString()))
+                .thenAnswer(invocation -> oldCache.equals(invocation.getArgument(0)));
+        when(aiModelClient.extractDocument(eq("source.pdf"), anyString(), eq(enrichHierarchy)))
+                .thenReturn(archive.bundle());
+        when(aiModelClient.generateEmbeddings(List.of(markdown)))
+                .thenReturn(List.of(Collections.nCopies(768, 0.1f)));
+        when(sparseVectorGenerator.generate(markdown))
+                .thenReturn(new SparseVector(List.of(), List.of()));
+        when(persistence.saveExtraction(documentId, "mineru", markdown, List.of(markdown)))
+                .thenReturn(List.of(chunk(document, markdown)));
+
+        worker().process(documentId);
+
+        verify(documentObjectStorage, never()).getStream(anyString());
+        verify(aiModelClient).extractDocument(eq("source.pdf"), anyString(), eq(enrichHierarchy));
+        verify(documentObjectStorage).write(eq(newCache), any(InputStream.class), anyLong(), eq("application/zip"));
+        verify(persistence).markReady(documentId, 1);
         assertThat(Files.exists(archive.path())).isFalse();
     }
 
@@ -279,7 +320,7 @@ class DocumentExtractionWorkerTest {
         when(documentObjectStorage.exists(checkpointKey)).thenReturn(true);
         when(documentObjectStorage.readText(checkpointKey)).thenReturn(
                 "{\"filename\":\"source.pdf\",\"method\":\"mineru\",\"markdown\":\"legacy\"}");
-        when(aiModelClient.extractDocument(eq("source.pdf"), anyString()))
+        when(aiModelClient.extractDocument(eq("source.pdf"), anyString(), eq(false)))
                 .thenReturn(extractedBundle);
         when(aiModelClient.generateEmbeddings(List.of(markdown)))
                 .thenReturn(List.of(Collections.nCopies(768, 0.1f)));
@@ -290,7 +331,7 @@ class DocumentExtractionWorkerTest {
 
         worker().process(documentId);
 
-        verify(aiModelClient).extractDocument(eq("source.pdf"), anyString());
+        verify(aiModelClient).extractDocument(eq("source.pdf"), anyString(), eq(false));
         verify(documentObjectStorage).write(eq(checkpointKey), any(byte[].class), eq("application/json"));
     }
 
@@ -307,7 +348,7 @@ class DocumentExtractionWorkerTest {
         when(documentObjectStorage.exists(checkpointKey)).thenReturn(true);
         when(documentObjectStorage.readText(checkpointKey)).thenReturn(
                 "{\"markdown\":\"broken\",\"blocks\":[null]}");
-        when(aiModelClient.extractDocument(eq("source.pdf"), anyString()))
+        when(aiModelClient.extractDocument(eq("source.pdf"), anyString(), eq(false)))
                 .thenReturn(extractedBundle);
         when(aiModelClient.generateEmbeddings(List.of(markdown)))
                 .thenReturn(List.of(Collections.nCopies(768, 0.1f)));
@@ -318,7 +359,7 @@ class DocumentExtractionWorkerTest {
 
         worker().process(documentId);
 
-        verify(aiModelClient).extractDocument(eq("source.pdf"), anyString());
+        verify(aiModelClient).extractDocument(eq("source.pdf"), anyString(), eq(false));
         verify(documentObjectStorage).write(eq(checkpointKey), any(byte[].class), eq("application/json"));
     }
 
@@ -342,7 +383,7 @@ class DocumentExtractionWorkerTest {
 
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(documentObjectStorage.exists(checkpointKey)).thenReturn(false);
-        when(aiModelClient.extractDocument(eq(filename), anyString()))
+        when(aiModelClient.extractDocument(eq(filename), anyString(), eq(false)))
                 .thenReturn(extractedBundle);
         when(aiModelClient.generateEmbeddings(List.of(markdown))).thenReturn(List.of(vector));
         when(sparseVectorGenerator.generate(markdown))
@@ -376,7 +417,7 @@ class DocumentExtractionWorkerTest {
 
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(documentObjectStorage.exists(checkpointKey)).thenReturn(false);
-        when(aiModelClient.extractDocument(eq("paper.pdf"), anyString()))
+        when(aiModelClient.extractDocument(eq("paper.pdf"), anyString(), eq(true)))
                 .thenReturn(extractedBundle);
         when(aiModelClient.generateEmbeddings(List.of(markdown)))
                 .thenReturn(List.of(Collections.nCopies(768, 0.1f)));
@@ -412,7 +453,7 @@ class DocumentExtractionWorkerTest {
         completion.verify(persistence).saveExtraction(documentId, "latex", latex, List.of());
         completion.verify(paperProcessingService).detectAndPersistSections(documentId);
         completion.verify(persistence).markReady(documentId, 0);
-        verify(aiModelClient, never()).extractDocument(any(), any());
+        verify(aiModelClient, never()).extractDocument(any(), any(), anyBoolean());
         verify(aiModelClient, never()).generateEmbeddings(any());
         verify(qdrantService, never()).upsertVectors(any());
         verify(sparseVectorGenerator, never()).generate(any());
@@ -430,7 +471,7 @@ class DocumentExtractionWorkerTest {
 
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(documentObjectStorage.exists(checkpointKey)).thenReturn(false);
-        when(aiModelClient.extractDocument(eq("source.pdf"), anyString()))
+        when(aiModelClient.extractDocument(eq("source.pdf"), anyString(), eq(false)))
                 .thenReturn(extractedBundle);
         when(aiModelClient.generateEmbeddings(List.of(markdown)))
                 .thenReturn(List.of(Collections.nCopies(768, 0.1f)));
@@ -451,7 +492,7 @@ class DocumentExtractionWorkerTest {
         Document document = document(documentId);
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(documentObjectStorage.exists(any())).thenReturn(false);
-        when(aiModelClient.extractDocument(eq("source.pdf"), anyString()))
+        when(aiModelClient.extractDocument(eq("source.pdf"), anyString(), eq(false)))
                 .thenThrow(new AiModelClient.AiApiException("/extract", 503));
         when(persistence.markQueuedForRetry(documentId)).thenReturn(true);
 

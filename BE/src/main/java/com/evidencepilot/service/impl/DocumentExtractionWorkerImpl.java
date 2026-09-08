@@ -132,7 +132,7 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
         String downloadUrl = baseUrl + "/api/documents/" + document.getId()
                 + "/download?token=" + document.getDownloadToken();
         try (ExtractionBundle bundle = aiModelClient.extractDocument(
-                document.getOriginalFilename(), downloadUrl)) {
+                document.getOriginalFilename(), downloadUrl, document.getDocType() == DocumentType.PAPER)) {
             AiModelClient.ExtractedDocument extracted = requireValid(bundle.document());
             if (cacheKey != null) {
                 writeExtractionCache(cacheKey, bundle);
@@ -202,7 +202,7 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
                                 || character >= 'a' && character <= 'f')) {
             return null;
         }
-        return DocumentObjectStorage.extractionCacheKey(hash);
+        return DocumentObjectStorage.extractionCacheKey(hash, document.getDocType() == DocumentType.PAPER);
     }
 
     private static boolean isPdf(String filename) {
