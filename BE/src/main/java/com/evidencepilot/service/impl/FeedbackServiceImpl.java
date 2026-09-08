@@ -1,14 +1,11 @@
 package com.evidencepilot.service.impl;
 
-import com.evidencepilot.dto.request.FeedbackReplyRequest;
 import com.evidencepilot.dto.request.FeedbackStateRequest;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
-import com.evidencepilot.dto.response.FeedbackMessageResponseDto;
 import com.evidencepilot.dto.response.FeedbackRequestResponseDto;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
 import com.evidencepilot.dto.response.ReviewSubmissionSnapshotResponse;
-import com.evidencepilot.model.FeedbackReply;
 import com.evidencepilot.model.FeedbackRequest;
 import com.evidencepilot.model.FeedbackStatus;
 import com.evidencepilot.model.InstructorFeedback;
@@ -17,12 +14,10 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
-import com.evidencepilot.model.enums.FeedbackReplyAuthorRole;
 import com.evidencepilot.model.enums.FeedbackThreadState;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
-import com.evidencepilot.repository.FeedbackReplyRepository;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
@@ -44,9 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -61,7 +54,6 @@ public class FeedbackServiceImpl implements FeedbackService {
 
     private final FeedbackRequestRepository feedbackRequestRepository;
     private final InstructorFeedbackRepository instructorFeedbackRepository;
-    private final FeedbackReplyRepository feedbackReplyRepository;
     private final PaperSectionRepository paperSectionRepository;
     private final ProjectRepository projectRepository;
     private final CurrentUserService currentUserService;
@@ -168,11 +160,10 @@ public class FeedbackServiceImpl implements FeedbackService {
         feedback.setCreatedAt(LocalDateTime.now());
         feedback.setUpdatedAt(feedback.getCreatedAt());
         feedback.setUpdatedBy(currentUser);
-        feedback.setAnswered(false);
         feedback.setThreadState(FeedbackThreadState.OPEN);
         feedbackAnchorService.initialize(feedback, request.anchor());
         InstructorFeedback saved = instructorFeedbackRepository.save(feedback);
-        return response(saved, currentUser, List.of());
+        return response(saved, currentUser);
     }
 
     @Override
@@ -183,9 +174,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         boolean instructorView = isInstructorViewer(currentUser, request);
         List<InstructorFeedback> roots = instructorFeedbackRepository.findByRequestId(feedbackRequestId);
         if (!instructorView) roots = roots.stream().filter(FeedbackServiceImpl::isPublished).toList();
-        Map<UUID, List<FeedbackReply>> replies = repliesByFeedback(roots);
-        return roots.stream().map(root -> response(root, currentUser,
-                replies.getOrDefault(root.getId(), List.of()))).toList();
+        return roots.stream().map(root -> response(root, currentUser)).toList();
     }
 
     @Override
@@ -205,7 +194,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         feedback.setUpdatedAt(LocalDateTime.now());
         feedback.setUpdatedBy(currentUser);
         instructorFeedbackRepository.saveAndFlush(feedback);
-        return response(feedback, currentUser, repliesFor(feedback));
+        return response(feedback, currentUser);
     }
 
     @Override
@@ -219,66 +208,10 @@ public class FeedbackServiceImpl implements FeedbackService {
 
     @Override
     @Transactional
-    public InstructorFeedbackResponseDto answerFeedback(
-            UUID feedbackItemId, String answerContent, UUID idempotencyKey) {
-        User currentUser = currentUserService.requireCurrentUser();
-        InstructorFeedback feedback = requireFeedbackForUpdate(feedbackItemId);
-        Project project = feedback.getRequest().getProject();
-        if (!isStudentMember(currentUser, project)) {
-            throw forbidden("Only a current project student can answer feedback.");
-        }
-        if (!isPublished(feedback)) throw conflict("Feedback is not published yet.");
-        if (Objects.requireNonNullElse(feedback.getThreadState(), FeedbackThreadState.OPEN) != FeedbackThreadState.OPEN) {
-            throw conflict("Feedback is already done.");
-        }
-        if (project.getStatus().isReadOnly()) throw conflict("Project is read-only.");
-        if (!isCurrentAssignee(currentUser, feedback.getSection(), project)) {
-            throw forbidden("You are not assigned to this section.");
-        }
-
-        throw conflict("Feedback replies are closed. Revise the paper and submit a new review round.");
-    }
-
-    @Override
-    @Transactional
-    public InstructorFeedbackResponseDto createInstructorReply(UUID feedbackItemId, FeedbackReplyRequest request) {
-        User currentUser = currentUserService.requireCurrentUser();
-        InstructorFeedback feedback = requireFeedbackForUpdate(feedbackItemId);
-        requireInstructorThreadAccess(feedback, currentUser);
-        throw conflict("Feedback replies are closed. Revise the paper and submit a new review round.");
-    }
-
-    @Override
-    @Transactional
-    public InstructorFeedbackResponseDto updateInstructorReply(
-            UUID feedbackItemId, UUID replyId, FeedbackReplyRequest request) {
-        User currentUser = currentUserService.requireCurrentUser();
-        InstructorFeedback feedback = requireFeedbackForUpdate(feedbackItemId);
-        requireInstructorThreadAccess(feedback, currentUser);
-        FeedbackReply reply = feedbackReplyRepository.findByIdAndFeedbackIdForUpdate(feedbackItemId, replyId)
-                .orElseThrow(() -> notFound("Feedback reply", replyId));
-        requireDraftReplyOwner(reply, currentUser);
-        throw conflict("Feedback replies are closed. Revise the paper and submit a new review round.");
-    }
-
-    @Override
-    @Transactional
-    public void deleteInstructorReply(UUID feedbackItemId, UUID replyId) {
-        User currentUser = currentUserService.requireCurrentUser();
-        InstructorFeedback feedback = requireFeedbackForUpdate(feedbackItemId);
-        requireInstructorThreadAccess(feedback, currentUser);
-        FeedbackReply reply = feedbackReplyRepository.findByIdAndFeedbackIdForUpdate(feedbackItemId, replyId)
-                .orElseThrow(() -> notFound("Feedback reply", replyId));
-        requireDraftReplyOwner(reply, currentUser);
-        feedbackReplyRepository.delete(reply);
-    }
-
-    @Override
-    @Transactional
     public InstructorFeedbackResponseDto prepareFeedbackState(UUID feedbackItemId, FeedbackStateRequest request) {
         User currentUser = currentUserService.requireCurrentUser();
         InstructorFeedback feedback = requireFeedbackForUpdate(feedbackItemId);
-        requireInstructorThreadAccess(feedback, currentUser);
+        requireFeedbackStateAccess(feedback, currentUser);
         long revision = revision(feedback);
         if (!Objects.equals(request.expectedRevision(), revision)) {
             throw conflict("Feedback changed; reload it before changing its state.");
@@ -292,7 +225,7 @@ public class FeedbackServiceImpl implements FeedbackService {
             feedback.setPendingStateOptVersion(revision + 1);
         }
         instructorFeedbackRepository.saveAndFlush(feedback);
-        return response(feedback, currentUser, repliesFor(feedback));
+        return response(feedback, currentUser);
     }
 
     @Override
@@ -318,11 +251,6 @@ public class FeedbackServiceImpl implements FeedbackService {
         if (project.getStatus().isReadOnly()) throw conflict("Project is read-only.");
 
         List<InstructorFeedback> roots = instructorFeedbackRepository.findByRequestProjectIdForUpdate(project.getId());
-        Map<UUID, List<FeedbackReply>> replies = repliesByFeedbackForUpdate(roots);
-        if (replies.values().stream().flatMap(Collection::stream)
-                .anyMatch(reply -> reply.getPublishedAt() == null && isInstructorReply(reply))) {
-            throw conflict("Resolve legacy reply drafts before returning. Copy them into round feedback or delete them.");
-        }
         requireFreshPendingStates(roots);
         LocalDateTime now = LocalDateTime.now();
         Set<UUID> feedbackWithNewInstructorContent = new LinkedHashSet<>();
@@ -337,7 +265,6 @@ public class FeedbackServiceImpl implements FeedbackService {
         }
         applyPendingStates(roots, currentUser, now);
         for (InstructorFeedback root : roots) {
-            syncLegacyAnswerProjection(root, replies.getOrDefault(root.getId(), List.of()));
             instructorFeedbackRepository.save(root);
         }
 
@@ -357,8 +284,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         if (project.getStatus().isReadOnly()) throw conflict("Project is read-only.");
 
         List<InstructorFeedback> roots = instructorFeedbackRepository.findByRequestProjectIdForUpdate(project.getId());
-        Map<UUID, List<FeedbackReply>> replies = repliesByFeedbackForUpdate(roots);
-        if (hasInstructorDrafts(roots, replies)) {
+        if (hasInstructorDrafts(roots)) {
             throw conflict("Publish or delete instructor drafts before approving.");
         }
         requireFreshPendingStates(roots);
@@ -366,7 +292,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         LocalDateTime now = LocalDateTime.now();
         applyPendingStates(roots, currentUser, now);
         if (roots.stream().anyMatch(root -> root.getThreadState() != FeedbackThreadState.DONE)) {
-            throw conflict("Every feedback thread must be done before approving.");
+            throw conflict("Every feedback item must be done before approving.");
         }
         for (InstructorFeedback root : roots) {
             instructorFeedbackRepository.save(root);
@@ -385,7 +311,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         }
         if (project.getStatus().isReadOnly()) throw conflict("Project is read-only.");
         List<InstructorFeedback> roots = instructorFeedbackRepository.findByRequestProjectIdForUpdate(project.getId());
-        if (hasInstructorDrafts(roots, repliesByFeedbackForUpdate(roots))) {
+        if (hasInstructorDrafts(roots)) {
             throw conflict("Publish or delete instructor drafts before rejecting.");
         }
         LocalDateTime now = LocalDateTime.now();
@@ -480,17 +406,10 @@ public class FeedbackServiceImpl implements FeedbackService {
         if (request.getProject().getStatus().isReadOnly()) throw conflict("Project is read-only.");
     }
 
-    private void requireInstructorThreadAccess(InstructorFeedback feedback, User currentUser) {
+    private void requireFeedbackStateAccess(InstructorFeedback feedback, User currentUser) {
         requireFeedbackAccess(feedback.getRequest(), currentUser, true);
         if (!isPublished(feedback)) throw conflict("Feedback is not published yet.");
         if (feedback.getRequest().getProject().getStatus().isReadOnly()) throw conflict("Project is read-only.");
-    }
-
-    private void requireDraftReplyOwner(FeedbackReply reply, User currentUser) {
-        if (reply.getPublishedAt() != null) throw conflict("Published feedback replies are immutable.");
-        if (!isInstructorReply(reply) || (!isAdmin(currentUser) && !sameUser(reply.getAuthor(), currentUser))) {
-            throw forbidden("Feedback reply access denied.");
-        }
     }
 
     private void requireLatestRequest(FeedbackRequest request, Project project) {
@@ -530,11 +449,8 @@ public class FeedbackServiceImpl implements FeedbackService {
         }
     }
 
-    private boolean hasInstructorDrafts(Collection<InstructorFeedback> roots,
-                                        Map<UUID, List<FeedbackReply>> replies) {
-        return roots.stream().anyMatch(root -> !isPublished(root)
-                || replies.getOrDefault(root.getId(), List.of()).stream()
-                .anyMatch(reply -> reply.getPublishedAt() == null && isInstructorReply(reply)));
+    private boolean hasInstructorDrafts(Collection<InstructorFeedback> roots) {
+        return roots.stream().anyMatch(root -> !isPublished(root));
     }
 
     private void validateCurrentSubmissionSnapshot(FeedbackRequest request, Project project, User currentUser) {
@@ -635,8 +551,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         return section;
     }
 
-    private InstructorFeedbackResponseDto response(InstructorFeedback feedback, User viewer,
-                                                   List<FeedbackReply> replies) {
+    private InstructorFeedbackResponseDto response(InstructorFeedback feedback, User viewer) {
         PaperSection section = feedback.getSection();
         Project project = feedback.getRequest().getProject();
         boolean instructorView = isInstructorViewer(viewer, feedback.getRequest());
@@ -649,81 +564,11 @@ public class FeedbackServiceImpl implements FeedbackService {
         boolean canEdit = !published && !project.getStatus().isReadOnly()
                 && feedback.getRequest().getStatus() == FeedbackStatus.PENDING
                 && (isAdmin(viewer) || sameUser(feedback.getInstructor(), viewer));
-        List<FeedbackMessageResponseDto> messages = conversation(feedback, replies, instructorView);
-        return InstructorFeedbackResponseDto.fromConversation(
+        return InstructorFeedbackResponseDto.fromFeedback(
                 feedback, section, section == null ? null : section.getVersion(),
                 section == null ? null : feedbackAnchorService.resolve(feedback, section.getContentTex(), section.getVersion()),
-                false, false, canMarkDone, canReopen, canEdit, canEdit,
-                instructorView ? feedback.getPendingState() : null, messages);
-    }
-
-    private List<FeedbackMessageResponseDto> conversation(InstructorFeedback feedback,
-                                                           List<FeedbackReply> replies,
-                                                           boolean instructorView) {
-        List<FeedbackMessageResponseDto> messages = new ArrayList<>();
-        if (instructorView || isPublished(feedback)) {
-            messages.add(new FeedbackMessageResponseDto(
-                    feedback.getId(), "ROOT", idOf(feedback.getInstructor()), roleOf(feedback.getInstructor()).name(),
-                    displayName(feedback.getInstructor()), feedback.getContent(), feedback.getCreatedAt(),
-                    feedback.getPublishedAt(), isPublished(feedback) ? feedback.getRequest().getId() : null,
-                    !isPublished(feedback)));
-        }
-        replies.stream()
-                .filter(reply -> instructorView || reply.getPublishedAt() != null)
-                .sorted(Comparator
-                        .comparing((FeedbackReply reply) -> reply.getPublishedAt() == null)
-                        .thenComparing(reply -> reply.getPublishedAt() == null ? reply.getCreatedAt() : reply.getPublishedAt(),
-                                Comparator.nullsLast(Comparator.naturalOrder())))
-                .forEach(reply -> messages.add(new FeedbackMessageResponseDto(
-                        reply.getId(), "REPLY", idOf(reply.getAuthor()), reply.getAuthorRole().name(),
-                        displayName(reply.getAuthor()), reply.getContent(), reply.getCreatedAt(), reply.getPublishedAt(),
-                        reply.getPublishedRequest() == null ? null : reply.getPublishedRequest().getId(),
-                        reply.getPublishedAt() == null)));
-        return List.copyOf(messages);
-    }
-
-    private Map<UUID, List<FeedbackReply>> repliesByFeedback(Collection<InstructorFeedback> roots) {
-        return groupReplies(roots, false);
-    }
-
-    private Map<UUID, List<FeedbackReply>> repliesByFeedbackForUpdate(Collection<InstructorFeedback> roots) {
-        return groupReplies(roots, true);
-    }
-
-    private Map<UUID, List<FeedbackReply>> groupReplies(Collection<InstructorFeedback> roots, boolean forUpdate) {
-        if (roots.isEmpty()) return Map.of();
-        List<UUID> ids = roots.stream().map(InstructorFeedback::getId).filter(Objects::nonNull).toList();
-        if (ids.isEmpty()) return Map.of();
-        Map<UUID, List<FeedbackReply>> grouped = new HashMap<>();
-        List<FeedbackReply> rows = forUpdate
-                ? feedbackReplyRepository.findByFeedbackIdInForUpdate(ids)
-                : feedbackReplyRepository.findByFeedbackIdInOrderByCreatedAtAsc(ids);
-        for (FeedbackReply reply : nonNullList(rows)) {
-            if (reply.getFeedback() != null) {
-                grouped.computeIfAbsent(reply.getFeedback().getId(), ignored -> new ArrayList<>()).add(reply);
-            }
-        }
-        return grouped;
-    }
-
-    private List<FeedbackReply> repliesFor(InstructorFeedback feedback) {
-        return new ArrayList<>(repliesByFeedback(List.of(feedback)).getOrDefault(feedback.getId(), List.of()));
-    }
-
-    private void syncLegacyAnswerProjection(InstructorFeedback feedback, List<FeedbackReply> replies) {
-        FeedbackReply last = replies.stream().filter(reply -> reply.getPublishedAt() != null)
-                .max(Comparator.comparing(FeedbackReply::getPublishedAt,
-                        Comparator.nullsLast(Comparator.naturalOrder())))
-                .orElse(null);
-        if (last != null && last.getAuthorRole() == FeedbackReplyAuthorRole.STUDENT) {
-            feedback.setAnswered(true);
-            feedback.setAnswerContent(last.getContent());
-            feedback.setAnsweredAt(last.getPublishedAt());
-        } else {
-            feedback.setAnswered(false);
-            feedback.setAnswerContent(null);
-            feedback.setAnsweredAt(null);
-        }
+                canMarkDone, canReopen, canEdit, canEdit,
+                instructorView ? feedback.getPendingState() : null);
     }
 
     private List<User> activeStudentMembers(Project project) {
@@ -775,37 +620,12 @@ public class FeedbackServiceImpl implements FeedbackService {
                 : feedback.getPendingState();
     }
 
-    private static boolean isInstructorReply(FeedbackReply reply) {
-        return reply.getAuthorRole() == FeedbackReplyAuthorRole.INSTRUCTOR
-                || reply.getAuthorRole() == FeedbackReplyAuthorRole.ADMIN;
-    }
-
-    private static FeedbackReplyAuthorRole roleOf(User user) {
-        if (user == null || user.getRole() == null) return FeedbackReplyAuthorRole.UNKNOWN;
-        return switch (user.getRole()) {
-            case STUDENT -> FeedbackReplyAuthorRole.STUDENT;
-            case INSTRUCTOR -> FeedbackReplyAuthorRole.INSTRUCTOR;
-            case ADMIN -> FeedbackReplyAuthorRole.ADMIN;
-        };
-    }
-
     private static long revision(InstructorFeedback feedback) {
         return Objects.requireNonNullElse(feedback.getOptVersion(), 0L);
     }
 
     private static boolean sameUser(User left, User right) {
         return left != null && right != null && Objects.equals(left.getId(), right.getId());
-    }
-
-    private static UUID idOf(User user) {
-        return user == null ? null : user.getId();
-    }
-
-    private static String displayName(User user) {
-        if (user == null) return null;
-        String name = (Objects.toString(user.getFirstName(), "") + " "
-                + Objects.toString(user.getLastName(), "")).trim();
-        return name.isEmpty() ? user.getEmail() : name;
     }
 
     private static FeedbackStatus parseStatus(String status) {
@@ -820,10 +640,6 @@ public class FeedbackServiceImpl implements FeedbackService {
 
     private static boolean sameUuid(String candidate, UUID expected) {
         return expected != null && expected.toString().equals(candidate);
-    }
-
-    private static <T> List<T> nonNullList(List<T> values) {
-        return values == null ? List.of() : values;
     }
 
     private static ResponseStatusException notFound(String type, UUID id) {

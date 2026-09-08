@@ -7,6 +7,7 @@ import com.evidencepilot.model.InstructorFeedback;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.ProjectCheckpoint;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.FeedbackThreadState;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
@@ -60,15 +61,15 @@ public class CheckpointServiceImpl implements CheckpointService {
                 }
             }
 
-            int answered = 0;
-            int unanswered = 0;
+            int resolved = 0;
+            int open = 0;
             for (InstructorFeedback feedback : instructorFeedbackRepository.findByRequestProjectId(projectId)) {
                 if (feedback.getPublishedAt() == null) continue;
-                if (feedback.isAnswered()) answered++; else unanswered++;
+                if (feedback.getThreadState() == FeedbackThreadState.DONE) resolved++; else open++;
             }
             snapshot.set("feedback", objectMapper.createObjectNode()
-                    .put("answered", answered)
-                    .put("unanswered", unanswered));
+                    .put("resolved", resolved)
+                    .put("open", open));
 
             ProjectCheckpoint checkpoint = new ProjectCheckpoint();
             checkpoint.setProject(projectRepository.findById(projectId).orElse(null));
@@ -108,8 +109,12 @@ public class CheckpointServiceImpl implements CheckpointService {
             }
         }
 
-        int feedbackAnsweredDelta = newest.path("feedback").path("answered").asInt()
-                - previous.path("feedback").path("answered").asInt();
+        // Legacy checkpoints counted replies; they cannot establish a resolution delta.
+        Integer feedbackResolvedDelta = newest.path("feedback").has("resolved")
+                && previous.path("feedback").has("resolved")
+                ? newest.path("feedback").path("resolved").asInt()
+                    - previous.path("feedback").path("resolved").asInt()
+                : null;
 
         return new CheckpointDiffResponse(
                 projectId,
@@ -117,7 +122,7 @@ public class CheckpointServiceImpl implements CheckpointService {
                 checkpoints.get(0).getCreatedAt(),
                 checkpoints.get(1).getTrigger(),
                 checkpoints.get(0).getTrigger(),
-                feedbackAnsweredDelta,
+                feedbackResolvedDelta,
                 wordDeltas);
     }
 

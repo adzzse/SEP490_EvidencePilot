@@ -16,7 +16,6 @@ import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.DocumentRepository;
-import com.evidencepilot.repository.FeedbackReplyRepository;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
@@ -85,9 +84,6 @@ class ProjectStatusConcurrencyIntegrationTest {
     private FeedbackRequestRepository feedbackRequests;
 
     @Autowired
-    private FeedbackReplyRepository feedbackReplies;
-
-    @Autowired
     private InstructorFeedbackRepository feedbackItems;
 
     @MockBean
@@ -107,7 +103,6 @@ class ProjectStatusConcurrencyIntegrationTest {
 
     @AfterEach
     void clean() {
-        feedbackReplies.deleteAll();
         feedbackItems.deleteAll();
         feedbackRequests.deleteAll();
         sections.deleteAll();
@@ -119,7 +114,7 @@ class ProjectStatusConcurrencyIntegrationTest {
     }
 
     @Test
-    void assignedMemberReadsAfterSubmitterLeavesButRepliesRemainClosedAndRemovedAccountsCannotRead() {
+    void assignedMemberReadsOneWayFeedbackAfterSubmitterLeavesButRemovedAccountsCannotRead() {
         User instructor = saveUser(UserRole.INSTRUCTOR);
         User submitter = saveUser(UserRole.STUDENT);
         User member = saveUser(UserRole.STUDENT);
@@ -145,9 +140,7 @@ class ProjectStatusConcurrencyIntegrationTest {
                 FeedbackAnchorService.fingerprint(section.getContentTex()), "latex-source-lf-v1", "utf16")));
         feedbackService.updateStatus(round.id(), "RETURNED");
         authenticate(submitter);
-        assertThat(feedbackService.getFeedbackItems(round.id()).getFirst().canAnswer()).isFalse();
-        assertThatThrownBy(() -> feedbackService.answerFeedback(feedback.id(), "Not assigned"))
-                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        assertThat(feedbackService.getFeedbackItems(round.id()).getFirst().canEdit()).isFalse();
         projectMembers.deleteAll(projectMembers.findByProjectIdAndUserId(project.getId(), submitter.getId()));
         assertThat(feedbackService.findAllForCurrentUser()).noneMatch(item -> item.id().equals(round.id()));
         assertThatThrownBy(() -> feedbackService.getSubmissionSnapshot(round.id()))
@@ -158,12 +151,10 @@ class ProjectStatusConcurrencyIntegrationTest {
         authenticate(member);
         assertThat(feedbackService.findAllForCurrentUser()).anyMatch(item -> item.id().equals(round.id()));
         assertThat(feedbackService.getSubmissionSnapshot(round.id())).isNotNull();
-        assertThat(feedbackService.getFeedbackItems(round.id()).getFirst().canAnswer()).isFalse();
-        assertThatThrownBy(() -> feedbackService.answerFeedback(feedback.id(), "Member answer\nSecond line"))
-                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("409");
+        assertThat(feedbackService.getFeedbackItems(round.id()).getFirst().canEdit()).isFalse();
         authenticate(instructor);
         var stored = feedbackService.getFeedbackItems(round.id()).getFirst();
-        assertThat(stored.answerContent()).isNull();
+        assertThat(stored.content()).isEqualTo("Explain the target");
         assertThat(stored.anchor().original().exact()).isEqualTo("target");
         projectMembers.deleteAll(projectMembers.findByProjectIdAndUserId(project.getId(), member.getId()));
         authenticate(member);
@@ -171,8 +162,6 @@ class ProjectStatusConcurrencyIntegrationTest {
         assertThatThrownBy(() -> feedbackService.getFeedbackItems(round.id()))
                 .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
         assertThatThrownBy(() -> feedbackService.getSubmissionSnapshot(round.id()))
-                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
-        assertThatThrownBy(() -> feedbackService.answerFeedback(feedback.id(), "Removed"))
                 .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
     }
 

@@ -108,11 +108,11 @@ class CheckpointServiceImplTest {
     void diffReportsSectionWordAndFeedbackDeltas() throws Exception {
         String previousJson = "{\"sections\":{\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\":"
                 + "{\"text\":\"a\",\"words\":100}},"
-                + "\"feedback\":{\"answered\":2,\"unanswered\":1}}";
+                + "\"feedback\":{\"resolved\":2,\"open\":1}}";
         String newestJson = "{\"sections\":{\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\":"
                 + "{\"text\":\"b\",\"words\":120},\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\":"
                 + "{\"text\":\"c\",\"words\":40}},"
-                + "\"feedback\":{\"answered\":3,\"unanswered\":0}}";
+                + "\"feedback\":{\"resolved\":3,\"open\":0}}";
 
         ProjectCheckpoint prev = checkpoint(previousJson, "REVIEW_STATUS:RETURNED", 1);
         ProjectCheckpoint newest = checkpoint(newestJson, "SUBMIT_FOR_REVIEW", 2);
@@ -121,7 +121,7 @@ class CheckpointServiceImplTest {
 
         var diff = service.getDiff(project.getId());
 
-        assertThat(diff.feedbackAnsweredDelta()).isEqualTo(1);
+        assertThat(diff.feedbackResolvedDelta()).isEqualTo(1);
         assertThat(diff.sectionWordDeltas()).containsExactlyInAnyOrder(
                 new com.evidencepilot.dto.response.CheckpointDiffResponse.WordCountDelta(
                         UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 100, 120),
@@ -138,7 +138,36 @@ class CheckpointServiceImplTest {
         var diff = service.getDiff(project.getId());
 
         assertThat(diff.sectionWordDeltas()).isEmpty();
-        assertThat(diff.feedbackAnsweredDelta()).isZero();
+        assertThat(diff.feedbackResolvedDelta()).isZero();
+    }
+
+    @Test
+    void legacyAnswerCountsCannotBeComparedToResolutionCounts() {
+        when(checkpointRepository.findByProjectIdOrderByCreatedAtDesc(project.getId()))
+                .thenReturn(List.of(checkpoint("{\"feedback\":{\"resolved\":2,\"open\":1}}", "RETURNED", 1),
+                        checkpoint("{\"feedback\":{\"answered\":2,\"unanswered\":1}}", "RETURNED", 2)));
+        assertThat(service.getDiff(project.getId()).feedbackResolvedDelta()).isNull();
+    }
+
+    @Test
+    void captureCountsOnlyPublishedResolutionStates() throws Exception {
+        when(projectRepository.findById(project.getId())).thenReturn(java.util.Optional.of(project));
+        var resolved = new com.evidencepilot.model.InstructorFeedback();
+        resolved.setPublishedAt(LocalDateTime.now());
+        resolved.setThreadState(com.evidencepilot.model.enums.FeedbackThreadState.DONE);
+        var open = new com.evidencepilot.model.InstructorFeedback();
+        open.setPublishedAt(LocalDateTime.now());
+        // A pending instructor state change must not leak into student-visible counts.
+        open.setPendingState(com.evidencepilot.model.enums.FeedbackThreadState.DONE);
+        var draft = new com.evidencepilot.model.InstructorFeedback();
+        draft.setThreadState(com.evidencepilot.model.enums.FeedbackThreadState.DONE);
+        when(instructorFeedbackRepository.findByRequestProjectId(project.getId()))
+                .thenReturn(List.of(resolved, open, draft));
+        service.capture(project.getId(), "RETURNED");
+        var saved = org.mockito.ArgumentCaptor.forClass(ProjectCheckpoint.class);
+        verify(checkpointRepository).save(saved.capture());
+        var counts = objectMapper.readTree(saved.getValue().getSnapshotJson()).path("feedback");
+        assertThat(counts).isEqualTo(objectMapper.readTree("{\"resolved\":1,\"open\":1}"));
     }
 
     @Test

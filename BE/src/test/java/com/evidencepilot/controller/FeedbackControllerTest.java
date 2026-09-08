@@ -1,6 +1,5 @@
 package com.evidencepilot.controller;
 
-import com.evidencepilot.dto.request.FeedbackReplyRequest;
 import com.evidencepilot.dto.request.FeedbackStateRequest;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
@@ -115,29 +114,19 @@ class FeedbackControllerTest {
     }
 
     @Test
-    void answerFeedbackReturnsConflictForTheClosedReplyWorkflow() throws Exception {
+    void retiredConversationRoutesAreNotAvailable() throws Exception {
         UUID itemId = UUID.randomUUID();
-        UUID key = UUID.randomUUID();
-        when(service.answerFeedback(itemId, "Revised the paragraph.", key)).thenThrow(
-                new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT));
-        mockMvc.perform(post("/api/instructor-feedback/{id}/answer", itemId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"content\":\"Revised the paragraph.\",\"idempotencyKey\":\"" + key + "\"}"))
-                .andExpect(status().isConflict());
-        verify(service).answerFeedback(itemId, "Revised the paragraph.", key);
-    }
-
-    @Test
-    void instructorReplyReturnsConflictForTheClosedReplyWorkflow() throws Exception {
-        UUID itemId = UUID.randomUUID();
-        UUID key = UUID.randomUUID();
-        when(service.createInstructorReply(eq(itemId), any())).thenThrow(
-                new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT));
-        mockMvc.perform(post("/api/instructor-feedback/{id}/replies", itemId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"content\":\"Please verify the source.\",\"idempotencyKey\":\"" + key + "\"}"))
-                .andExpect(status().isConflict());
-        verify(service).createInstructorReply(itemId, new FeedbackReplyRequest("Please verify the source.", key));
+        UUID replyId = UUID.randomUUID();
+        for (var request : java.util.List.of(
+                post("/api/instructor-feedback/{id}/answer", itemId),
+                post("/api/instructor-feedback/{id}/replies", itemId),
+                patch("/api/instructor-feedback/{id}/replies/{replyId}", itemId, replyId),
+                delete("/api/instructor-feedback/{id}/replies/{replyId}", itemId, replyId))) {
+            mockMvc.perform(request.contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"content\":\"Old reply\"}"))
+                    .andExpect(status().isNotFound());
+        }
+        verifyNoInteractions(service);
     }
 
     @Test

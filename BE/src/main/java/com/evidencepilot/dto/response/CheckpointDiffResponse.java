@@ -10,7 +10,7 @@ public record CheckpointDiffResponse(
     LocalDateTime to,
     String fromTrigger,
     String toTrigger,
-    int feedbackAnsweredDelta,
+    Integer feedbackResolvedDelta,
     List<WordCountDelta> sectionWordDeltas
 ) {
     public record WordCountDelta(UUID sectionId, int fromWords, int toWords) {}

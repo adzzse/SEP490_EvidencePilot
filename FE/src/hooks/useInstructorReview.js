@@ -384,16 +384,6 @@ export default function useInstructorReview({ projectId, enabled }) {
     }, () => { loadFeedback(); });
   };
 
-  const deleteReply = async (feedbackId, replyId) => {
-    setErrorMessage('');
-    try {
-      await api.delete(`/api/instructor-feedback/${feedbackId}/replies/${replyId}`);
-      await loadFeedback();
-    } catch (err) {
-      setErrorMessage(err?.response?.data?.message || t.deleteFeedbackFailed);
-    }
-  };
-
   const prepareState = async (feedback, state) => {
     setErrorMessage('');
     try {
@@ -533,5 +523,5 @@ export default function useInstructorReview({ projectId, enabled }) {
       ...(lineRef ? { lineReference: lineRef } : {}) });
   };
 
-  return { project, papers, sections, selectedPaperId, setSelectedPaperId, selectedSectionId, setSelectedSectionId, selectedSection, requests, orderedRequests, activeRequest, activeRequestId, setActiveRequestId, feedbackItems, sources, mediaAssets, loading, errorMessage, successMessage, diffEnabled, setDiffEnabled, baseline, diffOps, feedbackDraft, feedbackLineRef, selectedAnchor, editingFeedbackId, updateFeedbackDraft, savingFeedback, feedbackFilter, setFeedbackFilter, activeFeedbackId, viewMode, setViewMode, sourceEditorRef, transitioningRequestId, pendingTransition, setPendingTransition, checkedItems, setCheckedItems, suggestions, suggestionLoading, suggestionError, suggestionRan, submissionSnapshot, snapshotState, setSnapshotRetry, panelTab, setPanelTab, activeGuide, requestLocked, canReturn, canCreateRoot, handleSubmitFeedback, captureSourceSelection, handleEditFeedback, handleCancelEdit, handleDeleteFeedback, deleteReply, prepareState, selectFeedback, handleTransitionStatus, handleGenerateSuggestions, injectIntoFeedback, pendingDelete, undoDelete, dismissDelete };
+  return { project, papers, sections, selectedPaperId, setSelectedPaperId, selectedSectionId, setSelectedSectionId, selectedSection, requests, orderedRequests, activeRequest, activeRequestId, setActiveRequestId, feedbackItems, sources, mediaAssets, loading, errorMessage, successMessage, diffEnabled, setDiffEnabled, baseline, diffOps, feedbackDraft, feedbackLineRef, selectedAnchor, editingFeedbackId, updateFeedbackDraft, savingFeedback, feedbackFilter, setFeedbackFilter, activeFeedbackId, viewMode, setViewMode, sourceEditorRef, transitioningRequestId, pendingTransition, setPendingTransition, checkedItems, setCheckedItems, suggestions, suggestionLoading, suggestionError, suggestionRan, submissionSnapshot, snapshotState, setSnapshotRetry, panelTab, setPanelTab, activeGuide, requestLocked, canReturn, canCreateRoot, handleSubmitFeedback, captureSourceSelection, handleEditFeedback, handleCancelEdit, handleDeleteFeedback, prepareState, selectFeedback, handleTransitionStatus, handleGenerateSuggestions, injectIntoFeedback, pendingDelete, undoDelete, dismissDelete };
 }

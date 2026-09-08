@@ -9,6 +9,7 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.FeedbackThreadState;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.AuditLogRepository;
 import com.evidencepilot.repository.DocumentRepository;
@@ -80,7 +81,7 @@ public class ProgressReportServiceImpl implements ProgressReportService {
         for (InstructorFeedback feedback : feedbackList) {
             if (feedback.getPublishedAt() == null || feedback.getSection() == null) continue;
             int[] counts = feedbackCounts.computeIfAbsent(feedback.getSection().getId(), k -> new int[2]);
-            if (feedback.isAnswered()) counts[0]++; else counts[1]++;
+            if (feedback.getThreadState() == FeedbackThreadState.DONE) counts[0]++; else counts[1]++;
         }
         List<ProgressReportResponse.SectionPanel> allPanels = new ArrayList<>();
         for (PaperSection section : allSections) {
@@ -213,8 +214,8 @@ public class ProgressReportServiceImpl implements ProgressReportService {
         private int wordsAdded;
         private int wordsRemoved;
         private LocalDateTime lastEditedAt;
-        private int feedbackAnswered;
-        private int feedbackUnanswered;
+        private int feedbackResolved;
+        private int feedbackOpen;
         private final Set<String> editedSections = new LinkedHashSet<>();
 
         private ContributionAccumulator(User user) {
@@ -224,8 +225,8 @@ public class ProgressReportServiceImpl implements ProgressReportService {
         private void addCurrentSection(ProgressReportResponse.SectionPanel panel) {
             assignedSectionCount++;
             currentWordCount += panel.wordCount();
-            feedbackAnswered += panel.feedbackAnswered();
-            feedbackUnanswered += panel.feedbackUnanswered();
+            feedbackResolved += panel.feedbackResolved();
+            feedbackOpen += panel.feedbackOpen();
         }
 
         private void addAggregated(LocalDate date, long cnt, int delta, int added, int removed, LocalDateTime maxAt, String titlesConcat) {
@@ -260,8 +261,8 @@ public class ProgressReportServiceImpl implements ProgressReportService {
                     wordsAdded,
                     wordsRemoved,
                     lastEditedAt,
-                    feedbackAnswered,
-                    feedbackUnanswered,
+                    feedbackResolved,
+                    feedbackOpen,
                     List.copyOf(editedSections),
                     dailyWordDeltas);
         }

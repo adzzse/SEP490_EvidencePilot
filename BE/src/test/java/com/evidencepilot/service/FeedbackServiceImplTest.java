@@ -1,11 +1,9 @@
 package com.evidencepilot.service;
 
-import com.evidencepilot.dto.request.FeedbackReplyRequest;
 import com.evidencepilot.dto.request.FeedbackStateRequest;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
 import com.evidencepilot.model.Document;
-import com.evidencepilot.model.FeedbackReply;
 import com.evidencepilot.model.FeedbackRequest;
 import com.evidencepilot.model.FeedbackStatus;
 import com.evidencepilot.model.InstructorFeedback;
@@ -14,12 +12,10 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
-import com.evidencepilot.model.enums.FeedbackReplyAuthorRole;
 import com.evidencepilot.model.enums.FeedbackThreadState;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
-import com.evidencepilot.repository.FeedbackReplyRepository;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
@@ -43,7 +39,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -55,7 +50,6 @@ class FeedbackServiceImplTest {
 
     @Mock private FeedbackRequestRepository feedbackRequestRepository;
     @Mock private InstructorFeedbackRepository instructorFeedbackRepository;
-    @Mock private FeedbackReplyRepository feedbackReplyRepository;
     @Mock private PaperSectionRepository paperSectionRepository;
     @Mock private ProjectRepository projectRepository;
     @Mock private CurrentUserService currentUserService;
@@ -147,29 +141,10 @@ class FeedbackServiceImplTest {
         when(instructorFeedbackRepository.findByRequestId(request.getId())).thenReturn(List.of(root));
 
         assertThat(service().getFeedbackItems(request.getId())).isEmpty();
-        verifyNoInteractions(feedbackReplyRepository);
     }
 
     @Test
-    void studentCannotCreateRepliesInTheRoundBasedWorkflow() {
-        User instructor = user(UserRole.INSTRUCTOR);
-        User student = user(UserRole.STUDENT);
-        Project project = project(instructor, student, ProjectStatus.RETURNED);
-        FeedbackRequest request = request(project, instructor, student, FeedbackStatus.RETURNED);
-        PaperSection section = section(project, student);
-        InstructorFeedback root = feedback(request, section, instructor, true);
-        when(currentUserService.requireCurrentUser()).thenReturn(student);
-        when(instructorFeedbackRepository.findByIdForUpdate(root.getId())).thenReturn(Optional.of(root));
-        assertThatThrownBy(() -> service().answerFeedback(
-                root.getId(), "I fixed the cited passage.", UUID.randomUUID()))
-                .isInstanceOfSatisfying(ResponseStatusException.class,
-                        error -> assertThat(error.getStatusCode().value()).isEqualTo(409));
-        verify(feedbackReplyRepository, never()).save(any(FeedbackReply.class));
-        verifyNoInteractions(systemNotificationService);
-    }
-
-    @Test
-    void publishedRootIsImmutableAndInstructorRepliesAreClosed() {
+    void publishedRootCannotBeEditedOrDeleted() {
         User instructor = user(UserRole.INSTRUCTOR);
         User student = user(UserRole.STUDENT);
         Project project = project(instructor, student, ProjectStatus.RETURNED);
@@ -184,40 +159,45 @@ class FeedbackServiceImplTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Published feedback is immutable");
 
-        when(instructorFeedbackRepository.findByIdForUpdate(root.getId())).thenReturn(Optional.of(root));
-        assertThatThrownBy(() -> service().createInstructorReply(root.getId(),
-                new FeedbackReplyRequest("Please verify the revision.", UUID.randomUUID())))
-                .isInstanceOfSatisfying(ResponseStatusException.class,
-                        error -> assertThat(error.getStatusCode().value()).isEqualTo(409));
-        FeedbackReply legacyDraft = reply(root, instructor, false);
-        when(feedbackReplyRepository.findByIdAndFeedbackIdForUpdate(root.getId(), legacyDraft.getId()))
-                .thenReturn(Optional.of(legacyDraft));
-        assertThatThrownBy(() -> service().updateInstructorReply(root.getId(), legacyDraft.getId(),
-                new FeedbackReplyRequest("Replacement draft.", UUID.randomUUID())))
-                .isInstanceOfSatisfying(ResponseStatusException.class,
-                        error -> assertThat(error.getStatusCode().value()).isEqualTo(409));
-        assertThat(legacyDraft.getContent()).isEqualTo("Legacy reply.");
-        verify(feedbackReplyRepository, never()).save(any(FeedbackReply.class));
+        assertThatThrownBy(() -> service().deleteFeedbackItem(root.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Published feedback is immutable");
+        verify(instructorFeedbackRepository, never()).delete(any());
         verifyNoInteractions(systemNotificationService);
     }
 
     @Test
-    void doneFeedbackAlsoRejectsNewInstructorReplies() {
+    void studentCanReadPublishedFeedbackButCannotCreateEditDeleteOrResolveIt() {
         User instructor = user(UserRole.INSTRUCTOR);
         User student = user(UserRole.STUDENT);
         Project project = project(instructor, student, ProjectStatus.RETURNED);
         FeedbackRequest request = request(project, instructor, student, FeedbackStatus.RETURNED);
-        InstructorFeedback root = feedback(request, section(project, student), instructor, true);
-        root.setThreadState(FeedbackThreadState.DONE);
-
-        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        PaperSection section = section(project, student);
+        InstructorFeedback root = feedback(request, section, instructor, true);
+        when(currentUserService.requireCurrentUser()).thenReturn(student);
+        when(feedbackRequestRepository.findById(request.getId())).thenReturn(Optional.of(request));
+        when(feedbackRequestRepository.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
+        when(instructorFeedbackRepository.findByRequestId(request.getId())).thenReturn(List.of(root));
+        when(instructorFeedbackRepository.findById(root.getId())).thenReturn(Optional.of(root));
         when(instructorFeedbackRepository.findByIdForUpdate(root.getId())).thenReturn(Optional.of(root));
 
-        assertThatThrownBy(() -> service().createInstructorReply(root.getId(),
-                new FeedbackReplyRequest("Please revisit this.", UUID.randomUUID())))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("Feedback replies are closed");
-        verifyNoInteractions(feedbackReplyRepository);
+        var view = service().getFeedbackItems(request.getId()).getFirst();
+        assertThat(view.content()).isEqualTo("Original feedback.");
+        assertThat(view.canEdit() || view.canDelete() || view.canMarkDone() || view.canReopen()).isFalse();
+        InstructorFeedbackRequest input = new InstructorFeedbackRequest(section.getId(), null, "Student text");
+        assertThatThrownBy(() -> service().comment(request.getId(), input))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        assertThatThrownBy(() -> service().updateFeedbackItem(root.getId(), input))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        assertThatThrownBy(() -> service().deleteFeedbackItem(root.getId()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        assertThatThrownBy(() -> service().prepareFeedbackState(root.getId(),
+                new FeedbackStateRequest(FeedbackThreadState.DONE, 0L)))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        verify(instructorFeedbackRepository, never()).save(any());
+        verify(instructorFeedbackRepository, never()).saveAndFlush(any());
+        verify(instructorFeedbackRepository, never()).delete(any());
+        verifyNoInteractions(systemNotificationService);
     }
 
     @Test
@@ -235,7 +215,6 @@ class FeedbackServiceImplTest {
             root.setOptVersion(1L);
             return root;
         });
-        when(feedbackReplyRepository.findByFeedbackIdInOrderByCreatedAtAsc(anyCollection())).thenReturn(List.of());
 
         InstructorFeedbackResponseDto instructorView = service().prepareFeedbackState(root.getId(),
                 new FeedbackStateRequest(FeedbackThreadState.DONE, 0L));
@@ -269,7 +248,6 @@ class FeedbackServiceImplTest {
         when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
         when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(project.getId())).thenReturn(List.of(request));
         when(instructorFeedbackRepository.findByRequestProjectIdForUpdate(project.getId())).thenReturn(List.of(root));
-        when(feedbackReplyRepository.findByFeedbackIdInForUpdate(anyCollection())).thenReturn(List.of());
 
         service().updateStatus(request.getId(), "RETURNED");
 
@@ -281,35 +259,6 @@ class FeedbackServiceImplTest {
         verify(systemNotificationService).createNotification(
                 eq(student), eq(instructor), eq("INSTRUCTOR_FEEDBACK_PUBLISHED"), eq(request.getId()),
                 eq(root.getId()), any(String.class));
-    }
-
-    @Test
-    void returnRejectsLegacyReplyDraftsBeforePublishingAnyRoot() {
-        User instructor = user(UserRole.INSTRUCTOR);
-        User student = user(UserRole.STUDENT);
-        Project project = project(instructor, student, ProjectStatus.SUBMITTED_FOR_REVIEW);
-        FeedbackRequest request = request(project, instructor, student, FeedbackStatus.PENDING);
-        InstructorFeedback draft = feedback(request, section(project, student), instructor, false);
-        FeedbackRequest previous = request(project, instructor, student, FeedbackStatus.RETURNED);
-        InstructorFeedback oldRoot = feedback(previous, section(project, student), instructor, true);
-        FeedbackReply legacy = reply(oldRoot, instructor, false);
-        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
-        when(feedbackRequestRepository.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
-        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
-        when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(project.getId()))
-                .thenReturn(List.of(request, previous));
-        when(instructorFeedbackRepository.findByRequestProjectIdForUpdate(project.getId()))
-                .thenReturn(List.of(draft, oldRoot));
-        when(feedbackReplyRepository.findByFeedbackIdInForUpdate(anyCollection())).thenReturn(List.of(legacy));
-
-        assertThatThrownBy(() -> service().updateStatus(request.getId(), "RETURNED"))
-                .isInstanceOfSatisfying(ResponseStatusException.class,
-                        error -> assertThat(error.getStatusCode().value()).isEqualTo(409));
-        assertThat(draft.getPublishedAt()).isNull();
-        assertThat(legacy.getPublishedAt()).isNull();
-        assertThat(request.getStatus()).isEqualTo(FeedbackStatus.PENDING);
-        assertThat(project.getStatus()).isEqualTo(ProjectStatus.SUBMITTED_FOR_REVIEW);
-        verifyNoInteractions(systemNotificationService);
     }
 
     @Test
@@ -343,7 +292,6 @@ class FeedbackServiceImplTest {
         when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
         when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(project.getId())).thenReturn(List.of(request));
         when(instructorFeedbackRepository.findByRequestProjectIdForUpdate(project.getId())).thenReturn(List.of(draftRoot));
-        when(feedbackReplyRepository.findByFeedbackIdInForUpdate(anyCollection())).thenReturn(List.of());
 
         assertThatThrownBy(() -> service().updateStatus(request.getId(), "REVIEWED"))
                 .isInstanceOf(ResponseStatusException.class)
@@ -373,7 +321,6 @@ class FeedbackServiceImplTest {
         when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
         when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(project.getId())).thenReturn(List.of(request));
         when(instructorFeedbackRepository.findByRequestProjectIdForUpdate(project.getId())).thenReturn(List.of(root));
-        when(feedbackReplyRepository.findByFeedbackIdInForUpdate(anyCollection())).thenReturn(List.of());
         when(submissionReadinessService.assess(project, instructor)).thenReturn(
                 new SubmissionReadinessService.Assessment(null, List.of(paper), Map.of(paper.getId(), List.of(section))));
 
@@ -382,7 +329,7 @@ class FeedbackServiceImplTest {
                 .hasMessageContaining("no longer matches current section content");
         section.setContentTex("Evidence sentence.");
         assertThatThrownBy(() -> service().updateStatus(request.getId(), "REVIEWED"))
-                .hasMessageContaining("Every feedback thread must be done");
+                .hasMessageContaining("Every feedback item must be done");
         root.setPendingState(FeedbackThreadState.DONE);
         root.setPendingStateOptVersion(root.getOptVersion());
         service().updateStatus(request.getId(), "REVIEWED");
@@ -396,7 +343,6 @@ class FeedbackServiceImplTest {
         return new FeedbackServiceImpl(
                 feedbackRequestRepository,
                 instructorFeedbackRepository,
-                feedbackReplyRepository,
                 paperSectionRepository,
                 projectRepository,
                 currentUserService,
@@ -483,16 +429,4 @@ class FeedbackServiceImplTest {
         return feedback;
     }
 
-    private FeedbackReply reply(InstructorFeedback root, User author, boolean published) {
-        FeedbackReply reply = new FeedbackReply();
-        reply.setId(UUID.randomUUID());
-        reply.setFeedback(root);
-        reply.setAuthor(author);
-        reply.setAuthorRole(author.getRole() == UserRole.STUDENT
-                ? FeedbackReplyAuthorRole.STUDENT : FeedbackReplyAuthorRole.INSTRUCTOR);
-        reply.setContent("Legacy reply.");
-        reply.setCreatedAt(LocalDateTime.now());
-        if (published) reply.setPublishedAt(LocalDateTime.now());
-        return reply;
-    }
 }

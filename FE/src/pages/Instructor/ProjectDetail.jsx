@@ -1358,8 +1358,8 @@ export default function ProjectDetail() {
                       </div>
                       <p className="mt-3 text-[10px] text-[var(--text-tertiary)]">
                         {t.feedbackSummary
-                          .replace('{{answered}}', contribution.feedbackAnswered)
-                          .replace('{{total}}', contribution.feedbackAnswered + contribution.feedbackUnanswered)}
+                          .replace('{{resolved}}', contribution.feedbackResolved)
+                          .replace('{{total}}', contribution.feedbackResolved + contribution.feedbackOpen)}
                       </p>
                       {contribution.editedSections?.length > 0 && (
                         <p className="mt-2 text-[10px] text-[var(--text-tertiary)]">

@@ -133,6 +133,71 @@ class FeedbackRevisionMySqlTest {
     }
 
     @Test
+    void oneWayFeedbackIgnoresAndPreservesLegacyRepliesAcrossReturnAndApprove() throws Exception {
+        Fixture f = fixture();
+        confirm(f, f.leader(), f.first());
+        confirm(f, f.member(), f.second());
+        login(f.leader());
+        var round = feedback.submitForReview(f.project(),
+                new SubmitReviewRequest(readiness.readiness(f.project()).submissionFingerprint()));
+        login(f.instructor());
+        var root = feedback.comment(round.id(), new InstructorFeedbackRequest(f.first(), null, "One-way feedback"));
+        var snapshot = feedback.getSubmissionSnapshot(round.id()).snapshot();
+        for (boolean published : List.of(false, true)) {
+            jdbc.update("""
+                    INSERT INTO feedback_replies (id, feedback_id, author_id, author_role, content,
+                        created_at, published_at, published_request_id)
+                    VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), UUID_TO_BIN(?), ?, ?, NOW(6),
+                        IF(?, NOW(6), NULL), IF(?, UUID_TO_BIN(?), NULL))
+                    """, UUID.randomUUID().toString(), root.id().toString(),
+                    (published ? f.member() : f.instructor()).getId().toString(),
+                    published ? "STUDENT" : "INSTRUCTOR", published ? "Old student reply" : "Old instructor draft",
+                    published, published, round.id().toString());
+        }
+        jdbc.update("UPDATE instructor_feedbacks SET answered=TRUE, answer_content='Old answer', answered_at=NOW(6) WHERE id=UUID_TO_BIN(?)",
+                root.id().toString());
+        String legacySql = "SELECT content, author_role, created_at, published_at FROM feedback_replies WHERE feedback_id=UUID_TO_BIN(?) ORDER BY content";
+        String answerSql = "SELECT answered, answer_content, answered_at FROM instructor_feedbacks WHERE id=UUID_TO_BIN(?)";
+        var legacyRows = jdbc.queryForList(legacySql, root.id().toString());
+        var legacyAnswer = jdbc.queryForMap(answerSql, root.id().toString());
+        assertThatThrownBy(() -> feedback.updateStatus(round.id(), "REVIEWED"))
+                .hasMessageContaining("Publish or delete instructor drafts");
+        login(f.member());
+        assertThat(feedback.getFeedbackItems(round.id())).isEmpty();
+        login(f.instructor());
+        feedback.updateStatus(round.id(), "RETURNED");
+        assertThat(projectStatus(f.project())).isEqualTo("RETURNED");
+        assertThatThrownBy(() -> feedback.updateStatus(round.id(), "RETURNED"))
+                .hasMessageContaining("Only a PENDING review request");
+        for (User actor : List.of(f.instructor(), f.leader(), f.member())) {
+            login(actor);
+            var item = feedback.getFeedbackItems(round.id()).getFirst();
+            assertThat(item.content()).isEqualTo("One-way feedback");
+            var contract = json.valueToTree(item);
+            for (String retired : List.of("messages", "answerContent", "answered", "answeredAt", "replyState", "canAnswer", "canDraftReply")) {
+                assertThat(contract.has(retired)).as(retired).isFalse();
+            }
+            if (actor.getRole() == UserRole.STUDENT) {
+                assertThat(item.canEdit() || item.canDelete() || item.canMarkDone() || item.canReopen()).isFalse();
+                assertThatThrownBy(() -> feedback.prepareFeedbackState(root.id(),
+                        new com.evidencepilot.dto.request.FeedbackStateRequest(com.evidencepilot.model.enums.FeedbackThreadState.DONE, item.revision())))
+                        .hasMessageContaining("403");
+            }
+        }
+        login(f.instructor());
+        var published = feedback.getFeedbackItems(round.id()).getFirst();
+        assertThatThrownBy(() -> feedback.updateFeedbackItem(root.id(),
+                new InstructorFeedbackRequest(f.first(), null, "Overwrite"))).hasMessageContaining("immutable");
+        feedback.prepareFeedbackState(root.id(), new com.evidencepilot.dto.request.FeedbackStateRequest(
+                com.evidencepilot.model.enums.FeedbackThreadState.DONE, published.revision()));
+        feedback.updateStatus(round.id(), "REVIEWED");
+        assertThat(projectStatus(f.project())).isEqualTo("APPROVED");
+        assertThat(jdbc.queryForList(legacySql, root.id().toString())).isEqualTo(legacyRows);
+        assertThat(jdbc.queryForMap(answerSql, root.id().toString())).isEqualTo(legacyAnswer);
+        assertThat(feedback.getSubmissionSnapshot(round.id()).snapshot()).isEqualTo(snapshot);
+    }
+
+    @Test
     void testBypassEnforcesPermissionsAndDataAndStoresTruthfulReceipts() throws Exception {
         Fixture f = fixture();
         login(f.leader());

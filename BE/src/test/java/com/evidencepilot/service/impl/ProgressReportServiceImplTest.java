@@ -96,8 +96,18 @@ class ProgressReportServiceImplTest {
                 project.getId(), DocumentType.PAPER)).thenReturn(List.of(paper));
         when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paper.getId()))
                 .thenReturn(List.of(section));
+        var resolved = new com.evidencepilot.model.InstructorFeedback();
+        resolved.setSection(section);
+        resolved.setPublishedAt(LocalDateTime.now());
+        resolved.setThreadState(com.evidencepilot.model.enums.FeedbackThreadState.DONE);
+        var open = new com.evidencepilot.model.InstructorFeedback();
+        open.setSection(section);
+        open.setPublishedAt(LocalDateTime.now());
+        var draft = new com.evidencepilot.model.InstructorFeedback();
+        draft.setSection(section);
+        draft.setThreadState(com.evidencepilot.model.enums.FeedbackThreadState.DONE);
         when(instructorFeedbackRepository.findByRequestProjectId(project.getId()))
-                .thenReturn(List.of());
+                .thenReturn(List.of(resolved, open, draft));
         when(projectMemberRepository.findByProjectId(project.getId()))
                 .thenReturn(List.of(
                         member(project, previousAssignee),
@@ -116,6 +126,8 @@ class ProgressReportServiceImplTest {
         assertThat(report.sections()).singleElement().satisfies(panel -> {
             assertThat(panel.assignedUserId()).isEqualTo(currentAssignee.getId());
             assertThat(panel.wordCount()).isEqualTo(3);
+            assertThat(panel.feedbackResolved()).isEqualTo(1);
+            assertThat(panel.feedbackOpen()).isEqualTo(1);
         });
         assertThat(report.contributions()).hasSize(3);
         assertThat(report.contributions().stream()
@@ -141,6 +153,8 @@ class ProgressReportServiceImplTest {
                     assertThat(item.assignedSectionCount()).isEqualTo(1);
                     assertThat(item.currentWordCount()).isEqualTo(3);
                     assertThat(item.saveCount()).isZero();
+                    assertThat(item.feedbackResolved()).isEqualTo(1);
+                    assertThat(item.feedbackOpen()).isEqualTo(1);
                 });
         assertThat(report.contributions().stream()
                 .filter(item -> item.userId().equals(idleStudent.getId()))

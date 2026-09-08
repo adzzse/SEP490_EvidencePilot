@@ -157,7 +157,7 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
                 <p className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono leading-relaxed">{anchor.original.exact}</p>
               </details>}
               {canNavigate && <button type="button" className={`${control} font-semibold`} onClick={() => select(item)}>{t('studentFeedback.goToText')}</button>}
-              {item.threadState === 'DONE' && <p className="rounded-md bg-(--surface-secondary) p-2 text-[11px] text-(--text-secondary)">{t('studentFeedback.done')}</p>}
+              {item.threadState === 'DONE' && <p className="rounded-md bg-(--surface-secondary) p-2 text-[11px] text-(--text-secondary)">{t('studentFeedback.doneNotice')}</p>}
 
             </div>}
           </article>;

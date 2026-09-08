@@ -64,15 +64,6 @@ public class InstructorFeedback {
     @com.fasterxml.jackson.annotation.JsonIgnore
     private User updatedBy;
 
-    @Column(name = "answered", nullable = false)
-    private boolean answered;
-
-    @Column(name = "answer_content", columnDefinition = "TEXT")
-    private String answerContent;
-
-    @Column(name = "answered_at")
-    private LocalDateTime answeredAt;
-
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
 

@@ -1,7 +1,5 @@
 package com.evidencepilot.controller;
 
-import com.evidencepilot.dto.request.AnswerFeedbackRequest;
-import com.evidencepilot.dto.request.FeedbackReplyRequest;
 import com.evidencepilot.dto.request.FeedbackStateRequest;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
@@ -142,44 +140,6 @@ public class FeedbackController {
     public ResponseEntity<Void> deleteFeedbackItem(
             @Parameter(description = "Instructor feedback item UUID") @PathVariable UUID id) {
         feedbackService.deleteFeedbackItem(id);
-        return ResponseEntity.noContent().build();
-    }
-
-    @Operation(summary = "Answer a feedback item",
-            description = "Student marks an instructor feedback item as answered, with an explanation. "
-                    + "Answering never changes the request or project status: the request stays RETURNED and the "
-                    + "project remains editable so the student can revise and resubmit. Approval requires an "
-                    + "explicit instructor status transition to REVIEWED.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Feedback answered"),
-            @ApiResponse(responseCode = "400", description = "Invalid request"),
-            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
-            @ApiResponse(responseCode = "403", description = "Not the assigned student"),
-            @ApiResponse(responseCode = "404", description = "Feedback item not found")
-    })
-    @PostMapping("/instructor-feedback/{id}/answer")
-    public InstructorFeedbackResponseDto answerFeedback(
-            @Parameter(description = "Instructor feedback item UUID") @PathVariable UUID id,
-            @Valid @RequestBody AnswerFeedbackRequest request) {
-        return feedbackService.answerFeedback(id, request.content(), request.idempotencyKey());
-    }
-
-    @PostMapping("/instructor-feedback/{id}/replies")
-    public InstructorFeedbackResponseDto createInstructorReply(
-            @PathVariable UUID id, @Valid @RequestBody FeedbackReplyRequest request) {
-        return feedbackService.createInstructorReply(id, request);
-    }
-
-    @PatchMapping("/instructor-feedback/{id}/replies/{replyId}")
-    public InstructorFeedbackResponseDto updateInstructorReply(
-            @PathVariable UUID id, @PathVariable UUID replyId,
-            @Valid @RequestBody FeedbackReplyRequest request) {
-        return feedbackService.updateInstructorReply(id, replyId, request);
-    }
-
-    @DeleteMapping("/instructor-feedback/{id}/replies/{replyId}")
-    public ResponseEntity<Void> deleteInstructorReply(@PathVariable UUID id, @PathVariable UUID replyId) {
-        feedbackService.deleteInstructorReply(id, replyId);
         return ResponseEntity.noContent().build();
     }
 

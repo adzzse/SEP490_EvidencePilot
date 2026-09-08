@@ -19,8 +19,8 @@ public record ProgressReportResponse(
         String assignedUserName,
         int version,
         LocalDateTime lastUpdated,
-        int feedbackAnswered,
-        int feedbackUnanswered
+        int feedbackResolved,
+        int feedbackOpen
     ) {}
 
     public record MemberContribution(
@@ -33,8 +33,8 @@ public record ProgressReportResponse(
         int wordsAdded,
         int wordsRemoved,
         LocalDateTime lastEditedAt,
-        int feedbackAnswered,
-        int feedbackUnanswered,
+        int feedbackResolved,
+        int feedbackOpen,
         List<String> editedSections,
         List<DailyWordDelta> dailyWordDeltas
     ) {}

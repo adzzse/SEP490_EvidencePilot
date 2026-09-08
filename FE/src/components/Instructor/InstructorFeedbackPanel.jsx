@@ -5,7 +5,6 @@ import DeleteConfirm from '../ui/DeleteConfirm.jsx';
 import { UndoToast } from '../ui/UndoDelete.jsx';
 import { commonText, instructorText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
-import { useAuth } from '../../context/AuthContext';
 import { formatDateTime } from '../../utils/formatters/date.js';
 
 const ACTION_LABELS = { REVIEWED: { key: 'approve' }, RETURNED: { key: 'returnForRevision' } };
@@ -36,10 +35,9 @@ export function InstructorReviewGuide({ review, selectedSection }) {
 export default function InstructorFeedbackPanel({ review, selectedSection, onSelectFeedback }) {
   const { t: translate } = useTranslation();
   const { language } = useLanguage();
-  const { user } = useAuth();
   const t = instructorText[language];
   const ct = commonText[language];
-  const { selectedSectionId, orderedRequests, activeRequest, activeRequestId, setActiveRequestId, feedbackItems, errorMessage, successMessage, diffEnabled, setDiffEnabled, diffOps, feedbackDraft, selectedAnchor, editingFeedbackId, updateFeedbackDraft, savingFeedback, feedbackFilter, setFeedbackFilter, activeFeedbackId, transitioningRequestId, pendingTransition, setPendingTransition, suggestions, suggestionLoading, suggestionError, suggestionRan, panelTab, setPanelTab, activeGuide, requestLocked, canReturn, canCreateRoot, handleSubmitFeedback, captureSourceSelection, handleEditFeedback, handleCancelEdit, handleDeleteFeedback, deleteReply, prepareState, handleTransitionStatus, handleGenerateSuggestions, injectIntoFeedback, pendingDelete, undoDelete, dismissDelete } = review;
+  const { selectedSectionId, orderedRequests, activeRequest, activeRequestId, setActiveRequestId, feedbackItems, errorMessage, successMessage, diffEnabled, setDiffEnabled, diffOps, feedbackDraft, selectedAnchor, editingFeedbackId, updateFeedbackDraft, savingFeedback, feedbackFilter, setFeedbackFilter, activeFeedbackId, transitioningRequestId, pendingTransition, setPendingTransition, suggestions, suggestionLoading, suggestionError, suggestionRan, panelTab, setPanelTab, activeGuide, requestLocked, canReturn, canCreateRoot, handleSubmitFeedback, captureSourceSelection, handleEditFeedback, handleCancelEdit, handleDeleteFeedback, prepareState, handleTransitionStatus, handleGenerateSuggestions, injectIntoFeedback, pendingDelete, undoDelete, dismissDelete } = review;
   const [sectionOnly, setSectionOnly] = useState(false);
   const draftCount = feedbackItems.filter(item => String(item.requestId) === String(activeRequestId) && !item.publishedAt).length;
   const sectionFeedback = feedbackItems.filter(item => (!sectionOnly || String(item.sectionId) === String(selectedSectionId))
@@ -96,7 +94,6 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
     {successMessage && <p role="status" className="text-emerald-700">{successMessage}</p>}
     <label className="flex gap-2"><input type="checkbox" checked={sectionOnly} onChange={event => setSectionOnly(event.target.checked)} />{t.sectionFeedback}: {selectedSection?.sectionTitle}</label>
     {draftCount > 0 && <p>{draftCount} {t.draft}</p>}
-    {feedbackItems.some(item => (item.messages || []).some(message => message.kind === 'REPLY' && message.draft)) && <p role="alert">{t.legacyReplyDraftNotice}</p>}
     <label className="flex gap-2"><input type="checkbox" checked={diffEnabled} onChange={event => setDiffEnabled(event.target.checked)} />{t.showChanges}</label>
     {diffEnabled && (diffOps ? <pre className="max-h-64 overflow-auto whitespace-pre-wrap">{diffOps.map((op, i) => <span key={i} className={op[0] === -1 ? 'bg-rose-100 line-through' : op[0] === 1 ? 'bg-emerald-100' : ''}>{op[1]}</span>)}</pre> : <p>{t.noCheckpointBaseline}</p>)}
             <div className="bg-(--surface) rounded-2xl border border-(--border) shadow-sm">
@@ -157,24 +154,6 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
                               {String(fb.requestId) !== String(activeRequestId) && <p className="text-xs font-semibold text-amber-700">{t.previousRoundOpen}</p>}
                               {fb.anchor?.original?.exact && <p className="text-[10px] text-(--text-tertiary) italic line-clamp-2">“{fb.anchor.original.exact}”</p>}
                               <button type="button" onClick={() => onSelectFeedback(fb)} className="text-left whitespace-pre-wrap text-sm font-medium">{fb.content}</button>
-                              <details><summary className="cursor-pointer text-xs">{t.feedbackHistory}</summary>
-                              <div className="space-y-2">
-                                {(fb.messages || []).filter(message => message.kind === 'REPLY').map(message => {
-                                  const ownDraft = message.draft && String(message.authorId) === String(user?.id);
-                                  return (
-                                    <div key={message.id} className={`rounded-lg p-2 ${message.draft ? 'border border-dashed border-amber-300 bg-amber-50/70 dark:bg-amber-950/20' : message.authorRole === 'STUDENT' ? 'bg-emerald-50 dark:bg-emerald-950/20' : 'bg-(--surface)'}`}>
-                                      <div className="mb-1 flex items-center justify-between gap-2 text-[9px] font-bold text-(--text-tertiary)">
-                                        <span>{message.authorName || (message.authorRole === 'STUDENT' ? t.student : t.instructor)}</span>
-                                        <span className="flex shrink-0 items-center gap-1">{message.draft ? t.draft : message.publishedAt ? formatDateTime(message.publishedAt, language) : ''}
-                                          {ownDraft && message.kind === 'REPLY' && <><button type="button" onClick={event => { event.stopPropagation(); deleteReply(fb.id, message.id); }} className="text-rose-600 hover:underline">{ct.delete}</button></>}
-                                        </span>
-                                      </div>
-                                      <p className="whitespace-pre-wrap leading-relaxed text-(--text-primary)">{message.content}</p>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                              </details>
                               {fb.pendingState && <p className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 dark:bg-amber-950/20">{t.pendingState}: {fb.pendingState === 'DONE' ? t.doneFeedback : t.openFeedback}</p>}
                               {(fb.canMarkDone || fb.canReopen) && (
                                 <div className="flex gap-2 border-t border-(--border-light) pt-2">
@@ -265,7 +244,7 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
                           {fb.sectionTitle && <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">{fb.sectionTitle}</span>}
                           {fb.createdAt && <span className="text-[9px] text-(--text-tertiary)">{formatDateTime(fb.createdAt, language)}</span>}
                         </div>
-                        <p className="text-(--text-primary) leading-relaxed">{(fb.messages || []).map(message => `${message.authorName || message.authorRole}: ${message.content}`).join('\n')}</p>
+                        <p className="text-(--text-primary) leading-relaxed">{fb.content}</p>
                       </button>
                     ))}
                   </div>
