@@ -191,6 +191,10 @@ class SubmissionReadinessServiceTest {
                     f.project(), f.leader(), response.submissionFingerprint()))
                     .isInstanceOfSatisfying(SubmissionReadinessException.class,
                             error -> assertThat(error.getCode()).isEqualTo("REVISION_BASELINE_UNAVAILABLE"));
+            assertThatThrownBy(() -> service.requireReadyForSubmit(
+                    f.project(), f.leader(), response.submissionFingerprint(), true))
+                    .isInstanceOfSatisfying(SubmissionReadinessException.class,
+                            error -> assertThat(error.getCode()).isEqualTo("REVISION_BASELINE_UNAVAILABLE"));
         }
         when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(f.project().getId()))
                 .thenReturn(List.of());
@@ -298,6 +302,43 @@ class SubmissionReadinessServiceTest {
         verify(currentUserService).requireSectionContentWriteAccess(
                 fixture.leader(), fixture.section());
         verify(paperSectionRepository).saveAndFlush(fixture.section());
+        assertThat(response.confirmedAt()).isNotNull();
+        var repeated = service.confirm(fixture.paper().getId(), fixture.section().getId(), "f".repeat(64));
+        assertThat(repeated.confirmedById()).isEqualTo(response.confirmedById());
+        assertThat(repeated.confirmedAt()).isEqualTo(response.confirmedAt());
+        assertThat(fixture.section().getVersion()).isEqualTo(3);
+        verify(paperSectionRepository).saveAndFlush(fixture.section());
+    }
+
+    @Test
+    void testBypassPreservesMissingAndStaleConfirmations() throws Exception {
+        Fixture f = fixture();
+        stubAssessment(f, "f".repeat(64));
+        for (String state : List.of("STALE", "UNCONFIRMED")) {
+            if (state.equals("STALE")) f.section().setHandoffInputFingerprint("stale");
+            else {
+                f.section().setHandoffConfirmedBy(null);
+                f.section().setHandoffConfirmedAt(null);
+                f.section().setHandoffContentVersion(null);
+                f.section().setHandoffInputFingerprint(null);
+            }
+            var r = service.assess(f.project(), f.leader()).response();
+            assertThatThrownBy(() -> service.requireReadyForSubmit(f.project(), f.leader(), r.submissionFingerprint()))
+                    .isInstanceOfSatisfying(SubmissionReadinessException.class,
+                            error -> assertThat(error.getCode()).isEqualTo("REVIEW_NOT_READY"));
+            var assessment = service.requireReadyForSubmit(f.project(), f.leader(), r.submissionFingerprint(), true);
+            var saved = objectMapper.readTree(service.snapshot(assessment, f.project(), f.leader(), f.instructor(), LocalDateTime.now()));
+            var section = saved.path("papers").get(0).path("sections").get(0);
+            assertThat(section.path("handoffState").asText()).isEqualTo(state);
+            assertThat(section.path("confirmedById").isNull()).isEqualTo(state.equals("UNCONFIRMED"));
+            assertThat(section.path("confirmedAt").isNull()).isEqualTo(state.equals("UNCONFIRMED"));
+            assertThat(assessment.response().state()).isEqualTo("NOT_READY");
+            if (state.equals("STALE")) {
+                assertThat(section.path("confirmedById").asText()).isEqualTo(f.leader().getId().toString());
+                assertThat(f.section().getHandoffInputFingerprint()).isEqualTo("stale");
+            } else assertThat(f.section().getHandoffConfirmedBy()).isNull();
+        }
+        verify(paperSectionRepository, never()).saveAndFlush(f.section());
     }
 
     @Test

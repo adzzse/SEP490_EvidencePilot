@@ -116,7 +116,8 @@ public class FeedbackServiceImpl implements FeedbackService {
         User instructor = project.getInstructor();
         if (instructor == null) throw badRequest("Project has no instructor.");
         SubmissionReadinessService.Assessment assessment = submissionReadinessService
-                .requireReadyForSubmit(project, currentUser, request.expectedSubmissionFingerprint());
+                .requireReadyForSubmit(project, currentUser, request.expectedSubmissionFingerprint(),
+                        request.bypassSectionConfirmation());
 
         LocalDateTime now = LocalDateTime.now();
         FeedbackRequest feedbackRequest = new FeedbackRequest();

@@ -100,7 +100,7 @@ public class SubmissionReadinessService {
                 && Objects.equals(section.getVersion(), section.getHandoffContentVersion());
         if (!alreadyConfirmed) {
             section.setHandoffConfirmedBy(currentUser);
-            section.setHandoffConfirmedAt(LocalDateTime.now());
+            section.setHandoffConfirmedAt(LocalDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS));
             section.setHandoffContentVersion(section.getVersion());
             section.setHandoffInputFingerprint(currentFingerprint);
             paperSectionRepository.saveAndFlush(section);
@@ -127,6 +127,12 @@ public class SubmissionReadinessService {
 
     public Assessment requireReadyForSubmit(
             Project project, User currentUser, String expectedSubmissionFingerprint) {
+        return requireReadyForSubmit(project, currentUser, expectedSubmissionFingerprint, false);
+    }
+
+    public Assessment requireReadyForSubmit(
+            Project project, User currentUser, String expectedSubmissionFingerprint,
+            boolean bypassSectionConfirmation) {
         Assessment assessment = assess(project, currentUser);
         if (!assessment.response().canSubmit()) {
             throw new ResponseStatusException(
@@ -139,7 +145,11 @@ public class SubmissionReadinessService {
                     "REVISION_BASELINE_UNAVAILABLE", "The returned submission snapshot is unavailable.");
             default -> { }
         }
-        if (!"READY".equals(assessment.response().state())) {
+        // ponytail: CF-TEST-BYPASS — remove this Leader-only confirmation bypass before final acceptance.
+        boolean ready = assessment.response().checks().stream()
+                .filter(check -> !bypassSectionConfirmation || !"SECTION_CONFIRMED".equals(check.code()))
+                .allMatch(check -> "SATISFIED".equals(check.status()));
+        if (!ready) {
             throw new SubmissionReadinessException(
                     "REVIEW_NOT_READY", "The project is not ready for review.");
         }
@@ -370,6 +380,9 @@ public class SubmissionReadinessService {
         root.put("submittedByName", displayName(submittedBy));
         root.put("instructorId", instructor.getId());
 
+        Map<UUID, String> handoffStates = new HashMap<>();
+        assessment.response().papers().forEach(paper -> paper.sections().forEach(section ->
+                handoffStates.put(section.id(), section.handoffState())));
         List<Map<String, Object>> papers = new ArrayList<>();
         for (Document paper : assessment.papers()) {
             Map<String, Object> paperSnapshot = new LinkedHashMap<>();
@@ -387,7 +400,9 @@ public class SubmissionReadinessService {
                 sectionSnapshot.put("contentVersion", section.getVersion());
                 sectionSnapshot.put("assignedUserId", section.getAssignedUser().getId());
                 sectionSnapshot.put("assignedUserName", displayName(section.getAssignedUser()));
-                sectionSnapshot.put("confirmedById", section.getHandoffConfirmedBy().getId());
+                sectionSnapshot.put("handoffState", handoffStates.get(section.getId()));
+                sectionSnapshot.put("confirmedById", section.getHandoffConfirmedBy() == null
+                        ? null : section.getHandoffConfirmedBy().getId());
                 sectionSnapshot.put("confirmedByName", displayName(section.getHandoffConfirmedBy()));
                 sectionSnapshot.put("confirmedAt", section.getHandoffConfirmedAt());
                 sectionSnapshot.put("confirmedContentVersion", section.getHandoffContentVersion());

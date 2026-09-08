@@ -86,7 +86,7 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
           <button type="button" className={control} onClick={onClose} aria-label={t('studentFeedback.close')}>×</button>
         </div>
       </div>
-      <details open={!narrow} className="text-xs">
+      <details className="text-xs">
       <summary className="cursor-pointer py-1 text-(--text-secondary)">{t('studentFeedback.filters')}</summary>
       <div className="grid grid-cols-2 gap-2 mt-1">
         <select className={control} value={scope} onChange={event => setScope(event.target.value)} aria-label={t('studentFeedback.scope')}>
@@ -131,11 +131,6 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
           const locationStatus = anchor?.current?.status || (item.lineReference ? 'UNLOCATED' : 'SECTION');
           const placed = layoutById.get(item.id);
           const active = item.id === activeId;
-          const messages = item.messages?.length ? item.messages : [{
-            id: item.id, kind: 'ROOT', authorName: item.instructorName, authorRole: 'INSTRUCTOR',
-            content: item.content, createdAt: item.createdAt, publishedAt: item.publishedAt || item.createdAt,
-          }, ...(item.answerContent ? [{ id: `${item.id}-legacy-answer`, kind: 'REPLY', authorRole: 'STUDENT',
-            content: item.answerContent, createdAt: item.answeredAt, publishedAt: item.answeredAt }] : [])];
           const canNavigate = item.sectionId && (String(item.sectionId) !== String(sectionId) || position?.from != null);
           return <article key={item.id} ref={node => { if (node) cardsRef.current.set(item.id, node); else cardsRef.current.delete(item.id); }}
             data-feedback-card={item.id} aria-label={t('studentFeedback.card', { section: item.sectionTitle || '' })}
@@ -162,15 +157,6 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
                 <p className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono leading-relaxed">{anchor.original.exact}</p>
               </details>}
               {canNavigate && <button type="button" className={`${control} font-semibold`} onClick={() => select(item)}>{t('studentFeedback.goToText')}</button>}
-              <details><summary className="cursor-pointer font-semibold">{t('studentFeedback.conversation')}</summary>
-              <div className="space-y-2" aria-label={t('studentFeedback.conversation')}>
-                {messages.filter(message => message.kind === 'REPLY' && !message.draft).map((message, index) => <div key={message.id || index} className={`rounded-md border-l-2 p-2.5 ${message.authorRole === 'STUDENT' ? 'border-teal-600 bg-(--surface-secondary)' : 'border-indigo-500 bg-(--surface-secondary)'}`}>
-                  <p className="font-semibold">{message.authorName || (message.authorRole === 'STUDENT' ? t('studentFeedback.you') : item.instructorName || t('instructor'))}</p>
-                  <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
-                  <p className="mt-1 text-[10px] text-(--text-tertiary)">{date(message.publishedAt || message.createdAt)}</p>
-                </div>)}
-              </div>
-              </details>
               {item.threadState === 'DONE' && <p className="rounded-md bg-(--surface-secondary) p-2 text-[11px] text-(--text-secondary)">{t('studentFeedback.done')}</p>}
 
             </div>}

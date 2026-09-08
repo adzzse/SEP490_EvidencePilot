@@ -6,5 +6,10 @@ import jakarta.validation.constraints.Pattern;
 public record SubmitReviewRequest(
     @NotBlank
     @Pattern(regexp = "[0-9a-f]{64}", message = "expectedSubmissionFingerprint must be a SHA-256 fingerprint")
-    String expectedSubmissionFingerprint
-) {}
+    String expectedSubmissionFingerprint,
+    boolean bypassSectionConfirmation
+) {
+    public SubmitReviewRequest(String expectedSubmissionFingerprint) {
+        this(expectedSubmissionFingerprint, false);
+    }
+}

@@ -33,6 +33,7 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
     if (!open || !projectId) return;
     setLoading(true);
     setError('');
+    setReadiness(null);
     try {
       const response = await api.get(`/api/projects/${projectId}/review-readiness`);
       setReadiness(response.data);
@@ -45,13 +46,15 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
 
   useEffect(() => { load(); }, [load]);
 
-  const submit = async () => {
-    if (!readiness?.submissionFingerprint || dirtySectionIds.length > 0) return;
+  const submit = async (bypassSectionConfirmation) => {
+    if (loading || submitting || !readiness?.submissionFingerprint
+      || !(bypassSectionConfirmation ? canSubmitTest : canSubmit)) return;
     setSubmitting(true);
     setError('');
     try {
       const response = await api.post(`/api/projects/${projectId}/reviews`, {
         expectedSubmissionFingerprint: readiness.submissionFingerprint,
+        bypassSectionConfirmation,
       });
       await onSubmitted?.(response.data);
     } catch (submitError) {
@@ -68,8 +71,11 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
   };
 
   const canSubmit = readiness?.state === 'READY'
-    && readiness?.canSubmit
+    && readiness?.canSubmit === true
     && dirtySectionIds.length === 0;
+  const canSubmitTest = readiness?.canSubmit === true && dirtySectionIds.length === 0
+    && readiness.checks?.some(check => check.code === 'SECTION_CONFIRMED' && check.status !== 'SATISFIED')
+    && readiness.checks.every(check => check.code === 'SECTION_CONFIRMED' || check.status === 'SATISFIED');
 
   return (
     <Modal open={open} onClose={onClose} title={t('submitReview')} closeLabel={t('close')} wide>
@@ -117,7 +123,7 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
                           <div className="flex items-center justify-between gap-2">
                             <span className="truncate">{section.title}</span>
                             <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${section.handoffState === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                              {t(section.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : 'handoffStateUnconfirmed')}
+                              {t(section.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : section.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}
                             </span>
                           </div>
                           <p>{t('feedbackAssignee')}: {section.assignedUserName || t('feedbackUnassigned')}</p>
@@ -139,9 +145,14 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
           </>
         )}
 
-        <div className="flex justify-end gap-3 border-t border-(--border) pt-4">
+        <div className="flex flex-wrap justify-end gap-3 border-t border-(--border) pt-4">
           <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg px-4 py-2 text-sm font-semibold text-(--text-secondary) hover:bg-(--surface-secondary) disabled:opacity-50">{t('cancel')}</button>
-          <button type="button" onClick={submit} disabled={!canSubmit || submitting || loading}
+          {/* ponytail: CF-TEST-BYPASS — remove the test button/copy and request flag before final acceptance. */}
+          {readiness?.canSubmit === true && <button type="button" onClick={() => submit(true)} disabled={!canSubmitTest || submitting || loading}
+            className="rounded-lg border border-amber-400 px-4 py-2 text-sm font-semibold text-amber-800 dark:text-amber-200 disabled:cursor-not-allowed disabled:opacity-40">
+            {t('submitTestBypass')}
+          </button>}
+          <button type="button" onClick={() => submit(false)} disabled={!canSubmit || submitting || loading}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40">
             {submitting ? t('working') : t('submitReview')}
           </button>

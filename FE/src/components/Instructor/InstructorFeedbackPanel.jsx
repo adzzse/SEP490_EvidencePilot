@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal, StatusBadge } from '../index';
 import DeleteConfirm from '../ui/DeleteConfirm.jsx';
 import { UndoToast } from '../ui/UndoDelete.jsx';
@@ -33,6 +34,7 @@ export function InstructorReviewGuide({ review, selectedSection }) {
 }
 
 export default function InstructorFeedbackPanel({ review, selectedSection, onSelectFeedback }) {
+  const { t: translate } = useTranslation();
   const { language } = useLanguage();
   const { user } = useAuth();
   const t = instructorText[language];
@@ -45,12 +47,45 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
     && (String(item.requestId) === String(activeRequestId) || (item.threadState || 'OPEN') === 'OPEN')
     && (feedbackFilter === 'ALL' || (item.pendingState || item.threadState || 'OPEN') === feedbackFilter));
   const historyFeedback = [...feedbackItems].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const snapshot = review.snapshotState === 'AVAILABLE' ? review.submissionSnapshot : null;
+  const confirmationPapers = review.viewMode === 'working'
+    ? [{ id: review.selectedPaperId, sections: review.sections.map(section => ({ ...section, title: section.sectionTitle,
+      confirmedByName: section.handoffConfirmedByName, confirmedAt: section.handoffConfirmedAt, handoffState: null })) }]
+    : snapshot?.papers || [];
+  const selectedConfirmation = confirmationPapers.flatMap(paper => paper.sections)
+    .find(section => String(section.id) === String(selectedSectionId));
+  const bypassed = review.viewMode === 'submitted' && snapshot?.papers.some(paper =>
+    paper.sections.some(section => ['UNCONFIRMED', 'STALE'].includes(section.handoffState)));
   return <div className="space-y-3 text-xs">
     <div className="space-y-2 rounded-xl border border-(--border) bg-(--surface) p-3 shadow-sm">
       {orderedRequests.map(req => <button type="button" key={req.id} onClick={() => setActiveRequestId(req.id)} aria-pressed={req.id === activeRequestId} className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left focus-visible:ring-2 focus-visible:ring-(--brand) ${req.id === activeRequestId ? 'border-indigo-200 bg-(--brand-soft) text-(--brand-foreground)' : 'border-(--border-light) text-(--text-secondary) hover:bg-(--surface-secondary)'}`}>
         {formatDateTime(req.requestedAt, language)} · <StatusBadge status={req.status} />
       </button>)}
     </div>
+    {confirmationPapers.length > 0 && <section aria-label={translate('sectionConfirmations')} className="space-y-2 rounded-xl border border-(--border) bg-(--surface) p-3">
+      <h3 className="font-bold">{translate('sectionConfirmations')}</h3>
+      {bypassed && <p role="status" className="font-semibold text-amber-700 dark:text-amber-200">{translate('testSubmissionBypass')}</p>}
+      {review.viewMode === 'working' ? <p>{translate('confirmationWorkingCopy')}</p>
+        : <p>{translate('confirmationSubmittedBy')}: {snapshot.submittedByName || '—'} · {formatDateTime(snapshot.submittedAt)}</p>}
+      {selectedConfirmation && <div>
+        <p className="font-semibold">{selectedConfirmation.title}</p>
+        {selectedConfirmation.handoffState && <p>{translate(selectedConfirmation.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : selectedConfirmation.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}</p>}
+        <p>{translate('feedbackConfirmedBy')}: {selectedConfirmation.confirmedByName || '—'}</p>
+        <p>{translate('confirmationTime')}: {formatDateTime(selectedConfirmation.confirmedAt)}</p>
+      </div>}
+      <details><summary className="cursor-pointer font-semibold">{translate('confirmationOverview')}</summary>
+        {confirmationPapers.map(paper => <div key={paper.id} className="mt-2">
+          <h4 className="font-bold">{paper.title || t.paper}</h4>
+          {paper.sections.map(section => <div key={section.id} className="mt-2 border-t border-(--border) pt-2">
+            <p className="font-semibold">{section.title}</p>
+            <p>{translate('feedbackAssignee')}: {section.assignedUserName || translate('feedbackUnassigned')}</p>
+            {section.handoffState && <p>{translate(section.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : section.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}</p>}
+            <p>{translate('feedbackConfirmedBy')}: {section.confirmedByName || '—'}</p>
+            <p>{translate('confirmationTime')}: {formatDateTime(section.confirmedAt)}</p>
+          </div>)}
+        </div>)}
+      </details>
+    </section>}
     <div className="flex flex-wrap gap-2">
       {!requestLocked && <>
         {canReturn && <button type="button" disabled={savingFeedback || !!transitioningRequestId || !!pendingDelete} onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'RETURNED' })} className="rounded-lg bg-amber-500 px-3 py-2 font-bold text-white disabled:opacity-50">{t.returnForRevision}</button>}

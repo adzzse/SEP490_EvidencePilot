@@ -4,6 +4,7 @@ import api from '../../services/api.js';
 import { prepareProjectDoiImport } from '../../utils/student/doiImport.js';
 import { getSourceDownloadUrl } from '../../utils/student/sourceDownload.js';
 import SectionRequirementsPanel from './SectionRequirementsPanel.jsx';
+import { formatDateTime } from '../../utils/formatters/date.js';
 
 const FUNCTIONAL_TYPES = [
   { value: 'EMPIRICAL', labelKey: 'functionalTypeEmpirical' },
@@ -133,6 +134,36 @@ export default function ContextPanel({
   const [attachingSourceId, setAttachingSourceId] = useState(null);
   const fileInputRef = useRef(null);
   const { t, i18n } = useTranslation();
+
+  const [confirmationRequestId, setConfirmationRequestId] = useState(null);
+  const [confirmationSnapshot, setConfirmationSnapshot] = useState(null);
+  const [confirmationState, setConfirmationState] = useState('');
+  const [confirmationRetry, setConfirmationRetry] = useState(0);
+  useEffect(() => {
+    setConfirmationSnapshot(null);
+    if (!confirmationRequestId) { setConfirmationState(''); return; }
+    let cancelled = false;
+    setConfirmationState('LOADING');
+    api.get(`/api/feedback-requests/${confirmationRequestId}/submission-snapshot`)
+      .then(response => {
+        if (cancelled) return;
+        if (response.data?.state === 'LEGACY_NO_SNAPSHOT') {
+          setConfirmationState('LEGACY_NO_SNAPSHOT');
+          return;
+        }
+        const candidate = response.data?.snapshot;
+        const valid = response.data?.state === 'AVAILABLE' && candidate?.schemaVersion === 1
+          && String(candidate.projectId) === String(project?.id) && Array.isArray(candidate.papers)
+          && candidate.papers.every(paper => paper.id && (typeof paper.title === 'string' || paper.title === null) && Array.isArray(paper.sections)
+            && paper.sections.every(section => section.id && typeof section.title === 'string'
+              && typeof section.contentTex === 'string' && Number.isInteger(section.order) && Number.isInteger(section.contentVersion)));
+        if (!valid) throw new Error('Invalid submission snapshot');
+        setConfirmationSnapshot(candidate);
+        setConfirmationState('AVAILABLE');
+      })
+      .catch(() => { if (!cancelled) setConfirmationState('LOAD_ERROR'); });
+    return () => { cancelled = true; };
+  }, [confirmationRequestId, project?.id, confirmationRetry]);
 
   const handleAttachPdf = async (sourceId, file) => {
     if (!file || isLocked || attachingSourceId !== null) return;
@@ -385,7 +416,7 @@ export default function ContextPanel({
                   <p className="text-[10px] text-(--text-tertiary) uppercase tracking-wider font-bold">{t('projectStatus')}</p>
                   <p className="text-sm font-bold text-(--text-primary) mt-0.5">{project?.status ? t(`status.${project.status}`, { defaultValue: project.status }) : t('unknown')}</p>
                 </div>
-                {userProjectRole === 'LEADER' && (project?.status === 'ASSIGNED' || project?.status === 'IN_PROGRESS' || project?.status === 'RETURNED') && <button onClick={() => setShowSubmitReviewModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all" title={t('submitReviewDescription')}>{t('submitReview')}</button>}
+                {userProjectRole === 'LEADER' && <button onClick={() => setShowSubmitReviewModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all" title={t('submitReviewDescription')}>{t(isLocked ? 'viewConfirmations' : 'submitReview')}</button>}
               </div>
               <h3 className="text-[11px] font-bold text-(--text-tertiary) tracking-widest uppercase flex items-center gap-2 mt-2"><div className="h-px bg-(--border) flex-1"></div> {t('reviewHistory')} <div className="h-px bg-(--border) flex-1"></div></h3>
               <div className="space-y-4">
@@ -412,6 +443,33 @@ export default function ContextPanel({
                         {fb.status === 'REVIEWED' && <p className="text-emerald-600 font-medium">{t('reviewApproved')}</p>}
                         {fb.status === 'REJECTED' && <p className="text-rose-600 font-medium">{t('reviewRejected')}</p>}
                         <button type="button" onClick={() => onViewFeedback(fb.id || fb.requestId)} className="mt-3 rounded-md border border-(--border) px-3 py-2 font-semibold text-(--brand) hover:bg-(--brand-soft) focus-visible:ring-2 focus-visible:ring-(--brand)">{t('studentFeedback.viewFeedback')}</button>
+                        {userProjectRole === 'LEADER' && <details className="mt-3" open={confirmationRequestId === (fb.id || fb.requestId)}>
+                          <summary className="cursor-pointer font-semibold focus-visible:ring-2 focus-visible:ring-(--brand)" onClick={event => {
+                            event.preventDefault();
+                            setConfirmationSnapshot(null);
+                            setConfirmationState('LOADING');
+                            setConfirmationRequestId(previous => previous === (fb.id || fb.requestId) ? null : (fb.id || fb.requestId));
+                          }}>{t('sectionConfirmations')}</summary>
+                          {confirmationRequestId === (fb.id || fb.requestId) && <div className="mt-2 space-y-2">
+                            {confirmationState === 'LOADING' && <p role="status">{t('loading')}</p>}
+                            {confirmationState === 'LEGACY_NO_SNAPSHOT' && <p>{t('confirmationLegacy')}</p>}
+                            {confirmationState === 'LOAD_ERROR' && <div role="alert"><p>{t('confirmationLoadFailed')}</p><button type="button" onClick={() => setConfirmationRetry(value => value + 1)} className="underline">{t('retry')}</button></div>}
+                            {confirmationState === 'AVAILABLE' && confirmationSnapshot && <>
+                              {confirmationSnapshot.papers.some(paper => paper.sections.some(section => ['UNCONFIRMED', 'STALE'].includes(section.handoffState))) && <p role="status" className="font-semibold text-amber-700 dark:text-amber-200">{t('testSubmissionBypass')}</p>}
+                              <p>{t('confirmationSubmittedBy')}: {confirmationSnapshot.submittedByName || '—'} · {formatDateTime(confirmationSnapshot.submittedAt)}</p>
+                              {confirmationSnapshot.papers.map(paper => <div key={paper.id}>
+                                <h4 className="font-bold">{paper.title || t('paper')}</h4>
+                                {paper.sections.map(section => <div key={section.id} className="mt-2 border-t border-(--border) pt-2">
+                                  <p className="font-semibold">{section.title}</p>
+                                  <p>{t('feedbackAssignee')}: {section.assignedUserName || t('feedbackUnassigned')}</p>
+                                  {section.handoffState && <p>{t(section.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : section.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}</p>}
+                                  <p>{t('feedbackConfirmedBy')}: {section.confirmedByName || '—'}</p>
+                                  <p>{t('confirmationTime')}: {formatDateTime(section.confirmedAt)}</p>
+                                </div>)}
+                              </div>)}
+                            </>}
+                          </div>}
+                        </details>}
                       </div>
                     </div>
                   ))
