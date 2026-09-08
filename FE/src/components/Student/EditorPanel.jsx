@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import LatexEditor from '../features/LatexEditor';
+import { instructorText, commonText } from '../../locales';
+import { useLanguage } from '../../context/LanguageContext';
 import FeedbackPanel from './FeedbackPanel.jsx';
 import PreviewPane from '../features/PreviewPane';
 import { useTranslation } from 'react-i18next';
@@ -22,7 +24,7 @@ const getScrollAnchors = (container, editor) => {
 };
 
 export default function EditorPanel({
-  compact,
+  compact, review,
   selectedPaper, selectedSectionId, assignedSections, canEditCurrentSection, currentSection, displayContent, updateCode,
   editorWidth, onEditorResizeStart,
   saveStatus, lastSaved, handleSaveDraft,
@@ -31,7 +33,7 @@ export default function EditorPanel({
   showSearchPanel, setShowSearchPanel, searchQuery, setSearchQuery, replaceQuery, setReplaceQuery,
   textSize, setTextSize, showToast, editorRef, mediaAssets, isLocked,
   findings = [], onFindingClick,
-  onOpenSourceMap,
+  onOpenSourceMap, onViewFullPaper,
   onRunCitationReview, onOpenCitationReview, reviewBusy = false, reviewProgress = null,
   reviewFindingsCount = 0, reviewError = null,
   canRunCitationReview = false, onEditorUserScroll,
@@ -41,9 +43,12 @@ export default function EditorPanel({
   citationIndex = {}
 }) {
   const { t } = useTranslation();
+  const { language } = useLanguage();
+  const rt = instructorText[language];
+  const ct = commonText[language];
   const isOwnSection = canEditCurrentSection
     ?? (assignedSections && assignedSections.some(s => String(s.id) === String(selectedSectionId)));
-  const readOnlyLabel = isLocked ? t('projectLocked') : !isOwnSection ? t('readOnly') : '';
+  const readOnlyLabel = review ? rt.paperReadOnly : isLocked ? t('projectLocked') : !isOwnSection ? t('readOnly') : '';
   const citationReviewTitle = reviewBusy ? t('reviewing') : canRunCitationReview && !isLocked ? t('citationReviewDescription') : t('citationReviewUnavailable');
   const saveTitle = saveStatus === 'saving' ? t('saving') : isLocked ? t('saveReadOnly') : !isOwnSection ? t('noAssignedSection') : t('saveSectionHelp');
   const [previewZoom, setPreviewZoom] = useState(100);
@@ -52,14 +57,17 @@ export default function EditorPanel({
   const containerRef = useRef(null);
   const [availableWidth, setAvailableWidth] = useState(0);
   const [keepPreview, setKeepPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [positions, setPositions] = useState([]);
   const [overlapIds, setOverlapIds] = useState([]);
   const measureFrameRef = useRef(null);
   const narrow = compact || (availableWidth > 0 && availableWidth < 780);
   const canShowThree = availableWidth >= 1240;
   const threePanes = feedbackOpen && keepPreview && canShowThree && !narrow;
-  const previewVisible = !narrow && (!feedbackOpen || threePanes);
-  const sectionFeedback = useMemo(() => (feedback?.items || []).filter(item => String(item.sectionId) === String(selectedSectionId)), [feedback?.items, selectedSectionId]);
+  const previewVisible = (narrow ? showPreview : true) && (!feedbackOpen || threePanes);
+  useEffect(() => { setShowPreview(false); }, [selectedSectionId, review?.activeFeedbackId]);
+  useEffect(() => { if (feedbackOpen) setShowPreview(false); }, [feedbackOpen]);
+  const sectionFeedback = useMemo(() => (review?.feedbackItems || feedback?.items || []).filter(item => String(item.sectionId) === String(selectedSectionId)), [review?.feedbackItems, feedback?.items, selectedSectionId]);
   const measureFeedback = useCallback(() => {
     if (measureFrameRef.current != null) return;
     measureFrameRef.current = requestAnimationFrame(() => {
@@ -75,9 +83,9 @@ export default function EditorPanel({
   useEffect(() => { setOverlapIds([]); measureFeedback(); }, [selectedSectionId, feedbackOpen, measureFeedback]);
   const handleFeedbackClick = useCallback(ids => {
     setOverlapIds(ids);
-    const item = feedback?.items.find(entry => entry.id === ids[0]);
+    const item = (review?.feedbackItems || feedback?.items || []).find(entry => entry.id === ids[0]);
     if (item) onSelectFeedback?.(item);
-  }, [feedback?.items, onSelectFeedback]);
+  }, [review, feedback?.items, onSelectFeedback]);
   const closeFeedback = () => {
     setFeedbackOpen(false);
     containerRef.current?.querySelector('[data-tour="editor-feedback"]')?.focus();
@@ -145,19 +153,30 @@ export default function EditorPanel({
   }, [editorRef, selectedSectionId, previewVisible]);
 
   return (
-    <div ref={containerRef} id="editor-preview-container" className="flex-1 min-w-0 flex flex-col overflow-hidden bg-(--surface-tertiary)/50 p-2 gap-2">
+    <div ref={containerRef} id="editor-preview-container" role={review ? 'region' : undefined} aria-label={review ? review.viewMode === 'working' ? rt.workingCopy : t('feedbackSubmittedPaper') : undefined} className="flex-1 min-w-0 flex flex-col overflow-hidden bg-(--surface-tertiary)/50 p-2 gap-2">
+      {review && <div className="shrink-0 space-y-2 text-xs">
+        <div className="inline-flex flex-wrap rounded-lg border border-(--border) bg-(--surface) p-0.5">
+          {[['submitted', rt.submittedVersion], ['working', rt.workingCopy]].map(([mode, label]) => <button key={mode} type="button" aria-pressed={review.viewMode === mode} onClick={() => review.setViewMode(mode)} className={`rounded-md px-3 py-1.5 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${review.viewMode === mode ? 'bg-(--brand-soft) text-(--brand-foreground)' : 'text-(--text-secondary) hover:bg-(--surface-secondary)'}`}>{label}</button>)}
+        </div>
+        <p className="text-[11px] text-(--text-secondary)">{review.viewMode === 'working' ? rt.workingCopyLabel : rt.submittedVersionLabel}</p>
+        {review.viewMode === 'submitted' && review.snapshotState === 'LOADING' && <p role="status">{t('loading')}</p>}
+        {review.viewMode === 'submitted' && review.snapshotState === 'LEGACY_NO_SNAPSHOT' && <p role="alert">{rt.legacySnapshotNotice}</p>}
+        {review.viewMode === 'submitted' && review.snapshotState === 'LOAD_ERROR' && <p role="alert">{rt.snapshotLoadError} <button type="button" onClick={() => review.setSnapshotRetry(value => value + 1)}>{ct.retry}</button></p>}
+      </div>}
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex rounded-lg border border-(--border) bg-(--surface) p-0.5" aria-label={t('studentFeedback.view')}>
-          {!narrow && <button type="button" aria-pressed={!feedbackOpen} onClick={() => setFeedbackOpen?.(false)} className={`rounded-md px-3 py-1.5 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${!feedbackOpen ? 'bg-(--brand-soft) text-(--brand)' : ''}`}>{t('preview')}</button>}
-          <button type="button" data-tour="editor-feedback" aria-expanded={feedbackOpen} aria-controls="student-feedback-panel" onClick={() => setFeedbackOpen?.(!feedbackOpen)}
+          {narrow && <button type="button" aria-pressed={!showPreview} onClick={() => setShowPreview(false)} className={`rounded-md px-3 py-1.5 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${!showPreview ? 'bg-(--brand-soft) text-(--brand-foreground)' : ''}`}>LaTeX</button>}
+          <button type="button" aria-pressed={previewVisible} onClick={() => { setFeedbackOpen?.(false); setShowPreview(true); }} className={`rounded-md px-3 py-1.5 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${previewVisible ? 'bg-(--brand-soft) text-(--brand-foreground)' : ''}`}>{t('preview')}</button>
+          {!review && <button type="button" data-tour="editor-feedback" aria-expanded={feedbackOpen} aria-controls="student-feedback-panel" onClick={() => setFeedbackOpen?.(!feedbackOpen)}
             className={`rounded-md px-3 py-1.5 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${feedbackOpen ? 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300' : ''}`}>
             {t('studentFeedback.title')}{feedback?.items.length ? ` (${feedback.items.length})` : ''}
-          </button>
+          </button>}
         </div>
+        {selectedPaper && <button type="button" onClick={onViewFullPaper} className="rounded-lg border border-(--border) bg-(--surface) px-3 py-1.5 font-semibold text-(--brand-foreground) hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand)">{t('viewFullPaper')}</button>}
         {feedbackOpen && canShowThree && !narrow && <label className="flex items-center gap-1.5 text-(--text-secondary)"><input type="checkbox" checked={keepPreview} onChange={event => setKeepPreview(event.target.checked)} />{t('studentFeedback.keepPreview')}</label>}
       </div>
       <div className={`flex-1 min-h-0 min-w-0 flex gap-2 ${narrow ? 'flex-col' : ''}`}>
-      <div style={{ flex: narrow ? '1 1 0' : threePanes ? '1 1 480px' : `${editorWidth} 1 0` }} className="bg-(--surface) rounded-lg shadow-sm border border-(--border) flex flex-col overflow-hidden min-w-0 min-h-0">
+      <div style={{ flex: narrow ? '1 1 0' : threePanes ? '1 1 480px' : `${editorWidth} 1 0` }} className={`bg-(--surface) rounded-lg shadow-sm border border-(--border) ${narrow && previewVisible ? 'hidden' : 'flex'} flex-col overflow-hidden min-w-0 min-h-0`}>
         <div data-tour="editor-toolbar" className="h-10 border-b border-(--border-light) flex items-center justify-between px-3 bg-(--surface) shadow-sm shrink-0 z-10">
           <div className="flex items-center gap-2 truncate">
             <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded tracking-wide font-mono">LaTeX</span>
@@ -206,7 +225,7 @@ export default function EditorPanel({
                 </button>
               </>
             )}
-            {selectedPaper && canRunCitationReview !== null && (
+            {!review && selectedPaper && canRunCitationReview !== null && (
               <span className="inline-flex" title={citationReviewTitle}>
                 <button
                   type="button"
@@ -220,16 +239,16 @@ export default function EditorPanel({
                 </button>
               </span>
             )}
-            <span className="inline-flex" title={saveTitle}>
+            {!review && <span className="inline-flex" title={saveTitle}>
               <button onClick={handleSaveDraft} disabled={saveStatus === 'saving' || !isOwnSection || isLocked} className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-50 ${saveStatus === 'saving' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30' : saveStatus === 'saved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30' : saveStatus === 'error' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30' : 'bg-(--surface-tertiary) text-(--text-secondary) hover:bg-(--border)'}`}>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
                 {saveStatus === 'saving' ? t('saving') : saveStatus === 'saved' ? t('saved') : saveStatus === 'error' ? t('error') : t('save')}
                 {lastSaved && saveStatus !== 'saving' && <span className="text-[9px] opacity-60 ml-0.5">{lastSaved.toLocaleTimeString()}</span>}
               </button>
-            </span>
+            </span>}
           </div>
         </div>
-        <div className="bg-(--surface-secondary) border-b border-(--border) flex flex-col shrink-0 select-none">
+        {!review && <div className="bg-(--surface-secondary) border-b border-(--border) flex flex-col shrink-0 select-none">
           <div className="h-9 flex items-center justify-between px-3 border-b border-(--border-light) gap-1">
             <div className={`flex-1 flex items-center gap-1 min-w-0 pr-2 ${!isOwnSection || isLocked ? 'pointer-events-none opacity-30' : ''}`}>
               <div className="relative">
@@ -313,7 +332,7 @@ export default function EditorPanel({
               </div>
             </div>
           )}
-        </div>
+        </div>}
         {currentSection && (
           <div className="shrink-0 flex items-center gap-0 border-b border-(--border) bg-(--surface-secondary)/70 px-3 py-2 font-mono text-xs" title={readOnlyLabel || undefined}>
             <span className="text-indigo-600">{'\\section{'}</span>
@@ -323,8 +342,8 @@ export default function EditorPanel({
           </div>
         )}
         <div className="flex-1 min-h-0 overflow-hidden">
-          <LatexEditor key={selectedSectionId || 'no-section'} ref={editorRef} content={displayContent} savedContent={currentSection?.contentTex || ''} savedVersion={currentSection?.version}
-            feedbackItems={sectionFeedback} activeFeedbackId={activeFeedbackId} feedbackVisible={feedbackOpen} onFeedbackClick={handleFeedbackClick} onFeedbackChange={measureFeedback}
+          <LatexEditor key={review ? `${review.viewMode}-${review.activeRequestId}-${selectedSectionId}` : selectedSectionId || 'no-section'} ref={editorRef} content={displayContent} savedContent={currentSection?.contentTex || ''} savedVersion={currentSection?.version}
+            feedbackItems={sectionFeedback} activeFeedbackId={review?.activeFeedbackId || activeFeedbackId} feedbackVisible={Boolean(review) || feedbackOpen} onFeedbackClick={handleFeedbackClick} onFeedbackChange={measureFeedback}
             onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} />
         </div>
       </div>

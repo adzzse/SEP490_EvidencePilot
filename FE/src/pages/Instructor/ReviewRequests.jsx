@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { StatusBadge, LoadingSkeleton, EmptyState, TourLauncher, AppHeader, Breadcrumb, EntityCard } from '../../components';
 import { instructorText, commonText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
@@ -7,6 +7,7 @@ import { formatDateTime } from '../../utils/formatters/date';
 import api from '../../services/api.js';
 
 export default function ReviewRequests() {
+  const [searchParams] = useSearchParams();
   const { language } = useLanguage();
   const t = instructorText[language];
   const ct = commonText[language];
@@ -74,6 +75,16 @@ export default function ReviewRequests() {
     setDateFrom('');
     setDateTo('');
   };
+
+  const reviewLink = searchParams.get('review');
+  const linkedRequest = requests.find(req => req.id === reviewLink)
+    || requests.filter(req => req.projectId === reviewLink)
+      .sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0))[0];
+  if (linkedRequest) {
+    const search = new URLSearchParams(searchParams);
+    search.set('review', linkedRequest.id);
+    return <Navigate to={{ pathname: `/instructor/requests/${encodeURIComponent(linkedRequest.projectId)}`, search: `?${search}` }} replace />;
+  }
 
   return (
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary)">
@@ -200,7 +211,7 @@ export default function ReviewRequests() {
                     return (
                       <tr key={req.id} className="hover:bg-(--surface-secondary) transition-colors">
                         <td className="px-6 py-4">
-                          <Link to={`/instructor/requests/${req.projectId}`}
+                          <Link to={`/instructor/requests/${encodeURIComponent(req.projectId)}?review=${encodeURIComponent(req.id)}`}
                             className="font-bold text-(--text-primary) block text-xs hover:text-(--brand-foreground) transition-colors">
                             {projectTitle}
                           </Link>
@@ -228,7 +239,7 @@ export default function ReviewRequests() {
                           {req.requestedAt ? formatDateTime(req.requestedAt, language) : '—'}
                         </td>
                         <td className="px-6 py-4">
-                          <Link to={`/instructor/requests/${req.projectId}`}
+                          <Link to={`/instructor/requests/${encodeURIComponent(req.projectId)}?review=${encodeURIComponent(req.id)}`}
                             className="text-xs font-black text-(--brand) hover:underline">{t.review}</Link>
                         </td>
                       </tr>
@@ -250,7 +261,7 @@ export default function ReviewRequests() {
                   title={projectTitle}
                   subtitle={req.studentName ? `${t.studentName || (language === 'vi' ? 'Sinh viên' : 'Student')}: ${req.studentName}` : undefined}
                   status={req.status}
-                  onClick={() => { window.location.href = `/instructor/requests/${req.projectId}`; }}
+                  onClick={() => { window.location.href = `/instructor/requests/${encodeURIComponent(req.projectId)}?review=${encodeURIComponent(req.id)}`; }}
                 >
                   <div className="flex flex-wrap gap-1.5 text-[10px] font-mono text-(--text-tertiary)">
                     <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">

@@ -24,6 +24,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.UUID;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -91,6 +93,13 @@ class FeedbackPublicationMySqlTest {
                 INSERT INTO feedback_requests (id, project_id, student_id, instructor_id, status, requested_at, flagged)
                 VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), UUID_TO_BIN(?), UUID_TO_BIN(?), 'PENDING', NOW(6), FALSE)
                 """, requestId.toString(), projectId.toString(), actorId.toString(), actorId.toString());
+        String snapshot = new ObjectMapper().writeValueAsString(Map.of(
+                "schemaVersion", 1, "projectId", projectId, "papers", List.of(Map.of(
+                        "id", paperId, "title", "Paper", "sections", List.of(Map.of(
+                                "id", sectionId, "title", "Introduction", "order", 0,
+                                "contentTex", "Evidence sentence.", "contentVersion", 1))))));
+        jdbc.update("UPDATE feedback_requests SET submission_snapshot_json = ? WHERE id = UUID_TO_BIN(?)",
+                snapshot, requestId.toString());
 
         User actor = new User();
         actor.setId(actorId);

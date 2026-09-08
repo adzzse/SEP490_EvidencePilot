@@ -58,8 +58,8 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
               const isAssigned = assignedSections.some(s => String(s.id) === String(sec.id));
               const isSelected = String(sec.id) === String(selectedSectionId);
               return (
-                <div key={sec.id} onClick={() => onSelectSection(sec)} className={`flex items-center justify-between text-xs font-medium p-2 rounded-md cursor-pointer transition-all mt-1 group ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 border border-indigo-100 dark:border-indigo-800 shadow-sm' : isAssigned ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-(--text-primary)' : 'text-(--text-secondary) hover:bg-(--surface-tertiary)'}`}>
-                  <div className="flex items-center gap-2 truncate">
+                <div key={sec.id} className={`flex items-center justify-between text-xs font-medium p-2 rounded-md transition-all mt-1 group ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 border border-indigo-100 dark:border-indigo-800 shadow-sm' : isAssigned ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-(--text-primary)' : 'text-(--text-secondary) hover:bg-(--surface-tertiary)'}`}>
+                  <button type="button" aria-label={sec.sectionTitle || t('untitled')} aria-pressed={isSelected} onClick={() => onSelectSection(sec)} className="flex flex-1 items-center gap-2 truncate text-left cursor-pointer">
                     {isAssigned ? (
                       <svg className="w-3.5 h-3.5 shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                     ) : (
@@ -67,7 +67,7 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
                     )}
                     <span className="truncate max-w-[120px]" title={sec.sectionTitle}>{sec.sectionTitle || t('untitled')}</span>
                     <span className="text-[9px] text-(--text-tertiary) font-mono">#{(sec.sectionOrder ?? 0) + 1}</span>
-                  </div>
+                  </button>
                   {isAssigned && (
                     <span
                       title={t(sec.handoffConfirmedById ? 'handoffStateConfirmed' : 'handoffStateUnconfirmed')}
@@ -109,9 +109,9 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
                   <svg className="w-3.5 h-3.5 shrink-0 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                   <span className="truncate" title={m.texFilename}>{m.texFilename}</span>
                 </div>
-                <DeleteConfirm message={t('deleteMediaConfirm')} onConfirm={() => onDeleteMedia(m.id)} triggerLabel={t('deleteMedia')} confirmLabel={t('delete')} cancelLabel={t('cancel')} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-600 transition-all p-0.5">
+                {onDeleteMedia && <DeleteConfirm message={t('deleteMediaConfirm')} onConfirm={() => onDeleteMedia(m.id)} triggerLabel={t('deleteMedia')} confirmLabel={t('delete')} cancelLabel={t('cancel')} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-600 transition-all p-0.5">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                </DeleteConfirm>
+                </DeleteConfirm>}
               </div>
             ))
           )}

@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 
-export default function WorkspaceHeader({ project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onOpenNotification, historyDisabled, handleRunAiReview, loadingAiReview, canRunAiReview, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv }) {
+export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onOpenNotification, historyDisabled, handleRunAiReview, loadingAiReview, canRunAiReview, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv }) {
   const { user } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
@@ -31,7 +31,7 @@ export default function WorkspaceHeader({ project, notifications, unreadCount, s
   return (
     <header className="h-14 border-b border-(--border) bg-(--header-bg) backdrop-blur-md flex items-center px-2 sm:px-4 shrink-0 shadow-sm relative z-50">
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        <Link to="/student/projects" data-tour="header-back" className={iconButton} aria-label={t('back')}>
+        <Link to={workspaceMode === 'review' ? '/instructor/requests' : '/student/projects'} data-tour="header-back" className={iconButton} aria-label={t('back')}>
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
         </Link>
         <div data-tour="header-logo" className="w-7 h-7 bg-(--brand) text-(--on-brand) rounded-lg text-xs flex items-center justify-center font-bold shadow-sm shrink-0">EP</div>
@@ -66,9 +66,9 @@ export default function WorkspaceHeader({ project, notifications, unreadCount, s
         </div>
 
         <div className="hidden sm:flex items-center gap-0.5 lg:gap-1">
-          <button data-tour="header-history" onClick={onShowHistory} disabled={historyDisabled} className={iconButton} title={t('versionHistory')} aria-label={t('versionHistory')}>
+          {workspaceMode !== 'review' && <button data-tour="header-history" onClick={onShowHistory} disabled={historyDisabled} className={iconButton} title={t('versionHistory')} aria-label={t('versionHistory')}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          </button>
+          </button>}
           <button data-tour="header-dark-mode" onClick={toggleTheme} className={iconButton} title={theme === 'light' ? t('darkMode') : t('lightMode')} aria-label={theme === 'light' ? t('darkMode') : t('lightMode')}>
             {theme === 'light' ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>}
           </button>
@@ -76,12 +76,12 @@ export default function WorkspaceHeader({ project, notifications, unreadCount, s
             <button onClick={() => language !== 'en' && toggleLanguage()} className={`px-2 py-1 rounded-md transition ${language === 'en' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>EN</button>
             <button onClick={() => language !== 'vi' && toggleLanguage()} className={`px-2 py-1 rounded-md transition ${language === 'vi' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>VN</button>
           </div>
-          <span data-tour="header-ai-review" className="inline-flex" title={citationReviewTitle}>
+          {workspaceMode !== 'review' && <span data-tour="header-ai-review" className="inline-flex" title={citationReviewTitle}>
             <button onClick={handleRunAiReview} disabled={!canRunAiReview || loadingAiReview} className="bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-50 text-(--on-brand) p-2 lg:px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors" aria-label={t('aiReview')}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
               <span className="hidden lg:inline">{loadingAiReview ? t('loading') : t('aiReview')}</span>
             </button>
-          </span>
+          </span>}
           <div className="relative">
             <button data-tour="header-export" onClick={() => { if (canExport) setShowExportMenu(!showExportMenu); }} disabled={!canExport} className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 lg:px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed" title={canExport ? t('export') : t('exportLocked')}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
@@ -101,7 +101,7 @@ export default function WorkspaceHeader({ project, notifications, unreadCount, s
           </button>
           {showMoreMenu && (
             <div className="absolute right-0 top-full mt-2 w-[min(18rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] overflow-hidden">
-              <button onClick={() => runMobileAction(onShowHistory)} disabled={historyDisabled} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{t('versionHistory')}</button>
+              {workspaceMode !== 'review' && <button onClick={() => runMobileAction(onShowHistory)} disabled={historyDisabled} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{t('versionHistory')}</button>}
               <button onClick={() => runMobileAction(toggleTheme)} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{theme === 'light' ? t('darkMode') : t('lightMode')}</button>
               <div className="px-4 py-3 flex items-center justify-between">
                 <span className="text-xs font-semibold text-(--text-primary)">{t('language')}</span>
@@ -110,7 +110,7 @@ export default function WorkspaceHeader({ project, notifications, unreadCount, s
                   <button onClick={() => { if (language !== 'vi') toggleLanguage(); setShowMoreMenu(false); }} className={`px-2.5 py-1 rounded-md transition ${language === 'vi' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>VN</button>
                 </div>
               </div>
-              <button onClick={() => runMobileAction(handleRunAiReview)} disabled={!canRunAiReview || loadingAiReview} className="w-full text-left px-4 py-3 text-xs font-bold text-(--brand) hover:bg-(--brand-soft) disabled:opacity-40">{loadingAiReview ? t('loading') : t('aiReview')}</button>
+              {workspaceMode !== 'review' && <button onClick={() => runMobileAction(handleRunAiReview)} disabled={!canRunAiReview || loadingAiReview} className="w-full text-left px-4 py-3 text-xs font-bold text-(--brand) hover:bg-(--brand-soft) disabled:opacity-40">{loadingAiReview ? t('loading') : t('aiReview')}</button>}
               {canExport && <div className="border-t border-(--border)"><p className="px-4 pt-3 text-[10px] font-bold uppercase tracking-wider text-emerald-700">{t('export')}</p>{exportMenu}</div>}
             </div>
           )}

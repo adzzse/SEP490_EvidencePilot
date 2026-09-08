@@ -122,6 +122,7 @@ export default function ContextPanel({
   selectedPaper, selectedSection, isAssignedSection, isSectionDirty, onHandoffChanged, pollAiJob,
   // Review tab
   feedbacks, feedbackLoading, feedbackError, onRetryFeedback, onViewFeedback, setShowSubmitReviewModal, userProjectRole,
+  reviewContent, requirementsContent,
   isLocked,
 }) {
   const [showSourceModal, setShowSourceModal] = useState(false);
@@ -209,7 +210,7 @@ export default function ContextPanel({
   if (!isOpen) return null;
 
   const activeClass = (tab) =>
-    `flex-1 py-3 text-xs font-bold uppercase tracking-wider flex flex-col justify-center items-center gap-1 transition-all relative ${activeTab === tab ? 'text-(--brand)' : 'text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary)'}`;
+    `flex-1 py-3 text-xs font-bold uppercase tracking-wider flex flex-col justify-center items-center gap-1 transition-all relative ${activeTab === tab ? 'text-(--brand-foreground)' : 'text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary)'}`;
 
   return (
     <>
@@ -241,10 +242,10 @@ export default function ContextPanel({
                 className="w-full min-h-10 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm font-semibold text-(--text-primary) hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand) cursor-pointer">
                 {t('sourceMap.title')}
               </button>
-              <button onClick={() => { setDoiErrors([]); setShowSourceModal(true); }} disabled={isLocked} className="w-full flex items-center justify-center gap-2 bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-40 text-(--on-brand) font-bold text-sm py-3 px-4 rounded-xl shadow-md transition-colors">
+              {!reviewContent && <button onClick={() => { setDoiErrors([]); setShowSourceModal(true); }} disabled={isLocked} className="w-full flex items-center justify-center gap-2 bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-40 text-(--on-brand) font-bold text-sm py-3 px-4 rounded-xl shadow-md transition-colors">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
                 {t('insertSource')}
-              </button>
+              </button>}
 
               {showSourceModal && (
                 <div className="bg-(--surface) border border-(--border) rounded-xl p-4 shadow-lg space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
@@ -328,7 +329,7 @@ export default function ContextPanel({
                           ) : (
                             <p className="text-xs text-(--text-secondary) mt-1.5 line-clamp-2 leading-relaxed">{t('uploadedSourceDescription')}</p>
                           )}
-                          {src.processingStatus === 'METADATA_FETCHED' && (
+                          {!reviewContent && src.processingStatus === 'METADATA_FETCHED' && (
                             <div className="mt-3">
                               <input
                                 id={`attach-pdf-${src.id}`}
@@ -363,7 +364,7 @@ export default function ContextPanel({
             </div>
           )}
 
-          {activeTab === 'Requirements' && (
+          {activeTab === 'Requirements' && (requirementsContent ||
             <SectionRequirementsPanel
               project={project}
               selectedPaper={selectedPaper}
@@ -377,7 +378,7 @@ export default function ContextPanel({
             />
           )}
 
-          {activeTab === 'Review' && (
+          {activeTab === 'Review' && (reviewContent ||
             <div className="flex flex-col gap-4 animate-in fade-in duration-200">
               <div className="flex justify-between items-center mb-1 bg-(--surface) border border-(--border) rounded-xl p-3.5 shadow-sm">
                 <div>

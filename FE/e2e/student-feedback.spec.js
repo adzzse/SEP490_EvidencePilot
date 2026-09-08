@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { remapAnchor } from '../src/utils/student/feedbackAnchors.js';
 
-test.use({ channel: 'chrome', viewport: { width: 1440, height: 1000 } });
+test.use({ channel: 'chrome', viewport: { width: 1440, height: 1000 }, timezoneId: 'Asia/Bangkok' });
 const root = 'http://localhost:5173/student/projects/feedback-project';
 const fingerprint = text => createHash('sha256').update(text).digest('hex');
 const originalText = `Opening paragraph. ${'This sentence provides background for the study. '.repeat(6)}The evidence target needs clarification.\n\n${Array.from({ length: 32 }, (_, i) => `Paragraph ${i + 1}. Context and source details for this project.`).join('\n\n')}`;
@@ -13,14 +13,14 @@ const anchor = (text, from, to) => ({ original: { representation: 'latex-source-
 current: { status: 'ATTACHED', contentVersion: 1, fingerprint: fingerprint(text), from, to } });
 
 async function setup(page, options = {}) {
-  const state = { failLoad: options.failLoad || 0, failReply: false, failSave: false, saveDelay: 0, saves: [], replies: [], errors: [],
+  const state = { failLoad: options.failLoad || 0, failSave: false, saveDelay: 0, saves: [], replies: [], errors: [],
     sections: [
       { id: 'section-one', sectionTitle: 'Introduction', sectionOrder: 0, contentTex: originalText, version: 1, revision: 0, active: true, assignedUserId: 'member' },
       { id: 'section-two', sectionTitle: 'Methods', sectionOrder: 1, contentTex: 'Methods description', version: 1, revision: 0, active: true, assignedUserId: 'someone-else' },
     ],
     items: Array.from({ length: 5 }, (_, i) => ({ id: `feedback-${i}`, requestId: 'round-one', sectionId: 'section-one', paperId: 'paper-one',
       sectionTitle: 'Introduction', content: `Feedback ${i + 1}: clarify the evidence and explain the source.`, instructorName: 'Test Instructor',
-      createdAt: '2026-09-06T10:00:00', answered: false, canAnswer: true, sectionVersion: 1, anchor: anchor(originalText, start, end) })) };
+      assignedUserId: 'member', assignedUserName: 'Test Member', createdAt: '2026-09-06T10:00:00', answered: false, canAnswer: false, sectionVersion: 1, anchor: anchor(originalText, start, end) })) };
   state.items.push({ id: 'other-section', requestId: 'round-one', sectionId: 'section-two', paperId: 'paper-one', sectionTitle: 'Methods',
     content: 'Clarify the method.', answered: true, canAnswer: false, answerContent: 'Previous response', anchor: anchor('Methods description', 0, 7) });
   state.items.push({ id: 'legacy', requestId: 'round-old', sectionId: 'section-one', paperId: 'paper-one', sectionTitle: 'Introduction',
@@ -38,7 +38,7 @@ async function setup(page, options = {}) {
     const path = url.pathname;
     const method = route.request().method();
     let json = [];
-    const project = { id: 'feedback-project', title: 'Synthetic feedback validation', status: 'RETURNED', currentUserRole: 'MEMBER' };
+    const project = { id: 'feedback-project', title: 'Synthetic feedback validation', status: 'RETURNED', currentUserRole: options.leader ? 'LEADER' : 'MEMBER' };
     if (path === '/api/users/profile') json = { id: 'member', role: 'STUDENT', firstName: 'Test', lastName: 'Member' };
     else if (path === '/api/projects') json = { content: [project] };
     else if (path === '/api/projects/feedback-project') json = project;
@@ -76,12 +76,8 @@ async function setup(page, options = {}) {
         anchor: { ...remapAnchor(item.anchor, body.content, body.changes), current: {
           ...remapAnchor(item.anchor, body.content, body.changes).current, contentVersion: previous.version + 1, fingerprint: fingerprint(body.content) } } }));
       json = state.sections[0];
-    } else if (/\/instructor-feedback\/[^/]+\/answer$/.test(path)) {
-      const body = route.request().postDataJSON(); state.replies.push(body);
-      if (state.failReply) return route.fulfill({ status: 503, json: { message: 'Fixture reply failure' } });
-      const item = state.items.find(entry => entry.id === path.split('/').at(-2));
-      Object.assign(item, { answerContent: body.content, answered: true, canAnswer: false, answeredAt: '2026-09-06T11:00:00' }); json = item;
     }
+
     return route.fulfill({ json });
   });
   await page.goto(root);
@@ -103,7 +99,6 @@ test('a new feedback notification refreshes its thread and preserves drafts when
     requestId: 'round-old', content: 'Newly published Methods feedback.', answered: false, threadState: 'OPEN' });
   await page.locator('[data-tour="editor-feedback"]').click();
   await page.getByRole('combobox', { name: 'Go to feedback', exact: true }).selectOption('feedback-0');
-  await page.locator('[data-feedback-card="feedback-0"] textarea').fill('Keep my unsent reply');
   await page.locator('.cm-content').click();
   await page.keyboard.press('Control+Home');
   await page.keyboard.insertText('Unsaved source ');
@@ -112,7 +107,6 @@ test('a new feedback notification refreshes its thread and preserves drafts when
   await page.getByRole('button', { name: 'Open fresh feedback' }).click();
   await expect.poll(() => feedbackLoads).toBeGreaterThan(initialLoads);
   await expect(page.locator('.cm-content')).toContainText('Unsaved source ');
-  await expect(page.locator('[data-feedback-card="feedback-0"] textarea')).toHaveValue('Keep my unsent reply');
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Open fresh feedback' }).click();
   await expect(page.locator('[data-feedback-card="fresh-feedback"]')).toBeVisible();
@@ -129,17 +123,15 @@ async function openFeedback(page) {
   await expect(page.locator('.cm-feedback-active').first()).toBeVisible();
 }
 
-test('real workspace: range mapping, Save, reload, one reply with retry, and preserved drafts', async ({ page }) => {
+test('shared workspace: range mapping, Save and reload without replies', async ({ page }) => {
   const state = await setup(page);
   await expect.poll(() => page.evaluate(() => localStorage.getItem('student_workspace_active_tab'))).toBe('Review');
   await openFeedback(page);
   const editor = page.locator('.cm-content');
   await page.evaluate(() => { window.originalEditorNode = document.querySelector('.cm-editor'); });
-  const reply = page.getByRole('textbox', { name: 'Answer', exact: true });
-  await reply.fill('Draft response\nSecond line');
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
-  await page.locator('[data-tour="editor-feedback"]').click();
-  await expect(reply).toHaveValue('Draft response\nSecond line');
+  await expect(page.getByRole('region', { name: 'Project workspace', exact: true })).toBeVisible();
+  await expect(page.locator('#student-feedback-panel textarea')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Return for Revision', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => window.originalEditorNode === document.querySelector('.cm-editor'))).toBe(true);
   await editor.click(); await page.keyboard.press('Control+Home'); await page.keyboard.insertText('Prefix\n');
   await page.getByRole('button', { name: 'Go to passage', exact: true }).click();
@@ -153,19 +145,11 @@ test('real workspace: range mapping, Save, reload, one reply with retry, and pre
   await expect(editor).toContainText('Prefix');
   await openFeedback(page);
   await expect(page.locator('.cm-feedback-active')).toContainText('eXvidence target');
-  state.failReply = true;
-  await reply.fill('Changed explanation.\nPlease review.');
-  await page.locator('[data-feedback-card="feedback-0"] button[type="submit"]').click();
-  await expect(page.locator('[data-feedback-card="feedback-0"] [role="alert"]')).toBeVisible();
-  await expect(reply).toHaveValue('Changed explanation.\nPlease review.');
-  state.failReply = false;
-  await page.locator('[data-feedback-card="feedback-0"] button[type="submit"]').click();
-  await expect(page.locator('[data-feedback-card="feedback-0"]')).toContainText('Changed explanation.');
-  await expect(reply).toHaveCount(0);
-  expect(state.replies).toHaveLength(2);
+  await expect(page.locator('#student-feedback-panel textarea')).toHaveCount(0);
+  expect(state.replies).toHaveLength(0);
   expect(state.saves).toHaveLength(1);
   expect(state.errors).toEqual([]);
-  await page.screenshot({ path: '../../artifacts/codex/student-feedback-plan/feedback-desktop.png' });
+  await page.screenshot({ path: '../../artifacts/codex/mentor-feedback-plan-2026-09-08/verification/feedback-desktop.png' });
 });
 
 test('five overlapping comments, geometry, deletion/undo, font/theme and three panes', async ({ page }) => {
@@ -173,14 +157,14 @@ test('five overlapping comments, geometry, deletion/undo, font/theme and three p
   await openFeedback(page);
   for (let i = 0; i < 5; i++) {
     await page.getByRole('combobox', { name: 'Go to feedback', exact: true }).selectOption(`feedback-${i}`);
-    await expect(page.locator(`[data-feedback-card="feedback-${i}"] textarea`)).toBeVisible();
+    await expect(page.locator(`[data-feedback-card="feedback-${i}"]`)).toBeVisible();
   }
   await page.locator('.cm-feedback-active').first().click();
   const overlaps = page.locator('[aria-label="Feedback on this passage"]');
   await expect(overlaps.getByRole('button')).toHaveCount(5);
   await overlaps.getByRole('button', { name: '5', exact: true }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.locator('[data-feedback-card="feedback-4"] textarea')).toBeVisible();
+  await expect(page.locator('[data-feedback-card="feedback-4"]')).toBeVisible();
   const connectorError = async () => {
     const y = await page.locator('[data-feedback-card="feedback-4"] svg path').evaluate(path => {
       const point = path.getPointAtLength(0);
@@ -207,7 +191,7 @@ test('five overlapping comments, geometry, deletion/undo, font/theme and three p
   await page.getByRole('checkbox', { name: 'Keep Preview open' }).check();
   await expect(page.locator('#student-feedback-panel')).toBeVisible();
   await expect(page.getByText('Preview', { exact: true }).last()).toBeVisible();
-  await page.screenshot({ path: '../../artifacts/codex/student-feedback-plan/feedback-three-panes.png' });
+  await page.screenshot({ path: '../../artifacts/codex/mentor-feedback-plan-2026-09-08/verification/feedback-three-panes.png' });
   expect(state.errors).toEqual([]);
 });
 
@@ -229,6 +213,7 @@ test('load failure/retry and cross-section navigation respect unsaved changes', 
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('combobox', { name: 'Go to feedback', exact: true }).selectOption('other-section');
   await expect(page.locator('[data-tour="editor-section-name"]')).toHaveText('Methods');
+  await page.locator('[data-feedback-card="other-section"] details summary').last().click();
   await expect(page.locator('[data-feedback-card="other-section"]')).toContainText('Previous response');
   await expect(page.locator('#student-feedback-panel textarea')).toHaveCount(0);
   state.failLoad = 403; await page.getByRole('button', { name: 'Refresh feedback' }).click();
@@ -274,7 +259,7 @@ test('Save conflict keeps changes, and edits typed while saving form the next va
   expect(state.errors).toEqual([]);
 });
 
-test('small screens retain editing and replying without horizontal overflow', async ({ page }) => {
+test('small screens retain editing and feedback without horizontal overflow', async ({ page }) => {
   const state = await setup(page);
   await page.locator('[data-tour="sidebar-left"] button').nth(1).click();
   await page.locator('[data-tour="sidebar-left"] button').first().click();
@@ -289,8 +274,20 @@ test('small screens retain editing and replying without horizontal overflow', as
     expect(metrics.scroll).toBeLessThanOrEqual(metrics.width + 1);
     const editorHeight = await page.locator('.cm-scroller').evaluate(el => el.clientHeight);
     expect(editorHeight).toBeGreaterThan(100);
-    await page.screenshot({ path: `../../artifacts/codex/student-feedback-plan/feedback-width-${width}.png` });
+    await page.screenshot({ path: `../../artifacts/codex/review-ui-rework-01a080e9/student-width-${width}.png` });
   }
+  await page.locator('.cm-content').click();
+  await page.keyboard.press('Control+Home');
+  await page.keyboard.insertText('Unsaved preview check. ');
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await expect(page.locator('#editor-preview-container').getByRole('heading', { name: 'Introduction', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'LaTeX', exact: true }).click();
+  await expect(page.locator('.cm-content')).toContainText('Unsaved preview check.');
+  await page.getByRole('button', { name: 'View full paper', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'View full paper', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.cm-content')).toContainText('Unsaved preview check.');
+  expect(state.saves).toHaveLength(0);
   expect(state.errors).toEqual([]);
 });
 
@@ -322,7 +319,7 @@ test('notification and direct review links open the round; rollback keeps a vali
   expect(state.errors).toEqual([]);
 });
 
-test('Vietnamese dark mode and keyboard reply retain independent Citation Review highlights and popover', async ({ page }) => {
+test('Vietnamese dark mode and keyboard feedback retain independent Citation Review highlights and popover', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const state = await setup(page, { review: true });
   await openFeedback(page);
@@ -333,15 +330,12 @@ test('Vietnamese dark mode and keyboard reply retain independent Citation Review
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'VN', exact: true }).click();
   await page.locator('[data-tour="header-dark-mode"]').click();
-  const reply = page.getByRole('textbox', { name: 'Trả lời', exact: true });
-  await reply.fill('Đã bổ sung dẫn chứng.\nTiếng Việt 😀');
-  await page.keyboard.press('Tab');
-  await expect(page.locator('[data-feedback-card="feedback-0"] button[type="submit"]')).toBeFocused();
+  await expect(page.locator('#student-feedback-panel textarea')).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 850 });
-  await expect(reply).toHaveValue('Đã bổ sung dẫn chứng.\nTiếng Việt 😀');
-  await reply.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: '../../artifacts/codex/student-feedback-plan/feedback-mobile-vi-dark.png' });
-  await reply.focus(); await page.keyboard.press('Escape');
+  const card = page.locator('[data-feedback-card="feedback-0"]');
+  await card.getByRole('button').first().focus();
+  await page.screenshot({ path: '../../artifacts/codex/mentor-feedback-plan-2026-09-08/verification/student-mobile-vi-dark.png' });
+  await page.keyboard.press('Escape');
   await expect(page.locator('#student-feedback-panel')).toBeHidden();
   await expect(page.locator('[data-tour="editor-feedback"]')).toBeFocused();
   expect(state.errors).toEqual([]);
@@ -369,7 +363,7 @@ A & 1 \\
   await expect.poll(() => page.locator('.cm-feedback-active').count()).toBeGreaterThan(1);
   await expect(page.locator('.cm-cite-pill')).toBeVisible();
   await page.getByText('View original passage', { exact: true }).click();
-  await expect(page.locator('[data-feedback-card="feedback-0"] details')).toContainText(source.slice(0, to));
+  await expect(page.locator('[data-feedback-card="feedback-0"] details').first()).toContainText(source.slice(0, to));
   await page.getByRole('button', { name: 'Go to passage', exact: true }).click();
   await page.keyboard.press('Backspace');
   await expect(page.locator('[data-feedback-card="feedback-0"]')).toContainText('Location needs review');
@@ -381,5 +375,47 @@ A & 1 \\
   await expect.poll(() => page.locator('.cm-feedback-active').count()).toBeGreaterThan(1);
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   await expect(page.locator('.preview-content table')).toContainText('Giá trị');
+  expect(state.errors).toEqual([]);
+});
+
+test('leader always sees assignments and confirmation receipts, including READY and unchanged conflicts', async ({ page }) => {
+  const state = await setup(page, { leader: true });
+  let loads = 0;
+  let submissions = 0;
+  let revision = 'CHANGED';
+  await page.route('**/api/projects/feedback-project/review-readiness', route => {
+    loads++;
+    return route.fulfill({ json: {
+      state: revision === 'CHANGED' ? 'READY' : 'NOT_READY', canSubmit: true, submissionFingerprint: 'fixture-fingerprint',
+      revision: { baselineRequestId: 'round-one', state: revision },
+      checks: [{ code: 'REVISION_CHANGED', status: revision === 'CHANGED' ? 'SATISFIED' : 'UNSATISFIED' }],
+      papers: [{ id: 'paper-one', title: 'Paper', sections: [
+        { id: 'section-one', title: 'Introduction', assignedUserName: 'Test Leader', confirmedByName: 'Test Leader', confirmedAt: '2026-09-08T10:00:00', handoffState: 'CONFIRMED', blockers: [] },
+        { id: 'section-two', title: 'Methods', assignedUserName: 'Test Member', confirmedByName: 'Test Member', confirmedAt: '2026-09-08T10:05:00', handoffState: 'CONFIRMED', blockers: [] },
+      ] }],
+    } });
+  });
+  await page.route('**/api/projects/feedback-project/reviews', route => {
+    submissions++;
+    expect(route.request().postDataJSON()).toEqual({ expectedSubmissionFingerprint: 'fixture-fingerprint' });
+    revision = 'UNCHANGED';
+    return route.fulfill({ status: 409, json: { fieldErrors: { code: 'REVISION_UNCHANGED' } } });
+  });
+  await page.getByRole('button', { name: 'Submit for Review', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('Ready to submit for review');
+  await expect(dialog).toContainText('Assigned to: Test Member');
+  await expect(dialog).toContainText('Confirmed by: Test Leader');
+  await expect(dialog).toContainText('17:00 08-09-2026');
+  await expect(dialog).toContainText('17:05 08-09-2026');
+  await expect(dialog).toContainText('Methods');
+  await dialog.screenshot({ path: '../../artifacts/codex/mentor-feedback-plan-2026-09-08/verification/leader-readiness-ready.png' });
+  await dialog.getByRole('button', { name: 'Submit for Review', exact: true }).click();
+  await expect(dialog.getByRole('alert').first()).toContainText('unchanged');
+  await expect(dialog.getByRole('button', { name: 'Submit for Review', exact: true })).toBeDisabled();
+  await expect(dialog).not.toContainText('Only the project leader');
+  await expect(dialog).toContainText('Confirmed by: Test Member');
+  expect(loads).toBe(2);
+  expect(submissions).toBe(1);
   expect(state.errors).toEqual([]);
 });

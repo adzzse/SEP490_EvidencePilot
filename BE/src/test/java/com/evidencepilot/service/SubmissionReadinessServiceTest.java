@@ -2,6 +2,8 @@ package com.evidencepilot.service;
 
 import com.evidencepilot.exception.SubmissionReadinessException;
 import com.evidencepilot.model.Document;
+import com.evidencepilot.model.FeedbackRequest;
+import com.evidencepilot.model.FeedbackStatus;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
@@ -64,6 +66,7 @@ class SubmissionReadinessServiceTest {
 
         assertThat(ready.state()).isEqualTo("READY");
         assertThat(ready.canSubmit()).isTrue();
+        assertThat(ready.revision().state()).isEqualTo("FIRST_SUBMISSION");
         assertThat(ready.submissionFingerprint()).matches("[0-9a-f]{64}");
         assertThat(ready.checks()).allSatisfy(check ->
                 assertThat(check.status()).isEqualTo("SATISFIED"));
@@ -80,6 +83,163 @@ class SubmissionReadinessServiceTest {
         assertThat(changed.papers().get(0).sections().get(0).handoffState()).isEqualTo("STALE");
         assertThat(changed.checks()).filteredOn(check -> check.code().equals("SECTION_CONFIRMED"))
                 .extracting(check -> check.status()).containsExactly("UNSATISFIED");
+    }
+
+    @Test
+    void returnedPaperCannotBeSubmittedWithoutAContentChange() {
+        Fixture f = fixture();
+        stubAssessment(f, "f".repeat(64));
+        FeedbackRequest returned = new FeedbackRequest();
+        returned.setId(UUID.randomUUID());
+        returned.setProject(f.project());
+        returned.setStatus(FeedbackStatus.RETURNED);
+        returned.setRequestedAt(LocalDateTime.of(2026, 9, 4, 12, 0));
+        returned.setSubmissionSnapshotJson(service.snapshot(
+                service.assess(f.project(), f.leader()), f.project(), f.leader(),
+                f.instructor(), returned.getRequestedAt()));
+        f.project().setStatus(ProjectStatus.RETURNED);
+        when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(f.project().getId()))
+                .thenReturn(List.of(returned));
+
+        var readiness = service.assess(f.project(), f.leader()).response();
+
+        assertThatThrownBy(() -> service.requireReadyForSubmit(
+                f.project(), f.leader(), readiness.submissionFingerprint()))
+                .isInstanceOfSatisfying(SubmissionReadinessException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("REVISION_UNCHANGED"));
+        assertThat(readiness.canSubmit()).isTrue();
+        assertThat(readiness.state()).isEqualTo("NOT_READY");
+    }
+
+    @Test
+    void administrativeChangesAndRecreatedIdsDoNotCountAsARevision() {
+        Fixture f = fixture();
+        FeedbackRequest returned = stubReturned(f);
+        f.section().setVersion(9);
+        f.section().setOptVersion(15L);
+        f.section().setHandoffContentVersion(9);
+        f.section().setHandoffConfirmedAt(LocalDateTime.of(2026, 9, 5, 12, 0));
+        f.paper().setId(UUID.randomUUID());
+        f.section().setId(UUID.randomUUID());
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(f.paper().getId()))
+                .thenReturn(List.of(f.section()));
+
+        var response = service.assess(f.project(), f.leader()).response();
+
+        assertThat(response.revision().state()).isEqualTo("UNCHANGED");
+        assertThat(response.revision().baselineRequestId()).isEqualTo(returned.getId());
+        assertThat(response.papers().get(0).sections().get(0).handoffState()).isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    void changedTextCanBeResubmittedButLineEndingsAndRevertedEditsCannot() {
+        Fixture f = fixture();
+        f.section().setContentTex("First line\nSecond line");
+        stubReturned(f);
+        f.section().setContentTex("First line\r\nSecond line");
+        assertThat(service.assess(f.project(), f.leader()).response().revision().state())
+                .isEqualTo("UNCHANGED");
+
+        f.section().setContentTex("Revised explanation");
+        var changed = service.assess(f.project(), f.leader()).response();
+        assertThat(changed.revision().state()).isEqualTo("CHANGED");
+        assertThat(service.requireReadyForSubmit(f.project(), f.leader(), changed.submissionFingerprint())
+                .response().state()).isEqualTo("READY");
+
+        f.section().setContentTex("First line\nSecond line");
+        assertThatThrownBy(() -> service.requireReadyForSubmit(
+                f.project(), f.leader(), changed.submissionFingerprint()))
+                .isInstanceOfSatisfying(SubmissionReadinessException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("REVISION_UNCHANGED"));
+    }
+
+    @Test
+    void titleChangesCountButDoNotBypassHandoffOrFingerprintChecks() {
+        Fixture f = fixture();
+        stubReturned(f);
+        f.paper().setTitle("Revised paper title");
+        var changed = service.assess(f.project(), f.leader()).response();
+        assertThat(changed.revision().state()).isEqualTo("CHANGED");
+        assertThatThrownBy(() -> service.requireReadyForSubmit(f.project(), f.leader(), "stale"))
+                .isInstanceOfSatisfying(SubmissionReadinessException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("SUBMISSION_INPUT_CHANGED"));
+        f.paper().setTitle("Paper");
+        f.section().setSectionTitle("Revised section title");
+        f.section().setHandoffInputFingerprint("stale");
+        var notReady = service.assess(f.project(), f.leader()).response();
+        assertThat(notReady.revision().state()).isEqualTo("CHANGED");
+        assertThat(notReady.state()).isEqualTo("NOT_READY");
+        assertThatThrownBy(() -> service.requireReadyForSubmit(
+                f.project(), f.leader(), notReady.submissionFingerprint()))
+                .isInstanceOfSatisfying(SubmissionReadinessException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("REVIEW_NOT_READY"));
+    }
+
+    @Test
+    void invalidReturnedSnapshotsBlockSubmissionRatherThanUsingLiveContent() {
+        Fixture f = fixture();
+        FeedbackRequest returned = stubReturned(f);
+        String valid = returned.getSubmissionSnapshotJson();
+        for (String invalid : java.util.Arrays.asList(null, "", "[]", "{}", "{invalid",
+                valid.replace(f.project().getId().toString(), UUID.randomUUID().toString()),
+                valid.replace("\"contentTex\":\"Saved section text\",", ""),
+                valid.replace("\"order\":0", "\"order\":null"))) {
+            returned.setSubmissionSnapshotJson(invalid);
+            var response = service.assess(f.project(), f.leader()).response();
+            assertThat(response.revision().state()).as("snapshot %s", invalid).isEqualTo("UNVERIFIABLE");
+            assertThatThrownBy(() -> service.requireReadyForSubmit(
+                    f.project(), f.leader(), response.submissionFingerprint()))
+                    .isInstanceOfSatisfying(SubmissionReadinessException.class,
+                            error -> assertThat(error.getCode()).isEqualTo("REVISION_BASELINE_UNAVAILABLE"));
+        }
+        when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(f.project().getId()))
+                .thenReturn(List.of());
+        assertThat(service.assess(f.project(), f.leader()).response().revision().state())
+                .isEqualTo("UNVERIFIABLE");
+    }
+
+    @Test
+    void revisionBlockerDoesNotGrantSubmissionPermissionToMembers() {
+        Fixture f = fixture();
+        stubReturned(f);
+        f.project().getProjectMembers().get(1).setRole(ProjectRole.MEMBER);
+        var response = service.assess(f.project(), f.leader()).response();
+        assertThat(response.canSubmit()).isFalse();
+        assertThatThrownBy(() -> service.requireReadyForSubmit(
+                f.project(), f.leader(), response.submissionFingerprint()))
+                .isInstanceOfSatisfying(org.springframework.web.server.ResponseStatusException.class,
+                        error -> assertThat(error.getStatusCode().value()).isEqualTo(403));
+    }
+
+    @Test
+    void sectionOrderMultiplicityAndLatestReturnedBaselineAreCompared() {
+        Fixture f = fixture();
+        FeedbackRequest older = stubReturned(f);
+        PaperSection second = new PaperSection();
+        second.setId(UUID.randomUUID()); second.setDocument(f.paper()); second.setActive(true);
+        second.setSectionOrder(1); second.setSectionTitle("Methods"); second.setContentTex("Methods body");
+        second.setVersion(1); second.setAssignedUser(f.leader());
+        second.setHandoffConfirmedBy(f.leader()); second.setHandoffConfirmedAt(LocalDateTime.now());
+        second.setHandoffContentVersion(1); second.setHandoffInputFingerprint("s".repeat(64));
+        when(sectionStandardService.inputFingerprint(second)).thenReturn("s".repeat(64));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(f.paper().getId()))
+                .thenReturn(List.of(f.section(), second));
+        assertThat(service.assess(f.project(), f.leader()).response().revision().state()).isEqualTo("CHANGED");
+        FeedbackRequest latest = new FeedbackRequest();
+        latest.setId(UUID.randomUUID()); latest.setStatus(FeedbackStatus.RETURNED);
+        latest.setSubmissionSnapshotJson(service.snapshot(service.assess(f.project(), f.leader()),
+                f.project(), f.leader(), f.instructor(), LocalDateTime.now()));
+        when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(f.project().getId()))
+                .thenReturn(List.of(latest, older));
+        assertThat(service.assess(f.project(), f.leader()).response().revision().state()).isEqualTo("UNCHANGED");
+        f.section().setSectionOrder(2);
+        assertThat(service.assess(f.project(), f.leader()).response().revision().state()).isEqualTo("CHANGED");
+        f.section().setSectionOrder(0);
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(f.paper().getId()))
+                .thenReturn(List.of(f.section(), second, second));
+        assertThat(service.assess(f.project(), f.leader()).response().revision().state()).isEqualTo("CHANGED");
+        latest.setSubmissionSnapshotJson(null);
+        assertThat(service.assess(f.project(), f.leader()).response().revision().state()).isEqualTo("UNVERIFIABLE");
     }
 
     @Test
@@ -173,6 +333,22 @@ class SubmissionReadinessServiceTest {
                 .isEqualTo("Saved section text");
         assertThat(json.get("papers").get(0).get("sections").get(0).get("contentVersion").asInt())
                 .isEqualTo(3);
+    }
+
+    private FeedbackRequest stubReturned(Fixture f) {
+        stubAssessment(f, "f".repeat(64));
+        FeedbackRequest returned = new FeedbackRequest();
+        returned.setId(UUID.randomUUID());
+        returned.setProject(f.project());
+        returned.setStatus(FeedbackStatus.RETURNED);
+        returned.setRequestedAt(LocalDateTime.of(2026, 9, 4, 12, 0));
+        returned.setSubmissionSnapshotJson(service.snapshot(
+                service.assess(f.project(), f.leader()), f.project(), f.leader(),
+                f.instructor(), returned.getRequestedAt()));
+        f.project().setStatus(ProjectStatus.RETURNED);
+        when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(f.project().getId()))
+                .thenReturn(List.of(returned));
+        return returned;
     }
 
     private void stubAssessment(Fixture fixture, String fingerprint) {

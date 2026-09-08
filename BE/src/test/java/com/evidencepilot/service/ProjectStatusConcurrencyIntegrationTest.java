@@ -119,7 +119,7 @@ class ProjectStatusConcurrencyIntegrationTest {
     }
 
     @Test
-    void assignedMemberReadsAndAnswersAfterSubmitterLeavesButRemovedAccountsCannotRead() {
+    void assignedMemberReadsAfterSubmitterLeavesButRepliesRemainClosedAndRemovedAccountsCannotRead() {
         User instructor = saveUser(UserRole.INSTRUCTOR);
         User submitter = saveUser(UserRole.STUDENT);
         User member = saveUser(UserRole.STUDENT);
@@ -158,12 +158,12 @@ class ProjectStatusConcurrencyIntegrationTest {
         authenticate(member);
         assertThat(feedbackService.findAllForCurrentUser()).anyMatch(item -> item.id().equals(round.id()));
         assertThat(feedbackService.getSubmissionSnapshot(round.id())).isNotNull();
-        assertThat(feedbackService.getFeedbackItems(round.id()).getFirst().canAnswer()).isTrue();
-        assertThat(feedbackService.answerFeedback(feedback.id(), "Member answer\nSecond line").answerContent())
-                .isEqualTo("Member answer\nSecond line");
+        assertThat(feedbackService.getFeedbackItems(round.id()).getFirst().canAnswer()).isFalse();
+        assertThatThrownBy(() -> feedbackService.answerFeedback(feedback.id(), "Member answer\nSecond line"))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("409");
         authenticate(instructor);
         var stored = feedbackService.getFeedbackItems(round.id()).getFirst();
-        assertThat(stored.answerContent()).isEqualTo("Member answer\nSecond line");
+        assertThat(stored.answerContent()).isNull();
         assertThat(stored.anchor().original().exact()).isEqualTo("target");
         projectMembers.deleteAll(projectMembers.findByProjectIdAndUserId(project.getId(), member.getId()));
         authenticate(member);

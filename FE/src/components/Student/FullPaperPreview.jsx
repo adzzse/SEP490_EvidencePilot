@@ -1,18 +1,24 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import PreviewPane from '../features/PreviewPane';
 import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
 
-export default function FullPaperPreview({ sections, paperTitle, mediaAssets, onClose }) {
+export default function FullPaperPreview({ sections, paperTitle, mediaAssets, onClose, onAnnotateSection }) {
   const { t } = useTranslation();
+  const dialogRef = useRef(null);
   const sectionRefs = useRef({});
   const generatedReferences = [];
   const hasReferenceSection = sections.some(section =>
     isReferenceSectionTitle(section.sectionTitle));
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    dialog.showModal();
+    return () => dialog.close();
+  }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="flex w-full h-full max-w-[90vw] max-h-[90vh] m-auto bg-(--surface) rounded-2xl shadow-2xl border border-(--border) overflow-hidden">
+    <dialog ref={dialogRef} onCancel={onClose} aria-label={t('viewFullPaper')} className="fixed inset-0 m-auto h-[90vh] w-[90vw] max-h-none max-w-none rounded-2xl border-0 p-0 bg-transparent shadow-2xl backdrop:bg-slate-900/60 backdrop:backdrop-blur-sm">
+      <div className="flex w-full h-full bg-(--surface) rounded-2xl border border-(--border) overflow-hidden">
         {/* Left: Pages */}
         <div className="hidden md:flex w-56 bg-(--surface-secondary) border-r border-(--border) flex-col shrink-0">
           <div className="px-4 py-3 border-b border-(--border) flex items-center justify-between shrink-0">
@@ -49,7 +55,8 @@ export default function FullPaperPreview({ sections, paperTitle, mediaAssets, on
               {sections.map((sec, i) => {
                 const referenceSection = isReferenceSectionTitle(sec.sectionTitle);
                 return (
-                  <div key={sec.id} ref={el => { sectionRefs.current[sec.id] = el; }}>
+                  <div id={`paper-section-${sec.id}`} key={sec.id} ref={el => { sectionRefs.current[sec.id] = el; }}>
+                    {onAnnotateSection && <button type="button" onClick={() => onAnnotateSection(sec.id)} className="mb-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">{t('feedbackAnnotatePassage')} · {sec.sectionTitle}</button>}
                     <PreviewPane
                       sectionTitle={sec.sectionTitle}
                       latex={sec.contentTex || ''}
@@ -73,6 +80,6 @@ export default function FullPaperPreview({ sections, paperTitle, mediaAssets, on
           )}
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }

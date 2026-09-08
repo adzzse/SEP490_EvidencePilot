@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api.js';
 import Modal from '../ui/Modal.jsx';
+import { formatDateTime } from '../../utils/formatters/date.js';
 
 const CHECK_KEYS = {
+  REVISION_CHANGED: 'feedbackRevisionRequired',
   PROJECT_EDITABLE: 'reviewCheckProjectEditable',
   INSTRUCTOR_ASSIGNED: 'reviewCheckInstructorAssigned',
   PAPER_PRESENT: 'reviewCheckPaperPresent',
@@ -54,8 +56,9 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
       await onSubmitted?.(response.data);
     } catch (submitError) {
       const code = submitError?.response?.data?.fieldErrors?.code;
-      const message = code === 'SUBMISSION_INPUT_CHANGED'
-        ? t('submissionInputChanged')
+      const keys = { SUBMISSION_INPUT_CHANGED: 'submissionInputChanged', REVISION_UNCHANGED: 'feedbackRevisionUnchanged', REVISION_BASELINE_UNAVAILABLE: 'feedbackRevisionBaselineUnavailable' };
+      const message = keys[code]
+        ? t(keys[code])
         : submitError?.response?.data?.message || t('submitFailed');
       if (submitError?.response?.status === 409) await load();
       setError(message);
@@ -64,7 +67,6 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
     }
   };
 
-  const failedChecks = (readiness?.checks || []).filter(check => check.status !== 'SATISFIED');
   const canSubmit = readiness?.state === 'READY'
     && readiness?.canSubmit
     && dirtySectionIds.length === 0;
@@ -89,6 +91,9 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
               {!readiness.canSubmit && <p className="mt-1 text-xs">{t('leaderSubmissionOnly')}</p>}
             </div>
 
+            {readiness.revision && <p role={['UNCHANGED', 'UNVERIFIABLE'].includes(readiness.revision.state) ? 'alert' : 'status'} className="text-sm">
+              {t(`feedbackRevision.${readiness.revision.state}`)}
+            </p>}
             <section className="rounded-xl border border-(--border) bg-(--surface-secondary)/50 p-3">
               <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-(--text-secondary)">{t('submissionChecks')}</h3>
               <ul className="space-y-2">
@@ -101,7 +106,7 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
               </ul>
             </section>
 
-            {failedChecks.length > 0 && (
+            {(
               <section className="space-y-2">
                 {(readiness.papers || []).map(paper => (
                   <div key={paper.id} className="rounded-xl border border-(--border) bg-(--surface) p-3">
@@ -115,6 +120,8 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
                               {t(section.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : 'handoffStateUnconfirmed')}
                             </span>
                           </div>
+                          <p>{t('feedbackAssignee')}: {section.assignedUserName || t('feedbackUnassigned')}</p>
+                          <p>{t('feedbackConfirmedBy')}: {section.confirmedByName || '—'} · {formatDateTime(section.confirmedAt)}</p>
                           {(section.blockers || []).length > 0 && (
                             <ul className="mt-1 list-disc space-y-0.5 pl-4 text-rose-700 dark:text-rose-300">
                               {section.blockers.map(code => (

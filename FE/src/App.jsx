@@ -27,7 +27,6 @@ const NotFound = lazy(() => import('./pages/NotFound.jsx'));
 const CollectionList = lazy(() => import('./pages/Instructor/CollectionList.jsx'));
 const CollectionDetail = lazy(() => import('./pages/Instructor/CollectionDetail.jsx'));
 const ReviewRequests = lazy(() => import('./pages/Instructor/ReviewRequests.jsx'));
-const ReviewSpace = lazy(() => import('./pages/Instructor/ReviewSpace.jsx'));
 const InstructorDashboard = lazy(() => import('./pages/Instructor/Dashboard.jsx'));
 const ProjectManagement = lazy(() => import('./pages/Instructor/ProjectManagement.jsx'));
 const ProjectDetail = lazy(() => import('./pages/Instructor/ProjectDetail.jsx'));
@@ -90,7 +89,7 @@ function App() {
               <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><ReviewRequests /></ProtectedRoute>
             } />
             <Route path="/instructor/requests/:projectId" element={
-              <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><ErrorBoundary><ReviewSpace /></ErrorBoundary></ProtectedRoute>
+              <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><ErrorBoundary><WorkspaceLayout workspaceMode="review" /></ErrorBoundary></ProtectedRoute>
             } />
             <Route path="/instructor/collections" element={
               <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><CollectionList /></ProtectedRoute>

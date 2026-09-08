@@ -148,6 +148,9 @@ public class FeedbackServiceImpl implements FeedbackService {
         User currentUser = currentUserService.requireCurrentUser();
         FeedbackRequest feedbackRequest = requireFeedbackAccessForUpdate(feedbackRequestId, currentUser, true);
         requirePendingReview(feedbackRequest);
+        if (!hasSnapshot(feedbackRequest)) {
+            throw conflict("Feedback requires a verifiable submitted review snapshot.");
+        }
         PaperSection section = requireSectionInProject(request.sectionId(), feedbackRequest.getProject());
         Map<UUID, Integer> submittedVersions = submittedSectionVersions(feedbackRequest);
         if (hasSnapshot(feedbackRequest) && !submittedVersions.containsKey(section.getId())) {
@@ -223,14 +226,6 @@ public class FeedbackServiceImpl implements FeedbackService {
         if (!isStudentMember(currentUser, project)) {
             throw forbidden("Only a current project student can answer feedback.");
         }
-        requireIdempotencyKey(idempotencyKey);
-        var existing = feedbackReplyRepository.findByFeedbackIdAndIdempotencyKey(feedback.getId(), idempotencyKey);
-        if (existing.isPresent()) {
-            if (!sameUser(existing.get().getAuthor(), currentUser)) {
-                throw forbidden("Feedback reply idempotency key belongs to another user.");
-            }
-            return response(feedback, currentUser, repliesFor(feedback));
-        }
         if (!isPublished(feedback)) throw conflict("Feedback is not published yet.");
         if (Objects.requireNonNullElse(feedback.getThreadState(), FeedbackThreadState.OPEN) != FeedbackThreadState.OPEN) {
             throw conflict("Feedback is already done.");
@@ -240,27 +235,7 @@ public class FeedbackServiceImpl implements FeedbackService {
             throw forbidden("You are not assigned to this section.");
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        FeedbackReply reply = new FeedbackReply();
-        reply.setFeedback(feedback);
-        reply.setAuthor(currentUser);
-        reply.setAuthorRole(FeedbackReplyAuthorRole.STUDENT);
-        reply.setContent(answerContent);
-        reply.setCreatedAt(now);
-        reply.setPublishedAt(now);
-        reply.setPublishedRequest(feedback.getRequest());
-        reply.setIdempotencyKey(idempotencyKey);
-        feedbackReplyRepository.save(reply);
-        feedback.setUpdatedAt(now);
-        feedback.setUpdatedBy(currentUser);
-        List<FeedbackReply> replies = repliesFor(feedback);
-        if (replies.stream().noneMatch(item -> item == reply || Objects.equals(item.getId(), reply.getId()))) {
-            replies = new ArrayList<>(replies);
-            replies.add(reply);
-        }
-        syncLegacyAnswerProjection(feedback, replies);
-        instructorFeedbackRepository.save(feedback);
-        return response(feedback, currentUser, replies);
+        throw conflict("Feedback replies are closed. Revise the paper and submit a new review round.");
     }
 
     @Override
@@ -269,27 +244,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         User currentUser = currentUserService.requireCurrentUser();
         InstructorFeedback feedback = requireFeedbackForUpdate(feedbackItemId);
         requireInstructorThreadAccess(feedback, currentUser);
-        requireOpenThreadForNewInstructorReply(feedback);
-        requireIdempotencyKey(request.idempotencyKey());
-        var existing = feedbackReplyRepository.findByFeedbackIdAndIdempotencyKey(
-                feedback.getId(), request.idempotencyKey());
-        if (existing.isPresent()) {
-            if (!sameUser(existing.get().getAuthor(), currentUser)) {
-                throw forbidden("Feedback reply idempotency key belongs to another user.");
-            }
-            return response(feedback, currentUser, repliesFor(feedback));
-        }
-        FeedbackReply reply = new FeedbackReply();
-        reply.setFeedback(feedback);
-        reply.setAuthor(currentUser);
-        reply.setAuthorRole(replyRole(currentUser));
-        reply.setContent(request.content());
-        reply.setCreatedAt(LocalDateTime.now());
-        reply.setIdempotencyKey(request.idempotencyKey());
-        feedbackReplyRepository.save(reply);
-        List<FeedbackReply> replies = new ArrayList<>(repliesFor(feedback));
-        if (!replies.contains(reply)) replies.add(reply);
-        return response(feedback, currentUser, replies);
+        throw conflict("Feedback replies are closed. Revise the paper and submit a new review round.");
     }
 
     @Override
@@ -302,9 +257,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         FeedbackReply reply = feedbackReplyRepository.findByIdAndFeedbackIdForUpdate(feedbackItemId, replyId)
                 .orElseThrow(() -> notFound("Feedback reply", replyId));
         requireDraftReplyOwner(reply, currentUser);
-        reply.setContent(request.content());
-        feedbackReplyRepository.save(reply);
-        return response(feedback, currentUser, repliesFor(feedback));
+        throw conflict("Feedback replies are closed. Revise the paper and submit a new review round.");
     }
 
     @Override
@@ -365,6 +318,10 @@ public class FeedbackServiceImpl implements FeedbackService {
 
         List<InstructorFeedback> roots = instructorFeedbackRepository.findByRequestProjectIdForUpdate(project.getId());
         Map<UUID, List<FeedbackReply>> replies = repliesByFeedbackForUpdate(roots);
+        if (replies.values().stream().flatMap(Collection::stream)
+                .anyMatch(reply -> reply.getPublishedAt() == null && isInstructorReply(reply))) {
+            throw conflict("Resolve legacy reply drafts before returning. Copy them into round feedback or delete them.");
+        }
         requireFreshPendingStates(roots);
         LocalDateTime now = LocalDateTime.now();
         Set<UUID> feedbackWithNewInstructorContent = new LinkedHashSet<>();
@@ -375,18 +332,6 @@ public class FeedbackServiceImpl implements FeedbackService {
                 root.setUpdatedAt(now);
                 root.setUpdatedBy(currentUser);
                 feedbackWithNewInstructorContent.add(root.getId());
-            }
-        }
-        for (InstructorFeedback root : roots) {
-            for (FeedbackReply reply : replies.getOrDefault(root.getId(), List.of())) {
-                if (reply.getPublishedAt() == null && isInstructorReply(reply)) {
-                    reply.setPublishedAt(now);
-                    reply.setPublishedRequest(request);
-                    feedbackReplyRepository.save(reply);
-                    root.setUpdatedAt(now);
-                    root.setUpdatedBy(currentUser);
-                    feedbackWithNewInstructorContent.add(root.getId());
-                }
             }
         }
         applyPendingStates(roots, currentUser, now);
@@ -540,13 +485,6 @@ public class FeedbackServiceImpl implements FeedbackService {
         if (feedback.getRequest().getProject().getStatus().isReadOnly()) throw conflict("Project is read-only.");
     }
 
-    private void requireOpenThreadForNewInstructorReply(InstructorFeedback feedback) {
-        if (Objects.requireNonNullElse(feedback.getThreadState(), FeedbackThreadState.OPEN) != FeedbackThreadState.OPEN
-                || feedback.getPendingState() != null) {
-            throw conflict("Feedback thread must be open before drafting a reply.");
-        }
-    }
-
     private void requireDraftReplyOwner(FeedbackReply reply, User currentUser) {
         if (reply.getPublishedAt() != null) throw conflict("Published feedback replies are immutable.");
         if (!isInstructorReply(reply) || (!isAdmin(currentUser) && !sameUser(reply.getAuthor(), currentUser))) {
@@ -659,11 +597,22 @@ public class FeedbackServiceImpl implements FeedbackService {
         if (!hasSnapshot(request)) return Map.of();
         try {
             Map<UUID, Integer> versions = new HashMap<>();
-            for (JsonNode paper : objectMapper.readTree(request.getSubmissionSnapshotJson()).path("papers")) {
+            JsonNode snapshot = objectMapper.readTree(request.getSubmissionSnapshotJson());
+            if (snapshot == null || snapshot.path("schemaVersion").asInt() != 1
+                    || !request.getProject().getId().toString().equals(snapshot.path("projectId").asText())
+                    || !snapshot.path("papers").isArray() || snapshot.path("papers").isEmpty()) {
+                throw new IllegalArgumentException("Invalid snapshot");
+            }
+            for (JsonNode paper : snapshot.path("papers")) {
+                if (!paper.has("title") || !(paper.path("title").isTextual() || paper.path("title").isNull())
+                        || !paper.path("sections").isArray()
+                        || paper.path("sections").isEmpty()) throw new IllegalArgumentException("Invalid paper");
                 for (JsonNode section : paper.path("sections")) {
                     UUID sectionId = UUID.fromString(section.path("id").asText());
                     JsonNode version = section.get("contentVersion");
-                    if (version == null || !version.canConvertToInt()
+                    if (version == null || !version.isIntegralNumber() || !version.canConvertToInt()
+                            || !section.path("title").isTextual() || !section.path("contentTex").isTextual()
+                            || !section.path("order").isIntegralNumber()
                             || versions.putIfAbsent(sectionId, version.asInt()) != null) {
                         throw new IllegalArgumentException("Invalid section version");
                     }
@@ -671,7 +620,7 @@ public class FeedbackServiceImpl implements FeedbackService {
             }
             return versions;
         } catch (JsonProcessingException | IllegalArgumentException exception) {
-            throw new IllegalStateException("Stored review snapshot is invalid", exception);
+            throw conflict("Stored review snapshot is invalid.");
         }
     }
 
@@ -693,12 +642,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         boolean published = isPublished(feedback);
         FeedbackThreadState visibleState = instructorView ? effectiveState(feedback)
                 : Objects.requireNonNullElse(feedback.getThreadState(), FeedbackThreadState.OPEN);
-        boolean canAnswer = published && visibleState == FeedbackThreadState.OPEN
-                && !project.getStatus().isReadOnly() && isCurrentAssignee(viewer, section, project);
         boolean canManageState = instructorView && published && !project.getStatus().isReadOnly();
-        boolean canDraft = canManageState
-                && Objects.requireNonNullElse(feedback.getThreadState(), FeedbackThreadState.OPEN) == FeedbackThreadState.OPEN
-                && feedback.getPendingState() == null;
         boolean canMarkDone = canManageState && visibleState == FeedbackThreadState.OPEN;
         boolean canReopen = canManageState && visibleState == FeedbackThreadState.DONE;
         boolean canEdit = !published && !project.getStatus().isReadOnly()
@@ -708,7 +652,7 @@ public class FeedbackServiceImpl implements FeedbackService {
         return InstructorFeedbackResponseDto.fromConversation(
                 feedback, section, section == null ? null : section.getVersion(),
                 section == null ? null : feedbackAnchorService.resolve(feedback, section.getContentTex(), section.getVersion()),
-                canAnswer, canDraft, canMarkDone, canReopen, canEdit, canEdit,
+                false, false, canMarkDone, canReopen, canEdit, canEdit,
                 instructorView ? feedback.getPendingState() : null, messages);
     }
 
@@ -835,11 +779,6 @@ public class FeedbackServiceImpl implements FeedbackService {
                 || reply.getAuthorRole() == FeedbackReplyAuthorRole.ADMIN;
     }
 
-    private static FeedbackReplyAuthorRole replyRole(User user) {
-        if (user != null && user.getRole() == UserRole.ADMIN) return FeedbackReplyAuthorRole.ADMIN;
-        return FeedbackReplyAuthorRole.INSTRUCTOR;
-    }
-
     private static FeedbackReplyAuthorRole roleOf(User user) {
         if (user == null || user.getRole() == null) return FeedbackReplyAuthorRole.UNKNOWN;
         return switch (user.getRole()) {
@@ -880,10 +819,6 @@ public class FeedbackServiceImpl implements FeedbackService {
 
     private static boolean sameUuid(String candidate, UUID expected) {
         return expected != null && expected.toString().equals(candidate);
-    }
-
-    private static void requireIdempotencyKey(UUID idempotencyKey) {
-        if (idempotencyKey == null) throw badRequest("idempotencyKey is required.");
     }
 
     private static <T> List<T> nonNullList(List<T> values) {

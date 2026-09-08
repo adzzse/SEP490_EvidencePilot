@@ -1064,5 +1064,20 @@
     "severityWarn": "WARN",
     "severityCritical": "CRITICAL",
     "columnDoi": "DOI"
+  },
+  "feedbackProjectWorkspace": "Project workspace",
+  "feedbackSubmittedPaper": "Submitted paper",
+  "feedbackAnnotatePassage": "Comment on a passage",
+  "feedbackAssignee": "Assigned to",
+  "feedbackUnassigned": "Unassigned",
+  "feedbackConfirmedBy": "Confirmed by",
+  "feedbackRevisionRequired": "A resubmission must change the paper content or structure.",
+  "feedbackRevisionUnchanged": "The paper is unchanged. Revise it before submitting a new round.",
+  "feedbackRevisionBaselineUnavailable": "The previous submission cannot be verified. Ask your instructor to check the review snapshot.",
+  "feedbackRevision": {
+    "FIRST_SUBMISSION": "First submission.",
+    "CHANGED": "Paper changed since the latest returned round.",
+    "UNCHANGED": "The paper is unchanged. Revise it before submitting a new round.",
+    "UNVERIFIABLE": "The previous submission cannot be verified. Ask your instructor to check the review snapshot."
   }
 }

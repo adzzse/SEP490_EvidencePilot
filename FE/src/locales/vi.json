@@ -1072,5 +1072,20 @@
     "severityWarn": "CẢNH BÁO",
     "severityCritical": "NGHIÊM TRỌNG",
     "columnDoi": "DOI"
+  },
+  "feedbackProjectWorkspace": "Không gian làm việc dự án",
+  "feedbackSubmittedPaper": "Bài đã nộp",
+  "feedbackAnnotatePassage": "Góp ý đoạn",
+  "feedbackAssignee": "Người phụ trách",
+  "feedbackUnassigned": "Chưa phân công",
+  "feedbackConfirmedBy": "Người xác nhận",
+  "feedbackRevisionRequired": "Bản nộp lại phải thay đổi nội dung hoặc cấu trúc bài.",
+  "feedbackRevisionUnchanged": "Bài chưa thay đổi. Hãy sửa bài trước khi nộp vòng mới.",
+  "feedbackRevisionBaselineUnavailable": "Không thể đối chiếu bản nộp trước. Hãy liên hệ giảng viên để kiểm tra snapshot vòng review.",
+  "feedbackRevision": {
+    "FIRST_SUBMISSION": "Bản nộp đầu tiên.",
+    "CHANGED": "Bài đã thay đổi so với vòng được trả lại gần nhất.",
+    "UNCHANGED": "Bài chưa thay đổi. Hãy sửa bài trước khi nộp vòng mới.",
+    "UNVERIFIABLE": "Không thể đối chiếu bản nộp trước. Hãy liên hệ giảng viên để kiểm tra snapshot vòng review."
   }
 }

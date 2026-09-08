@@ -9,8 +9,11 @@ public record ReviewReadinessResponse(
         boolean canSubmit,
         String submissionFingerprint,
         List<Check> checks,
-        List<Paper> papers
+        List<Paper> papers,
+        Revision revision
 ) {
+    public record Revision(UUID baselineRequestId, String state) {}
+
     public record Check(
             String code,
             String status,

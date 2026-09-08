@@ -40,7 +40,9 @@ public record InstructorFeedbackResponseDto(
         boolean canReopen,
         boolean canEdit,
         boolean canDelete,
-        List<FeedbackMessageResponseDto> messages
+        List<FeedbackMessageResponseDto> messages,
+        UUID assignedUserId,
+        String assignedUserName
 ) {
     public static InstructorFeedbackResponseDto fromConversation(
             InstructorFeedback feedback,
@@ -96,7 +98,9 @@ public record InstructorFeedbackResponseDto(
                 canReopen,
                 canEdit,
                 canDelete,
-                conversation);
+                conversation,
+                section != null && section.getAssignedUser() != null ? section.getAssignedUser().getId() : null,
+                section != null ? displayName(section.getAssignedUser()) : null);
     }
 
     private static boolean isStale(Integer anchorVersion, Integer currentVersion) {
