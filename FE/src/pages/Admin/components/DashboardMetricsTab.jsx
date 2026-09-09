@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { driver } from 'driver.js';
+import { useAdminTour } from '../../../hooks/useAdminTour.js';
 import { PageSkeleton, ErrorBlock } from './shared.jsx';
 import { useTranslation } from 'react-i18next';
 function DashboardSection({ api }) {
@@ -54,19 +54,13 @@ function DashboardSection({ api }) {
   const queueCounts = queue?.counts || {};
   const queueTotal = ['QUEUED', 'PROCESSING', 'FAILED'].reduce((a, k) => a + (typeof queueCounts[k] === 'number' ? queueCounts[k] : 0), 0);
 
-  const startProcessGuide = () => {
-    setTimeout(() => {
-      driver({
-        animate: true, showProgress: true,
-        steps: [
-          { popover: { title: t('admin.processGuide'), description: t('admin.guideDashDesc'), side: 'center' } },
-          { element: '[data-guide="overview-projects"]', popover: { title: t('admin.activeProjects'), description: t('admin.guideDashOverviewProjects'), side: 'bottom' } },
-          { element: '[data-guide="dash-status"]', popover: { title: t('admin.status'), description: t('admin.guideDashStatus'), side: 'top' } },
-          { popover: { title: t('admin.done'), description: t('admin.guideDashDone'), side: 'center' } },
-        ],
-      }).drive();
-    }, 300);
-  };
+  const dashTourSteps = useCallback(() => [
+    { popover: { title: t('admin.processGuide'), description: t('admin.guideDashDesc'), side: 'center' } },
+    { element: '[data-guide="overview-projects"]', popover: { title: t('admin.activeProjects'), description: t('admin.guideDashOverviewProjects'), side: 'bottom' } },
+    { element: '[data-guide="dash-status"]', popover: { title: t('admin.status'), description: t('admin.guideDashStatus'), side: 'top' } },
+    { popover: { title: t('admin.done'), description: t('admin.guideDashDone'), side: 'center' } },
+  ], [t]);
+  const { start: startProcessGuide } = useAdminTour('dashboard', dashTourSteps);
 
   if (loading) return <PageSkeleton />;
   if (error) return <ErrorBlock msg={error} onRetry={() => fetch(new AbortController().signal)} />;

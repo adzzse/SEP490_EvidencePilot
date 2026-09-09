@@ -15,6 +15,20 @@ export function studentDisplayName(student) {
     || 'Unassigned';
 }
 
+export const SUGGESTION_PAGE_SIZE = 8;
+
+export function paginateStudents(list, page, pageSize = SUGGESTION_PAGE_SIZE) {
+  const items = Array.isArray(list) ? list : [];
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(Math.max(0, page), totalPages - 1);
+  return {
+    items: items.slice(safePage * pageSize, safePage * pageSize + pageSize),
+    page: safePage,
+    totalPages,
+    total: items.length,
+  };
+}
+
 export function getStudentSuggestions(users, projectMembers, query, limit = 8) {
   const memberIds = new Set((Array.isArray(projectMembers) ? projectMembers : [])
     .map(member => String(member?.userId)));

@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
-import { driver } from 'driver.js';
-import 'driver.js/dist/driver.css';
+import { useAdminTour } from '../../hooks/useAdminTour.js';
 import api from '../../services/api.js';
 import i18n from '../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -18,6 +17,8 @@ import { InfraSection } from './components/InfrastructureTab.jsx';
 import { QueueSection } from './components/ExtractionQueueTab.jsx';
 import { NotificationsSection } from './components/NotificationsTab.jsx';
 import { SettingsSection } from './components/SettingsTab.jsx';
+import { PromptConfigSection } from './components/PromptConfigTab.jsx';
+import { DataManagementSection } from './components/DataManagementTab.jsx';
 import NotificationBell from '../../components/ui/NotificationBell.jsx';
 import ProfileModal from '../../components/ui/ProfileModal.jsx';
 const NAV_ITEMS = [
@@ -30,12 +31,14 @@ const NAV_ITEMS = [
   { key: 'extraction', labelKey: 'extractionQueue' },
   { key: 'notifications', labelKey: 'notifications' },
   { key: 'settings', labelKey: 'settings' },
+  { key: 'prompts', labelKey: 'promptConfig' },
+  { key: 'data', labelKey: 'dataManagement' },
 ];
 
 const SECTIONS = {
   dashboard: DashboardSection, users: UsersSection, projects: ProjectsSection, papers: PapersSection,
   audit: AuditLogsSection, infra: InfraSection, extraction: QueueSection, notifications: NotificationsSection,
-  settings: SettingsSection,
+  settings: SettingsSection, prompts: PromptConfigSection, data: DataManagementSection,
 };
 
 const getIcon = (key, isActive) => {
@@ -96,6 +99,18 @@ const getIcon = (key, isActive) => {
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       );
+    case 'prompts':
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      );
+    case 'data':
+      return (
+        <svg className={cls} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7M4 7l8-4 8 4M4 7h16" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -135,9 +150,9 @@ export default function AdminDashboard() {
 
   const handleLogout = () => { logout(); navigate('/'); };
 
-  const startTour = useCallback(() => {
+  const tourSteps = useCallback(() => {
     const navItems = NAV_ITEMS.map(item => ({
-      element: `[data-tour="nav-${item.key}"]`,
+      element: `[data-guide="nav-${item.key}"]`,
       popover: {
         title: label(item),
         description: t('admin.tourNavItemDesc', { label: label(item).toLowerCase() }),
@@ -145,64 +160,56 @@ export default function AdminDashboard() {
         align: 'start',
       }
     }));
-
-    const driverObj = driver({
-      animate: true,
-      showProgress: true,
-      showButtons: ['next', 'previous', 'close'],
-      steps: [
-        {
-          popover: {
-            title: t('admin.tourWelcomeTitle'),
-            description: t('admin.tourWelcomeDesc'),
-            side: 'center',
-          }
-        },
-        {
-          element: '[data-tour="sidebar"]',
-          popover: {
-            title: t('admin.tourSidebarTitle'),
-            description: t('admin.tourSidebarDesc'),
-            side: 'right',
-          }
-        },
-        ...navItems,
-        {
-          element: '[data-tour="header"]',
-          popover: {
-            title: t('admin.tourHeaderTitle'),
-            description: t('admin.tourHeaderDesc'),
-            side: 'bottom',
-          }
-        },
-        {
-          element: '[data-tour="content"]',
-          popover: {
-            title: t('admin.tourContentTitle'),
-            description: t('admin.tourContentDesc'),
-            side: 'left',
-          }
-        },
-        {
-          element: '[data-tour="footer"]',
-          popover: {
-            title: t('admin.tourFooterTitle'),
-            description: t('admin.tourFooterDesc'),
-            side: 'top',
-          }
-        },
-        {
-          popover: {
-            title: t('admin.tourReadyTitle'),
-            description: t('admin.tourReadyDesc'),
-          }
-        },
-      ],
-      onDestroy: () => localStorage.setItem('admin_tour_done', 'true'),
-    });
-
-    driverObj.drive();
-  }, [t]);
+    return [
+      {
+        popover: {
+          title: t('admin.tourWelcomeTitle'),
+          description: t('admin.tourWelcomeDesc'),
+          side: 'center',
+        }
+      },
+      {
+        element: '[data-guide="sidebar"]',
+        popover: {
+          title: t('admin.tourSidebarTitle'),
+          description: t('admin.tourSidebarDesc'),
+          side: 'right',
+        }
+      },
+      ...navItems,
+      {
+        element: '[data-guide="header"]',
+        popover: {
+          title: t('admin.tourHeaderTitle'),
+          description: t('admin.tourHeaderDesc'),
+          side: 'bottom',
+        }
+      },
+      {
+        element: '[data-guide="content"]',
+        popover: {
+          title: t('admin.tourContentTitle'),
+          description: t('admin.tourContentDesc'),
+          side: 'left',
+        }
+      },
+      {
+        element: '[data-guide="footer"]',
+        popover: {
+          title: t('admin.tourFooterTitle'),
+          description: t('admin.tourFooterDesc'),
+          side: 'top',
+        }
+      },
+      {
+        popover: {
+          title: t('admin.tourReadyTitle'),
+          description: t('admin.tourReadyDesc'),
+        }
+      },
+    ];
+  }, [t, label]);
+  const { start: startTour } = useAdminTour('admin_dashboard', tourSteps);
 
   return (
     <div className="min-h-screen bg-(--page-bg) font-sans flex text-(--text-primary)">
@@ -210,7 +217,7 @@ export default function AdminDashboard() {
       {mobileOpen && <div className="fixed inset-0 bg-black/30 z-30 lg:hidden" onClick={() => setMobileOpen(false)} />}
 
       {/* Sidebar */}
-      <aside data-tour="sidebar" className={`fixed lg:static lg:h-screen lg:sticky lg:top-0 inset-y-0 left-0 z-40 bg-[#111e3b] flex flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-56'} ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} border-none`}>
+      <aside data-guide="sidebar" className={`fixed lg:static lg:h-screen lg:sticky lg:top-0 inset-y-0 left-0 z-40 bg-[#111e3b] flex flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-56'} ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} border-none`}>
         {/* Brand — with inline collapse icon */}
         <div className={`h-16 flex items-center gap-2 px-3 border-b border-white/5 shrink-0 bg-[#0c162e] ${collapsed ? 'justify-center' : 'justify-between'}`}>
           {!collapsed && (
@@ -260,7 +267,7 @@ export default function AdminDashboard() {
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {filteredNav.map(item => (
-            <button key={item.key} data-tour={`nav-${item.key}`} onClick={() => { setActive(item.key); setMobileOpen(false); }}
+            <button key={item.key} data-guide={`nav-${item.key}`} onClick={() => { setActive(item.key); setMobileOpen(false); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition text-left group ${active === item.key ? 'bg-white/10 text-white shadow-sm font-semibold' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
               title={collapsed ? label(item) : undefined}>
               {getIcon(item.key, active === item.key)}
@@ -323,7 +330,7 @@ export default function AdminDashboard() {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header data-tour="header" className="h-16 bg-(--surface) border-b border-(--border) flex items-center justify-between px-6 shrink-0 shadow-sm">
+        <header data-guide="header" className="h-16 bg-(--surface) border-b border-(--border) flex items-center justify-between px-6 shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
             <button onClick={() => setMobileOpen(true)} className="lg:hidden text-(--text-tertiary) hover:text-(--text-primary)">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
@@ -380,7 +387,7 @@ export default function AdminDashboard() {
         </header>
 
         {/* Content */}
-        <main data-tour="content" style={{ backgroundColor: collapsed ? 'var(--content-canvas)' : 'var(--page-bg)' }} className={`flex-1 overflow-y-auto w-full max-w-[1600px] mx-auto transition-colors duration-200`}>
+        <main data-guide="content" style={{ backgroundColor: collapsed ? 'var(--content-canvas)' : 'var(--page-bg)' }} className={`flex-1 overflow-y-auto w-full max-w-[1600px] mx-auto transition-colors duration-200`}>
           <SectionBoundary>
             <Section api={api} />
           </SectionBoundary>

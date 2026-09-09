@@ -8,6 +8,7 @@ import com.evidencepilot.repository.ReviewGuideRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,10 +22,10 @@ import java.util.Locale;
 @Component
 public class DatabaseSeeder implements CommandLineRunner {
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
     private final ReviewGuideRepository reviewGuideRepository;
     private final ObjectMapper objectMapper;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
     private final String adminEmail;
     private final String adminPassword;
     private final String adminFirstName;
@@ -39,6 +40,7 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final String instructorFirstName;
     private final String instructorLastName;
 
+    @Autowired
     public DatabaseSeeder(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
@@ -57,10 +59,10 @@ public class DatabaseSeeder implements CommandLineRunner {
             @Value("${app.instructor.password:}") String instructorPassword,
             @Value("${app.instructor.first-name:Test}") String instructorFirstName,
             @Value("${app.instructor.last-name:Instructor}") String instructorLastName) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
         this.reviewGuideRepository = reviewGuideRepository;
         this.objectMapper = objectMapper;
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
         this.adminEmail = adminEmail;
         this.adminPassword = adminPassword;
         this.adminFirstName = adminFirstName;
@@ -78,10 +80,17 @@ public class DatabaseSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        if ("production".equalsIgnoreCase(System.getenv("APP_ENV"))) {
+            throw new IllegalStateException("Seeder execution attempted in production environment. Halting boot.");
+        }
+        seedReviewGuides();
+        seedDemoUsers();
+    }
+
+    private void seedDemoUsers() {
         seedUser(adminEmail, adminPassword, adminFirstName, adminLastName, UserRole.ADMIN, null);
         seedUser(studentEmail, studentPassword, studentFirstName, studentLastName, UserRole.STUDENT, studentCode);
         seedUser(instructorEmail, instructorPassword, instructorFirstName, instructorLastName, UserRole.INSTRUCTOR, null);
-        seedReviewGuides();
     }
 
     private void seedUser(
@@ -99,36 +108,23 @@ public class DatabaseSeeder implements CommandLineRunner {
             log.info("Skipping {} seed account because its required fields are not configured", role);
             return;
         }
-        ensureUser(
-                email.trim().toLowerCase(Locale.ROOT),
-                password,
-                firstName.trim(),
-                lastName.trim(),
-                role,
-                role == UserRole.STUDENT ? studentCode.trim().toUpperCase(Locale.ROOT) : null);
-    }
-
-    private void ensureUser(
-            String email,
-            String rawPassword,
-            String firstName,
-            String lastName,
-            UserRole role,
-            String studentCode) {
-        User user = userRepository.findByEmail(email).orElseGet(User::new);
-        user.setEmail(email);
-        user.setPasswordHash(passwordEncoder.encode(rawPassword));
-        user.setFirstName(firstName);
-        user.setLastName(lastName);
+        String normEmail = email.trim().toLowerCase(Locale.ROOT);
+        String normFirst = firstName.trim();
+        String normLast = lastName.trim();
+        String normCode = role == UserRole.STUDENT && studentCode != null ? studentCode.trim().toUpperCase(Locale.ROOT) : null;
+        User user = userRepository.findByEmail(normEmail).orElseGet(User::new);
+        user.setEmail(normEmail);
+        user.setPasswordHash(passwordEncoder.encode(password));
+        user.setFirstName(normFirst);
+        user.setLastName(normLast);
         user.setRole(role);
-        user.setStudentCode(studentCode);
+        user.setStudentCode(normCode);
         user.setAccountStatus(AccountStatus.ACTIVE);
         if (user.getCreatedAt() == null) {
             user.setCreatedAt(LocalDateTime.now());
         }
         userRepository.save(user);
-
-        log.info("Ensured {} user: {}", role, email);
+        log.info("Ensured {} user: {}", role, normEmail);
     }
 
     private static final List<ReviewGuideSeed> REVIEW_GUIDES = List.of(

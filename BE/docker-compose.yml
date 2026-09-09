@@ -35,25 +35,6 @@ services:
         aliases:
           - qdrant
 
-  qdrant-init:
-    image: curlimages/curl:latest
-    container_name: evidence_pilot_qdrant_init
-    depends_on:
-      vector-db:
-        condition: service_started
-    networks:
-      - evidence-network
-    entrypoint: >
-      /bin/sh -c "
-        echo 'Waiting for Qdrant...';
-        until curl -sf http://qdrant:6333/readyz; do 
-          sleep 2; 
-        done;
-        echo 'Qdrant ready. Creating collection...';
-        curl -X PUT http://qdrant:6333/collections/source_chunks -H 'Content-Type: application/json' -d '{\"vectors\":{\"dense\":{\"size\":768,\"distance\":\"Cosine\"}},\"sparse_vectors\":{\"sparse\":{\"modifier\":\"idf\"}}}' && echo 'Collection created by qdrant-init' || echo 'Collection may already exist (ignore 409)';
-        echo 'Qdrant initialization complete';
-      "
-
   minio:
     image: minio/minio:latest
     container_name: evidence_pilot_minio
@@ -72,22 +53,6 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
-    networks:
-      - evidence-network
-
-  minio-init:
-    image: minio/mc:latest
-    container_name: evidence_pilot_minio_init
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c " until (/usr/bin/mc alias set myminio $${MINIO_URL} $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}) do echo 'Waiting for MinIO...'; sleep 2; done; /usr/bin/mc mb --ignore-existing myminio/$${MINIO_BUCKET_NAME}; /usr/bin/mc anonymous set none myminio/$${MINIO_BUCKET_NAME}; echo 'Bucket created and configured'; "
-    environment:
-      MINIO_URL: ${MINIO_URL}
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME}
     networks:
       - evidence-network
 
@@ -126,8 +91,6 @@ services:
       db:
         condition: service_healthy
       vector-db:
-        condition: service_started
-      qdrant-init:
         condition: service_started
       minio:
         condition: service_healthy
@@ -186,7 +149,7 @@ services:
       PASSWORD_RESET_TOKEN_TTL_MINUTES: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:-60}
       PASSWORD_RESET_REQUEST_COOLDOWN_SECONDS: ${PASSWORD_RESET_REQUEST_COOLDOWN_SECONDS:-60}
       MAIL_HOST: ${MAIL_HOST:-}
-      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_PORT: ${MAIL_PORT:-}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
@@ -204,6 +167,10 @@ services:
 
       # ── Application base URL (public-facing, e.g. ngrok) ──────────────────
       APP_BASE_URL: ${APP_BASE_URL}
+
+      # ── Upload caps (seed bundles can be hundreds of MB) ────────────────────
+      UPLOAD_MAX_FILE_SIZE: ${UPLOAD_MAX_FILE_SIZE:-1GB}
+      UPLOAD_MAX_REQUEST_SIZE: ${UPLOAD_MAX_REQUEST_SIZE:-1GB}
 
       SERVER_PORT: 8080
     networks:

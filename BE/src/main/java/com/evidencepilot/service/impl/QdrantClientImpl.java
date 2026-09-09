@@ -216,8 +216,13 @@ public class QdrantClientImpl implements QdrantClient {
         Map<String, Object> info = new LinkedHashMap<>();
         long start = System.currentTimeMillis();
         try {
+            // ponytail: hit the server-level healthz endpoint rather than the
+            // collection-level GET /collections/{name} — a missing collection
+            // should not flip the system health strip to DOWN. Collection
+            // existence is checked separately at the call site (search/upsert
+            // handle 404 by ensuring the collection).
             restClient.get()
-                    .uri(baseUrl + "/collections/" + COLLECTION)
+                    .uri(baseUrl + "/healthz")
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (req, res) -> {
                         throw new QdrantException("Health check failed", res.getStatusCode().value());

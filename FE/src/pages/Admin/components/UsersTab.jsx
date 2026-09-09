@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { driver } from 'driver.js';
+import { useAdminTour } from '../../../hooks/useAdminTour.js';
 import { ErrorBlock } from './shared.jsx';
 import Modal from '../../../components/ui/Modal.jsx';
 import UserImportModal from './UserImportModal.jsx';
@@ -51,26 +51,17 @@ function UsersSection({ api }) {
     setPage(0);
   }, [q, roleFilter, statusFilter]);
 
-  const startProcessGuide = () => {
-    setTimeout(() => {
-      // ponytail: drop steps whose element is absent (e.g. the DEV-only bypass
-      // checkbox in production builds) so the tour never breaks on them.
-      const steps = [
-        { popover: { title: t('admin.processGuide'), description: t('admin.guideUsersDesc'), side: 'center' } },
-        { element: '[data-guide="create-btn"]', popover: { title: t('admin.createUser'), description: t('admin.guideUsersCreate'), side: 'bottom' } },
-        { element: '[data-guide="create-verify"]', popover: { title: t('admin.devBypass'), description: t('admin.guideUsersVerify'), side: 'bottom' } },
-        { element: '[data-guide="import-btn"]', popover: { title: t('admin.importUsers'), description: t('admin.guideUsersImport'), side: 'bottom' } },
-        { element: '[data-guide="preflight"]', popover: { title: t('admin.preflightTitle'), description: t('admin.guideUsersPreflight'), side: 'left' } },
-        { element: '[data-guide="table"]', popover: { title: t('admin.userAccounts'), description: t('admin.guideUsersTable'), side: 'left' } },
-        { element: '[data-guide="action-ban"]', popover: { title: t('admin.actions'), description: t('admin.guideUsersActions'), side: 'left' } },
-        { popover: { title: t('admin.done'), description: t('admin.guideUsersDone'), side: 'center' } },
-      ].filter((s) => !s.element || document.querySelector(s.element));
-      const d = driver({
-        animate: true, showProgress: true,
-        steps,
-      }).drive();
-    }, 300);
-  };
+  const usersTourSteps = useCallback(() => [
+    { popover: { title: t('admin.processGuide'), description: t('admin.guideUsersDesc'), side: 'center' } },
+    { element: '[data-guide="create-btn"]', popover: { title: t('admin.createUser'), description: t('admin.guideUsersCreate'), side: 'bottom' } },
+    { element: '[data-guide="create-verify"]', popover: { title: t('admin.devBypass'), description: t('admin.guideUsersVerify'), side: 'bottom' } },
+    { element: '[data-guide="import-btn"]', popover: { title: t('admin.importUsers'), description: t('admin.guideUsersImport'), side: 'bottom' } },
+    { element: '[data-guide="preflight"]', popover: { title: t('admin.preflightTitle'), description: t('admin.guideUsersPreflight'), side: 'left' } },
+    { element: '[data-guide="table"]', popover: { title: t('admin.userAccounts'), description: t('admin.guideUsersTable'), side: 'left' } },
+    { element: '[data-guide="action-ban"]', popover: { title: t('admin.actions'), description: t('admin.guideUsersActions'), side: 'left' } },
+    { popover: { title: t('admin.done'), description: t('admin.guideUsersDone'), side: 'center' } },
+  ], [t]);
+  const { start: startProcessGuide } = useAdminTour('users', usersTourSteps);
 
   const toggleStatus = async (u) => {
     const ns = u.accountStatus === 'ACTIVE' ? 'BANNED' : 'ACTIVE';

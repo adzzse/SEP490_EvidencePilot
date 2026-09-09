@@ -12,7 +12,7 @@ import {
   isSourceShareable,
   isSourceSharedWithProject,
 } from '../../utils/instructor/sourceShareSelection';
-import { getStudentSuggestions, studentDisplayName } from '../../utils/instructor/studentSearch';
+import { getStudentSuggestions, paginateStudents, studentDisplayName } from '../../utils/instructor/studentSearch';
 import useUndoDelete, { UndoToast } from '../../components/ui/UndoDelete.jsx';
 import DeleteConfirm from '../../components/ui/DeleteConfirm.jsx';
 import ActionExpandHeader from '../../components/Instructor/ActionExpandHeader.jsx';
@@ -78,6 +78,8 @@ export default function ProjectDetail() {
   const [memberQuery, setMemberQuery] = useState('');
   const [memberSuggestionsOpen, setMemberSuggestionsOpen] = useState(false);
   const [highlightedStudentIndex, setHighlightedStudentIndex] = useState(0);
+  const [suggestionPage, setSuggestionPage] = useState(0);
+  const [advancedPage, setAdvancedPage] = useState(0);
   const [updatingMemberId, setUpdatingMemberId] = useState(null);
 
   // Setup tab state
@@ -285,10 +287,17 @@ export default function ProjectDetail() {
     }));
   }, [progressReport]);
 
-  const studentSuggestions = useMemo(
-    () => getStudentSuggestions(users, members, memberQuery),
+  // Full match list (uncapped) + paged slice for the combobox — previously the
+  // list silently stopped at 8 with no way to reach the rest.
+  const suggestionList = useMemo(
+    () => getStudentSuggestions(users, members, memberQuery, Number.MAX_SAFE_INTEGER),
     [users, members, memberQuery],
   );
+  const suggestionPaging = useMemo(
+    () => paginateStudents(suggestionList, suggestionPage),
+    [suggestionList, suggestionPage],
+  );
+  const studentSuggestions = suggestionPaging.items;
   const studentMembers = useMemo(
     () => members.filter(member => member.userRole === 'STUDENT'),
     [members],
@@ -313,10 +322,14 @@ export default function ProjectDetail() {
 
   const advancedFilteredStudents = useMemo(() => {
     const q = advancedSearch.trim().toLowerCase();
-    const list = getStudentSuggestions(users, members, '');
+    const list = getStudentSuggestions(users, members, '', Number.MAX_SAFE_INTEGER);
     if (!q) return list;
     return list.filter(s => studentDisplayName(s).toLowerCase().includes(q) || (s.email?.toLowerCase() ?? '').includes(q));
   }, [users, members, advancedSearch]);
+  const advancedPaging = useMemo(
+    () => paginateStudents(advancedFilteredStudents, advancedPage, MODAL_PAGE_SIZE),
+    [advancedFilteredStudents, advancedPage],
+  );
 
   const selectedMember = useMemo(() => {
     if (selectedMemberId) return members.find(m => String(m.userId) === String(selectedMemberId)) || members.find(m => String(m.id) === String(selectedMemberId)) || null;
@@ -765,6 +778,7 @@ export default function ProjectDetail() {
     setMemberQuery('');
     setMemberSuggestionsOpen(false);
     setHighlightedStudentIndex(0);
+    setSuggestionPage(0);
   };
 
   const selectStudent = (student) => {
@@ -1489,6 +1503,7 @@ export default function ProjectDetail() {
                 setMemberQuery(event.target.value);
                 setNewMemberId('');
                 setHighlightedStudentIndex(0);
+                setSuggestionPage(0);
                 setMemberSuggestionsOpen(true);
               }}
               onKeyDown={handleStudentSearchKeyDown}
@@ -1496,7 +1511,7 @@ export default function ProjectDetail() {
             />
             {memberSuggestionsOpen && (
               <div id="student-suggestions" role="listbox" className="absolute z-10 mt-1 max-h-96 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1 shadow-lg">
-                {studentSuggestions.length === 0 ? (
+                {suggestionList.length === 0 ? (
                   <p className="px-3 py-3 text-xs italic text-[var(--text-tertiary)]">{t.noStudentsFound}</p>
                 ) : studentSuggestions.map((student, index) => (
                   <button
@@ -1517,6 +1532,16 @@ export default function ProjectDetail() {
                     {student.studentCode && <span className="shrink-0 rounded bg-[var(--surface-tertiary)] px-2 py-1 font-mono text-[10px] font-semibold text-[var(--text-secondary)]">{student.studentCode}</span>}
                   </button>
                 ))}
+                {suggestionPaging.totalPages > 1 && (
+                  <div className="flex items-center justify-between gap-2 border-t border-[var(--border-light)] px-3 py-1.5 text-[10px] font-semibold text-[var(--text-secondary)]">
+                    <span>{t.suggestionPager.replace('{{shown}}', String(studentSuggestions.length)).replace('{{total}}', String(suggestionPaging.total))}</span>
+                    <span className="flex items-center gap-1">
+                      <span>{t.page} {suggestionPaging.page + 1}/{suggestionPaging.totalPages}</span>
+                      <button type="button" disabled={suggestionPaging.page === 0} onMouseDown={event => event.preventDefault()} onClick={() => { setSuggestionPage(p => Math.max(0, p - 1)); setHighlightedStudentIndex(0); }} className="rounded px-1.5 py-0.5 hover:bg-[var(--surface-secondary)] disabled:opacity-40">{t.prev}</button>
+                      <button type="button" disabled={suggestionPaging.page >= suggestionPaging.totalPages - 1} onMouseDown={event => event.preventDefault()} onClick={() => { setSuggestionPage(p => p + 1); setHighlightedStudentIndex(0); }} className="rounded px-1.5 py-0.5 hover:bg-[var(--surface-secondary)] disabled:opacity-40">{t.next}</button>
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1532,15 +1557,15 @@ export default function ProjectDetail() {
       </Modal>
 
       {/* Phase 3: Add Students — with local search */}
-      <Modal open={showAdvancedAdd} onClose={()=>{setShowAdvancedAdd(false); setAdvancedSelectedIds([]); setAdvancedSearch('');}} title={t.addStudents}>
+      <Modal open={showAdvancedAdd} onClose={()=>{setShowAdvancedAdd(false); setAdvancedSelectedIds([]); setAdvancedSearch(''); setAdvancedPage(0);}} title={t.addStudents}>
         <div className="space-y-3">
           <p className="text-xs text-[var(--text-secondary)]">{t.addStudentsHint}</p>
           <div className="relative">
             <svg aria-hidden="true" viewBox="0 0 16 16" className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 fill-[var(--text-tertiary)]"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0" /></svg>
-            <input value={advancedSearch} onChange={e=>setAdvancedSearch(e.target.value)} placeholder={t.searchNameOrEmail} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] py-2 pl-8 pr-3 text-xs outline-none focus:border-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]" />
+            <input value={advancedSearch} onChange={e=>{setAdvancedSearch(e.target.value); setAdvancedPage(0);}} placeholder={t.searchNameOrEmail} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] py-2 pl-8 pr-3 text-xs outline-none focus:border-[var(--brand)] focus:ring-1 focus:ring-[var(--brand)]" />
           </div>
           <div className="max-h-64 overflow-y-auto rounded-lg border border-[var(--border)] divide-y divide-[var(--border-light)]">
-            {advancedFilteredStudents.length===0 ? <p className="p-3 text-xs italic text-[var(--text-tertiary)]">{t.noStudentsFound}</p> : advancedFilteredStudents.map(st=> {
+            {advancedPaging.total===0 ? <p className="p-3 text-xs italic text-[var(--text-tertiary)]">{t.noStudentsFound}</p> : advancedPaging.items.map(st=> {
               const checked = advancedSelectedIds.includes(String(st.id));
               return (
                 <label key={st.id} className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-[var(--surface-secondary)]">
@@ -1553,8 +1578,18 @@ export default function ProjectDetail() {
               )
             })}
           </div>
+          {advancedPaging.totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 text-[10px] font-semibold text-[var(--text-secondary)]">
+              <span>{t.suggestionPager.replace('{{shown}}', String(advancedPaging.items.length)).replace('{{total}}', String(advancedPaging.total))}</span>
+              <span className="flex items-center gap-1">
+                <span>{t.page} {advancedPaging.page + 1}/{advancedPaging.totalPages}</span>
+                <button type="button" disabled={advancedPaging.page === 0} onClick={() => setAdvancedPage(p => Math.max(0, p - 1))} className="rounded px-1.5 py-0.5 hover:bg-[var(--surface-secondary)] disabled:opacity-40">{t.prev}</button>
+                <button type="button" disabled={advancedPaging.page >= advancedPaging.totalPages - 1} onClick={() => setAdvancedPage(p => p + 1)} className="rounded px-1.5 py-0.5 hover:bg-[var(--surface-secondary)] disabled:opacity-40">{t.next}</button>
+              </span>
+            </div>
+          )}
           <div className="flex justify-end gap-2">
-            <button onClick={()=>{setShowAdvancedAdd(false); setAdvancedSelectedIds([]); setAdvancedSearch('');}} className="rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-xs font-semibold">{ct.cancel}</button>
+            <button onClick={()=>{setShowAdvancedAdd(false); setAdvancedSelectedIds([]); setAdvancedSearch(''); setAdvancedPage(0);}} className="rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-xs font-semibold">{ct.cancel}</button>
             <button onClick={handleAdvancedAddMultiple} disabled={advancedSelectedIds.length===0} className="rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{t.add || ct.add || 'Add'} {advancedSelectedIds.length ? `(${advancedSelectedIds.length})` : ''}</button>
           </div>
         </div>

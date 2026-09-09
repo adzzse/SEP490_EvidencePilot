@@ -155,7 +155,7 @@ public class GlobalExceptionHandler {
             MaxUploadSizeExceededException exception,
             HttpServletRequest request) {
 
-        return build(HttpStatus.PAYLOAD_TOO_LARGE, "File size exceeds the 50MB limit", request);
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "File size exceeds the configured upload limit", request);
     }
 
     private ResponseEntity<ApiErrorResponse> build(HttpStatus status, String message,

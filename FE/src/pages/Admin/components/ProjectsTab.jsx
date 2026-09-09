@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { driver } from 'driver.js';
+import { useAdminTour } from '../../../hooks/useAdminTour.js';
 import { useToast } from '../../../components/ui/Toast.jsx';
 import { useTranslation } from 'react-i18next';
 import Tabs from '../../../components/ui/Tabs.jsx';
@@ -135,18 +135,12 @@ function ProjectsSection({ api }) {
     onSettled: () => setUpdatingMemberId(null),
   });
 
-  const startProcessGuide = () => {
-    setTimeout(() => {
-      driver({
-        animate: true, showProgress: true,
-        steps: [
-          { popover: { title: t('admin.processGuide'), description: t('admin.guideProjectsDesc'), side: 'center' } },
-          { element: '[data-guide="projects-table"]', popover: { title: t('admin.projects'), description: t('admin.guideProjectsTable'), side: 'left' } },
-          { popover: { title: t('admin.done'), description: t('admin.guideProjectsDone'), side: 'center' } },
-        ],
-      }).drive();
-    }, 300);
-  };
+  const projectsTourSteps = useCallback(() => [
+    { popover: { title: t('admin.processGuide'), description: t('admin.guideProjectsDesc'), side: 'center' } },
+    { element: '[data-guide="projects-table"]', popover: { title: t('admin.projects'), description: t('admin.guideProjectsTable'), side: 'left' } },
+    { popover: { title: t('admin.done'), description: t('admin.guideProjectsDone'), side: 'center' } },
+  ], [t]);
+  const { start: startProcessGuide } = useAdminTour('projects', projectsTourSteps);
 
   const getStatusBadge = (status) => {
     const styles = {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { driver } from 'driver.js';
+import { useAdminTour } from '../../../hooks/useAdminTour.js';
 import Modal from '../../../components/ui/Modal.jsx';
 import { ErrorBlock, JsonTree } from './shared.jsx';
 import SearchBar from '../../../components/ui/SearchBar.jsx';
@@ -54,19 +54,13 @@ function AuditLogsSection({ api }) {
     setActorId(v);
   };
 
-  const startProcessGuide = () => {
-    setTimeout(() => {
-      driver({
-        animate: true, showProgress: true,
-        steps: [
-          { popover: { title: t('admin.processGuide'), description: t('admin.guideAuditDesc'), side: 'center' } },
-          { element: '[data-guide="logs-filter"]', popover: { title: t('admin.filter'), description: t('admin.guideAuditFilter'), side: 'bottom' } },
-          { element: '[data-guide="logs-table"]', popover: { title: t('admin.auditLogs'), description: t('admin.guideAuditTable'), side: 'left' } },
-          { popover: { title: t('admin.done'), description: t('admin.guideAuditDone'), side: 'center' } },
-        ],
-      }).drive();
-    }, 300);
-  };
+  const auditTourSteps = useCallback(() => [
+    { popover: { title: t('admin.processGuide'), description: t('admin.guideAuditDesc'), side: 'center' } },
+    { element: '[data-guide="logs-filter"]', popover: { title: t('admin.filter'), description: t('admin.guideAuditFilter'), side: 'bottom' } },
+    { element: '[data-guide="logs-table"]', popover: { title: t('admin.auditLogs'), description: t('admin.guideAuditTable'), side: 'left' } },
+    { popover: { title: t('admin.done'), description: t('admin.guideAuditDone'), side: 'center' } },
+  ], [t]);
+  const { start: startProcessGuide } = useAdminTour('audit', auditTourSteps);
 
   const getActorAvatar = (email) => {
     const safeEmail = email ?? '';

@@ -13,11 +13,13 @@ import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.prompt.SectionCitationReviewPrompt;
 import com.evidencepilot.repository.PaperSectionRepository;
+import com.evidencepilot.repository.PromptTemplateRepository;
 import com.evidencepilot.repository.ReviewSnapshotRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.PaperStandardService;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -76,6 +78,8 @@ public class SectionCitationReviewService {
     private final SourceMatchingService sourceMatchingService;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
+    @Autowired(required = false)
+    private PromptTemplateRepository promptTemplateRepository;
 
     @Transactional(readOnly = true)
     public Optional<SectionCitationReviewResponse> cached(UUID documentId, UUID sectionId) {
@@ -215,10 +219,32 @@ public class SectionCitationReviewService {
         Project project = section.getDocument().getProject();
         String standard = project.getTargetStandard() == null
                 ? "CUSTOM" : project.getTargetStandard().name();
-        String input = REVIEW_VERSION + '\0' + RULE_CATALOG_VERSION + '\0' + SectionCitationReviewPrompt.SYSTEM
-                + '\0' + standard + '\0' + section.getId() + '\0' + section.getSectionTitle()
+        String input = REVIEW_VERSION + '\0' + RULE_CATALOG_VERSION + '\0' + resolveSystem()
+                + '\0' + activePromptVersion() + '\0' + standard + '\0' + section.getId() + '\0' + section.getSectionTitle()
                 + '\0' + sectionContentFingerprint(section) + '\0' + corpusRevision(project.getId());
         return sha256(input);
+    }
+
+    /** Active CITATION_REVIEW SYSTEM from DB, fallback to code constant (pre-V29 safe). */
+    private String resolveSystem() {
+        try {
+            if (promptTemplateRepository == null) return SectionCitationReviewPrompt.SYSTEM;
+            return promptTemplateRepository.findByTemplateKeyAndActiveTrue("CITATION_REVIEW")
+                    .map(t -> t.getSystemText()).filter(s -> !s.isBlank())
+                    .orElse(SectionCitationReviewPrompt.SYSTEM);
+        } catch (Exception e) {
+            return SectionCitationReviewPrompt.SYSTEM;
+        }
+    }
+
+    private String activePromptVersion() {
+        try {
+            if (promptTemplateRepository == null) return "";
+            return promptTemplateRepository.findByTemplateKeyAndActiveTrue("CITATION_REVIEW")
+                    .map(t -> t.getVersion()).orElse("");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     public String sectionContentFingerprint(PaperSection section) {
@@ -484,7 +510,7 @@ public class SectionCitationReviewService {
             int batchIndex,
             int batchCount) {
         String prompt = reviewPrompt(section, normalizedTitle, contexts, batchIndex, batchCount);
-        return aiModelClient.generateValidated(SectionCitationReviewPrompt.SYSTEM, prompt, null, generation -> {
+        return aiModelClient.generateValidated(resolveSystem(), prompt, null, generation -> {
             try {
                 ModelReview review = strictMapper().readValue(
                         extractJson(generation.response()), ModelReview.class);

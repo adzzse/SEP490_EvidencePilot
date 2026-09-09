@@ -102,11 +102,12 @@ public class User {
         if (o == null || getClass() != o.getClass())
             return false;
         User user = (User) o;
+        if (id == null || user.id == null) return false;
         return id.equals(user.id);
     }
 
     @Override
     public int hashCode() {
-        return id.hashCode();
+        return id != null ? id.hashCode() : System.identityHashCode(this);
     }
 }

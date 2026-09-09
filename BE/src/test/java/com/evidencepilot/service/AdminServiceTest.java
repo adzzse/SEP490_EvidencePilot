@@ -627,6 +627,49 @@ class AdminServiceTest {
                 instructor, admin, "ADMIN_BROADCAST_URGENT", null, "System maintenance");
     }
 
+    @Test
+    void importSuppressesInvitationsWithActiveSeedAccounts() {
+        User admin = user(UserRole.ADMIN, AccountStatus.ACTIVE);
+        when(currentUsers.requireCurrentUser()).thenReturn(admin);
+        when(users.findAllByEmailIn(any())).thenReturn(List.of());
+        when(users.findAllByStudentCodeIn(any())).thenReturn(List.of());
+        when(passwords.encode(any())).thenAnswer(invocation -> "encoded:" + invocation.getArgument(0));
+        when(users.saveAll(any())).thenAnswer(invocation -> {
+            List<User> saved = invocation.getArgument(0);
+            saved.forEach(user -> user.setId(UUID.randomUUID()));
+            return saved;
+        });
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "seedDefaultPassword", "EP123456!");
+
+        var response = service.importUsers(new AdminUserImportRequest("STUDENT", List.of(
+                new AdminUserImportRequest.UserItem("silent@example.com", "Silent", "Student", "SE170701"))), true);
+
+        assertThat(response.created()).isOne();
+        assertThat(response.errors()).isEmpty();
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Iterable<User>> savedUsers = ArgumentCaptor.forClass(Iterable.class);
+        verify(users).saveAll(savedUsers.capture());
+        assertThat(savedUsers.getValue()).singleElement().satisfies(saved -> {
+            assertThat(saved.getAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
+            assertThat(saved.getPasswordHash()).isEqualTo("encoded:EP123456!");
+        });
+        verify(invitations, never()).issueInvitation(any());
+        ArgumentCaptor<Object> auditValue = ArgumentCaptor.forClass(Object.class);
+        verify(audit).record(eq("USER_IMPORTED"), eq("USER"), any(), eq(admin),
+                isNull(), auditValue.capture());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> safeAuditValue = (Map<String, Object>) auditValue.getValue();
+        assertThat(safeAuditValue).containsEntry("seedSilent", true);
+    }
+
+    @Test
+    void importSuppressRequiresAdmin() {
+        when(currentUsers.requireCurrentUser()).thenReturn(user(UserRole.INSTRUCTOR, AccountStatus.ACTIVE));
+        assertForbidden(() -> service.importUsers(new AdminUserImportRequest("STUDENT", List.of(
+                new AdminUserImportRequest.UserItem("x@example.com", "X", "Y", "SE170702"))), true));
+        verifyNoInteractions(users);
+    }
+
     private User user(UserRole role, AccountStatus status) {
         User user = new User();
         user.setId(UUID.randomUUID());

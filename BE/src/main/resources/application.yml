@@ -32,12 +32,12 @@ spring:
     init:
       mode: never
 
-  # ── File upload limits ────────────────────────────────────────────────────
+  # ── File upload limits (env-tunable; seed bundles can be hundreds of MB) ───
   servlet:
     multipart:
       enabled: true
-      max-file-size: 50MB
-      max-request-size: 52MB
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:1GB}
+      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:1GB}
 
   # ── RabbitMQ configuration ────────────────────────────────────────────────
   rabbitmq:
@@ -59,12 +59,12 @@ spring:
           max-attempts: 3
           max-interval: 30s
 
-  # ── SMTP mail configuration (used for password reset) ─────────────────────
-  # IMPORTANT: MAIL_PASSWORD must be an App Password, NOT your primary account
-  # password. For Gmail, generate one at https://myaccount.google.com/apppasswords.
+  # ── SMTP mail configuration (external relay — Resend / SES) ─────────────────
+  # Production requires MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD to be
+  # set via environment variables. No defaults — boot fails if missing in prod.
   mail:
     host: ${MAIL_HOST:}
-    port: ${MAIL_PORT:587}
+    port: ${MAIL_PORT:}
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
     properties:

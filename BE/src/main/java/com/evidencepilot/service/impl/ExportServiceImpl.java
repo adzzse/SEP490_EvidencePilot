@@ -11,6 +11,7 @@ import com.evidencepilot.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
@@ -20,8 +21,10 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -44,6 +47,12 @@ public class ExportServiceImpl implements ExportService {
     private final UserRepository userRepository;
     private final RabbitTemplate rabbitTemplate;
     private final TexArchiveBuilder texArchiveBuilder;
+    @Autowired(required = false)
+    private DocumentRepository documentRepository;
+    @Autowired(required = false)
+    private PaperSectionRepository paperSectionRepository;
+    @Autowired(required = false)
+    private EvidenceRevisionTraceRepository evidenceRevisionTraceRepository;
 
     @Override
     @Transactional
@@ -112,7 +121,8 @@ public class ExportServiceImpl implements ExportService {
         if (job.getStatus() != ExportStatus.READY) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Export not ready");
         }
-        return new InputStreamResource(documentObjectStorage.getStream(EXPORT_MINIO_PREFIX + jobId + ".zip"));
+        String suffix = job.getFormat() == ExportFormat.TRACEABILITY_CSV ? ".csv" : ".zip";
+        return new InputStreamResource(documentObjectStorage.getStream(EXPORT_MINIO_PREFIX + jobId + suffix));
     }
 
     @Override
@@ -129,15 +139,26 @@ public class ExportServiceImpl implements ExportService {
         job.setUpdatedAt(LocalDateTime.now());
         exportJobRepository.save(job);
 
-        Path archivePath = null;
-        String objectKey = EXPORT_MINIO_PREFIX + job.getId() + ".zip";
+        Path tmpPath = null;
+        String objectKey = null;
+        String contentType;
         boolean stored = false;
         try {
-            archivePath = Files.createTempFile("evidencepilot-export-", ".zip");
-            texArchiveBuilder.write(job.getProjectId(), archivePath);
-            try (InputStream content = Files.newInputStream(archivePath)) {
-                documentObjectStorage.write(
-                        objectKey, content, Files.size(archivePath), "application/zip");
+            if (job.getFormat() == ExportFormat.TRACEABILITY_CSV) {
+                objectKey = EXPORT_MINIO_PREFIX + job.getId() + ".csv";
+                contentType = "text/csv;charset=UTF-8";
+                tmpPath = writeTraceabilityCsvToTemp(job.getProjectId());
+                try (InputStream content = Files.newInputStream(tmpPath)) {
+                    documentObjectStorage.write(objectKey, content, Files.size(tmpPath), contentType);
+                }
+            } else {
+                objectKey = EXPORT_MINIO_PREFIX + job.getId() + ".zip";
+                contentType = "application/zip";
+                tmpPath = Files.createTempFile("evidencepilot-export-", ".zip");
+                texArchiveBuilder.write(job.getProjectId(), tmpPath);
+                try (InputStream content = Files.newInputStream(tmpPath)) {
+                    documentObjectStorage.write(objectKey, content, Files.size(tmpPath), contentType);
+                }
             }
             stored = true;
 
@@ -152,7 +173,7 @@ public class ExportServiceImpl implements ExportService {
                     "Export is ready for download.");
         } catch (Exception e) {
             log.error("Export failed for job {}", job.getId(), e);
-            if (stored) {
+            if (stored && objectKey != null) {
                 try {
                     documentObjectStorage.delete(objectKey);
                 } catch (RuntimeException cleanupFailure) {
@@ -164,14 +185,62 @@ public class ExportServiceImpl implements ExportService {
             job.setUpdatedAt(LocalDateTime.now());
             exportJobRepository.save(job);
         } finally {
-            if (archivePath != null) {
+            if (tmpPath != null) {
                 try {
-                    Files.deleteIfExists(archivePath);
+                    Files.deleteIfExists(tmpPath);
                 } catch (IOException e) {
-                    log.warn("Failed to delete temporary export archive {}", archivePath, e);
+                    log.warn("Failed to delete temporary export file {}", tmpPath, e);
                 }
             }
         }
+    }
+
+    private Path writeTraceabilityCsvToTemp(UUID projectId) throws IOException {
+        Path tmp = Files.createTempFile("traceability-", ".csv");
+        try (BufferedWriter w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
+            w.write('\uFEFF');
+            w.write("Section ID,Section Title,Word Count,Version,Assigned User ID\n");
+            for (Document paper : documentRepository.findByProjectIdAndDocTypeAndActiveTrue(projectId, com.evidencepilot.model.enums.DocumentType.PAPER)) {
+                for (PaperSection s : paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paper.getId())) {
+                    if (!s.isActive()) continue;
+                    w.write(String.join(",",
+                            esc(s.getId().toString()),
+                            esc(s.getSectionTitle()),
+                            String.valueOf(wordCount(s.getContentTex())),
+                            String.valueOf(s.getVersion() != null ? s.getVersion() : 1),
+                            esc(s.getAssignedUser() == null ? "" : s.getAssignedUser().getId().toString())));
+                    w.write("\n");
+                }
+            }
+            w.write("\nTrace ID,Section ID,Section Title,Finding,Action,Excerpt,Source ID,Relation,Student Action,Outcome,Judgment\n");
+            for (EvidenceRevisionTrace t : evidenceRevisionTraceRepository.findByProjectIdOrderByCreatedAtDesc(projectId)) {
+                w.write(String.join(",",
+                        esc(t.getId().toString()),
+                        esc(t.getSection().getId().toString()),
+                        esc(t.getSection().getSectionTitle()),
+                        t.getFindingIndex() == null ? "" : t.getFindingIndex().toString(),
+                        esc(t.getSuggestedAction()),
+                        esc(t.getExcerpt()),
+                        esc(t.getSource() == null ? "" : t.getSource().getId().toString()),
+                        esc(t.getEvidenceRelation()),
+                        esc(t.getStudentAction() == null ? "" : t.getStudentAction().name()),
+                        esc(t.getOutcome() == null ? "" : t.getOutcome().name()),
+                        esc(t.getJudgment() == null ? "" : t.getJudgment().name())));
+                w.write("\n");
+            }
+        }
+        return tmp;
+    }
+
+    private static String esc(String s) {
+        if (s == null) return "";
+        if (s.contains(",") || s.contains("\"") || s.contains("\n")) return "\"" + s.replace("\"", "\"\"") + "\"";
+        return s;
+    }
+
+    private static int wordCount(String tex) {
+        if (tex == null || tex.isBlank()) return 0;
+        return tex.trim().split("\\s+").length;
     }
 
     private ExportJob exposeDownloadEndpoint(ExportJob job) {
