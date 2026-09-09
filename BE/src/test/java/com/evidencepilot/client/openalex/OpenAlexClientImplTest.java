@@ -201,6 +201,36 @@ class OpenAlexClientImplTest {
     }
 
     @Test
+    void findWorkByTitle_returnsFullWorkOnExactMatch() {
+        when(restClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(org.mockito.ArgumentMatchers.anyString())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.body(String.class)).thenReturn(
+                "{\"results\":[{\"id\":\"https://openalex.org/W123\",\"doi\":\"https://doi.org/10.1000/xyz123\",\"title\":\"Test Paper Title\"}]}");
+        when(responseSpec.body(OpenAlexWorkResponse.class)).thenReturn(sampleWork);
+
+        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "", mock(HttpClient.class), new ObjectMapper());
+        OpenAlexWorkResponse result = client.findWorkByTitle("test paper title!");
+
+        assertThat(result.title()).isEqualTo("Test Paper Title");
+    }
+
+    @Test
+    void findWorkByTitle_returnsNullWithoutExactMatch() {
+        when(restClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(org.mockito.ArgumentMatchers.anyString())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.body(String.class)).thenReturn(
+                "{\"results\":[{\"id\":\"https://openalex.org/W999\",\"title\":\"Something Else Entirely\"}]}");
+
+        OpenAlexClientImpl client = new OpenAlexClientImpl(restClient, BASE, "", mock(HttpClient.class), new ObjectMapper());
+
+        assertThat(client.findWorkByTitle("Test Paper Title")).isNull();
+        org.mockito.Mockito.verify(responseSpec, org.mockito.Mockito.never())
+                .body(OpenAlexWorkResponse.class);
+    }
+
+    @Test
     void downloadPdf_returnsInputStream() throws Exception {
         byte[] pdfBytes = "fake-pdf-content".getBytes();
 

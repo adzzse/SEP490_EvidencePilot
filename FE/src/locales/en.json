@@ -1096,6 +1096,7 @@
     "seedFailed": "Seed job failed.",
     "zipNoPreview": "ZIP uploads go straight to background job after layout check.",
     "guideDataTemplate": "Download the multi-sheet template first.",
-    "previewInvitations": "Emails to send: {{invite}}, silent ACTIVE accounts: {{silent}}"
+    "previewInvitations": "Emails to send: {{invite}}, silent ACTIVE accounts: {{silent}}",
+    "previewDois": "Unique DOIs to resolve live: {{count}} (PDFs download once each)"
   }
 }

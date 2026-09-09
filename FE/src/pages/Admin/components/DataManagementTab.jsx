@@ -149,6 +149,9 @@ function DataManagementSection({ api }) {
               {preview.invitations && (
                 <p className="font-mono text-amber-600">{t('admin.previewInvitations', { invite: preview.invitations.willInvite ?? 0, silent: preview.invitations.silentActive ?? 0 })}</p>
               )}
+              {preview.uniqueDois != null && (
+                <p className="font-mono text-sky-600">{t('admin.previewDois', { count: preview.uniqueDois })}</p>
+              )}
               {(preview.errors || []).slice(0, 8).map((e, i) => <p key={i} className="text-rose-600">{e}</p>)}
               {preview.valid && (
                 <button onClick={(e) => uploadFile(document.querySelector('input[type=file]')?.files?.[0], false)} className="px-3 py-1.5 bg-[#0c162e] text-white rounded-lg text-[11px] font-bold">{t('admin.confirmInsert')}</button>

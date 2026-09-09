@@ -1096,6 +1096,7 @@
     "seedFailed": "Seed thất bại.",
     "zipNoPreview": "ZIP sẽ chạy nền sau kiểm tra cấu trúc.",
     "guideDataTemplate": "Tải mẫu nhiều sheet trước.",
-    "previewInvitations": "Email sẽ gửi: {{invite}}, tài khoản ACTIVE im lặng: {{silent}}"
+    "previewInvitations": "Email sẽ gửi: {{invite}}, tài khoản ACTIVE im lặng: {{silent}}",
+    "previewDois": "DOI duy nhất resolve trực tiếp: {{count}} (mỗi PDF tải một lần)"
   }
 }

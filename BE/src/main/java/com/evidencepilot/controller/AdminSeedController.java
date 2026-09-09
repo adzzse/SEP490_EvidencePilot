@@ -56,7 +56,13 @@ public class AdminSeedController {
         int userRows = parsed.sheets().getOrDefault("users", List.of()).size();
         Map<String, Object> invitations =
                 Map.of("willInvite", (int) invited, "silentActive", userRows - (int) invited);
+        long uniqueDois = parsed.sheets().getOrDefault("sources", List.of()).stream()
+                .map(r -> com.evidencepilot.client.openalex.DoiUtils.normalize(r.getOrDefault("doi", "")))
+                .filter(d -> d != null && !d.isBlank())
+                .distinct()
+                .count();
         return ResponseEntity.ok(Map.of("rows", rows, "invitations", invitations,
+                "uniqueDois", (int) uniqueDois,
                 "errors", parsed.errors(), "valid", parsed.errors().isEmpty()));
     }
 

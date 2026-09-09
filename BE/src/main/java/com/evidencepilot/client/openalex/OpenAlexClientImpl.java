@@ -84,6 +84,28 @@ public class OpenAlexClientImpl implements OpenAlexClient {
     }
 
     @Override
+    public OpenAlexWorkResponse findWorkByTitle(String title) {
+        if (title == null || title.isBlank()) return null;
+        String encoded = java.net.URLEncoder.encode(title.trim(), java.nio.charset.StandardCharsets.UTF_8);
+        String uri = baseUrl + "/works?search=" + encoded + "&per_page=5";
+        if (apiKey != null && !apiKey.isBlank()) {
+            uri += "&api_key=" + apiKey;
+        }
+        log.info("Searching OpenAlex work by title");
+        String want = normalizeTitle(title);
+        return listWorks(uri).stream()
+                .filter(c -> c.title() != null && normalizeTitle(c.title()).equals(want))
+                .findFirst()
+                .map(match -> fetchWorkById(match.id()))
+                .orElse(null);
+    }
+
+    private static String normalizeTitle(String title) {
+        return title.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", " ").trim().replaceAll("\\s+", " ");
+    }
+
+    @Override
     public OpenAlexWorkResponse fetchWorkById(String openAlexId) {
         if (openAlexId == null || openAlexId.isBlank()) {
             throw new OpenAlexApiException("Invalid OpenAlex ID: " + openAlexId, HttpStatus.BAD_REQUEST.value());

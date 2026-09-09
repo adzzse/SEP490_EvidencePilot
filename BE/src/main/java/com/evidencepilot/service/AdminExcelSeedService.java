@@ -1,9 +1,11 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.client.openalex.DoiUtils;
+import com.evidencepilot.client.openalex.OpenAlexClient;
+import com.evidencepilot.dto.openalex.OpenAlexWorkResponse;
 import com.evidencepilot.dto.request.AdminUserImportRequest;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentText;
-import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
@@ -16,10 +18,14 @@ import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.DocumentTextRepository;
-import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
+import com.evidencepilot.service.impl.DocumentPersistenceService;
+import com.evidencepilot.service.impl.ProjectCollectionService;
+import com.evidencepilot.service.OpenAlexIngestionService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +53,7 @@ import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -63,7 +70,7 @@ import java.util.zip.ZipInputStream;
 
 /**
  * Excel + folder-per-paper ZIP seed. Streaming-light: caps enforced
- * (6 sheets, 200 rows/sheet, 10MB xlsx). ZIP bundles are uncapped and
+ * (5 sheets, 200 rows/sheet with members at 500, 10MB xlsx). ZIP bundles are uncapped and
  * spooled entry-by-entry to temp files (never heap) with per-job cleanup.
  * Reuses AdminService user validation, DocumentService extraction pipeline,
  * MediaAssetService for images. Async jobs with in-memory progress (pollable).
@@ -73,11 +80,19 @@ import java.util.zip.ZipInputStream;
 @RequiredArgsConstructor
 public class AdminExcelSeedService {
 
-    private static final int MAX_ROWS_PER_SHEET = 200;
+    private static final int MAX_ROWS_DEFAULT = 200;
+    // ponytail: member rows are cheap single inserts; 3-5 students per project
+    // across 60+ projects exceeds the default cap, so members get headroom
+    private static final int MAX_ROWS_MEMBERS = 500;
     private static final long MAX_XLSX_BYTES = 10L * 1024 * 1024;
-    private static final List<String> SHEETS = List.of("users", "projects", "members", "sources", "papers", "sections");
+    // ponytail: no "sections" sheet — file-backed papers get sections from extraction,
+    // standard papers from createSectionsFromStandard; a legacy sheet is ignored by parse
+    private static final List<String> SHEETS = List.of("users", "projects", "members", "sources", "papers");
     private static final Set<String> INVITE_TRUE_TOKENS = Set.of("TRUE", "1", "YES", "Y");
     private static final Set<String> INVITE_FALSE_TOKENS = Set.of("FALSE", "0", "NO", "N");
+    // ponytail: mirrors OpenAlexIngestionServiceImpl — per-PDF cap + header scan
+    private static final long MAX_SEED_PDF_BYTES = 50L * 1024 * 1024;
+    private static final byte[] PDF_SIGNATURE = {'%', 'P', 'D', 'F', '-'};
 
     /**
      * Blank means FALSE (silent ACTIVE account) — sending mail is explicit opt-in.
@@ -99,10 +114,15 @@ public class AdminExcelSeedService {
     private final DocumentRepository documentRepository;
     private final DocumentTextRepository documentTextRepository;
     private final DocumentChunkRepository documentChunkRepository;
-    private final PaperSectionRepository paperSectionRepository;
     private final DocumentService documentService;
     private final MediaAssetService mediaAssetService;
     private final PaperProcessingService paperProcessingService;
+    private final OpenAlexClient openAlexClient;
+    private final OpenAlexIngestionService openAlexIngestionService;
+    private final DocumentObjectStorage documentObjectStorage;
+    private final DocumentPersistenceService documentPersistenceService;
+    private final ProjectCollectionService projectCollectionService;
+    private final ObjectMapper objectMapper;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ConcurrentHashMap<UUID, SeedJob> jobs = new ConcurrentHashMap<>();
@@ -131,11 +151,12 @@ public class AdminExcelSeedService {
         try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             sheet(wb, "README", List.of("note"),
                     List.of(
-                            List.of("Bundle = seed.xlsx + papers/<slug>/ folders only. Fill users→projects→members→sources→papers→sections. Reference by email/project_title."),
+                            List.of("Bundle = seed.xlsx + papers/<slug>/ folders only. Fill users→projects→members→sources→papers. Reference by email/project_title. Sections come from extraction (file papers) or the standard (paper_standard papers) — no sections sheet."),
                             List.of("papers.paper_folder must equal the <slug> in papers.paper_file (^[a-z0-9-]{1,80}$). Main file must be named <slug>.pdf|.docx|.tex after its folder; images/ goes beside it."),
-                            List.of("Precedence: paper_file, then paper_standard, then content_tex. Max 1 paper per project. xlsx<=10MB, zip size uncapped (spooled to disk), 200 rows/sheet."),
+                            List.of("Precedence: paper_file, then paper_standard, then content_tex. Max 1 paper per project. xlsx<=10MB, zip size uncapped (spooled to disk), 200 rows/sheet (members: 500)."),
                             List.of("paper_standard (IEEE|ACM|...) creates a standard-template paper like Instructor Page choose-standard: leave paper_file and content_tex blank, sections are generated."),
-                            List.of("users.send_invitation: TRUE sends the set-password email; FALSE or blank creates an ACTIVE account with password EP123456! and sends nothing.")));
+                            List.of("users.send_invitation: TRUE sends the set-password email; FALSE or blank creates an ACTIVE account with password EP123456! and sends nothing."),
+                            List.of("sources.doi is required and resolved live via OpenAlex (metadata + PDF win over sheet columns); rows without OA PDF import as METADATA_FETCHED for later file attach.")));
             sheet(wb, "users", List.of("email", "first_name", "last_name", "role", "student_code", "send_invitation"),
                     List.of(List.of("demo01@example.test", "An", "Nguyen", "STUDENT", "AB123456", "FALSE"),
                             List.of("prof@example.test", "Binh", "Tran", "INSTRUCTOR", "", "TRUE")));
@@ -145,11 +166,9 @@ public class AdminExcelSeedService {
                     List.of(List.of("EP-DEMO-Retrieval", "demo01@example.test", "LEADER"),
                             List.of("EP-DEMO-Retrieval", "prof@example.test", "INSTRUCTOR")));
             sheet(wb, "sources", List.of("project_title", "doi", "title", "authors", "publication_year", "publisher", "cited_by_count", "abstract_or_text"),
-                    List.of(List.of("EP-DEMO-Retrieval", "10.1234/demo.smith2023", "Hybrid retrieval", "Smith, A.", "2023", "Demo Press", "42", "Smith et al. report 89.2% accuracy.")));
+                    List.of(List.of("EP-DEMO-Retrieval", "10.48550/arXiv.2004.04906", "Dense Passage Retrieval for Open-Domain Question Answering", "Karpukhin, V.; et al.", "2020", "arXiv", "5600", "Reference only — live OpenAlex metadata wins at import.")));
             sheet(wb, "papers", List.of("project_title", "paper_folder", "paper_file", "title", "content_tex", "paper_standard"),
                     List.of(List.of("EP-DEMO-Retrieval", "attention-retrieval", "papers/attention-retrieval/attention-retrieval.tex", "Attention demo", "", "")));
-            sheet(wb, "sections", List.of("project_title", "section_title", "section_order", "content_tex", "assigned_user_email"),
-                    List.of(List.of("EP-DEMO-Retrieval", "Introduction", "0", "Transformer models are widely used.", "demo01@example.test")));
             wb.write(out);
             return out.toByteArray();
         }
@@ -252,7 +271,7 @@ public class AdminExcelSeedService {
         }
         Map<String, List<Map<String, String>>> sheets = new LinkedHashMap<>();
         try (Workbook wb = new XSSFWorkbook(in)) {
-            if (wb.getNumberOfSheets() > 7) errors.add("too many sheets (max README + 6 data sheets)");
+            if (wb.getNumberOfSheets() > 6) errors.add("too many sheets (max README + 5 data sheets)");
             for (String name : SHEETS) {
                 Sheet s = wb.getSheet(name);
                 if (s == null) continue;
@@ -264,11 +283,12 @@ public class AdminExcelSeedService {
                 }
                 hr.forEach(c -> headers.add(str(c).trim().toLowerCase(Locale.ROOT)));
                 List<Map<String, String>> rows = new ArrayList<>();
+                int rowCap = "members".equals(name) ? MAX_ROWS_MEMBERS : MAX_ROWS_DEFAULT;
                 for (int r = 1; r <= s.getLastRowNum(); r++) {
                     Row row = s.getRow(r);
                     if (row == null || isBlankRow(row, headers.size())) continue;
-                    if (rows.size() >= MAX_ROWS_PER_SHEET) {
-                        errors.add(name + ": exceeds 200 rows");
+                    if (rows.size() >= rowCap) {
+                        errors.add(name + ": exceeds " + rowCap + " rows");
                         break;
                     }
                     Map<String, String> m = new LinkedHashMap<>();
@@ -379,6 +399,13 @@ public class AdminExcelSeedService {
                 errors.add(at + "project_role must be LEADER|MEMBER|INSTRUCTOR");
             }
         }
+        for (var r : sheets.getOrDefault("sources", List.of())) {
+            String at = "sources row " + r.get("_row") + ": ";
+            if (!titles.contains(r.getOrDefault("project_title", ""))) errors.add(at + "unknown project_title");
+            String doi = DoiUtils.normalize(r.getOrDefault("doi", ""));
+            if (doi == null || doi.isBlank()) errors.add(at + "doi is required (DOI-in seed)");
+            else if (!DoiUtils.isValid(doi)) errors.add(at + "invalid DOI format: " + r.getOrDefault("doi", ""));
+        }
         for (var r : sheets.getOrDefault("papers", List.of())) {
             String at = "papers row " + r.get("_row") + ": ";
             if (!titles.contains(r.getOrDefault("project_title", ""))) errors.add(at + "unknown project_title");
@@ -473,7 +500,6 @@ public class AdminExcelSeedService {
             counts.put("members", commitMembers(parsed.sheets().getOrDefault("members", List.of()), job));
             counts.put("sources", commitSources(parsed.sheets().getOrDefault("sources", List.of()), job));
             counts.put("papers", commitPapers(parsed.sheets().getOrDefault("papers", List.of()), bundle.files(), job));
-            counts.put("sections", commitSections(parsed.sheets().getOrDefault("sections", List.of()), job));
             job.result = counts;
             job.status = job.errors.isEmpty() ? "DONE" : "DONE";
         } catch (Exception e) {
@@ -643,27 +669,139 @@ public class AdminExcelSeedService {
         return n;
     }
 
-    @Transactional
+    /**
+     * DOI-in sources: each row resolves its DOI via OpenAlex and goes through the
+     * same pipeline as manual DOI ingest — live metadata wins over sheet columns,
+     * PDFs land in MinIO, extraction is queued, preview works via download link.
+     * Deliberately NOT @Transactional: each row does live network I/O that must
+     * not pin one DB transaction for the whole sheet. Each repository call and
+     * markDocumentAsUploaded runs in its own transaction.
+     */
     public int commitSources(List<Map<String, String>> rows, SeedJob job) {
         int n = 0;
+        // per-job cache: unique DOIs resolve + download once, reused across projects
+        Map<String, ResolvedSourceDoi> cache = new LinkedHashMap<>();
         for (var r : rows) {
             var project = findProject(r.get("project_title"));
-            var uploader = firstMember(project);
+            var uploader = instructorOf(project);
             if (project == null || uploader == null) {
                 if (job != null) job.errors.add("sources row " + r.get("_row") + ": unresolvable project/member");
                 continue;
             }
-            String text = r.getOrDefault("abstract_or_text", "");
-            Document d = baseDocument(project, uploader, DocumentType.SOURCE,
-                    "source-" + slug(r.getOrDefault("title", "untitled")) + ".txt", text);
-            d.setDoi(nullIfBlank(r.getOrDefault("doi", "")));
-            d.setTitle(nullIfBlank(r.getOrDefault("title", "")));
-            d.setAuthors(nullIfBlank(r.getOrDefault("authors", "")));
-            d.setPublicationYear(parseInt(r.getOrDefault("publication_year", "")));
-            d.setPublisher(nullIfBlank(r.getOrDefault("publisher", "")));
-            d.setCitedByCount(parseInt(r.getOrDefault("cited_by_count", "")));
+            String doi = DoiUtils.normalize(r.getOrDefault("doi", ""));
+            if (!DoiUtils.isValid(doi)) {
+                if (job != null) job.errors.add("sources row " + r.get("_row") + ": invalid DOI format");
+                continue;
+            }
+            if (documentRepository.countActiveProjectSourcesByDoi(project.getId(), DocumentType.SOURCE, doi) > 0) {
+                if (job != null) job.errors.add("sources row " + r.get("_row") + ": DOI already in project — skipped");
+                continue;
+            }
+            ResolvedSourceDoi resolved = cache.get(doi);
+            if (resolved == null) {
+                OpenAlexWorkResponse work;
+                try {
+                    work = openAlexClient.fetchWork(doi);
+                } catch (Exception e) {
+                    // ponytail: arXiv DataCite DOIs (10.48550/arXiv.*) are locations,
+                    // not primary DOIs in OpenAlex, so /works/doi: 404s — resolve by
+                    // exact title match, else fall back to the sheet's own metadata
+                    // columns + direct arXiv PDF instead of dropping the row
+                    work = resolveWithoutDoi(r, doi);
+                    if (work == null) {
+                        if (job != null) job.errors.add("sources row " + r.get("_row") + ": DOI not resolvable: " + doi);
+                        continue;
+                    }
+                }
+                byte[] pdf = null;
+                String downloadNote = null;
+                String oaUrl = work.oaUrl();
+                if ((oaUrl == null || oaUrl.isBlank()) && arxivId(doi) != null) {
+                    // ponytail: title-matched works often lack an OA PDF URL even
+                    // though the arXiv e-print is freely downloadable
+                    oaUrl = "https://arxiv.org/pdf/" + arxivId(doi);
+                }
+                if (oaUrl == null || oaUrl.isBlank()) {
+                    downloadNote = "No open-access PDF available for this DOI";
+                } else {
+                    try (var pdfStream = openAlexClient.downloadPdf(oaUrl)) {
+                        byte[] raw = pdfStream.readNBytes((int) (MAX_SEED_PDF_BYTES + 1));
+                        if (raw.length > MAX_SEED_PDF_BYTES) throw new IllegalArgumentException("exceeds 50MB");
+                        if (!hasPdfSignature(raw)) throw new IllegalArgumentException("not a valid PDF (bot-block?)");
+                        pdf = raw;
+                    } catch (Exception e) {
+                        downloadNote = "PDF download not completed: " + e.getMessage() + ". Metadata saved.";
+                    }
+                }
+                resolved = new ResolvedSourceDoi(work, pdf, downloadNote);
+                cache.put(doi, resolved);
+            }
+            // build row from LIVE work (field mapping mirrors OpenAlexIngestionServiceImpl)
+            var work = resolved.work();
+            Document d = new Document();
+            d.setProject(project);
+            d.setUploadedBy(uploader);
+            d.setDocType(DocumentType.SOURCE);
+            d.setFileUrl("pending");
+            d.setContentType("application/pdf");
+            d.setFileSizeBytes(0L);
+            d.setActive(true);
+            d.setCreatedAt(LocalDateTime.now());
+            d.setDownloadToken(UUID.randomUUID().toString());
+            d.setOriginalFilename(work.title() != null ? work.title() + ".pdf" : doi + ".pdf");
+            d.setDoi(doi);
+            d.setTitle(work.title());
+            d.setAuthors(toJson(work.authorNames()));
+            d.setPublicationYear(work.publicationYear());
+            d.setPublisher(work.publisher());
+            d.setCitedByCount(work.citedByCount());
+            // ponytail: non-null before the first save — leaving it unset crashed
+            // MySQL NOT NULL inserts (mirrors OpenAlexIngestionServiceImpl)
+            d.setProcessingStatus(ProcessingStatus.METADATA_FETCHED);
+            if (work.primaryTopic() != null) {
+                d.setOpenAlexTopic(work.primaryTopic().displayName());
+                if (work.primaryTopic().subfield() != null) {
+                    d.setOpenAlexSubfield(work.primaryTopic().subfield().displayName());
+                }
+                if (work.primaryTopic().field() != null) {
+                    d.setOpenAlexField(work.primaryTopic().field().displayName());
+                }
+                if (work.primaryTopic().domain() != null) {
+                    d.setOpenAlexDomain(work.primaryTopic().domain().displayName());
+                }
+            }
             d = documentRepository.save(d);
-            saveText(d, text.isBlank() ? (d.getTitle() == null ? "" : d.getTitle()) : text);
+            if (resolved.pdfBytes() == null) {
+                d.setProcessingStatus(ProcessingStatus.METADATA_FETCHED);
+                d.setProcessingError(resolved.note() != null ? resolved.note() : "No open-access PDF available for this DOI");
+                documentRepository.save(d);
+            } else {
+                String objectKey = "sources/raw/" + d.getId() + ".pdf";
+                try {
+                    String hash = documentObjectStorage.writeWithSha256(objectKey, resolved.pdfBytes(), "application/pdf");
+                    documentObjectStorage.deleteOnRollback(objectKey);
+                    d.setFileSizeBytes((long) resolved.pdfBytes().length);
+                    d = documentPersistenceService.markDocumentAsUploaded(d.getId(), objectKey, hash);
+                } catch (Exception e) {
+                    try {
+                        documentObjectStorage.delete(objectKey);
+                    } catch (RuntimeException cleanupFailure) {
+                        e.addSuppressed(cleanupFailure);
+                    }
+                    log.warn("Seed PDF upload failed for DOI {}: {}. Metadata saved.", doi, e.getMessage());
+                    d.setProcessingStatus(ProcessingStatus.METADATA_FETCHED);
+                    d.setProcessingError("PDF download not completed: " + e.getMessage() + ". Metadata saved.");
+                    documentRepository.save(d);
+                }
+            }
+            projectCollectionService.syncSource(d);
+            // ponytail: the visual/citation maps read saved DocumentReference rows —
+            // without this, seeded sources render as isolated nodes with no edges
+            try {
+                openAlexIngestionService.persistCitationGraph(d, resolved.work());
+            } catch (RuntimeException e) {
+                log.warn("Seed citation graph persist failed for DOI {}", doi, e);
+            }
             n++;
             if (job != null) {
                 job.processed++;
@@ -671,6 +809,83 @@ public class AdminExcelSeedService {
             }
         }
         return n;
+    }
+
+    private record ResolvedSourceDoi(OpenAlexWorkResponse work, byte[] pdfBytes, String note) {
+    }
+
+    /**
+     * DOI-less resolution: exact title match in OpenAlex first (live metadata wins),
+     * then the sheet's own columns. Null when the row has no usable title.
+     */
+    private OpenAlexWorkResponse resolveWithoutDoi(Map<String, String> r, String doi) {
+        String title = r.getOrDefault("title", "").trim();
+        if (!title.isBlank()) {
+            try {
+                OpenAlexWorkResponse match = openAlexClient.findWorkByTitle(title);
+                if (match != null) return match;
+            } catch (RuntimeException ignored) {
+                // best effort — sheet fallback below
+            }
+        }
+        return sheetWork(r, doi);
+    }
+
+    /**
+     * Sheet-metadata fallback for DOIs OpenAlex can't resolve (notably arXiv
+     * DataCite DOIs). Returns null when the row has no usable title — the caller
+     * then keeps the "DOI not resolvable" error instead of saving a stub.
+     */
+    private static OpenAlexWorkResponse sheetWork(Map<String, String> r, String doi) {
+        String title = r.getOrDefault("title", "").trim();
+        if (title.isBlank()) return null;
+        List<OpenAlexWorkResponse.OpenAlexAuthor> authorships = Arrays.stream(r.getOrDefault("authors", "").split(";"))
+                .map(String::trim).filter(s -> !s.isBlank())
+                .map(n -> new OpenAlexWorkResponse.OpenAlexAuthor(new OpenAlexWorkResponse.Author(n))).toList();
+        String arxivId = arxivId(doi);
+        OpenAlexWorkResponse.OpenAlexOpenAccess oa = arxivId == null ? null
+                : new OpenAlexWorkResponse.OpenAlexOpenAccess(true, "gold", "https://arxiv.org/pdf/" + arxivId, true);
+        String publisher = nullIfBlank(r.getOrDefault("publisher", ""));
+        OpenAlexWorkResponse.OpenAlexPrimaryLocation loc = publisher == null ? null
+                : new OpenAlexWorkResponse.OpenAlexPrimaryLocation(
+                        new OpenAlexWorkResponse.OpenAlexSource(publisher, null, null, null), null, null, null, null, false);
+        return new OpenAlexWorkResponse(null, doi, title, authorships, loc, null, oa, null,
+                parseInt(r.getOrDefault("publication_year", "")), null, null,
+                parseInt(r.getOrDefault("cited_by_count", "")));
+    }
+
+    private static String arxivId(String doi) {
+        if (doi == null) return null;
+        String suffix = doi.contains("/") ? doi.substring(doi.lastIndexOf('/') + 1) : doi;
+        // ponytail: DataCite arXiv DOIs look like 10.48550/arXiv.1706.03762
+        if (suffix.regionMatches(true, 0, "arXiv.", 0, 6)) return suffix.substring(6).trim();
+        if (suffix.regionMatches(true, 0, "arXiv:", 0, 6)) return suffix.substring(6).trim();
+        return null;
+    }
+
+    private static boolean hasPdfSignature(byte[] content) {
+        if (content == null || content.length < PDF_SIGNATURE.length) return false;
+        int scanLength = Math.min(content.length, 1024);
+        for (int offset = 0; offset <= scanLength - PDF_SIGNATURE.length; offset++) {
+            boolean matches = true;
+            for (int index = 0; index < PDF_SIGNATURE.length; index++) {
+                if (content[offset + index] != PDF_SIGNATURE[index]) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) return true;
+        }
+        return false;
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to serialize to JSON, storing as string", e);
+            return String.valueOf(value);
+        }
     }
 
     @Transactional
@@ -763,47 +978,6 @@ public class AdminExcelSeedService {
             if (job != null) {
                 job.processed++;
                 job.currentStep = "papers";
-            }
-        }
-        return n;
-    }
-
-    @Transactional
-    public int commitSections(List<Map<String, String>> rows, SeedJob job) {
-        int n = 0;
-        for (var r : rows) {
-            var project = findProject(r.get("project_title"));
-            if (project == null) {
-                if (job != null) job.errors.add("sections row " + r.get("_row") + ": unknown project");
-                continue;
-            }
-            var papers = documentRepository.findByProjectIdAndDocTypeAndActiveTrue(project.getId(), DocumentType.PAPER);
-            if (papers.isEmpty()) {
-                if (job != null) job.errors.add("sections row " + r.get("_row") + ": project has no paper");
-                continue;
-            }
-            Document paper = papers.get(0);
-            PaperSection s = new PaperSection();
-            s.setDocument(paper);
-            s.setSectionTitle(r.getOrDefault("section_title", "Untitled"));
-            try {
-                s.setSectionOrder(Integer.parseInt(r.getOrDefault("section_order", "0")));
-            } catch (NumberFormatException e) {
-                s.setSectionOrder(0);
-            }
-            s.setContentTex(r.getOrDefault("content_tex", ""));
-            String assignee = r.getOrDefault("assigned_user_email", "").toLowerCase(Locale.ROOT);
-            if (!assignee.isBlank()) {
-                userRepository.findByEmail(assignee).ifPresent(s::setAssignedUser);
-            }
-            s.setVersion(1);
-            s.setActive(true);
-            s.setUpdatedAt(LocalDateTime.now());
-            paperSectionRepository.save(s);
-            n++;
-            if (job != null) {
-                job.processed++;
-                job.currentStep = "sections";
             }
         }
         return n;

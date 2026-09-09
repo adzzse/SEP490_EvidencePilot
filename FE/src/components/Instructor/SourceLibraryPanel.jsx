@@ -6,7 +6,6 @@ import DeleteConfirm from '../ui/DeleteConfirm.jsx';
 import { useLanguage } from '../../context/LanguageContext';
 import { commonText, instructorText } from '../../locales';
 import {
-  PAGINATION_LIMIT,
   DOCUMENT_PROCESSING_STATUSES,
   STATUS_COLOR_MAP,
   API_ROUTES,
@@ -17,6 +16,9 @@ import api from '../../services/api';
 function statusColor(status) {
   return STATUS_COLOR_MAP[status] || STATUS_COLOR_MAP.DEFAULT;
 }
+
+// ponytail: library cards want 8/page; the shared PAGINATION_LIMIT (6) drives other pages
+const LIBRARY_PAGE_SIZE = 8;
 
 function formatSize(bytes) {
   if (!bytes) return '—';
@@ -31,13 +33,6 @@ function displayTitle(source) {
 function initialTitle(source) {
   if (source.title) return source.title;
   return (source.originalFilename || '').replace(/\.[^.]+$/, '');
-}
-
-function canPreviewPdf(source) {
-  const contentType = (source.contentType || '').toLowerCase();
-  const filename = source.originalFilename || '';
-  return Number(source.fileSizeBytes) > 0
-    && (contentType.includes('pdf') || /\.pdf$/i.test(filename));
 }
 
 function sourceErrorCode(source) {
@@ -126,7 +121,7 @@ export default function SourceLibraryPanel() {
     try {
       const params = {
         page,
-        size: PAGINATION_LIMIT,
+        size: LIBRARY_PAGE_SIZE,
         sort: 'createdAt,desc',
       };
       if (debouncedQuery) {
@@ -406,7 +401,7 @@ export default function SourceLibraryPanel() {
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="h-36 bg-(--surface-tertiary) rounded-2xl animate-pulse" />)}
+          {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <div key={i} className="h-36 bg-(--surface-tertiary) rounded-2xl animate-pulse" />)}
         </div>
       ) : sources.length === 0 ? (
         <EmptyState title={t.noLibrarySourcesManaged} description={t.noLibrarySourcesManagedDesc} />
@@ -419,7 +414,6 @@ export default function SourceLibraryPanel() {
               ...(source.projects || []).map(item => item.name),
             ].filter(Boolean);
             const downloadable = source.processingStatus === 'READY' || source.processingStatus === 'COMPLETED';
-            const previewable = canPreviewPdf(source);
             const recovery = recoveryInfo(source, t);
             const recovering = recoveringSource?.id === source.id;
 
@@ -454,19 +448,18 @@ export default function SourceLibraryPanel() {
 
                 <div className="border-t border-(--border-light) pt-3 mt-4">
                   <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                    {previewable && (
-                      <button
-                        type="button"
-                        onClick={() => setViewerFile({
-                          fileUrl: `/api/documents/${source.id}/download`,
-                          fileName: source.originalFilename || displayTitle(source),
-                        })}
-                        disabled={recovering}
-                        className="px-2.5 py-1 text-xs font-bold text-(--brand-foreground) bg-(--brand-soft) hover:bg-(--surface-tertiary) rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                      >
-                        {t.previewSource}
-                      </button>
-                    )}
+                    {/* ponytail: unconditional like Project/Collection detail — FileViewerModal already handles unloadable files */}
+                    <button
+                      type="button"
+                      onClick={() => setViewerFile({
+                        fileUrl: `/api/documents/${source.id}/download`,
+                        fileName: source.originalFilename || displayTitle(source),
+                      })}
+                      disabled={recovering}
+                      className="px-2.5 py-1 text-xs font-bold text-(--brand-foreground) bg-(--brand-soft) hover:bg-(--surface-tertiary) rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {t.previewSource}
+                    </button>
                     {downloadable && (
                       <button
                         type="button"
@@ -538,7 +531,6 @@ export default function SourceLibraryPanel() {
               ...(source.projects || []).map(item => item.name),
             ].filter(Boolean);
             const downloadable = source.processingStatus === 'READY' || source.processingStatus === 'COMPLETED';
-            const previewable = canPreviewPdf(source);
             const recovery = recoveryInfo(source, t);
             const recovering = recoveringSource?.id === source.id;
             const recoveryPanelClass = source.processingStatus === 'FAILED'
@@ -582,19 +574,17 @@ export default function SourceLibraryPanel() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    {previewable && (
-                      <button
-                        type="button"
-                        onClick={() => setViewerFile({
-                          fileUrl: `/api/documents/${source.id}/download`,
-                          fileName: source.originalFilename || displayTitle(source),
-                        })}
-                        disabled={recovering}
-                        className="cursor-pointer rounded-xl bg-(--brand-soft) px-3 py-2 text-xs font-bold text-(--brand-foreground) transition-colors hover:bg-(--surface-tertiary) focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {t.previewSource}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setViewerFile({
+                        fileUrl: `/api/documents/${source.id}/download`,
+                        fileName: source.originalFilename || displayTitle(source),
+                      })}
+                      disabled={recovering}
+                      className="cursor-pointer rounded-xl bg-(--brand-soft) px-3 py-2 text-xs font-bold text-(--brand-foreground) transition-colors hover:bg-(--surface-tertiary) focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {t.previewSource}
+                    </button>
 
                     {downloadable && (
                       <button

@@ -18,7 +18,10 @@ test('instructor source library previews stored PDFs through the authenticated v
 
   assert.match(sourceLibrary, /import FileViewerModal from '\.\.\/features\/FileViewerModal'/);
   assert.match(sourceLibrary, /import useUndoDelete, \{ UndoToast \} from '\.\.\/ui\/UndoDelete\.jsx'/);
-  assert.match(sourceLibrary, /Number\(source\.fileSizeBytes\) > 0/);
+  // ponytail: preview is unconditional (parity with Project/Collection detail) —
+  // FileViewerModal already handles unloadable files, so no size/type gate here
+  assert.doesNotMatch(sourceLibrary, /canPreviewPdf/);
+  assert.doesNotMatch(sourceLibrary, /previewable &&/);
   assert.match(sourceLibrary, /fileUrl: `\/api\/documents\/\$\{source\.id\}\/download`/);
   assert.match(sourceLibrary, /<FileViewerModal/);
 });

@@ -231,6 +231,14 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
         }
     }
 
+    @Override
+    @Transactional
+    public void persistCitationGraph(Document document, OpenAlexWorkResponse work) {
+        if (document == null || work == null) return;
+        tryPersistReferences(document, work);
+        tryPersistCitedBy(document, work);
+    }
+
     private void tryPersistReferences(Document document, OpenAlexWorkResponse work) {
         try {
             persistReferences(document, work);

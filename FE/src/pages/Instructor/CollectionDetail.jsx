@@ -273,6 +273,8 @@ export default function CollectionDetail() {
   const [sharedSearch, setSharedSearch] = useState('');
   const [sharedProjectFilter, setSharedProjectFilter] = useState('');
   const [sharedPage, setSharedPage] = useState(0);
+  const [docSearch, setDocSearch] = useState('');
+  const [docPage, setDocPage] = useState(0);
   const [isSharedGridView, setIsSharedGridView] = useState(true);
 
   const [collection, setCollection] = useState(null);
@@ -380,20 +382,42 @@ export default function CollectionDetail() {
     }
   };
 
-  const renderDocuments = () => (
+  const renderDocuments = () => {
+    // ponytail: client-side filter + 5/page pager over the fetched list (mirrors Connected Map tab)
+    const DOCS_PAGE_SIZE = 5;
+    const filteredDocs = sources.filter(s => {
+      if (!docSearch.trim()) return true;
+      const q = docSearch.trim().toLowerCase();
+      return (s.title || '').toLowerCase().includes(q) || (s.originalFilename || '').toLowerCase().includes(q);
+    });
+    const totalDocPages = Math.ceil(filteredDocs.length / DOCS_PAGE_SIZE) || 1;
+    const safeDocPage = Math.min(docPage, totalDocPages - 1);
+    const pagedDocs = filteredDocs.slice(safeDocPage * DOCS_PAGE_SIZE, (safeDocPage + 1) * DOCS_PAGE_SIZE);
+    return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
       <div className="lg:col-span-2 space-y-4">
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-(--text-tertiary)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          <input
+            type="search"
+            value={docSearch}
+            onChange={(e) => { setDocSearch(e.target.value); setDocPage(0); }}
+            placeholder={ct.search || 'Search sources...'}
+            className="w-full pl-9 pr-3 py-2.5 bg-(--surface) border border-(--border) rounded-xl text-xs font-medium text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)"
+          />
+        </div>
         <button id="add-doc-btn" onClick={() => setAddDocModal(true)}
           className="w-full py-3 bg-(--brand) text-(--on-brand) font-black text-xs rounded-xl hover:bg-(--brand-hover) transition-colors shadow-sm cursor-pointer">
           + {t.addDocument}
         </button>
         {srcLoading ? <LoadingSkeleton count={4} height="h-12" /> : srcError ? (
           <div className="p-4 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold">{srcError}</div>
-        ) : sources.length === 0 ? (
+        ) : filteredDocs.length === 0 ? (
           <EmptyState title={t.noDocuments} description={t.uploadDocsToCollection} />
         ) : (
+          <>
           <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">
-            {sources.map(doc => (
+            {pagedDocs.map(doc => (
               <button key={doc.id} onClick={() => setSelectedSource(doc)}
                 className={`w-full text-left p-3 rounded-xl border text-xs transition flex items-center gap-3 cursor-pointer ${selectedSource?.id === doc.id
                   ? 'bg-(--brand-soft) border-indigo-300 shadow-sm'
@@ -410,6 +434,28 @@ export default function CollectionDetail() {
               </button>
             ))}
           </div>
+          {totalDocPages > 1 && (
+            <div className="flex items-center justify-center gap-2 text-xs">
+              <button
+                disabled={safeDocPage === 0}
+                onClick={() => setDocPage(p => p - 1)}
+                className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {t.prev}
+              </button>
+              <span className="px-3 py-1.5 font-mono font-bold text-(--text-secondary)">
+                {t.page} {safeDocPage + 1} {t.of} {totalDocPages}
+              </span>
+              <button
+                disabled={safeDocPage >= totalDocPages - 1}
+                onClick={() => setDocPage(p => p + 1)}
+                className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {t.next}
+              </button>
+            </div>
+          )}
+          </>
         )}
       </div>
 
@@ -510,7 +556,8 @@ export default function CollectionDetail() {
         )}
       </div>
     </div>
-  );
+    );
+  };
 
   const renderConnectedMap = () => {
     const allShared = sources.filter(s => (s.projectIds || []).length > 0);

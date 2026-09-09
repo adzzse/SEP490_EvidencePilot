@@ -9,6 +9,13 @@ public interface OpenAlexClient {
 
     OpenAlexWorkResponse fetchWork(String doi);
 
+    /**
+     * Best-effort exact-title lookup for works unresolvable by DOI (notably arXiv
+     * DataCite DOIs, which OpenAlex stores as locations rather than primary DOIs).
+     * Returns the full work, or null when nothing matches exactly.
+     */
+    OpenAlexWorkResponse findWorkByTitle(String title);
+
     OpenAlexWorkResponse fetchWorkById(String openAlexId);
 
     List<OpenAlexWorkResponse> fetchCitedByWorks(String openAlexId, int limit);
