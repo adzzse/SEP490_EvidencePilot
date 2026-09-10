@@ -25,6 +25,7 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     long countByProcessingStatus(ProcessingStatus processingStatus);
     long countByCollectionId(UUID collectionId);
     List<Document> findByProjectId(UUID projectId);
+    org.springframework.data.domain.Slice<Document> findByProjectId(UUID projectId, org.springframework.data.domain.Pageable pageable);
     List<Document> findByProjectIdAndDocTypeAndActiveTrue(UUID projectId, DocumentType docType);
     List<Document> findByCollectionId(UUID collectionId);
     List<Document> findByCollectionIdAndDocTypeAndActiveTrue(UUID collectionId, DocumentType docType);

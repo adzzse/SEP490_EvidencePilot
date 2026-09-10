@@ -11,15 +11,14 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ReviewSnapshot;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
-import com.evidencepilot.prompt.SectionCitationReviewPrompt;
 import com.evidencepilot.repository.PaperSectionRepository;
-import com.evidencepilot.repository.PromptTemplateRepository;
+import com.evidencepilot.service.PromptTemplateService;
+import com.evidencepilot.service.PromptTemplateService.ResolvedPrompt;
 import com.evidencepilot.repository.ReviewSnapshotRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.PaperStandardService;
-import org.springframework.beans.factory.annotation.Autowired;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -78,19 +77,21 @@ public class SectionCitationReviewService {
     private final SourceMatchingService sourceMatchingService;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
-    @Autowired(required = false)
-    private PromptTemplateRepository promptTemplateRepository;
+    private final PromptTemplateService promptTemplateService;
 
     @Transactional(readOnly = true)
     public Optional<SectionCitationReviewResponse> cached(UUID documentId, UUID sectionId) {
         PaperSection section = requireSection(documentId, sectionId, false);
-        String reviewInputFingerprint = reviewInputFingerprint(section);
-        return reviewSnapshotRepository
+        ResolvedPrompt prompt = promptTemplateService.resolve("CITATION_REVIEW");
+        String reviewInputFingerprint = reviewInputFingerprint(section, prompt);
+        var cached = reviewSnapshotRepository
                 .findByProjectIdAndStyleAndInputFingerprint(
                         section.getDocument().getProject().getId(), SNAPSHOT_STYLE,
                         reviewInputFingerprint)
                 .flatMap(this::readSnapshot)
                 .filter(SectionCitationReviewResponse::complete);
+        requireCurrentPrompt(prompt);
+        return cached;
     }
 
     @Transactional
@@ -131,7 +132,8 @@ public class SectionCitationReviewService {
         if (!projectId.equals(project.getId())) {
             throw new IllegalArgumentException("Section review project does not match its job");
         }
-        String reviewInputFingerprint = reviewInputFingerprint(section);
+        ResolvedPrompt prompt = promptTemplateService.resolve("CITATION_REVIEW");
+        String reviewInputFingerprint = reviewInputFingerprint(section, prompt);
         if (!reviewInputFingerprint.equals(expectedReviewInputFingerprint)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
@@ -143,6 +145,7 @@ public class SectionCitationReviewService {
                 .flatMap(this::readSnapshot)
                 .filter(SectionCitationReviewResponse::complete);
         if (cached.isPresent()) {
+            requireCurrentPrompt(prompt);
             return cached.get();
         }
 
@@ -150,7 +153,8 @@ public class SectionCitationReviewService {
         SectionCitationReviewResponse review = isPolicyExempt(normalizedTitle)
                 ? notApplicable(
                         section, reviewInputFingerprint, exemptionSummary(normalizedTitle))
-                : generate(section, reviewInputFingerprint, normalizedTitle, onProgress, onCheckpoint);
+                : generate(section, reviewInputFingerprint, normalizedTitle, onProgress, onCheckpoint, prompt);
+        requireCurrentPrompt(prompt);
         if (review.complete()) {
             saveSnapshot(project, reviewInputFingerprint, review);
         }
@@ -216,34 +220,22 @@ public class SectionCitationReviewService {
     }
 
     public String reviewInputFingerprint(PaperSection section) {
+        return reviewInputFingerprint(section, promptTemplateService.resolve("CITATION_REVIEW"));
+    }
+
+    private String reviewInputFingerprint(PaperSection section, ResolvedPrompt prompt) {
         Project project = section.getDocument().getProject();
         String standard = project.getTargetStandard() == null
                 ? "CUSTOM" : project.getTargetStandard().name();
-        String input = REVIEW_VERSION + '\0' + RULE_CATALOG_VERSION + '\0' + resolveSystem()
-                + '\0' + activePromptVersion() + '\0' + standard + '\0' + section.getId() + '\0' + section.getSectionTitle()
+        String input = REVIEW_VERSION + '\0' + RULE_CATALOG_VERSION + '\0' + prompt.fingerprint()
+                + '\0' + standard + '\0' + section.getId() + '\0' + section.getSectionTitle()
                 + '\0' + sectionContentFingerprint(section) + '\0' + corpusRevision(project.getId());
         return sha256(input);
     }
 
-    /** Active CITATION_REVIEW SYSTEM from DB, fallback to code constant (pre-V29 safe). */
-    private String resolveSystem() {
-        try {
-            if (promptTemplateRepository == null) return SectionCitationReviewPrompt.SYSTEM;
-            return promptTemplateRepository.findByTemplateKeyAndActiveTrue("CITATION_REVIEW")
-                    .map(t -> t.getSystemText()).filter(s -> !s.isBlank())
-                    .orElse(SectionCitationReviewPrompt.SYSTEM);
-        } catch (Exception e) {
-            return SectionCitationReviewPrompt.SYSTEM;
-        }
-    }
-
-    private String activePromptVersion() {
-        try {
-            if (promptTemplateRepository == null) return "";
-            return promptTemplateRepository.findByTemplateKeyAndActiveTrue("CITATION_REVIEW")
-                    .map(t -> t.getVersion()).orElse("");
-        } catch (Exception e) {
-            return "";
+    private void requireCurrentPrompt(ResolvedPrompt prompt) {
+        if (!prompt.fingerprint().equals(promptTemplateService.resolve("CITATION_REVIEW").fingerprint())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "SECTION_REVIEW_INPUT_CHANGED: prompt changed; run Citation Review again");
         }
     }
 
@@ -281,7 +273,7 @@ public class SectionCitationReviewService {
             String reviewInputFingerprint,
             String normalizedTitle,
             BiConsumer<Integer, Integer> onProgress,
-            java.util.function.Consumer<SectionCitationReviewResponse> onCheckpoint) {
+            java.util.function.Consumer<SectionCitationReviewResponse> onCheckpoint, ResolvedPrompt prompt) {
         UUID projectId = section.getDocument().getProject().getId();
         List<ClaimCandidate> candidates = sectionCandidates(section.getContentTex());
         int batchCount = (candidates.size() + REVIEW_BATCH_SIZE - 1) / REVIEW_BATCH_SIZE;
@@ -300,7 +292,7 @@ public class SectionCitationReviewService {
             try {
                 List<CandidateContext> contexts = retrieveCandidateEvidence(projectId, batch);
                 GeneratedReview generated = generateBatchReview(
-                        section, normalizedTitle, contexts, batchIndex, batchCount);
+                        section, normalizedTitle, contexts, batchIndex, batchCount, prompt.systemText());
                 if (provider == null) {
                     provider = generated.provider();
                     model = generated.model();
@@ -342,6 +334,7 @@ public class SectionCitationReviewService {
                 onProgress.accept(batchIndex + 1, batchCount);
             }
             if (completedBatches > 0) {
+                requireCurrentPrompt(prompt);
                 List<String> checkpointLimitations = new ArrayList<>(limitations);
                 for (int pending = batchIndex + 1; pending < batchCount; pending++) {
                     checkpointLimitations.add("Batch " + (pending + 1) + "/" + batchCount + " has not been reviewed yet");
@@ -508,9 +501,9 @@ public class SectionCitationReviewService {
             String normalizedTitle,
             List<CandidateContext> contexts,
             int batchIndex,
-            int batchCount) {
+        int batchCount, String systemText) {
         String prompt = reviewPrompt(section, normalizedTitle, contexts, batchIndex, batchCount);
-        return aiModelClient.generateValidated(resolveSystem(), prompt, null, generation -> {
+        return aiModelClient.generateValidated(systemText, prompt, null, generation -> {
             try {
                 ModelReview review = strictMapper().readValue(
                         extractJson(generation.response()), ModelReview.class);

@@ -23,9 +23,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Manual seed — pure ADMIN function (no @Profile, no APP_ENV gate on manual
- * path; auto boot seeder stays profile-gated). Excel multi-sheet + folder-
- * per-paper ZIP bundle, async jobs with progress polling.
+ * ADMIN-only Excel/ZIP seed. Silent rows require explicit local/test policy;
+ * one reserved import owns its temporary files through worker completion.
  */
 @RestController
 @RequestMapping("/api/admin/seed")
@@ -47,7 +46,10 @@ public class AdminSeedController {
 
     @PostMapping(value = "/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> preview(@RequestParam("file") MultipartFile file) throws Exception {
-        var parsed = excelSeedService.parse(file.getInputStream(), file.getSize());
+        AdminExcelSeedService.ParsedSeed parsed;
+        try (var in = file.getInputStream()) {
+            parsed = excelSeedService.parse(in, file.getSize());
+        }
         Map<String, Object> rows = new LinkedHashMap<>();
         parsed.sheets().forEach((k, v) -> rows.put(k, v.size()));
         long invited = parsed.sheets().getOrDefault("users", List.of()).stream()
@@ -68,37 +70,64 @@ public class AdminSeedController {
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) throws Exception {
-        byte[] xlsx = file.getBytes();
-        var job = excelSeedService.submit(xlsx,
-                new AdminExcelSeedService.ZipBundle(Map.of(), List.of()), null);
-        return ResponseEntity.accepted().body(Map.of("jobId", job.getId().toString(), "status", job.getStatus()));
+        if (!excelSeedService.tryReserveImport()) return busy();
+        boolean submitted = false;
+        try {
+            excelSeedService.checkUploadSize(file.getSize());
+            byte[] xlsx;
+            try (var in = file.getInputStream()) {
+                xlsx = excelSeedService.readXlsx(in, file.getSize());
+            }
+            var job = excelSeedService.submit(xlsx,
+                    new AdminExcelSeedService.ZipBundle(Map.of(), List.of()), null);
+            submitted = true;
+            return ResponseEntity.accepted().body(Map.of("jobId", job.getId().toString(), "status", job.getStatus()));
+        } finally {
+            if (!submitted) excelSeedService.releaseImport();
+        }
     }
 
     @PostMapping(value = "/upload-zip", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> uploadZip(@RequestParam("file") MultipartFile file) throws Exception {
-        var bundle = excelSeedService.readZip(file.getInputStream());
-        if (!bundle.errors().isEmpty()) {
-            AdminExcelSeedService.deleteSpoolDir(bundle.spoolDir());
-            return ResponseEntity.badRequest().body(Map.of("errors", bundle.errors()));
-        }
-        java.nio.file.Path xlsxPath = bundle.files().get("seed.xlsx");
-        if (xlsxPath == null) {
-            // fallback: first xlsx at root
-            xlsxPath = bundle.files().entrySet().stream()
+        if (!excelSeedService.tryReserveImport()) return busy();
+        boolean submitted = false;
+        AdminExcelSeedService.ZipBundle bundle = null;
+        try {
+            excelSeedService.checkUploadSize(file.getSize());
+            try (var in = file.getInputStream()) {
+                bundle = excelSeedService.readZip(in);
+            }
+            if (!bundle.errors().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("errors", bundle.errors()));
+            }
+            var candidates = bundle.files().entrySet().stream()
                     .filter(e -> e.getKey().toLowerCase(java.util.Locale.ROOT).endsWith(".xlsx") && !e.getKey().contains("/"))
-                    .map(Map.Entry::getValue).findFirst()
-                    .orElse(null);
+                    .toList();
+            if (candidates.size() != 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ZIP must contain exactly one XLSX at root");
+            }
+            var selected = candidates.getFirst();
+            byte[] xlsx;
+            try (var in = java.nio.file.Files.newInputStream(selected.getValue())) {
+                xlsx = excelSeedService.readXlsx(in, java.nio.file.Files.size(selected.getValue()));
+            }
+            Map<String, java.nio.file.Path> rest = new LinkedHashMap<>(bundle.files());
+            rest.remove(selected.getKey());
+            var job = excelSeedService.submit(xlsx,
+                    new AdminExcelSeedService.ZipBundle(rest, List.of(), bundle.spoolDir()), null);
+            submitted = true;
+            return ResponseEntity.accepted().body(Map.of("jobId", job.getId().toString(), "status", job.getStatus()));
+        } finally {
+            if (!submitted) {
+                if (bundle != null) AdminExcelSeedService.deleteSpoolDir(bundle.spoolDir());
+                excelSeedService.releaseImport();
+            }
         }
-        if (xlsxPath == null) {
-            AdminExcelSeedService.deleteSpoolDir(bundle.spoolDir());
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ZIP must contain seed.xlsx at root");
-        }
-        byte[] xlsx = java.nio.file.Files.readAllBytes(xlsxPath);
-        Map<String, java.nio.file.Path> rest = new LinkedHashMap<>(bundle.files());
-        rest.remove("seed.xlsx");
-        var job = excelSeedService.submit(xlsx,
-                new AdminExcelSeedService.ZipBundle(rest, List.of(), bundle.spoolDir()), null);
-        return ResponseEntity.accepted().body(Map.of("jobId", job.getId().toString(), "status", job.getStatus()));
+    }
+
+    private ResponseEntity<Map<String, Object>> busy() {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).header(HttpHeaders.RETRY_AFTER, "5")
+                .body(Map.of("errors", List.of("A seed import is already running; retry after it finishes")));
     }
 
     @GetMapping("/jobs/{jobId}")
@@ -110,6 +139,10 @@ public class AdminSeedController {
         body.put("status", job.getStatus());
         body.put("total", job.getTotal());
         body.put("processed", job.getProcessed());
+        body.put("complete", job.isComplete());
+        body.put("successfulRows", job.getSuccessfulRows());
+        body.put("failedRows", job.getFailedRows());
+        body.put("skippedRows", job.getSkippedRows());
         body.put("currentStep", job.getCurrentStep());
         body.put("progress", job.getTotal() == 0 ? 0 : (int) (100L * job.getProcessed() / Math.max(1, job.getTotal())));
         body.put("errors", job.getErrors());

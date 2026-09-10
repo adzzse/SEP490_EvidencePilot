@@ -4,7 +4,7 @@ import { useAdminTour } from '../../hooks/useAdminTour.js';
 
 export default function TourLauncher({ steps, tourKey, autoLaunch = false, className }) {
   const { t } = useTranslation();
-  const { start, active } = useAdminTour(tourKey, () => steps);
+  const { start } = useAdminTour(tourKey, steps);
   const [autoFired, setAutoFired] = useState(false);
 
   useEffect(() => {

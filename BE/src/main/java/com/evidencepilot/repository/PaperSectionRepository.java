@@ -9,6 +9,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface PaperSectionRepository extends JpaRepository<PaperSection, UUID> {
+    @Query("select s from PaperSection s where s.document.project.id = :projectId")
+    org.springframework.data.domain.Slice<PaperSection> findForExport(@org.springframework.data.repository.query.Param("projectId") UUID projectId, org.springframework.data.domain.Pageable pageable);
+
     @Query("""
             select s from PaperSection s
             join fetch s.document d

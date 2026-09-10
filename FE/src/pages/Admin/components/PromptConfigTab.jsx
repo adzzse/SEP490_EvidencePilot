@@ -87,7 +87,7 @@ function PromptConfigSection({ api }) {
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {p.active && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">{t('admin.active')}</span>}
-                  <button onClick={() => validate(p.id)} className="px-2 py-1 text-[10px] font-bold border border-(--border) rounded-lg hover:bg-(--surface-secondary)">{t('admin.validate')}</button>
+                  <button onClick={() => validate(p.id)} className="px-2 py-1 text-[10px] font-bold border border-(--border) rounded-lg hover:bg-(--surface-secondary)">{t('admin.promptValidate')}</button>
                   {!p.active && <button onClick={() => activate(p.id)} className="px-2 py-1 text-[10px] font-bold bg-[#0c162e] text-white rounded-lg">{t('admin.activate')}</button>}
                 </div>
               </div>
@@ -107,9 +107,9 @@ function PromptConfigSection({ api }) {
             <select value={form.model} onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))} className="px-3 py-2 border border-(--border) rounded-xl text-xs font-semibold" title={t('admin.promptModelHint')}>
               {MODELS.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
-            <input value={form.version} onChange={(e) => setForm((f) => ({ ...f, version: e.target.value }))} placeholder="v5" required className="flex-1 px-3 py-2 border border-(--border) rounded-xl text-xs font-mono" />
+            <input value={form.version} onChange={(e) => setForm((f) => ({ ...f, version: e.target.value }))} placeholder="v5" aria-label={t('admin.promptVersions')} maxLength={50} required className="flex-1 px-3 py-2 border border-(--border) rounded-xl text-xs font-mono" />
           </div>
-          <textarea value={form.system_text} onChange={(e) => setForm((f) => ({ ...f, system_text: e.target.value }))} rows={18} required placeholder={defaults[form.template_key] || t('admin.promptSystemPlaceholder')} className="w-full px-3 py-2 border border-(--border) rounded-xl text-xs font-mono whitespace-pre-wrap" />
+          <textarea value={form.system_text} onChange={(e) => setForm((f) => ({ ...f, system_text: e.target.value }))} rows={18} aria-label={t('admin.promptEditor')} maxLength={48000} required placeholder={defaults[form.template_key] || t('admin.promptSystemPlaceholder')} className="w-full px-3 py-2 border border-(--border) rounded-xl text-xs font-mono whitespace-pre-wrap" />
           <p className="text-[10px] text-(--text-tertiary)">{t('admin.promptModelHint')}</p>
           <div className="flex justify-between items-center">
             <button type="button" onClick={() => setForm((f) => ({ ...f, system_text: defaults[f.template_key] || '' }))} disabled={!defaults[form.template_key]} className="px-3 py-2 text-xs font-bold text-(--text-secondary) border border-(--border) rounded-xl hover:bg-(--surface-secondary) disabled:opacity-40">{t('admin.loadOriginal')}</button>

@@ -149,7 +149,7 @@ class AdminServiceTest {
 
     @Test
     void createsActiveUserWithFixedPasswordWhenDevBypassAllowed() {
-        when(devBypassPolicies.getIfAvailable()).thenReturn(new DevBypassPolicy(true));
+        when(devBypassPolicies.getIfAvailable()).thenReturn(localPolicy(true));
         when(currentUsers.requireCurrentUser()).thenReturn(user(UserRole.ADMIN, AccountStatus.ACTIVE));
         when(passwords.encode(DevBypassPolicy.FIXED_PASSWORD)).thenReturn("$2a$10$random");
         when(users.save(any(User.class))).thenAnswer(invocation -> {
@@ -185,7 +185,7 @@ class AdminServiceTest {
 
     @Test
     void rejectsDevBypassWhenFlagDisabled() {
-        when(devBypassPolicies.getIfAvailable()).thenReturn(new DevBypassPolicy(false));
+        when(devBypassPolicies.getIfAvailable()).thenReturn(localPolicy(false));
         assertForbidden(() -> service.createUser(new AdminUserCreateRequest(
                 "dev@example.com", "D", "Ev", UserRole.INSTRUCTOR, null, true)));
         verify(users, never()).save(any());
@@ -332,7 +332,7 @@ class AdminServiceTest {
 
     @Test
     void importWithDevBypassCreatesActiveUsersWithoutInvites() {
-        when(devBypassPolicies.getIfAvailable()).thenReturn(new DevBypassPolicy(true));
+        when(devBypassPolicies.getIfAvailable()).thenReturn(localPolicy(true));
         when(currentUsers.requireCurrentUser()).thenReturn(user(UserRole.ADMIN, AccountStatus.ACTIVE));
         when(users.findAllByEmailIn(any())).thenReturn(List.of());
         when(users.findAllByStudentCodeIn(any())).thenReturn(List.of());
@@ -639,7 +639,7 @@ class AdminServiceTest {
             saved.forEach(user -> user.setId(UUID.randomUUID()));
             return saved;
         });
-        org.springframework.test.util.ReflectionTestUtils.setField(service, "seedDefaultPassword", "EP123456!");
+        when(devBypassPolicies.getIfAvailable()).thenReturn(localPolicy(true));
 
         var response = service.importUsers(new AdminUserImportRequest("STUDENT", List.of(
                 new AdminUserImportRequest.UserItem("silent@example.com", "Silent", "Student", "SE170701"))), true);
@@ -651,7 +651,7 @@ class AdminServiceTest {
         verify(users).saveAll(savedUsers.capture());
         assertThat(savedUsers.getValue()).singleElement().satisfies(saved -> {
             assertThat(saved.getAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
-            assertThat(saved.getPasswordHash()).isEqualTo("encoded:EP123456!");
+            assertThat(saved.getPasswordHash()).isEqualTo("encoded:" + DevBypassPolicy.FIXED_PASSWORD);
         });
         verify(invitations, never()).issueInvitation(any());
         ArgumentCaptor<Object> auditValue = ArgumentCaptor.forClass(Object.class);
@@ -668,6 +668,22 @@ class AdminServiceTest {
         assertForbidden(() -> service.importUsers(new AdminUserImportRequest("STUDENT", List.of(
                 new AdminUserImportRequest.UserItem("x@example.com", "X", "Y", "SE170702"))), true));
         verifyNoInteractions(users);
+    }
+
+    @Test
+    void forbiddenSilentImportDoesNotReadOrWriteUsersOrSendInvitations() {
+        when(currentUsers.requireCurrentUser()).thenReturn(user(UserRole.ADMIN, AccountStatus.ACTIVE));
+        when(devBypassPolicies.getIfAvailable()).thenReturn(new DevBypassPolicy(true,
+                new org.springframework.mock.env.MockEnvironment().withProperty("APP_ENV", "production")
+                        .withProperty("spring.profiles.active", "dev")));
+        assertForbidden(() -> service.importUsers(new AdminUserImportRequest("STUDENT", List.of(
+                new AdminUserImportRequest.UserItem("silent@fixture.test", "Test", "Student", "SE170703"))), true));
+        verifyNoInteractions(users, invitations, passwords, events);
+    }
+
+    private static DevBypassPolicy localPolicy(boolean enabled) {
+        return new DevBypassPolicy(enabled, new org.springframework.mock.env.MockEnvironment()
+                .withProperty("spring.profiles.active", "test"));
     }
 
     private User user(UserRole role, AccountStatus status) {

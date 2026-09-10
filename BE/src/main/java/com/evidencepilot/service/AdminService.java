@@ -34,7 +34,6 @@ import com.evidencepilot.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -83,13 +82,9 @@ public class AdminService {
     private final PasswordEncoder passwords;
     private final UserInvitationService invitations;
     private final UserAvatarService avatars;
-    // Empty unless the dev profile is active — DevBypassPolicy is @Profile("dev").
+    // Fail closed if a restricted test context does not provide the policy.
     private final ObjectProvider<DevBypassPolicy> devBypassPolicies;
     private final ApplicationEventPublisher events;
-    // Default password for seed-created silent accounts (ADMIN-gated seed only,
-    // every creation audited). Never used for interactive user creation.
-    @Value("${app.seed.default-password:EP123456!}")
-    private String seedDefaultPassword;
 
     @Transactional(readOnly = true)
     public PagedResponse<AdminUserResponse> getUsers(
@@ -175,9 +170,8 @@ public class AdminService {
 
     /**
      * Bulk import with an explicit invitation suppress switch for the ADMIN-gated
-     * seed flow. Unlike {@code devBypass} (dev profile only), this path works on
-     * any profile but requires the caller to be ADMIN. Suppressed accounts are
-     * created {@code ACTIVE} with the seed default password and no email is sent;
+     * seed flow. Requires ADMIN and explicitly enabled local/test policy.
+     * Suppressed accounts are created {@code ACTIVE} using the local bypass;
      * every creation is audited with {@code seedSilent=true}.
      */
     @Transactional
@@ -187,6 +181,7 @@ public class AdminService {
             if (caller.getRole() != UserRole.ADMIN) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invitation suppress requires ADMIN role");
             }
+            requireDevBypass();
         }
         List<AdminUserImportResponse.ImportError> errors = new ArrayList<>();
         if (request == null) {
@@ -292,12 +287,9 @@ public class AdminService {
                 user.setEmail(row.email());
                 user.setRole(role);
                 user.setPasswordChangeNoticePending(true);
-                if (devBypass) {
+                if (devBypass || suppressInvitations) {
                     user.setAccountStatus(AccountStatus.ACTIVE);
                     user.setPasswordHash(passwords.encode(DevBypassPolicy.FIXED_PASSWORD));
-                } else if (suppressInvitations) {
-                    user.setAccountStatus(AccountStatus.ACTIVE);
-                    user.setPasswordHash(passwords.encode(seedDefaultPassword));
                 } else {
                     user.setAccountStatus(AccountStatus.VERIFYING_EMAIL);
                     user.setPasswordHash(User.DISABLED_PASSWORD_SENTINEL);

@@ -50,8 +50,9 @@ public class AdminPromptController {
 
     @PostMapping("/{id}/validate")
     public Map<String, Object> validate(@PathVariable UUID id) {
-        List<String> errors = service.validateDryRun(id);
-        return Map.of("id", id.toString(), "valid", errors.isEmpty(), "errors", errors);
+        List<String> errors = service.validateConfiguration(id);
+        return Map.of("id", id.toString(), "valid", errors.isEmpty(), "errors", errors,
+                "validation_type", "CONFIGURATION", "runtime_verified", false);
     }
 
     @PostMapping("/{id}/activate")

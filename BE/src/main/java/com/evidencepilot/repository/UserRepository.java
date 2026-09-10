@@ -16,6 +16,9 @@ import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.UserRole;
 
 public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificationExecutor<User> {
+    @Query("select u from User u where exists (select m.id from ProjectMember m where m.user = u and m.project.id = :projectId)")
+    org.springframework.data.domain.Slice<User> findForExport(@Param("projectId") UUID projectId, org.springframework.data.domain.Pageable pageable);
+
     // soft-deleted accounts are invisible to login, lookup, and duplicate checks
     @Query("select user from User user where user.email = :email and user.accountStatus <> 'DELETED'")
     Optional<User> findByEmail(@Param("email") String email);

@@ -36,8 +36,8 @@ spring:
   servlet:
     multipart:
       enabled: true
-      max-file-size: ${UPLOAD_MAX_FILE_SIZE:1GB}
-      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:1GB}
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:256MB}
+      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:256MB}
 
   # ── RabbitMQ configuration ────────────────────────────────────────────────
   rabbitmq:
@@ -61,10 +61,10 @@ spring:
 
   # ── SMTP mail configuration (external relay — Resend / SES) ─────────────────
   # Production requires MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD to be
-  # set via environment variables. No defaults — boot fails if missing in prod.
+  # configured effectively; the production guard rejects missing relay credentials.
   mail:
     host: ${MAIL_HOST:}
-    port: ${MAIL_PORT:}
+    port: ${MAIL_PORT:587}
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
     properties:
@@ -116,11 +116,14 @@ app:
   mail:
     # Visible sender for all branded emails. Falls back to the SMTP username.
     from: ${MAIL_FROM:${MAIL_USERNAME:}}
-  # Dev-only user-creation bypass (fixed password, no email). The bypass code
-  # path is additionally gated behind the dev Spring profile — this flag alone
-  # can never enable it in production.
+  # Silent creation requires an explicit dev/test profile plus this flag.
+  # The production profile or APP_ENV=production always disables it.
   dev-bypass:
     enabled: ${APP_DEV_BYPASS_ENABLED:false}
+  seed:
+    max-upload-bytes: ${SEED_MAX_UPLOAD_BYTES:268435456}
+    max-expanded-bytes: ${SEED_MAX_EXPANDED_BYTES:536870912}
+    max-entries: ${SEED_MAX_ENTRIES:2000}
 
 # ── External AI model integration ────────────────────────────────────────
 ai:

@@ -376,6 +376,72 @@ class SubmissionReadinessServiceTest {
                 .isEqualTo(3);
     }
 
+    @Test
+    void promptActivationStalesAiResultWithoutRevokingHandoffOrChangingSubmissionIdentity() {
+        Fixture f = fixture();
+        var templates = org.mockito.Mockito.mock(com.evidencepilot.repository.PromptTemplateRepository.class);
+        var evaluations = org.mockito.Mockito.mock(com.evidencepilot.repository.SectionStandardEvaluationRepository.class);
+        var transactions = org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class);
+        var prompts = new PromptTemplateService(templates, currentUserService, transactions);
+        var standards = new SectionStandardService(org.mockito.Mockito.mock(AiModelClient.class), paperSectionRepository,
+                evaluations, currentUserService, objectMapper, transactions, prompts);
+        service = new SubmissionReadinessService(projectRepository, documentRepository, paperSectionRepository,
+                feedbackRequestRepository, standards, currentUserService, objectMapper);
+        var original = new com.evidencepilot.model.PromptTemplate();
+        original.setId(UUID.randomUUID());
+        original.setTemplateKey("CHECK_STANDARD");
+        original.setVersion("v1");
+        original.setSystemText(PromptTemplateService.CHECK_STANDARD_DEFAULT);
+        original.setActive(true);
+        var candidate = new com.evidencepilot.model.PromptTemplate();
+        candidate.setId(UUID.randomUUID());
+        candidate.setTemplateKey("CHECK_STANDARD");
+        candidate.setVersion("v2");
+        candidate.setSystemText(PromptTemplateService.CHECK_STANDARD_DEFAULT + "\nBe concise.");
+        when(templates.findByTemplateKeyAndActiveTrue("CHECK_STANDARD"))
+                .thenAnswer(call -> List.of(original, candidate).stream().filter(com.evidencepilot.model.PromptTemplate::isActive).findFirst());
+        when(templates.findById(candidate.getId())).thenReturn(Optional.of(candidate));
+        when(templates.lockVersions("CHECK_STANDARD")).thenReturn(List.of(original, candidate));
+        when(templates.saveAndFlush(candidate)).thenReturn(candidate);
+        var evaluation = new com.evidencepilot.model.SectionStandardEvaluation();
+        evaluation.setSectionId(f.section().getId());
+        evaluation.setDocumentId(f.paper().getId());
+        evaluation.setRequirements(List.of("Has thesis"));
+        evaluation.setStatus("COMPLETED");
+        evaluation.setResultJson("{}");
+        when(evaluations.findTopBySectionIdOrderByUpdatedAtDesc(f.section().getId())).thenReturn(Optional.of(evaluation));
+        String objective = standards.inputFingerprint(f.section());
+        evaluation.setInputFingerprint(objective);
+        evaluation.setPromptFingerprint(prompts.resolve("CHECK_STANDARD").fingerprint());
+        when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(f.project().getId(), DocumentType.PAPER)).thenReturn(List.of(f.paper()));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(f.paper().getId())).thenReturn(List.of(f.section()));
+        when(paperSectionRepository.findByIdWithDocument(f.section().getId())).thenReturn(Optional.of(f.section()));
+        when(projectRepository.findByIdForUpdate(f.project().getId())).thenReturn(Optional.of(f.project()));
+        when(currentUserService.requireCurrentUser()).thenReturn(f.leader());
+        when(paperSectionRepository.saveAndFlush(f.section())).thenReturn(f.section());
+        f.section().setHandoffConfirmedBy(null);
+        service.confirm(f.paper().getId(), f.section().getId(), objective);
+        var confirmedAt = f.section().getHandoffConfirmedAt();
+        var before = service.assess(f.project(), f.leader()).response();
+        assertThat(before.canSubmit()).isTrue();
+        assertThat(standards.latest(f.paper().getId(), f.section().getId()).orElseThrow().stale()).isFalse();
+
+        prompts.activate(candidate.getId());
+
+        assertThat(standards.latest(f.paper().getId(), f.section().getId()).orElseThrow().stale()).isTrue();
+        var after = service.assess(f.project(), f.leader()).response();
+        assertThat(after.submissionFingerprint()).isEqualTo(before.submissionFingerprint());
+        assertThat(after.canSubmit()).isTrue();
+        assertThat(after.papers().get(0).sections().get(0).handoffState()).isEqualTo("CONFIRMED");
+        assertThat(f.section().getHandoffConfirmedAt()).isEqualTo(confirmedAt);
+        org.mockito.Mockito.clearInvocations(templates);
+        org.mockito.Mockito.lenient().doThrow(new org.springframework.dao.DataAccessResourceFailureException("offline"))
+                .when(templates).findByTemplateKeyAndActiveTrue("CHECK_STANDARD");
+        assertThat(service.assess(f.project(), f.leader()).response().submissionFingerprint()).isEqualTo(before.submissionFingerprint());
+        assertThat(service.assess(f.project(), f.leader()).response().canSubmit()).isTrue();
+        org.mockito.Mockito.verifyNoInteractions(templates);
+    }
+
     private FeedbackRequest stubReturned(Fixture f) {
         stubAssessment(f, "f".repeat(64));
         FeedbackRequest returned = new FeedbackRequest();

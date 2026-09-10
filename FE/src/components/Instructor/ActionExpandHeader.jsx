@@ -26,6 +26,7 @@ export default function ActionExpandHeader({ title, placeholder = 'Search...', s
         <button
           type="button"
           onClick={onAdd}
+          aria-label={addLabel}
           onMouseEnter={() => setIsAddHovered(true)}
           onMouseLeave={() => setIsAddHovered(false)}
           className={`flex shrink-0 items-center justify-center rounded-lg bg-[var(--brand)] text-white transition-all duration-300 ease-in-out hover:bg-[var(--brand-hover)] ${isAddHovered ? 'px-3 gap-1.5 h-8' : 'w-8 h-8'}`}

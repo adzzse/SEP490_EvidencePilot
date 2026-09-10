@@ -47,11 +47,15 @@ class SectionStandardServiceTest {
     private SectionStandardEvaluationRepository evaluationRepository;
     @Mock
     private CurrentUserService currentUserService;
+    @Mock
+    private PromptTemplateService prompts;
 
     private SectionStandardService service;
 
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.lenient().when(prompts.resolve("CHECK_STANDARD")).thenReturn(
+                new PromptTemplateService.ResolvedPrompt("CHECK_STANDARD", "code-default", PromptTemplateService.CHECK_STANDARD_DEFAULT));
         // The client tests cover continuation; these tests exercise the supplied domain validator.
         org.mockito.Mockito.lenient().doAnswer(invocation -> {
             AiModelClient.GenerationResult generated = aiModelClient.generateStrict(invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2));
@@ -71,7 +75,7 @@ class SectionStandardServiceTest {
                 evaluationRepository,
                 currentUserService,
                 new ObjectMapper(),
-                org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class));
+                org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class), prompts);
     }
 
     @ParameterizedTest
@@ -233,6 +237,71 @@ class SectionStandardServiceTest {
                 UUID.randomUUID(), instructor, "queued-input"))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("job project");
         verifyNoInteractions(aiModelClient, evaluationRepository);
+    }
+
+    @Test
+    void samePromptReusesCacheAndNewPromptOrLegacyNullFingerprintRecomputes() {
+        PaperSection section = section();
+        var evaluation = stubEvaluation(section);
+        var first = service.evaluate(section.getDocument().getId(), section.getId());
+        assertThat(service.evaluate(section.getDocument().getId(), section.getId()).status()).isEqualTo("COMPLETED");
+        verify(aiModelClient, times(1)).generateStrict(anyString(), anyString(), anyMap());
+        evaluation.setPromptFingerprint(null);
+        assertThat(service.latest(section.getDocument().getId(), section.getId()).orElseThrow().stale()).isTrue();
+        service.evaluate(section.getDocument().getId(), section.getId());
+        var changed = new PromptTemplateService.ResolvedPrompt("CHECK_STANDARD", "v2", PromptTemplateService.CHECK_STANDARD_DEFAULT + "\nBe concise.");
+        when(prompts.resolve("CHECK_STANDARD")).thenReturn(changed);
+        assertThat(service.latest(section.getDocument().getId(), section.getId()).orElseThrow().stale()).isTrue();
+        var fresh = service.evaluate(section.getDocument().getId(), section.getId());
+        assertThat(fresh.stale()).isFalse();
+        assertThat(fresh.inputFingerprint()).isEqualTo(first.inputFingerprint());
+        assertThat(evaluation.getPromptFingerprint()).isEqualTo(changed.fingerprint());
+        verify(aiModelClient, times(3)).generateStrict(anyString(), anyString(), anyMap());
+        service.saveConfig(section.getDocument().getId(), section.getId(), List.of("Has thesis"));
+        assertThat(evaluation.getPromptFingerprint()).isNull();
+    }
+
+    @Test
+    void promptSwitchDuringGenerationRejectsResultBeforePersistence() {
+        PaperSection section = section();
+        var evaluation = stubEvaluation(section);
+        var original = prompts.resolve("CHECK_STANDARD");
+        var changed = new PromptTemplateService.ResolvedPrompt("CHECK_STANDARD", "v2", original.systemText());
+        when(prompts.resolve("CHECK_STANDARD")).thenReturn(original, changed);
+        assertThatThrownBy(() -> service.evaluate(section.getDocument().getId(), section.getId()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("STANDARD_INPUT_CHANGED");
+        verify(evaluationRepository, never()).save(any());
+        assertThat(evaluation.getStatus()).isEqualTo("CONFIGURED");
+        verify(aiModelClient).generateStrict(org.mockito.ArgumentMatchers.eq(original.systemText()), anyString(), anyMap());
+    }
+
+    @Test
+    void promptDatabaseFailurePreventsGenerationButDoesNotChangeObjectiveInputIdentity() {
+        PaperSection section = section();
+        var evaluation = configured(section);
+        when(paperSectionRepository.findByIdWithDocument(section.getId())).thenReturn(Optional.of(section));
+        when(evaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId())).thenReturn(Optional.of(evaluation));
+        String objective = service.inputFingerprint(section);
+        when(prompts.resolve("CHECK_STANDARD")).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("offline"));
+        assertThat(service.inputFingerprint(section)).isEqualTo(objective);
+        assertThatThrownBy(() -> service.evaluate(section.getDocument().getId(), section.getId()))
+                .isInstanceOf(org.springframework.dao.DataAccessResourceFailureException.class);
+        verifyNoInteractions(aiModelClient);
+    }
+
+    private SectionStandardEvaluation stubEvaluation(PaperSection section) {
+        var evaluation = configured(section);
+        var instructor = user(UserRole.INSTRUCTOR);
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(paperSectionRepository.findByIdWithDocument(section.getId())).thenReturn(Optional.of(section));
+        when(evaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId())).thenReturn(Optional.of(evaluation));
+        org.mockito.Mockito.lenient().when(evaluationRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+        when(aiModelClient.generateStrict(anyString(), anyString(), anyMap())).thenReturn(new AiModelClient.GenerationResult("provider", "model", """
+                {"summary":"Present","limitations":[],"items":[{"requirement":"Has thesis","verdict":"MET",
+                "evidence":"clear thesis","reason":"Present","missing":"","suggestion":""}]}
+                """));
+        return evaluation;
     }
 
     private PaperSection section() {

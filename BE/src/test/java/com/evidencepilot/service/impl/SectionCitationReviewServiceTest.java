@@ -18,6 +18,7 @@ import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.PaperStandardService;
+import com.evidencepilot.service.PromptTemplateService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -55,10 +56,13 @@ class SectionCitationReviewServiceTest {
     private final UserRepository userRepository = mock(UserRepository.class);
     private final SourceMatchingService sourceMatchingService = mock(SourceMatchingService.class);
     private final AuditService auditService = mock(AuditService.class);
+    private final PromptTemplateService prompts = mock(PromptTemplateService.class);
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @org.junit.jupiter.api.BeforeEach
     void configureDomainValidation() {
+        when(prompts.resolve("CITATION_REVIEW")).thenReturn(new PromptTemplateService.ResolvedPrompt(
+                "CITATION_REVIEW", "code-default", SectionCitationReviewPrompt.SYSTEM));
 
         // The client tests cover continuation; these tests exercise the supplied domain validator.
         org.mockito.Mockito.lenient().doAnswer(invocation -> {
@@ -1085,6 +1089,66 @@ class SectionCitationReviewServiceTest {
         assertThat(service.sectionContentFingerprint(section)).isEqualTo(contentFingerprint);
     }
 
+    @Test
+    void changedPromptInvalidatesCacheAndOldExpectedFingerprint() {
+        UUID project = UUID.randomUUID(), document = UUID.randomUUID(), id = UUID.randomUUID(), actorId = UUID.randomUUID();
+        PaperSection section = section(project, document, id, "Introduction", "The benchmark reports 90 percent accuracy.");
+        User actor = new User();
+        actor.setId(actorId);
+        when(sectionRepository.findByIdWithDocument(id)).thenReturn(Optional.of(section));
+        when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
+        when(sourceMatchingService.search(eq(project), any(), eq(5))).thenReturn(emptyMatches(1));
+        when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
+                new AiModelClient.GenerationResult("provider", "model", review(id, 0, okVerdict(0))));
+        java.util.Map<String, ReviewSnapshot> cache = new java.util.HashMap<>();
+        when(snapshotRepository.findByProjectIdAndStyleAndInputFingerprint(eq(project), anyString(), anyString()))
+                .thenAnswer(call -> Optional.ofNullable(cache.get(call.getArgument(2))));
+        when(snapshotRepository.save(any())).thenAnswer(call -> {
+            ReviewSnapshot row = call.getArgument(0);
+            cache.put(row.getInputFingerprint(), row);
+            return row;
+        });
+        var service = service();
+        String initial = service.reviewInputFingerprint(section);
+        service.run(document, project, id, initial, actorId);
+        service.run(document, project, id, initial, actorId);
+        verify(aiModelClient, times(1)).generateForReview(anyString(), anyString());
+        var changed = new PromptTemplateService.ResolvedPrompt("CITATION_REVIEW", "v2", SectionCitationReviewPrompt.SYSTEM + "\nBe concise.");
+        when(prompts.resolve("CITATION_REVIEW")).thenReturn(changed);
+        assertThat(service.cached(document, id)).isEmpty();
+        assertThatThrownBy(() -> service.run(document, project, id, initial, actorId))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("SECTION_REVIEW_INPUT_CHANGED");
+        var fresh = service.run(document, project, id, service.reviewInputFingerprint(section), actorId);
+        assertThat(fresh.complete()).isTrue();
+        assertThat(fresh.reviewInputFingerprint()).isNotEqualTo(initial);
+        verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
+    }
+
+    @Test
+    void activationDuringMultibatchRunKeepsOneSystemAndRejectsStaleOutput() {
+        UUID project = UUID.randomUUID(), document = UUID.randomUUID(), id = UUID.randomUUID();
+        PaperSection section = section(project, document, id, "Introduction", IntStream.range(0, 11)
+                .mapToObj(i -> "Benchmark " + i + " reports exactly 90 percent accuracy.").collect(Collectors.joining(" ")));
+        when(sectionRepository.findByIdWithDocument(id)).thenReturn(Optional.of(section));
+        when(sourceMatchingService.search(eq(project), any(), eq(5))).thenReturn(emptyMatches(10), emptyMatches(1));
+        var before = prompts.resolve("CITATION_REVIEW");
+        var after = new PromptTemplateService.ResolvedPrompt("CITATION_REVIEW", "v2", before.systemText() + "\nBe concise.");
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        when(aiModelClient.generateForReview(anyString(), anyString())).thenAnswer(call -> {
+            int batch = calls.getAndIncrement();
+            if (batch == 1) when(prompts.resolve("CITATION_REVIEW")).thenReturn(after);
+            String[] verdicts = IntStream.range(batch * 10, batch == 0 ? 10 : 11)
+                    .mapToObj(SectionCitationReviewServiceTest::okVerdict).toArray(String[]::new);
+            return new AiModelClient.GenerationResult("provider", "model", review(id, batch, verdicts));
+        });
+        var service = service();
+        String expected = service.reviewInputFingerprint(section);
+        assertThatThrownBy(() -> service.run(document, project, id, expected, UUID.randomUUID()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("SECTION_REVIEW_INPUT_CHANGED");
+        verify(aiModelClient, times(2)).generateForReview(eq(before.systemText()), anyString());
+        verify(snapshotRepository, never()).save(any());
+    }
+
     private SectionCitationReviewService service() {
         return new SectionCitationReviewService(
                 aiModelClient,
@@ -1094,7 +1158,7 @@ class SectionCitationReviewServiceTest {
                 new PaperStandardService(mock(AiModelClient.class), objectMapper),
                 sourceMatchingService,
                 auditService,
-                objectMapper);
+                objectMapper, prompts);
     }
 
     private static String review(UUID sectionId, int batchIndex, String... verdicts) {

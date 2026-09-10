@@ -33,6 +33,11 @@ class DatabaseSeederTest {
     @Mock
     private ReviewGuideRepository reviewGuideRepository;
 
+    private static com.evidencepilot.service.DevBypassPolicy localPolicy() {
+        return new com.evidencepilot.service.DevBypassPolicy(true,
+                new org.springframework.mock.env.MockEnvironment().withProperty("spring.profiles.active", "test"));
+    }
+
     @Test
     void seedsThreeActiveAccountsFromConfiguration() {
         when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
@@ -44,6 +49,7 @@ class DatabaseSeederTest {
                 passwordEncoder,
                 reviewGuideRepository,
                 new ObjectMapper(),
+                localPolicy(),
                 "configured-admin@example.com",
                 "admin-password",
                 "Configured",
@@ -94,6 +100,7 @@ class DatabaseSeederTest {
                 passwordEncoder,
                 reviewGuideRepository,
                 new ObjectMapper(),
+                localPolicy(),
                 "",
                 "",
                 "",
@@ -121,6 +128,7 @@ class DatabaseSeederTest {
                 passwordEncoder,
                 reviewGuideRepository,
                 new ObjectMapper(),
+                localPolicy(),
                 "",
                 "",
                 "",
@@ -152,6 +160,7 @@ class DatabaseSeederTest {
                 passwordEncoder,
                 reviewGuideRepository,
                 new ObjectMapper(),
+                localPolicy(),
                 "",
                 "",
                 "",

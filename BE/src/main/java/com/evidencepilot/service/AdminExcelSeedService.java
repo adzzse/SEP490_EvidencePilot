@@ -6,10 +6,12 @@ import com.evidencepilot.dto.openalex.OpenAlexWorkResponse;
 import com.evidencepilot.dto.request.AdminUserImportRequest;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentText;
+import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.PaperStandard;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.ProjectRole;
@@ -18,6 +20,7 @@ import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.DocumentTextRepository;
+import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
@@ -29,18 +32,23 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.annotation.PreDestroy;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -63,14 +71,18 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
  * Excel + folder-per-paper ZIP seed. Streaming-light: caps enforced
- * (5 sheets, 200 rows/sheet with members at 500, 10MB xlsx). ZIP bundles are uncapped and
+ * (6 sheets, 200 rows/sheet with members at 500, 10MB xlsx). ZIP bundles are bounded and
  * spooled entry-by-entry to temp files (never heap) with per-job cleanup.
  * Reuses AdminService user validation, DocumentService extraction pipeline,
  * MediaAssetService for images. Async jobs with in-memory progress (pollable).
@@ -85,9 +97,8 @@ public class AdminExcelSeedService {
     // across 60+ projects exceeds the default cap, so members get headroom
     private static final int MAX_ROWS_MEMBERS = 500;
     private static final long MAX_XLSX_BYTES = 10L * 1024 * 1024;
-    // ponytail: no "sections" sheet — file-backed papers get sections from extraction,
-    // standard papers from createSectionsFromStandard; a legacy sheet is ignored by parse
-    private static final List<String> SHEETS = List.of("users", "projects", "members", "sources", "papers");
+    // Legacy sections remain optional; READY and section-order guards prevent overwriting extraction.
+    private static final List<String> SHEETS = List.of("users", "projects", "members", "sources", "papers", "sections");
     private static final Set<String> INVITE_TRUE_TOKENS = Set.of("TRUE", "1", "YES", "Y");
     private static final Set<String> INVITE_FALSE_TOKENS = Set.of("FALSE", "0", "NO", "N");
     // ponytail: mirrors OpenAlexIngestionServiceImpl — per-PDF cap + header scan
@@ -114,6 +125,7 @@ public class AdminExcelSeedService {
     private final DocumentRepository documentRepository;
     private final DocumentTextRepository documentTextRepository;
     private final DocumentChunkRepository documentChunkRepository;
+    private final PaperSectionRepository paperSectionRepository;
     private final DocumentService documentService;
     private final MediaAssetService mediaAssetService;
     private final PaperProcessingService paperProcessingService;
@@ -123,19 +135,78 @@ public class AdminExcelSeedService {
     private final DocumentPersistenceService documentPersistenceService;
     private final ProjectCollectionService projectCollectionService;
     private final ObjectMapper objectMapper;
+    private final DevBypassPolicy seedPolicy;
+    private final PlatformTransactionManager transactionManager;
 
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    @Value("${app.seed.max-upload-bytes:268435456}")
+    private long maxUploadBytes = 256L * 1024 * 1024;
+    @Value("${app.seed.max-expanded-bytes:536870912}")
+    private long maxExpandedBytes = 512L * 1024 * 1024;
+    @Value("${app.seed.max-entries:2000}")
+    private int maxEntries = 2000;
+
+    private final ExecutorService executor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+            new SynchronousQueue<>(), runnable -> {
+                Thread thread = new Thread(runnable, "admin-seed");
+                thread.setDaemon(true);
+                return thread;
+            });
+    private final AtomicBoolean importReserved = new AtomicBoolean();
     private final ConcurrentHashMap<UUID, SeedJob> jobs = new ConcurrentHashMap<>();
 
     @Getter
     public static class SeedJob {
         private final UUID id = UUID.randomUUID();
-        private volatile String status = "QUEUED"; // QUEUED|RUNNING|DONE|FAILED
+        private volatile String status = "QUEUED"; // QUEUED|RUNNING|DONE|PARTIAL|FAILED
         private volatile int total;
         private volatile int processed;
+        private volatile boolean complete;
+        private volatile int successfulRows;
+        private volatile int failedRows;
+        private volatile int skippedRows;
         private volatile String currentStep = "";
-        private final List<String> errors = new ArrayList<>();
+        private int pendingRows;
+        private final List<String> errors = java.util.Collections.synchronizedList(new ArrayList<>());
         private volatile Map<String, Integer> result = Map.of();
+        private volatile long completedAt;
+
+        public List<String> getErrors() {
+            synchronized (errors) {
+                return List.copyOf(errors);
+            }
+        }
+
+        private void startRows(String step, int count) {
+            currentStep = step;
+            pendingRows = count;
+        }
+
+        private void addCount(String key, int count) {
+            var counts = new LinkedHashMap<>(result);
+            counts.merge(key, count, Integer::sum);
+            result = java.util.Collections.unmodifiableMap(counts);
+        }
+
+        private void succeeded(String step, int count) {
+            successfulRows += count;
+            processed += count;
+            pendingRows = 0;
+            addCount(step, count);
+        }
+
+        private void failed(String message, int count) {
+            errors.add(message);
+            failedRows += count;
+            processed += count;
+            pendingRows = 0;
+        }
+
+        private void skipped(String message, int count) {
+            errors.add(message);
+            skippedRows += count;
+            processed += count;
+            pendingRows = 0;
+        }
     }
 
     public record ParsedSeed(Map<String, List<Map<String, String>>> sheets, List<String> errors) {}
@@ -151,11 +222,14 @@ public class AdminExcelSeedService {
         try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             sheet(wb, "README", List.of("note"),
                     List.of(
-                            List.of("Bundle = seed.xlsx + papers/<slug>/ folders only. Fill users→projects→members→sources→papers. Reference by email/project_title. Sections come from extraction (file papers) or the standard (paper_standard papers) — no sections sheet."),
+                            List.of("Bundle = seed.xlsx + papers/<slug>/ folders only. Fill users→projects→members→sources→papers. Reference by email/project_title. Sections come from extraction (file papers) or the standard (paper_standard papers) — the template omits the optional legacy sections sheet."),
                             List.of("papers.paper_folder must equal the <slug> in papers.paper_file (^[a-z0-9-]{1,80}$). Main file must be named <slug>.pdf|.docx|.tex after its folder; images/ goes beside it."),
-                            List.of("Precedence: paper_file, then paper_standard, then content_tex. Max 1 paper per project. xlsx<=10MB, zip size uncapped (spooled to disk), 200 rows/sheet (members: 500)."),
+                            List.of("Precedence: paper_file, then paper_standard, then content_tex. Max 1 paper per project. xlsx<=10MiB, bounded ZIP spooled to disk, 200 rows/sheet (members: 500)."),
                             List.of("paper_standard (IEEE|ACM|...) creates a standard-template paper like Instructor Page choose-standard: leave paper_file and content_tex blank, sections are generated."),
-                            List.of("users.send_invitation: TRUE sends the set-password email; FALSE or blank creates an ACTIVE account with password EP123456! and sends nothing."),
+                            List.of("users.send_invitation: TRUE requests a set-password invitation; FALSE or blank sends nothing and requires explicitly enabled dev/test bypass. Production rejects silent rows."),
+                            List.of("Project titles are aliases for this import only; existing titles are rejected. Use writable initial states, never seed a submitted review."),
+                            List.of("File papers: wait until extraction is READY, then apply content/assignment using existing paper section APIs/UI. Do not re-upload this bundle to update an existing project."),
+                            List.of("Standard templates generate their own section orders; conflicting section rows are reported, never overwritten."),
                             List.of("sources.doi is required and resolved live via OpenAlex (metadata + PDF win over sheet columns); rows without OA PDF import as METADATA_FETCHED for later file attach.")));
             sheet(wb, "users", List.of("email", "first_name", "last_name", "role", "student_code", "send_invitation"),
                     List.of(List.of("demo01@example.test", "An", "Nguyen", "STUDENT", "AB123456", "FALSE"),
@@ -270,8 +344,8 @@ public class AdminExcelSeedService {
             return new ParsedSeed(Map.of(), errors);
         }
         Map<String, List<Map<String, String>>> sheets = new LinkedHashMap<>();
-        try (Workbook wb = new XSSFWorkbook(in)) {
-            if (wb.getNumberOfSheets() > 6) errors.add("too many sheets (max README + 5 data sheets)");
+        try (Workbook wb = new XSSFWorkbook(new ByteArrayInputStream(readXlsx(in, size)))) {
+            if (wb.getNumberOfSheets() > 7) errors.add("too many sheets (max README + 6 data sheets)");
             for (String name : SHEETS) {
                 Sheet s = wb.getSheet(name);
                 if (s == null) continue;
@@ -298,34 +372,62 @@ public class AdminExcelSeedService {
                 }
                 sheets.put(name, rows);
             }
+        } catch (org.apache.poi.ooxml.POIXMLException | org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid XLSX workbook", ex);
         }
         errors.addAll(validate(sheets));
         return new ParsedSeed(sheets, errors);
     }
 
     /**
-     * Reads a seed bundle with no size cap — entries stream straight to temp
-     * files so arbitrarily large bundles never sit in heap. Callers must let
-     * the seed job delete {@link ZipBundle#spoolDir} when done.
+     * Counts actual expanded bytes while spooling; the caller owns cleanup
+     * until submit succeeds, after which the worker owns this directory.
      */
     public ZipBundle readZip(InputStream in) throws IOException {
         List<String> errors = new ArrayList<>();
         Path spoolDir = Files.createTempDirectory("seed-zip-");
         try {
             Map<String, Path> files = new LinkedHashMap<>();
+            Set<String> seen = new java.util.HashSet<>();
+            long expandedBytes = 0;
+            int entries = 0;
+            byte[] buffer = new byte[8192];
             try (ZipInputStream zip = new ZipInputStream(in, StandardCharsets.UTF_8)) {
                 ZipEntry e;
                 while ((e = zip.getNextEntry()) != null) {
-                    String name = e.getName();
-                    if (e.isDirectory()) continue;
-                    if (name.contains("..") || name.startsWith("/") || name.startsWith("\\")) {
-                        errors.add("zip: illegal path " + name);
-                        continue;
+                    if (++entries > maxEntries) {
+                        throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "ZIP entry limit exceeded");
                     }
-                    Path target = spoolDir.resolve(name.replace("/", java.io.File.separator));
-                    Files.createDirectories(target.getParent());
-                    Files.copy(zip, target, StandardCopyOption.REPLACE_EXISTING);
-                    files.put(name, target);
+                    String name = e.getName().replace('\\', '/');
+                    if (name.isBlank() || name.startsWith("/") || name.matches(".*[<>:\"|?*\\p{Cntrl}].*")) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Illegal ZIP path");
+                    }
+                    for (String segment : name.split("/")) {
+                        if (segment.equals("..") || segment.endsWith(" ") || (segment.endsWith(".") && !segment.equals("."))
+                                || segment.toUpperCase(Locale.ROOT).matches("(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?")) {
+                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Illegal ZIP path");
+                        }
+                    }
+                    Path target = spoolDir.resolve(name).normalize();
+                    if (!target.startsWith(spoolDir) || target.equals(spoolDir)) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Illegal ZIP path");
+                    }
+                    String normalized = spoolDir.relativize(target).toString().replace('\\', '/');
+                    if (!seen.add(normalized.toLowerCase(Locale.ROOT))) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duplicate ZIP path");
+                    }
+                    Files.createDirectories(e.isDirectory() ? target : target.getParent());
+                    try (var out = e.isDirectory() ? java.io.OutputStream.nullOutputStream() : Files.newOutputStream(target)) {
+                        int read;
+                        while ((read = zip.read(buffer)) != -1) {
+                            if (read > maxExpandedBytes - expandedBytes) {
+                                throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "ZIP expansion limit exceeded");
+                            }
+                            expandedBytes += read;
+                            out.write(buffer, 0, read);
+                        }
+                    }
+                    if (!e.isDirectory()) files.put(normalized, target);
                 }
             }
             return new ZipBundle(files, errors, spoolDir);
@@ -342,19 +444,59 @@ public class AdminExcelSeedService {
                     .forEach(p -> {
                         try {
                             Files.deleteIfExists(p);
-                        } catch (IOException ignored) {
-                            // best effort — OS temp cleaners reclaim leftovers
+                        } catch (IOException failure) {
+                            log.warn("Seed temporary file cleanup failed ({})", failure.getClass().getSimpleName());
                         }
                     });
-        } catch (IOException ignored) {
-            // best effort — OS temp cleaners reclaim leftovers
+        } catch (IOException failure) {
+            log.warn("Seed temporary directory cleanup failed ({})", failure.getClass().getSimpleName());
         }
+    }
+
+    public void checkUploadSize(long size) {
+        if (size < 0 || size > maxUploadBytes) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Seed upload limit exceeded");
+        }
+    }
+
+    public byte[] readXlsx(InputStream in, long size) throws IOException {
+        if (size > MAX_XLSX_BYTES) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "XLSX exceeds 10MiB limit");
+        }
+        byte[] bytes = in.readNBytes((int) MAX_XLSX_BYTES + 1);
+        if (bytes.length > MAX_XLSX_BYTES) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "XLSX exceeds 10MiB limit");
+        }
+        return bytes;
+    }
+
+    public boolean tryReserveImport() {
+        return importReserved.compareAndSet(false, true);
+    }
+
+    public void releaseImport() {
+        importReserved.set(false);
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        executor.shutdown();
+    }
+
+    private void pruneJobs() {
+        var terminal = jobs.values().stream().filter(job -> job.completedAt != 0)
+                .sorted(java.util.Comparator.comparingLong(job -> job.completedAt)).toList();
+        terminal.stream().limit(Math.max(0, terminal.size() - 50)).forEach(job -> jobs.remove(job.id, job));
     }
 
     // ---------- validate (dry-run, no writes) ----------
 
     List<String> validate(Map<String, List<Map<String, String>>> sheets) {
         List<String> errors = new ArrayList<>();
+        if (!seedPolicy.allowsSeedAccounts() && sheets.getOrDefault("users", List.of()).stream()
+                .anyMatch(row -> !sendInvitationRequested(row.getOrDefault("send_invitation", "")))) {
+            errors.add("Silent seed requires enabled dev/test bypass; production rows must explicitly request invitations");
+        }
         // users: reuse AdminService patterns lightly (email/code/role)
         var emails = new java.util.HashSet<String>();
         for (var r : sheets.getOrDefault("users", List.of())) {
@@ -379,7 +521,7 @@ public class AdminExcelSeedService {
             String st = r.getOrDefault("status", "CREATED");
             if (!st.isBlank()) try {
                 ProjectStatus v = ProjectStatus.valueOf(st);
-                if (v.isReadOnly()) errors.add(at + "read-only status not allowed on seed: " + st);
+                if (v.isReadOnly() || v == ProjectStatus.SUBMITTED_FOR_REVIEW) errors.add(at + "read-only/review status not allowed on seed: " + st);
             } catch (IllegalArgumentException ex) {
                 errors.add(at + "unknown status: " + st);
             }
@@ -442,21 +584,109 @@ public class AdminExcelSeedService {
         paperCount.forEach((t, n) -> {
             if (n > 1) errors.add("papers: project '" + t + "' has " + n + " rows (max 1, mirrors PaperController one-paper rule)");
         });
+        var sectionOrders = new java.util.HashSet<String>();
+        for (var row : sheets.getOrDefault("sections", List.of())) {
+            String at = "sections row " + row.get("_row") + ": ";
+            if (!titles.contains(row.get("project_title"))) errors.add(at + "unknown project_title");
+            Integer order = parseInt(row.get("section_order"));
+            if (order == null || order < 0) errors.add(at + "section_order must be a nonnegative integer");
+            else if (!sectionOrders.add(row.get("project_title") + "\n" + order)) errors.add(at + "duplicate section_order");
+        }
         return errors;
+    }
+
+    private void preflight(Map<String, List<Map<String, String>>> sheets) {
+        var titles = sheets.getOrDefault("projects", List.of()).stream().map(row -> row.get("project_title")).toList();
+        if (titles.stream().map(title -> title.toLowerCase(Locale.ROOT)).distinct().count() != titles.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duplicate project aliases");
+        }
+        if (!titles.isEmpty() && !projectRepository.findExistingTitles(titles).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Project title already exists; use new aliases or the existing project APIs");
+        }
+        var emails = new java.util.HashSet<String>();
+        for (var row : sheets.getOrDefault("users", List.of())) emails.add(row.get("email").toLowerCase(Locale.ROOT));
+        for (var row : sheets.getOrDefault("members", List.of())) emails.add(row.getOrDefault("user_email", "").toLowerCase(Locale.ROOT));
+        for (var row : sheets.getOrDefault("sections", List.of())) {
+            if (!row.getOrDefault("assigned_user_email", "").isBlank()) emails.add(row.get("assigned_user_email").toLowerCase(Locale.ROOT));
+        }
+        Map<String, User> users = new LinkedHashMap<>();
+        if (!emails.isEmpty()) userRepository.findAllByEmailIn(emails).forEach(user -> users.put(user.getEmail().toLowerCase(Locale.ROOT), user));
+        for (var row : sheets.getOrDefault("users", List.of())) {
+            String email = row.get("email").toLowerCase(Locale.ROOT);
+            UserRole role = UserRole.valueOf(row.get("role").toUpperCase(Locale.ROOT));
+            User existing = users.get(email);
+            if (existing != null && (existing.getRole() != role || existing.getAccountStatus() == AccountStatus.DELETED)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "users row " + row.get("_row") + ": existing account cannot be updated for this role");
+            }
+            if (existing == null) {
+                User user = new User();
+                user.setRole(role);
+                user.setAccountStatus(sendInvitationRequested(row.get("send_invitation")) ? AccountStatus.VERIFYING_EMAIL : AccountStatus.ACTIVE);
+                users.put(email, user);
+            }
+        }
+        Map<String, Map<String, ProjectRole>> memberships = new LinkedHashMap<>();
+        for (var row : sheets.getOrDefault("members", List.of())) {
+            String email = row.getOrDefault("user_email", "").toLowerCase(Locale.ROOT);
+            User user = users.get(email);
+            ProjectRole role = ProjectRole.valueOf(row.get("project_role"));
+            if (user == null || user.getAccountStatus() == AccountStatus.DELETED || user.getAccountStatus() == AccountStatus.BANNED
+                    || user.getRole() != (role == ProjectRole.INSTRUCTOR ? UserRole.INSTRUCTOR : UserRole.STUDENT)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "members row " + row.get("_row") + ": missing user or incompatible account/project role");
+            }
+            if (memberships.computeIfAbsent(row.get("project_title"), key -> new LinkedHashMap<>()).putIfAbsent(email, role) != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "members row " + row.get("_row") + ": duplicate membership");
+            }
+        }
+        for (String sheet : List.of("sources", "papers")) {
+            for (var row : sheets.getOrDefault(sheet, List.of())) {
+                var members = memberships.getOrDefault(row.get("project_title"), Map.of());
+                boolean instructor = members.entrySet().stream().anyMatch(member -> member.getValue() == ProjectRole.INSTRUCTOR
+                        && users.get(member.getKey()).getAccountStatus() == AccountStatus.ACTIVE);
+                if (!titles.contains(row.get("project_title")) || !instructor) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, sheet + " row " + row.get("_row") + ": requires a project with an active Instructor member");
+                }
+            }
+        }
+        for (var row : sheets.getOrDefault("sections", List.of())) {
+            String assignee = row.getOrDefault("assigned_user_email", "").toLowerCase(Locale.ROOT);
+            if (!assignee.isBlank() && (!memberships.getOrDefault(row.get("project_title"), Map.of()).containsKey(assignee)
+                    || users.get(assignee).getRole() != UserRole.STUDENT || users.get(assignee).getAccountStatus() != AccountStatus.ACTIVE)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sections row " + row.get("_row") + ": assignee must be an active Student member of this project");
+            }
+        }
     }
 
     // ---------- async jobs ----------
 
     public SeedJob submit(byte[] xlsx, ZipBundle bundle, BiConsumer<SeedJob, String> log) {
+        if (!importReserved.get()) throw new IllegalStateException("Reserve a seed import before submission");
+        ZipBundle safe = bundle == null ? new ZipBundle(Map.of(), List.of()) : bundle;
+        ParsedSeed parsed;
+        try {
+            parsed = parse(new ByteArrayInputStream(xlsx), xlsx.length);
+        } catch (IOException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid XLSX workbook", ex);
+        }
+        List<String> errors = new ArrayList<>(parsed.errors());
+        errors.addAll(safe.errors());
+        errors.addAll(checkZipLayout(parsed.sheets(), safe.files()));
+        if (!errors.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, String.join("; ", errors));
+        preflight(parsed.sheets());
+        pruneJobs();
         SeedJob job = new SeedJob();
-        job.total = 1;
+        job.total = parsed.sheets().values().stream().mapToInt(List::size).sum();
         jobs.put(job.getId(), job);
         // ponytail: worker thread has no SecurityContext — capture the requesting
         // ADMIN auth so uploadDocument/media/importUsers don't 401 (ADMIN bypasses
         // project write checks in CurrentUserServiceImpl).
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        ZipBundle safe = bundle == null ? new ZipBundle(Map.of(), List.of()) : bundle;
-        executor.submit(() -> runJob(job, xlsx, safe, auth));
+        try {
+            executor.execute(() -> runJob(job, parsed, safe, auth));
+        } catch (RejectedExecutionException ex) {
+            jobs.remove(job.id);
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Seed worker is busy; retry shortly", ex);
+        }
         return job;
     }
 
@@ -464,51 +694,33 @@ public class AdminExcelSeedService {
         return jobs.get(id);
     }
 
-    private void runJob(SeedJob job, byte[] xlsx, ZipBundle bundle, Authentication auth) {
+    private void runJob(SeedJob job, ParsedSeed parsed, ZipBundle bundle, Authentication auth) {
         job.status = "RUNNING";
         var context = SecurityContextHolder.getContext();
         Authentication previous = context.getAuthentication();
         context.setAuthentication(auth);
         try {
-            ParsedSeed parsed;
-            try (InputStream in = new ByteArrayInputStream(xlsx)) {
-                parsed = parse(in, xlsx.length);
-            }
-            if (!parsed.errors().isEmpty()) {
-                job.errors.addAll(parsed.errors());
-                job.status = "FAILED";
-                return;
-            }
-            // zip layout check for folder-per-paper rows
-            List<String> zipErrors = checkZipLayout(parsed.sheets(), bundle.files());
-            if (!zipErrors.isEmpty()) {
-                job.errors.addAll(zipErrors);
-                job.status = "FAILED";
-                return;
-            }
-            int total = parsed.sheets().values().stream().mapToInt(List::size).sum();
-            job.total = Math.max(total, 1);
-            Map<String, Integer> counts = new LinkedHashMap<>();
+            job.result = Map.of("users", 0, "projects", 0, "members", 0, "sources", 0, "papers", 0, "sections", 0);
             var userRows = parsed.sheets().getOrDefault("users", List.of());
-            long invited = userRows.stream()
-                    .filter(r -> sendInvitationRequested(r.getOrDefault("send_invitation", "")))
-                    .count();
-            counts.put("users", commitUsers(userRows, job));
-            counts.put("users_invited", (int) invited);
-            counts.put("users_silent", userRows.size() - (int) invited);
-            counts.put("projects", commitProjects(parsed.sheets().getOrDefault("projects", List.of()), job));
-            counts.put("members", commitMembers(parsed.sheets().getOrDefault("members", List.of()), job));
-            counts.put("sources", commitSources(parsed.sheets().getOrDefault("sources", List.of()), job));
-            counts.put("papers", commitPapers(parsed.sheets().getOrDefault("papers", List.of()), bundle.files(), job));
-            job.result = counts;
-            job.status = job.errors.isEmpty() ? "DONE" : "DONE";
+            commitUsers(userRows, job);
+            var projects = commitProjects(parsed.sheets().getOrDefault("projects", List.of()), job);
+            commitMembers(parsed.sheets().getOrDefault("members", List.of()), job, projects);
+            commitSources(parsed.sheets().getOrDefault("sources", List.of()), job, projects);
+            commitPapers(parsed.sheets().getOrDefault("papers", List.of()), bundle.files(), job, projects);
+            commitSections(parsed.sheets().getOrDefault("sections", List.of()), job, projects);
         } catch (Exception e) {
             log.error("Seed job {} failed", job.getId(), e);
-            job.errors.add(e.getMessage() == null ? e.toString() : e.getMessage());
-            job.status = "FAILED";
+            job.failed(job.currentStep + ": " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()), job.pendingRows);
         } finally {
             context.setAuthentication(previous);
             deleteSpoolDir(bundle.spoolDir());
+            int remaining = job.total - job.processed;
+            if (remaining > 0) job.skipped("Unprocessed rows skipped after job failure", remaining);
+            job.complete = job.errors.isEmpty() && job.failedRows == 0 && job.skippedRows == 0 && job.processed == job.total;
+            job.status = job.complete ? "DONE" : job.successfulRows > 0 ? "PARTIAL" : "FAILED";
+            job.completedAt = System.nanoTime();
+            pruneJobs();
+            releaseImport();
         }
     }
 
@@ -586,9 +798,11 @@ public class AdminExcelSeedService {
 
     // ---------- commit (FK order) ----------
 
-    @Transactional
     public int commitUsers(List<Map<String, String>> rows, SeedJob job) {
         if (rows.isEmpty()) return 0;
+        if (rows.stream().anyMatch(row -> !sendInvitationRequested(row.getOrDefault("send_invitation", "")))) {
+            seedPolicy.allowOrThrow();
+        }
         // group by role (importUsers takes one role per call) and by invitation
         // flag — send_invitation=FALSE rows become silent ACTIVE accounts
         record UserGroup(String role, boolean invite) {}
@@ -601,28 +815,39 @@ public class AdminExcelSeedService {
         }
         int n = 0;
         for (var e : groups.entrySet()) {
+            if (job != null) job.startRows("users", e.getValue().size());
             String role = e.getKey().role();
             boolean silent = !e.getKey().invite();
             List<AdminUserImportRequest.UserItem> items = e.getValue().stream().map(r ->
                     new AdminUserImportRequest.UserItem(r.getOrDefault("email", ""), r.getOrDefault("first_name", ""),
                             r.getOrDefault("last_name", ""), nullIfBlank(r.getOrDefault("student_code", "")))).toList();
             var resp = adminService.importUsers(new AdminUserImportRequest(role, items), silent);
-            n += resp.created();
+            int succeeded = resp.created() + resp.updated();
+            n += succeeded;
             resp.errors().forEach(err -> {
                 if (job != null) job.errors.add("users item " + err.item() + " [" + err.field() + "]: " + err.message());
             });
             if (job != null) {
-                job.processed += e.getValue().size();
-                job.currentStep = "users";
+                job.succeeded("users", succeeded);
+                job.addCount("users_created", resp.created());
+                job.addCount("users_updated", resp.updated());
+                job.addCount("users_invitation_requested", silent ? 0 : resp.created());
+                job.addCount("users_silent_created", silent ? resp.created() : 0);
+                int unsuccessful = e.getValue().size() - succeeded;
+                int failed = resp.errors().stream().anyMatch(error -> error.item() == 0) ? unsuccessful
+                        : Math.min(unsuccessful, (int) resp.errors().stream().map(err -> err.item()).distinct().count());
+                job.failedRows += failed;
+                job.processed += failed;
+                if (unsuccessful > failed) job.skipped("users: rows skipped because their import batch could not complete", unsuccessful - failed);
             }
         }
         return n;
     }
 
-    @Transactional
-    public int commitProjects(List<Map<String, String>> rows, SeedJob job) {
-        int n = 0;
+    public Map<String, Project> commitProjects(List<Map<String, String>> rows, SeedJob job) {
+        Map<String, Project> projects = new LinkedHashMap<>();
         for (var r : rows) {
+            if (job != null) job.startRows("projects", 1);
             Project p = new Project();
             p.setTitle(r.get("project_title"));
             p.setDescription(nullIfBlank(r.getOrDefault("description", "")));
@@ -633,27 +858,28 @@ public class AdminExcelSeedService {
             p.setActive(true);
             p.setCreatedAt(LocalDateTime.now());
             p.setUpdatedAt(LocalDateTime.now());
-            projectRepository.save(p);
-            n++;
+            projects.put(r.get("project_title"), projectRepository.save(p));
             if (job != null) {
-                job.processed++;
-                job.currentStep = "projects";
+                job.succeeded("projects", 1);
             }
         }
-        return n;
+        return projects;
     }
 
-    @Transactional
-    public int commitMembers(List<Map<String, String>> rows, SeedJob job) {
+    public int commitMembers(List<Map<String, String>> rows, SeedJob job, Map<String, Project> projects) {
         int n = 0;
         for (var r : rows) {
-            var project = findProject(r.get("project_title"));
+            if (job != null) job.startRows("members", 1);
+            var project = projects.get(r.get("project_title"));
             var user = userRepository.findByEmail(r.getOrDefault("user_email", "").toLowerCase(Locale.ROOT)).orElse(null);
             if (project == null || user == null) {
-                if (job != null) job.errors.add("members row " + r.get("_row") + ": unresolvable FK");
+                if (job != null) job.skipped("members row " + r.get("_row") + ": unresolvable FK", 1);
                 continue;
             }
-            if (!memberRepository.findByProjectIdAndUserId(project.getId(), user.getId()).isEmpty()) continue;
+            if (!memberRepository.findByProjectIdAndUserId(project.getId(), user.getId()).isEmpty()) {
+                if (job != null) job.skipped("members row " + r.get("_row") + ": duplicate membership", 1);
+                continue;
+            }
             ProjectMember m = new ProjectMember();
             m.setProject(project);
             m.setUser(user);
@@ -662,8 +888,7 @@ public class AdminExcelSeedService {
             memberRepository.save(m);
             n++;
             if (job != null) {
-                job.processed++;
-                job.currentStep = "members";
+                job.succeeded("members", 1);
             }
         }
         return n;
@@ -677,24 +902,25 @@ public class AdminExcelSeedService {
      * not pin one DB transaction for the whole sheet. Each repository call and
      * markDocumentAsUploaded runs in its own transaction.
      */
-    public int commitSources(List<Map<String, String>> rows, SeedJob job) {
+    public int commitSources(List<Map<String, String>> rows, SeedJob job, Map<String, Project> projects) {
         int n = 0;
         // per-job cache: unique DOIs resolve + download once, reused across projects
         Map<String, ResolvedSourceDoi> cache = new LinkedHashMap<>();
         for (var r : rows) {
-            var project = findProject(r.get("project_title"));
+            if (job != null) job.startRows("sources", 1);
+            var project = projects.get(r.get("project_title"));
             var uploader = instructorOf(project);
             if (project == null || uploader == null) {
-                if (job != null) job.errors.add("sources row " + r.get("_row") + ": unresolvable project/member");
+                if (job != null) job.skipped("sources row " + r.get("_row") + ": unresolvable project/member", 1);
                 continue;
             }
             String doi = DoiUtils.normalize(r.getOrDefault("doi", ""));
             if (!DoiUtils.isValid(doi)) {
-                if (job != null) job.errors.add("sources row " + r.get("_row") + ": invalid DOI format");
+                if (job != null) job.failed("sources row " + r.get("_row") + ": invalid DOI format", 1);
                 continue;
             }
             if (documentRepository.countActiveProjectSourcesByDoi(project.getId(), DocumentType.SOURCE, doi) > 0) {
-                if (job != null) job.errors.add("sources row " + r.get("_row") + ": DOI already in project — skipped");
+                if (job != null) job.skipped("sources row " + r.get("_row") + ": DOI already in project — skipped", 1);
                 continue;
             }
             ResolvedSourceDoi resolved = cache.get(doi);
@@ -709,7 +935,7 @@ public class AdminExcelSeedService {
                     // columns + direct arXiv PDF instead of dropping the row
                     work = resolveWithoutDoi(r, doi);
                     if (work == null) {
-                        if (job != null) job.errors.add("sources row " + r.get("_row") + ": DOI not resolvable: " + doi);
+                        if (job != null) job.failed("sources row " + r.get("_row") + ": DOI not resolvable: " + doi, 1);
                         continue;
                     }
                 }
@@ -804,8 +1030,7 @@ public class AdminExcelSeedService {
             }
             n++;
             if (job != null) {
-                job.processed++;
-                job.currentStep = "sources";
+                job.succeeded("sources", 1);
             }
         }
         return n;
@@ -888,24 +1113,27 @@ public class AdminExcelSeedService {
         }
     }
 
-    @Transactional
-    public int commitPapers(List<Map<String, String>> rows, Map<String, Path> zipFiles, SeedJob job) {
+    public int commitPapers(List<Map<String, String>> rows, Map<String, Path> zipFiles, SeedJob job, Map<String, Project> projects) {
         int n = 0;
         for (var r : rows) {
-            var project = findProject(r.get("project_title"));
-            var uploader = firstMember(project);
+            if (job != null) job.startRows("papers", 1);
+            var project = projects.get(r.get("project_title"));
+            var uploader = instructorOf(project);
             if (project == null || uploader == null) {
-                if (job != null) job.errors.add("papers row " + r.get("_row") + ": unresolvable project/member");
+                if (job != null) job.skipped("papers row " + r.get("_row") + ": unresolvable project/member", 1);
                 continue;
             }
             String pf = r.getOrDefault("paper_file", "");
             String standard = r.getOrDefault("paper_standard", "").trim().toUpperCase(Locale.ROOT);
             try {
+                if (project.getStatus().isReadOnly() || project.getStatus() == ProjectStatus.SUBMITTED_FOR_REVIEW) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Project is locked for paper changes");
+                }
                 if (!pf.isBlank() && !zipFiles.isEmpty()) {
                     String norm = pf.replace("\\", "/").replaceAll("^/+", "");
                     Path data = zipFiles.get(norm);
                     if (data == null) {
-                        if (job != null) job.errors.add("papers row " + r.get("_row") + ": file not in ZIP: " + norm);
+                        if (job != null) job.skipped("papers row " + r.get("_row") + ": file not in ZIP: " + norm, 1);
                         continue;
                     }
                     String filename = norm.substring(norm.lastIndexOf('/') + 1);
@@ -940,8 +1168,9 @@ public class AdminExcelSeedService {
                     if (instructor == null || instructor.getRole() != UserRole.INSTRUCTOR) {
                         throw new IllegalStateException("standard paper needs a project member with INSTRUCTOR role");
                     }
+                    new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
                     Document stub = new Document();
-                    stub.setProject(project);
+                    stub.setProject(projectRepository.findById(project.getId()).orElseThrow());
                     stub.setUploadedBy(instructor);
                     stub.setDocType(DocumentType.PAPER);
                     stub.setFileUrl("placeholder");
@@ -963,21 +1192,68 @@ public class AdminExcelSeedService {
                     } finally {
                         SecurityContextHolder.getContext().setAuthentication(previous);
                     }
+                    });
                 } else {
                     String text = r.getOrDefault("content_tex", "");
                     Document d = baseDocument(project, uploader, DocumentType.PAPER,
                             "paper-" + slug(r.getOrDefault("title", project.getTitle())) + ".txt", text);
                     d.setTitle(nullIfBlank(r.getOrDefault("title", "")));
-                    d = documentRepository.save(d);
-                    saveText(d, text);
+                    new TransactionTemplate(transactionManager).executeWithoutResult(status -> saveText(documentRepository.save(d), text));
                 }
                 n++;
+                if (job != null) job.succeeded("papers", 1);
             } catch (Exception e) {
-                if (job != null) job.errors.add("papers row " + r.get("_row") + ": " + e.getMessage());
+                if (job != null) job.failed("papers row " + r.get("_row") + ": " + e.getMessage(), 1);
             }
+        }
+        return n;
+    }
+
+    public int commitSections(List<Map<String, String>> rows, SeedJob job, Map<String, Project> projects) {
+        int n = 0;
+        for (var r : rows) {
+            if (job != null) job.startRows("sections", 1);
+            var project = projects.get(r.get("project_title"));
+            if (project == null) {
+                if (job != null) job.skipped("sections row " + r.get("_row") + ": unknown project", 1);
+                continue;
+            }
+            var papers = documentRepository.findByProjectIdAndDocTypeAndActiveTrue(project.getId(), DocumentType.PAPER);
+            if (papers.isEmpty()) {
+                if (job != null) job.skipped("sections row " + r.get("_row") + ": project has no paper", 1);
+                continue;
+            }
+            Document paper = papers.get(0);
+            if (paper.getProcessingStatus() != ProcessingStatus.READY) {
+                if (job != null) job.skipped("sections row " + r.get("_row") + ": PAPER_NOT_READY; apply content after extraction through section APIs/UI", 1);
+                continue;
+            }
+            int order = Integer.parseInt(r.get("section_order"));
+            if (paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paper.getId()).stream()
+                    .anyMatch(existing -> existing.getSectionOrder() == order)) {
+                if (job != null) job.failed("sections row " + r.get("_row") + ": section order conflicts with a generated/existing section; choose its target via section APIs/UI", 1);
+                continue;
+            }
+            PaperSection s = new PaperSection();
+            s.setDocument(paper);
+            s.setSectionTitle(r.getOrDefault("section_title", "Untitled"));
+            try {
+                s.setSectionOrder(Integer.parseInt(r.getOrDefault("section_order", "0")));
+            } catch (NumberFormatException e) {
+                s.setSectionOrder(0);
+            }
+            s.setContentTex(r.getOrDefault("content_tex", ""));
+            String assignee = r.getOrDefault("assigned_user_email", "").toLowerCase(Locale.ROOT);
+            if (!assignee.isBlank()) {
+                userRepository.findByEmail(assignee).ifPresent(s::setAssignedUser);
+            }
+            s.setVersion(1);
+            s.setActive(true);
+            s.setUpdatedAt(LocalDateTime.now());
+            paperSectionRepository.save(s);
+            n++;
             if (job != null) {
-                job.processed++;
-                job.currentStep = "papers";
+                job.succeeded("sections", 1);
             }
         }
         return n;
@@ -985,31 +1261,13 @@ public class AdminExcelSeedService {
 
     // ---------- helpers ----------
 
-    private Project findProject(String title) {
-        if (title == null || title.isBlank()) return null;
-        return projectRepository.findAll().stream()
-                .filter(p -> title.equals(p.getTitle())).findFirst().orElse(null);
-    }
-
-    /**
-     * Uploader attribution mirroring the Instructor page: prefer the project's
-     * INSTRUCTOR member, else first member, else any user. Auth checks still run
-     * as the propagated ADMIN (which bypasses project write checks).
-     */
+    /** Only an active Instructor member may own imported papers/sources. */
     private User instructorOf(Project project) {
         if (project == null) return null;
-        var members = memberRepository.findByProjectId(project.getId());
-        for (var m : members) {
-            if (m.getRole() == ProjectRole.INSTRUCTOR && m.getUser() != null) return m.getUser();
-        }
-        for (var m : members) {
-            if (m.getUser() != null) return m.getUser();
-        }
-        return userRepository.findAll().stream().findFirst().orElse(null);
-    }
-
-    private User firstMember(Project project) {
-        return instructorOf(project);
+        return new TransactionTemplate(transactionManager).execute(status -> memberRepository.findByProjectId(project.getId()).stream()
+                .filter(member -> member.getRole() == ProjectRole.INSTRUCTOR && member.getUser() != null
+                        && member.getUser().getRole() == UserRole.INSTRUCTOR && member.getUser().getAccountStatus() == AccountStatus.ACTIVE)
+                .map(ProjectMember::getUser).findFirst().orElse(null));
     }
 
     private Document baseDocument(Project p, User by, DocumentType type, String filename, String content) {

@@ -51,11 +51,24 @@ class FlywayMigrationMySqlTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
+    void activePromptConstraintRejectsTwoActivesButAllowsMultipleDrafts() {
+        String key = "migration-fixture-" + UUID.randomUUID();
+        for (int i = 0; i < 3; i++) {
+            jdbcTemplate.update("INSERT INTO prompt_templates(id,template_key,version,system_text,active) VALUES(UUID_TO_BIN(?),?,?,?,?)",
+                    UUID.randomUUID().toString(), key, "v" + i, "fixture", i == 0);
+        }
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE prompt_templates SET active=TRUE WHERE template_key=? AND version='v1'", key))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM prompt_templates WHERE template_key=? AND active=TRUE", Integer.class, key)).isOne();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM prompt_templates WHERE template_key=? AND active=FALSE", Integer.class, key)).isEqualTo(2);
+    }
+
+    @Test
     void migrationsBuildValidatedSchemaAndEnforceCoreInvariants() {
         Integer successfulMigrations = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
                 Integer.class);
-        assertThat(successfulMigrations).isEqualTo(29);
+        assertThat(successfulMigrations).isEqualTo(30);
 
         assertThat(jdbcTemplate.queryForList("""
                         SELECT constraint_name
@@ -64,6 +77,7 @@ class FlywayMigrationMySqlTest {
                         """, String.class))
                 .contains(
                         "uq_document_chunks_document_index",
+                        "uq_prompt_single_active",
                         "uq_review_snapshots_lookup",
                         "uq_project_media_storage",
                         "uq_document_references_order",
@@ -264,10 +278,10 @@ class FlywayMigrationMySqlTest {
                 .migrate()
                 .migrationsExecuted;
 
-        assertThat(migrationsExecuted).isEqualTo(28);
+        assertThat(migrationsExecuted).isEqualTo(29);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
-                Integer.class)).isEqualTo(29);
+                Integer.class)).isEqualTo(30);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT type FROM flyway_schema_history WHERE installed_rank = 1",
                 String.class)).isEqualTo("BASELINE");

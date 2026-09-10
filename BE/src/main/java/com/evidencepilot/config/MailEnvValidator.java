@@ -1,37 +1,34 @@
 package com.evidencepilot.config;
 
 import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
+import com.evidencepilot.service.DevBypassPolicy;
+import lombok.RequiredArgsConstructor;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 /**
  * Fatal boot guard for external SMTP relay.
- * In the production profile, MAIL_HOST / MAIL_PORT / MAIL_USERNAME / MAIL_PASSWORD
- * must be provided via strict environment variables. Missing values throw on boot.
+ * Checks the effective sender configuration whenever production policy applies.
  */
 @Component
-@Profile("production")
+@RequiredArgsConstructor
 public class MailEnvValidator {
-
-    @Value("${MAIL_HOST:}")
-    private String mailHost;
-
-    @Value("${MAIL_PORT:}")
-    private String mailPort;
-
-    @Value("${MAIL_USERNAME:}")
-    private String mailUsername;
-
-    @Value("${MAIL_PASSWORD:}")
-    private String mailPassword;
+    private final DevBypassPolicy policy;
+    private final Environment environment;
 
     @PostConstruct
     void validate() {
-        if (isBlank(mailHost) || isBlank(mailPort) || isBlank(mailUsername) || isBlank(mailPassword)) {
-            throw new IllegalStateException(
-                    "Mail configuration missing in production profile. "
-                            + "Required env vars: MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD");
+        if (!policy.isProduction()) return;
+        int port;
+        try {
+            port = Integer.parseInt(environment.getProperty("spring.mail.port", "587"));
+        } catch (NumberFormatException ex) {
+            port = 0;
+        }
+        if (port < 1 || port > 65535 || isBlank(environment.getProperty("spring.mail.host"))
+                || isBlank(environment.getProperty("spring.mail.username"))
+                || isBlank(environment.getProperty("spring.mail.password"))) {
+            throw new IllegalStateException("Production requires spring.mail.host, port (1..65535), username and password");
         }
     }
 

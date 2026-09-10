@@ -10,6 +10,9 @@ import java.util.List;
 import java.util.UUID;
 
 public interface EvidenceRevisionTraceRepository extends JpaRepository<EvidenceRevisionTrace, UUID> {
+    @Query("select t from EvidenceRevisionTrace t where t.round.project.id = :projectId")
+    org.springframework.data.domain.Slice<EvidenceRevisionTrace> findForExport(@Param("projectId") UUID projectId, org.springframework.data.domain.Pageable pageable);
+
     List<EvidenceRevisionTrace> findBySectionIdOrderByCreatedAtDesc(UUID sectionId);
 
     List<EvidenceRevisionTrace> findByRoundIdOrderByFindingIndex(UUID roundId);

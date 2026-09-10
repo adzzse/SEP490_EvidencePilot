@@ -13,6 +13,16 @@ import java.util.List;
 import java.util.UUID;
 
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
+    @Query("""
+            select a from AuditLog a where
+                (upper(a.entityType) = 'PROJECT' and a.entityId = :projectId)
+                or (upper(a.entityType) = 'DOCUMENT' and exists
+                    (select d.id from Document d where d.id = a.entityId and d.project.id = :projectId))
+                or (a.entityType = 'PaperSection' and exists
+                    (select s.id from PaperSection s where s.id = a.entityId and s.document.project.id = :projectId))
+            """)
+    org.springframework.data.domain.Slice<AuditLog> findForExport(@Param("projectId") UUID projectId, Pageable pageable);
+
     Page<AuditLog> findAllByOrderByOccurredAtDesc(Pageable pageable);
     Page<AuditLog> findByActorIdOrderByOccurredAtDesc(UUID actorId, Pageable pageable);
     Page<AuditLog> findByEntityTypeAndEntityIdOrderByOccurredAtDesc(String entityType, UUID entityId, Pageable pageable);

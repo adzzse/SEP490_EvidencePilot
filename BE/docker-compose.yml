@@ -149,7 +149,7 @@ services:
       PASSWORD_RESET_TOKEN_TTL_MINUTES: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:-60}
       PASSWORD_RESET_REQUEST_COOLDOWN_SECONDS: ${PASSWORD_RESET_REQUEST_COOLDOWN_SECONDS:-60}
       MAIL_HOST: ${MAIL_HOST:-}
-      MAIL_PORT: ${MAIL_PORT:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
@@ -158,8 +158,9 @@ services:
       # ── Set-password invitation link (required for user creation/import) ───
       APP_INVITATION_URL: ${APP_INVITATION_URL:-}
       APP_INVITATION_TTL_HOURS: ${APP_INVITATION_TTL_HOURS:-24}
-      # Dev-only creation bypass (fixed password, no email). BE also requires
-      # the dev Spring profile — defaults to false, keep it that way in prod.
+      # Silent seed requires explicit dev/test plus this flag; production wins.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      APP_ENV: ${APP_ENV:-}
       APP_DEV_BYPASS_ENABLED: ${APP_DEV_BYPASS_ENABLED:-false}
 
       JWT_SECRET: ${JWT_SECRET}
@@ -169,8 +170,11 @@ services:
       APP_BASE_URL: ${APP_BASE_URL}
 
       # ── Upload caps (seed bundles can be hundreds of MB) ────────────────────
-      UPLOAD_MAX_FILE_SIZE: ${UPLOAD_MAX_FILE_SIZE:-1GB}
-      UPLOAD_MAX_REQUEST_SIZE: ${UPLOAD_MAX_REQUEST_SIZE:-1GB}
+      UPLOAD_MAX_FILE_SIZE: ${UPLOAD_MAX_FILE_SIZE:-256MB}
+      UPLOAD_MAX_REQUEST_SIZE: ${UPLOAD_MAX_REQUEST_SIZE:-256MB}
+      SEED_MAX_UPLOAD_BYTES: ${SEED_MAX_UPLOAD_BYTES:-268435456}
+      SEED_MAX_EXPANDED_BYTES: ${SEED_MAX_EXPANDED_BYTES:-536870912}
+      SEED_MAX_ENTRIES: ${SEED_MAX_ENTRIES:-2000}
 
       SERVER_PORT: 8080
     networks:

@@ -16,7 +16,7 @@ export function useAdminTour(tourKey, stepsFactory) {
       showProgress: true,
       showButtons: ['next', 'previous', 'close'],
       steps,
-      onDestroyed: () => {
+      onDestroyStarted: () => {
         setActive(false);
         if (tourKey) localStorage.setItem(`tour_seen_${tourKey}`, '1');
       },

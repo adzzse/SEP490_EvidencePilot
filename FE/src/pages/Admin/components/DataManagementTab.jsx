@@ -18,6 +18,7 @@ function DataManagementSection({ api }) {
   const [preview, setPreview] = useState(null);
   const [job, setJob] = useState(null);
   const pollRef = useRef(null);
+  const xlsxRef = useRef(null);
 
   const tourSteps = useCallback(() => [
     { popover: { title: t('admin.dataManagement'), description: t('admin.guideDataDesc'), side: 'center' } },
@@ -36,19 +37,27 @@ function DataManagementSection({ api }) {
       try {
         const r = await api.get(`/api/admin/seed/jobs/${jobId}`);
         setJob(r.data);
-        if (r.data.status === 'DONE' || r.data.status === 'FAILED') {
+        if (['DONE', 'PARTIAL', 'FAILED'].includes(r.data.status)) {
           clearInterval(pollRef.current);
           pollRef.current = null;
           setBusy(null);
           if (r.data.status === 'DONE') {
-            const res = r.data.result || {};
-            const total = Object.values(res).reduce((a, b) => a + (b || 0), 0);
-            setMsg(t('admin.seedDone', { count: total }));
+            setMsg(t('admin.seedDone', { count: r.data.successfulRows ?? 0 }));
           } else {
-            setErr((r.data.errors || []).slice(0, 5).join('; ') || t('admin.seedFailed'));
+            setMsg('');
+            setErr(r.data.status === 'PARTIAL'
+              ? t('admin.seedPartial', { success: r.data.successfulRows ?? 0, failed: r.data.failedRows ?? 0, skipped: r.data.skippedRows ?? 0 })
+              : t('admin.seedFailed'));
           }
         }
-      } catch (e) { /* keep polling */ }
+      } catch (e) {
+        if ([401, 403, 404].includes(e.response?.status)) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setBusy(null); setJob(null); setMsg('');
+          setErr(e.response.status === 404 ? t('admin.seedJobExpired') : e.response?.data?.message || e.message);
+        }
+      }
     }, 1000);
   }, [api, t]);
 
@@ -107,6 +116,7 @@ function DataManagementSection({ api }) {
       setMsg(t('admin.seedStarted'));
     } catch (e) {
       setBusy(null);
+      setJob(null);
       setErr(e.response?.data?.errors?.join('; ') || e.response?.data?.message || e.message);
     }
   };
@@ -120,8 +130,8 @@ function DataManagementSection({ api }) {
         </div>
         <button onClick={start} className="px-4 py-2 text-xs font-bold text-(--text-secondary) bg-(--surface) border border-(--border) rounded-xl hover:bg-(--surface-secondary) shadow-sm transition">{t('admin.viewGuide')}</button>
       </div>
-      {err && <div className="text-xs text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-100 font-semibold">{err}</div>}
-      {msg && <div className="text-xs text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 font-semibold">{msg}</div>}
+      {err && <div role="alert" className="text-xs text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-100 font-semibold">{err}</div>}
+      {msg && <div role="status" className="text-xs text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 font-semibold">{msg}</div>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <div className="bg-(--surface) rounded-2xl border border-(--border) p-6 space-y-3">
           <h3 className="text-xs font-bold uppercase tracking-wider">{t('admin.backupData')}</h3>
@@ -137,10 +147,10 @@ function DataManagementSection({ api }) {
             <button data-guide="seed-template" onClick={downloadTemplate} className="px-4 py-2 border border-(--border) rounded-xl text-xs font-bold hover:bg-(--surface-secondary)">{t('admin.seedTemplate')}</button>
           </div>
           <div data-guide="seed-btn" className="space-y-3">
-          <label className="block text-[11px] font-bold text-(--text-secondary) uppercase tracking-wider">{t('admin.excelUpload')}</label>
-          <input type="file" accept=".xlsx" disabled={busy === 'upload' || busy === 'preview'} onChange={(e) => previewFile(e.target.files?.[0], false)} className="text-xs" />
-          <label className="block text-[11px] font-bold text-(--text-secondary) uppercase tracking-wider">{t('admin.zipUpload')}</label>
-          <input type="file" accept=".zip" disabled={busy === 'upload' || busy === 'preview'} onChange={(e) => uploadFile(e.target.files?.[0], true)} className="text-xs" />
+          <label htmlFor="seed-xlsx" className="block text-[11px] font-bold text-(--text-secondary) uppercase tracking-wider">{t('admin.excelUpload')}</label>
+          <input id="seed-xlsx" ref={xlsxRef} type="file" accept=".xlsx" disabled={busy === 'upload' || busy === 'preview'} onChange={(e) => previewFile(e.target.files?.[0], false)} className="text-xs" />
+          <label htmlFor="seed-zip" className="block text-[11px] font-bold text-(--text-secondary) uppercase tracking-wider">{t('admin.zipUpload')}</label>
+          <input id="seed-zip" type="file" accept=".zip" disabled={busy === 'upload' || busy === 'preview'} onChange={(e) => { uploadFile(e.target.files?.[0], true); e.target.value = ''; }} className="text-xs" />
           <p className="text-[10px] text-(--text-tertiary)">seed.xlsx + papers/&lt;slug&gt;/&lt;slug&gt;.&#123;pdf,docx,tex&#125; + images/ — {t('admin.zipHint')}</p>
           {preview && (
             <div className="text-xs border border-(--border) rounded-xl p-3 space-y-1">
@@ -154,7 +164,7 @@ function DataManagementSection({ api }) {
               )}
               {(preview.errors || []).slice(0, 8).map((e, i) => <p key={i} className="text-rose-600">{e}</p>)}
               {preview.valid && (
-                <button onClick={(e) => uploadFile(document.querySelector('input[type=file]')?.files?.[0], false)} className="px-3 py-1.5 bg-[#0c162e] text-white rounded-lg text-[11px] font-bold">{t('admin.confirmInsert')}</button>
+                <button disabled={busy === 'upload'} onClick={() => uploadFile(xlsxRef.current?.files?.[0], false)} className="px-3 py-1.5 bg-[#0c162e] text-white rounded-lg text-[11px] font-bold disabled:opacity-50">{t('admin.confirmInsert')}</button>
               )}
             </div>
           )}
@@ -164,10 +174,15 @@ function DataManagementSection({ api }) {
               <ProgressBar value={job.progress || 0} />
             </div>
           )}
-          {job && job.status === 'DONE' && job.result && (
+          {job && ['DONE', 'PARTIAL', 'FAILED'].includes(job.status) && job.result && (
             <div className="text-xs font-mono border border-(--border) rounded-xl p-3">
               {Object.entries(job.result).map(([k, v]) => <p key={k}>{k}: {v}</p>)}
-              {(job.errors || []).slice(0, 5).map((e, i) => <p key={i} className="text-amber-600">{e}</p>)}
+              {job.errors?.length > 0 && (
+                <details className="mt-2 text-amber-700">
+                  <summary className="cursor-pointer">{t('admin.seedErrors', { count: job.errors.length })}</summary>
+                  <ul className="mt-2 space-y-1">{job.errors.map((error, index) => <li key={index}>{error}</li>)}</ul>
+                </details>
+              )}
             </div>
           )}
           </div>
