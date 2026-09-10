@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import * as XLSX from 'xlsx';
 import { useTranslation } from 'react-i18next';
+
+// ponytail: xlsx (~400KB) loads on first use, not with the admin bundle.
+const loadXlsx = () => import('xlsx');
 
 const HEADERS = ['First Name', 'Last Name', 'Student Code', 'Email', 'Role'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -31,7 +33,8 @@ export default function UserImportModal({ api, onClose, onDone }) {
   const [error, setError] = useState('');
   const [devBypass, setDevBypass] = useState(false);
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
+    const XLSX = await loadXlsx();
     const ws = XLSX.utils.json_to_sheet([
       { 'First Name': 'An', 'Last Name': 'Nguyen', 'Student Code': 'SE170608', 'Email': 'an.nguyen@example.com', 'Role': 'STUDENT' },
       { 'First Name': 'Binh', 'Last Name': 'Tran', 'Student Code': '', 'Email': 'binh.tran@example.com', 'Role': 'INSTRUCTOR' },
@@ -71,6 +74,7 @@ export default function UserImportModal({ api, onClose, onDone }) {
     if (!file) return;
     setError(''); setServerResult(null);
     try {
+      const XLSX = await loadXlsx();
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
       const sheet = wb.Sheets[wb.SheetNames[0]];

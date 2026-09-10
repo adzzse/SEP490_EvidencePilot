@@ -1,26 +1,71 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import api from '../../services/api.js';
 import PreviewPane from '../features/PreviewPane';
 import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
+import { mergePaperMetadata, parsePaperInfoSection } from '../../utils/formatters/paperInfo.js';
 
-export default function FullPaperPreview({ sections, paperTitle, mediaAssets, onClose, onAnnotateSection }) {
+// Allowlist mini-renderer: only <sup>/<sub> become elements, everything else
+// stays React-escaped text (extraction content is never trusted as HTML).
+function RichText({ text }) {
+  const tokens = String(text || '')
+    .split(/(<sup(?:\s[^<>]*)?>|<\/sup>|<sub(?:\s[^<>]*)?>|<\/sub>)/gi);
+  const children = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const open = tokens[i].match(/^<(sup|sub)(?:\s[^<>]*)?>$/i);
+    if (open && i + 2 < tokens.length
+      && new RegExp(`^</${open[1]}>$`, 'i').test(tokens[i + 2])) {
+      const Tag = open[1].toLowerCase();
+      children.push(<Tag key={i}>{tokens[i + 1]}</Tag>);
+      i += 3;
+    } else {
+      children.push(<React.Fragment key={i}>{tokens[i]}</React.Fragment>);
+      i += 1;
+    }
+  }
+  return <>{children}</>;
+}
+
+export default function FullPaperPreview({ sections, paperId, paperTitle, mediaAssets, onClose, onAnnotateSection }) {
   const { t } = useTranslation();
   const dialogRef = useRef(null);
   const sectionRefs = useRef({});
+  const [metadata, setMetadata] = useState(null);
   const generatedReferences = [];
   const hasReferenceSection = sections.some(section =>
     isReferenceSectionTitle(section.sectionTitle));
-  const displayTitle = (paperTitle || '')
-    .replace(/\.[a-z0-9]+$/i, '')
-    .split(/[-_]+/)
-    .filter(Boolean)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+  // Paper Info section edits win; extraction metadata fills gaps; the
+  // filename-derived prettification is a last resort for untitled papers.
+  const paperMeta = useMemo(() => {
+    const merged = mergePaperMetadata(metadata, parsePaperInfoSection(sections));
+    if (merged.title) return merged;
+    return {
+      ...merged,
+      title: (paperTitle || '')
+        .replace(/\.[a-z0-9]+$/i, '')
+        .split(/[-_]+/)
+        .filter(Boolean)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' '),
+    };
+  }, [sections, metadata, paperTitle]);
+  const displayTitle = paperMeta.title;
+  const authorNames = paperMeta.authors;
+  const affiliations = paperMeta.affiliations;
   useEffect(() => {
     const dialog = dialogRef.current;
     dialog.showModal();
     return () => dialog.close();
   }, []);
+  useEffect(() => {
+    if (!paperId) return undefined;
+    let cancelled = false;
+    api.get(`/api/papers/${paperId}/metadata`)
+      .then(r => { if (!cancelled) setMetadata(r.data || null); })
+      .catch(() => { if (!cancelled) setMetadata(null); });
+    return () => { cancelled = true; };
+  }, [paperId]);
 
   return (
     <dialog ref={dialogRef} onCancel={onClose} onClick={event => { if (event.target === dialogRef.current) onClose(); }} aria-label={t('viewFullPaper')} className="fixed inset-0 m-auto h-[90vh] w-[90vw] max-h-none max-w-none rounded-2xl border-0 p-0 bg-transparent shadow-2xl backdrop:bg-slate-900/60 backdrop:backdrop-blur-sm">
@@ -56,6 +101,30 @@ export default function FullPaperPreview({ sections, paperTitle, mediaAssets, on
           {displayTitle && (
             <>
               <h1 className="text-2xl font-bold text-slate-900 text-center">{displayTitle}</h1>
+              {(authorNames.length > 0 || paperMeta.doi || paperMeta.keywords) && (
+                <div className="mt-2 text-center space-y-1">
+                  {authorNames.length > 0 && (
+                    <p className="text-sm text-slate-700 font-medium">
+                      <RichText text={authorNames.join(', ')} />
+                    </p>
+                  )}
+                  {affiliations.length > 0 && (
+                    <p className="text-xs text-slate-500 italic">
+                      <RichText text={affiliations.join(' · ')} />
+                    </p>
+                  )}
+                  {paperMeta.doi && (
+                    <p className="text-xs text-slate-500">
+                      {t('paperDoi')}: <a className="text-indigo-600 hover:underline" target="_blank" rel="noreferrer" href={`https://doi.org/${paperMeta.doi}`}>{paperMeta.doi}</a>
+                    </p>
+                  )}
+                  {paperMeta.keywords && (
+                    <p className="text-xs text-slate-500">
+                      <span className="font-semibold">{t('paperKeywords')}: </span>{paperMeta.keywords}
+                    </p>
+                  )}
+                </div>
+              )}
               <hr className="my-4 border-slate-200" />
             </>
           )}
@@ -66,7 +135,7 @@ export default function FullPaperPreview({ sections, paperTitle, mediaAssets, on
               {sections.map((sec, i) => {
                 const referenceSection = isReferenceSectionTitle(sec.sectionTitle);
                 return (
-                  <div id={`paper-section-${sec.id}`} key={sec.id} ref={el => { sectionRefs.current[sec.id] = el; }}>
+                    <div id={`paper-section-${sec.id}`} key={sec.id} ref={el => { sectionRefs.current[sec.id] = el; }} className="[content-visibility:auto] [contain-intrinsic-size:auto_400px]">
                     {onAnnotateSection && <button type="button" onClick={() => onAnnotateSection(sec.id)} className="mb-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">{t('feedbackAnnotatePassage')} · {sec.sectionTitle}</button>}
                     <PreviewPane
                       sectionTitle={sec.sectionTitle}

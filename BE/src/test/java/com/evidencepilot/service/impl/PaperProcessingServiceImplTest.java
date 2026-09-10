@@ -144,19 +144,33 @@ class PaperProcessingServiceImplTest {
         List<AiModelClient.ExtractionBlock> blocks = List.of(
                 heading("Evaluation of adipokines", 1),
                 heading("Abstract", 2),
+                para("Abstract body."),
                 heading("Introduction", 2),
+                para("Introduction body."),
                 heading("Material and methods Study design", 2),
+                para("Study design body."),
                 heading("Population", 3),
+                para("Population body."),
                 heading("Laboratory methods", 3),
+                para("Laboratory body."),
                 heading("Leptin and Vaspin Quantification: Enzymatic Method (Diasource, KAP2281)", 3),
+                para("Assay body."),
                 heading("Statistical analysis", 3),
+                para("Statistics body."),
                 heading("Results", 2),
+                para("Results body."),
                 heading("Adipokine level correlation analysis and principal component scores", 3),
+                para("Correlation body."),
                 heading("Discussion", 2),
+                para("Discussion body."),
                 heading("Study limitations", 3),
+                para("Limitations body."),
                 heading("Conclusions", 2),
+                para("Conclusion body."),
                 heading("Acknowledgments", 2),
-                new AiModelClient.ExtractionBlock("reference", "References", null, null));
+                para("Thanks."),
+                new AiModelClient.ExtractionBlock("reference", "References", null, null),
+                para("Reference 1."));
 
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId)).thenReturn(List.of());
@@ -171,23 +185,34 @@ class PaperProcessingServiceImplTest {
 
         assertThat(saved).extracting(PaperSection::getSectionTitle)
                 .containsExactly(
+                        "Paper Info",
                         "Abstract",
                         "Introduction",
-                        "Material and methods",
+                        "Material and methods Study design",
                         "Results",
                         "Discussion",
                         "Conclusions",
                         "Acknowledgments",
                         "References");
-        assertThat(saved.get(2).getContentTex())
-                .startsWith("## Study design\n\nStudy design body.")
-                .contains("## Population")
-                .contains("## Laboratory methods")
-                .contains("## Leptin and Vaspin Quantification: Enzymatic Method (Diasource, KAP2281)")
-                .contains("## Statistical analysis");
-        assertThat(saved.get(3).getContentTex())
-                .contains("## Adipokine level correlation analysis and principal component scores");
-        assertThat(saved.get(4).getContentTex()).contains("## Study limitations");
+        assertThat(saved.getFirst().getContentTex())
+                .isEqualTo("\\textbf{Title:} Evaluation of adipokines");
+        // H3 blocks stay inside the general section as \textbf subheadings — never split.
+        assertThat(saved).allMatch(section -> section.getParentSection() == null);
+        assertThat(saved.get(3).getContentTex()).isEqualTo(
+                "Study design body."
+                + "\n\n\\textbf{Population}\n\nPopulation body."
+                + "\n\n\\textbf{Laboratory methods}\n\nLaboratory body."
+                + "\n\n\\textbf{Leptin and Vaspin Quantification: Enzymatic Method (Diasource, KAP2281)}\n\nAssay body."
+                + "\n\n\\textbf{Statistical analysis}\n\nStatistics body.");
+        assertThat(saved.get(4).getContentTex()).isEqualTo(
+                "Results body."
+                + "\n\n\\textbf{Adipokine level correlation analysis and principal component scores}\n\nCorrelation body.");
+        assertThat(saved.get(5).getContentTex()).isEqualTo(
+                "Discussion body.\n\n\\textbf{Study limitations}\n\nLimitations body.");
+        assertThat(saved.get(8).getContentTex()).isEqualTo("Reference 1.");
+        // Gap ordering: distinct, ascending, step-based.
+        assertThat(saved).extracting(PaperSection::getSectionOrder)
+                .containsExactly(1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216);
     }
 
     @Test
@@ -226,6 +251,9 @@ class PaperProcessingServiceImplTest {
 
         List<AiModelClient.ExtractionBlock> blocks = new ArrayList<>();
         blocks.add(heading("Paper title", 1));
+        blocks.add(para("Authors"));
+        blocks.add(para("Abstract: Abstract body."));
+        blocks.add(para("Keywords: AI, ML"));
         headings.forEach(title -> blocks.add(heading(title, 2)));
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId)).thenReturn(List.of());
@@ -240,27 +268,367 @@ class PaperProcessingServiceImplTest {
 
         assertThat(saved).extracting(PaperSection::getSectionTitle)
                 .containsExactly(
+                        "Paper Info",
                         "Abstract",
-                        "Introduction",
-                        "Background",
-                        "Research methodology",
-                        "Results",
-                        "Discussion",
-                        "Conclusion",
-                        "Acknowledgments",
-                        "References",
+                        "1. Introduction",
+                        "2. Background",
+                        "3. Research methodology",
+                        "4. Results",
+                        "5. Discussion",
+                        "6. Conclusion",
+                        "7. Acknowledgments",
+                        "8. References",
                         "Appendix A",
+                        "Table A.17",
                         "Appendix B",
                         "Appendix C",
                         "Appendix D");
-        assertThat(saved.getFirst().getContentTex())
+        assertThat(saved.getFirst().getContentTex()).isEqualTo(
+                "\\textbf{Title:} Paper title"
+                + "\n\n\\textbf{Authors:} Authors"
+                + "\n\n\\textbf{Keywords:} AI, ML");
+        assertThat(saved.get(1).getContentTex())
                 .isEqualTo("Abstract body.\n\nKeywords: AI, ML");
-        assertThat(saved.get(9).getContentTex())
-                .contains("## Table A.17\nBody.");
     }
 
     private static AiModelClient.ExtractionBlock heading(String text, int level) {
         return new AiModelClient.ExtractionBlock("heading", text, level, null);
+    }
+
+    private static AiModelClient.ExtractionBlock para(String text) {
+        return new AiModelClient.ExtractionBlock("paragraph", text, null, null);
+    }
+
+    @Test
+    void spladePreambleGoesToMetadataAndKeywordsProduceNoSection() throws Exception {
+        UUID documentId = UUID.randomUUID();
+        Document document = new Document();
+        document.setId(documentId);
+        DocumentText text = new DocumentText();
+        text.setDocument(document);
+        text.setExtractedText("full text placeholder");
+        document.setDocumentText(text);
+        List<AiModelClient.ExtractionBlock> blocks = List.of(
+                heading("SPLADE v2: Sparse Lexical and Expansion Model for Information Retrieval", 1),
+                para("Thibault Formal\nNaver Labs Europe\nMeylan, France\nthibault.formal@naverlabs.com"),
+                para("Carlos Lassance Naver Labs Europe Meylan, France carlos.lassance@naverlabs.com"),
+                heading("ABSTRACT", 2),
+                para("In neural Information Retrieval (IR), ongoing research continues."),
+                heading("KEYWORDS", 2),
+                para("neural networks, indexing, sparse representations, regularization"),
+                heading("1 INTRODUCTION", 2),
+                para("The release of large pre-trained language models shook the field."),
+                heading("2 RELATED WORKS", 2),
+                para("Dense retrieval based on BERT became standard."),
+                heading("5 CONCLUSION", 2),
+                para("In this paper, we have built on SPLADE."),
+                new AiModelClient.ExtractionBlock("reference", "REFERENCES", null, null));
+
+        com.evidencepilot.repository.DocumentMetadataRepository metadataRepo =
+                mock(com.evidencepilot.repository.DocumentMetadataRepository.class);
+        PaperProcessingServiceImpl svc = new PaperProcessingServiceImpl(
+                paperSectionRepository,
+                metadataRepo,
+                new BlockTreeIngestor(new com.fasterxml.jackson.databind.ObjectMapper()),
+                mock(InstructorFeedbackRepository.class),
+                documentRepository,
+                currentUserService,
+                mock(PaperStandardService.class),
+                userRepository,
+                projectRepository,
+                mock(SystemNotificationService.class),
+                mock(TexArchiveBuilder.class),
+                evidenceTraceService,
+                auditService,
+                sectionStandardEvaluationRepository,
+                feedbackAnchorService,
+                new com.fasterxml.jackson.databind.ObjectMapper());
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId)).thenReturn(List.of());
+        List<PaperSection> saved = new ArrayList<>();
+        when(paperSectionRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            Iterable<PaperSection> sections = invocation.getArgument(0);
+            sections.forEach(saved::add);
+            return saved;
+        });
+
+        svc.detectAndPersistSections(documentId, blocks);
+
+        // Every source heading is its own node, verbatim — nothing absorbed, nothing renamed.
+        assertThat(saved).extracting(PaperSection::getSectionTitle)
+                .containsExactly(
+                        "Paper Info",
+                        "ABSTRACT",
+                        "1 INTRODUCTION",
+                        "2 RELATED WORKS",
+                        "5 CONCLUSION",
+                        "References");
+        assertThat(saved.getFirst().getContentTex()).isEqualTo(
+                "\\textbf{Title:} SPLADE v2: Sparse Lexical and Expansion Model for Information Retrieval"
+                + "\n\n\\textbf{Authors:} Thibault Formal; Carlos Lassance Naver Labs Europe Meylan, France"
+                + "\n\n\\textbf{Affiliations:} Naver Labs Europe; Meylan, France"
+                + "\n\n\\textbf{Emails:} thibault.formal@naverlabs.com; carlos.lassance@naverlabs.com"
+                + "\n\n\\textbf{Keywords:} neural networks, indexing, sparse representations, regularization");
+        assertThat(saved.get(1).getContentTex()).isEqualTo(
+                "In neural Information Retrieval (IR), ongoing research continues."
+                + "\n\nKeywords: neural networks, indexing, sparse representations, regularization");
+        assertThat(saved.get(2).getContentTex())
+                .isEqualTo("The release of large pre-trained language models shook the field.");
+        assertThat(saved.stream().map(PaperSection::getContentTex).toList())
+                .noneMatch(content -> content.contains("thibault.formal@naverlabs.com")
+                        && !content.contains("\\textbf{Emails:}"));
+
+        var metadataCaptor = org.mockito.ArgumentCaptor
+                .forClass(com.evidencepilot.model.DocumentMetadata.class);
+        verify(metadataRepo).save(metadataCaptor.capture());
+        com.evidencepilot.model.DocumentMetadata metadata = metadataCaptor.getValue();
+        assertThat(metadata.getTitle()).startsWith("SPLADE v2");
+        assertThat(metadata.getKeywords()).contains("neural networks");
+        var authors = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(metadata.getAuthorsJson());
+        assertThat(authors.size()).isEqualTo(2);
+        assertThat(metadata.getAuthorsJson()).contains("thibault.formal@naverlabs.com",
+                "carlos.lassance@naverlabs.com");
+    }
+
+    @Test
+    void dottedSubsectionsCollapseAndReferencesMerge() {
+        UUID documentId = UUID.randomUUID();
+        Document document = new Document();
+        document.setId(documentId);
+        DocumentText text = new DocumentText();
+        text.setDocument(document);
+        text.setExtractedText("full text placeholder");
+        document.setDocumentText(text);
+        List<AiModelClient.ExtractionBlock> blocks = List.of(
+                heading("SPLADE v2", 1),
+                para("Thibault Formal\nthibault.formal@naverlabs.com"),
+                heading("ABSTRACT", 2),
+                para("Abstract body."),
+                heading("3 SPARSE LEXICAL REPRESENTATIONS FOR FIRST-STAGE RANKING", 2),
+                para("Section 3 body."),
+                heading("3.1 SPLADE", 2),
+                para("SPLADE body."),
+                heading("3.2 Pooling strategy", 2),
+                para("Pooling body."),
+                heading("4 EXPERIMENTAL SETTING AND RESULTS", 2),
+                para("Section 4 body."),
+                heading("4.1 Impact of max pooling", 2),
+                para("Pooling impact body."),
+                new AiModelClient.ExtractionBlock("reference", "REFERENCES", null, null),
+                new AiModelClient.ExtractionBlock("reference",
+                        "- [1] Yang Bai et al. 2020. SparTerm.", null, null),
+                new AiModelClient.ExtractionBlock("reference",
+                        "- [2] Leonid Boytsov. 2018. k-NN Search.", null, null));
+
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId)).thenReturn(List.of());
+        List<PaperSection> saved = new ArrayList<>();
+        when(paperSectionRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            Iterable<PaperSection> sections = invocation.getArgument(0);
+            sections.forEach(saved::add);
+            return saved;
+        });
+
+        service().detectAndPersistSections(documentId, blocks);
+
+        assertThat(saved).extracting(PaperSection::getSectionTitle)
+                .containsExactly(
+                        "Paper Info",
+                        "ABSTRACT",
+                        "3 SPARSE LEXICAL REPRESENTATIONS FOR FIRST-STAGE RANKING",
+                        "4 EXPERIMENTAL SETTING AND RESULTS",
+                        "References");
+        assertThat(saved.get(2).getContentTex()).isEqualTo(
+                "Section 3 body."
+                + "\n\n\\textbf{3.1 SPLADE}\n\nSPLADE body."
+                + "\n\n\\textbf{3.2 Pooling strategy}\n\nPooling body.");
+        assertThat(saved.get(3).getContentTex()).isEqualTo(
+                "Section 4 body.\n\n\\textbf{4.1 Impact of max pooling}\n\nPooling impact body.");
+        assertThat(saved.get(4).getContentTex())
+                .contains("- [1] Yang Bai", "- [2] Leonid Boytsov");
+    }
+
+    @Test
+    void paperInfoSectionIncludesDoiWhenKnown() {
+        UUID documentId = UUID.randomUUID();
+        Document document = new Document();
+        document.setId(documentId);
+        document.setDoi("10.1234/splade");
+        DocumentText text = new DocumentText();
+        text.setDocument(document);
+        text.setExtractedText("full text placeholder");
+        document.setDocumentText(text);
+        List<AiModelClient.ExtractionBlock> blocks = List.of(
+                heading("Some Title", 1),
+                heading("ABSTRACT", 2),
+                para("Body."));
+
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId)).thenReturn(List.of());
+        List<PaperSection> saved = new ArrayList<>();
+        when(paperSectionRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            Iterable<PaperSection> sections = invocation.getArgument(0);
+            sections.forEach(saved::add);
+            return saved;
+        });
+
+        service().detectAndPersistSections(documentId, blocks);
+
+        assertThat(saved).extracting(PaperSection::getSectionTitle)
+                .containsExactly("Paper Info", "ABSTRACT");
+        assertThat(saved.getFirst().getContentTex()).contains("\\textbf{DOI:} 10.1234/splade");
+    }
+
+    @Test
+    void getPaperMetadataPrefersExtractorValuesAndFallsBackToDocument() {
+        com.evidencepilot.repository.DocumentMetadataRepository metadataRepo =
+                mock(com.evidencepilot.repository.DocumentMetadataRepository.class);
+        PaperProcessingServiceImpl svc = new PaperProcessingServiceImpl(
+                paperSectionRepository,
+                metadataRepo,
+                new BlockTreeIngestor(new com.fasterxml.jackson.databind.ObjectMapper()),
+                mock(InstructorFeedbackRepository.class),
+                documentRepository,
+                currentUserService,
+                mock(PaperStandardService.class),
+                userRepository,
+                projectRepository,
+                mock(SystemNotificationService.class),
+                mock(TexArchiveBuilder.class),
+                evidenceTraceService,
+                auditService,
+                sectionStandardEvaluationRepository,
+                feedbackAnchorService,
+                new com.fasterxml.jackson.databind.ObjectMapper());
+
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paperDoc = paper(project);
+        paperDoc.setTitle("Doc title");
+        paperDoc.setAuthors("D. Ocument");
+        paperDoc.setDoi("10.1234/abc");
+        paperDoc.setPublisher("ACM");
+        paperDoc.setPublicationYear(2021);
+        com.evidencepilot.model.DocumentMetadata meta = new com.evidencepilot.model.DocumentMetadata();
+        meta.setTitle("Extracted title");
+        meta.setAuthorsJson("[{\"name\":\"A. Uthor\",\"affiliations\":[\"Lab\"],\"emails\":[\"a@x.com\"]}]");
+        meta.setKeywords("k1, k2");
+        when(metadataRepo.findByDocumentId(paperDoc.getId())).thenReturn(Optional.of(meta));
+        when(currentUserService.requireCurrentUser()).thenReturn(user(UserRole.INSTRUCTOR));
+        when(documentRepository.findById(paperDoc.getId())).thenReturn(Optional.of(paperDoc));
+
+        var response = svc.getPaperMetadata(paperDoc.getId());
+
+        assertThat(response.title()).isEqualTo("Extracted title");
+        assertThat(response.authors()).singleElement().satisfies(author -> {
+            assertThat(author.name()).isEqualTo("A. Uthor");
+            assertThat(author.affiliations()).containsExactly("Lab");
+            assertThat(author.emails()).containsExactly("a@x.com");
+        });
+        assertThat(response.keywords()).isEqualTo("k1, k2");
+        assertThat(response.doi()).isEqualTo("10.1234/abc");
+        assertThat(response.publisher()).isEqualTo("ACM");
+        assertThat(response.publicationYear()).isEqualTo(2021);
+
+        when(metadataRepo.findByDocumentId(paperDoc.getId())).thenReturn(Optional.empty());
+        var fallback = svc.getPaperMetadata(paperDoc.getId());
+        assertThat(fallback.title()).isEqualTo("Doc title");
+        assertThat(fallback.authors()).singleElement()
+                .satisfies(author -> assertThat(author.name()).isEqualTo("D. Ocument"));
+        assertThat(fallback.keywords()).isNull();
+    }
+
+    @Test
+    void validateSectionsIgnoresLegacyKeywordsNode() {
+        PaperStandardService standards = mock(PaperStandardService.class);
+        when(standards.getRequiredSections(
+                com.evidencepilot.model.enums.PaperStandard.IEEE))
+                .thenReturn(List.of("Abstract", "Introduction"));
+        when(standards.normalizeSectionTitle(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        com.evidencepilot.repository.DocumentMetadataRepository metadataRepo =
+                mock(com.evidencepilot.repository.DocumentMetadataRepository.class);
+        PaperProcessingServiceImpl svc = new PaperProcessingServiceImpl(
+                paperSectionRepository,
+                metadataRepo,
+                new BlockTreeIngestor(new com.fasterxml.jackson.databind.ObjectMapper()),
+                mock(InstructorFeedbackRepository.class),
+                documentRepository,
+                currentUserService,
+                standards,
+                userRepository,
+                projectRepository,
+                mock(SystemNotificationService.class),
+                mock(TexArchiveBuilder.class),
+                evidenceTraceService,
+                auditService,
+                sectionStandardEvaluationRepository,
+                feedbackAnchorService,
+                new com.fasterxml.jackson.databind.ObjectMapper());
+
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        project.setTargetStandard(com.evidencepilot.model.enums.PaperStandard.IEEE);
+        Document paperDoc = paper(project);
+        PaperSection abstractSection = section(paperDoc);
+        abstractSection.setSectionTitle("Abstract");
+        PaperSection legacyKeywords = section(paperDoc);
+        legacyKeywords.setSectionTitle("Keywords");
+        when(currentUserService.requireCurrentUser()).thenReturn(user(UserRole.INSTRUCTOR));
+        when(documentRepository.findById(paperDoc.getId())).thenReturn(Optional.of(paperDoc));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperDoc.getId()))
+                .thenReturn(List.of(abstractSection, legacyKeywords));
+
+        var response = svc.validateSections(paperDoc.getId());
+
+        assertThat(response.extraSections()).isEmpty();
+        assertThat(response.missingSections()).containsExactly("Introduction");
+    }
+
+    @Test
+    void batchUpdateAcceptsGapOrdering() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paperDoc = paper(project);
+        PaperSection first = section(paperDoc);
+        first.setSectionOrder(1024);
+        first.setContentTex("A");
+        PaperSection second = section(paperDoc);
+        second.setSectionOrder(2048);
+        second.setContentTex("B");
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(documentRepository.findById(paperDoc.getId())).thenReturn(Optional.of(paperDoc));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperDoc.getId()))
+                .thenReturn(List.of(first, second));
+
+        var result = service().batchUpdateSections(paperDoc.getId(), List.of(
+                new SectionBatchItem(first.getId(), 2048, "Intro", null, "A", 0L),
+                new SectionBatchItem(second.getId(), 1024, "Intro", null, "B", 0L)));
+
+        assertThat(result).hasSize(2);
+        assertThat(first.getSectionOrder()).isEqualTo(2048);
+        assertThat(second.getSectionOrder()).isEqualTo(1024);
+        verify(paperSectionRepository).saveAll(anyList());
+    }
+
+    @Test
+    void createSectionUsesGapStep() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paperDoc = paper(project);
+        PaperSection existingSection = section(paperDoc);
+        existingSection.setSectionOrder(1024);
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(documentRepository.findById(paperDoc.getId())).thenReturn(Optional.of(paperDoc));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperDoc.getId()))
+                .thenReturn(List.of(existingSection));
+        when(paperSectionRepository.save(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service().createSection(paperDoc.getId(), "Extra", null);
+
+        assertThat(response.sectionOrder()).isEqualTo(2048);
     }
 
     @Test
@@ -634,6 +1002,8 @@ class PaperProcessingServiceImplTest {
     private PaperProcessingServiceImpl service() {
         return new PaperProcessingServiceImpl(
                 paperSectionRepository,
+                mock(com.evidencepilot.repository.DocumentMetadataRepository.class),
+                new BlockTreeIngestor(new com.fasterxml.jackson.databind.ObjectMapper()),
                 mock(InstructorFeedbackRepository.class),
                 documentRepository,
                 currentUserService,
@@ -645,7 +1015,8 @@ class PaperProcessingServiceImplTest {
                 evidenceTraceService,
                 auditService,
                 sectionStandardEvaluationRepository,
-                feedbackAnchorService);
+                feedbackAnchorService,
+                new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     private User user(UserRole role) {

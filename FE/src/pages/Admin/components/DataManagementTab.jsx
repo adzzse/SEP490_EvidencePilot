@@ -74,6 +74,19 @@ function DataManagementSection({ api }) {
     finally { setBusy(null); }
   };
 
+  const backupSeedBundle = async () => {
+    setBusy('seed-bundle'); setErr(''); setMsg('');
+    try {
+      const r = await api.get('/api/admin/backup/seed-bundle', { responseType: 'blob', timeout: 600000 });
+      const url = URL.createObjectURL(new Blob([r.data], { type: 'application/zip' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = `seed-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click(); URL.revokeObjectURL(url);
+      setMsg(t('admin.backupDone'));
+    } catch (e) { setErr(e.response?.data?.message || e.message); }
+    finally { setBusy(null); }
+  };
+
   const downloadTemplate = async () => {
     setErr(''); setMsg('');
     try {
@@ -138,6 +151,10 @@ function DataManagementSection({ api }) {
           <p className="text-xs text-(--text-secondary)">{t('admin.backupHint')}</p>
           <button data-guide="backup-btn" onClick={backup} disabled={busy === 'backup'} className="px-4 py-2 bg-[#0c162e] text-white rounded-xl text-xs font-bold disabled:opacity-50">
             {busy === 'backup' ? t('admin.working') : t('admin.backupData')}
+          </button>
+          <p className="text-xs text-(--text-secondary)">{t('admin.backupSeedHint')}</p>
+          <button onClick={backupSeedBundle} disabled={busy === 'seed-bundle'} className="px-4 py-2 border border-(--border) rounded-xl text-xs font-bold hover:bg-(--surface-secondary) disabled:opacity-50">
+            {busy === 'seed-bundle' ? t('admin.working') : t('admin.backupSeedBundle')}
           </button>
         </div>
         <div className="bg-(--surface) rounded-2xl border border-(--border) p-6 space-y-3">

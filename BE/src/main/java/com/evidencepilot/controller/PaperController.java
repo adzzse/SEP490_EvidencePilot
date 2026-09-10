@@ -3,6 +3,7 @@ package com.evidencepilot.controller;
 import com.evidencepilot.dto.response.CitationValidationResponse;
 import com.evidencepilot.dto.response.DocumentResponse;
 import com.evidencepilot.dto.response.PaperSectionResponse;
+import com.evidencepilot.dto.response.PaperMetadataResponse;
 import com.evidencepilot.dto.response.PaperStandardSuggestionResponse;
 import com.evidencepilot.dto.response.PaperValidationResponse;
 import com.evidencepilot.dto.response.JobSubmitResponse;
@@ -37,6 +38,7 @@ import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.DocumentService;
 import com.evidencepilot.service.AiEvaluationService;
 import com.evidencepilot.service.PaperProcessingService;
+import com.evidencepilot.service.PaperStandardService;
 import com.evidencepilot.service.SubmissionReadinessService;
 import com.evidencepilot.service.impl.EvidenceTraceService;
 import com.evidencepilot.service.impl.SectionCitationReviewService;
@@ -90,6 +92,7 @@ public class PaperController {
     private final SectionCitationReviewService sectionCitationReviewService;
     private final EvidenceTraceService evidenceTraceService;
     private final SubmissionReadinessService submissionReadinessService;
+    private final PaperStandardService paperStandardService;
 
     @Operation(summary = "List all papers",
             description = "Returns all active paper documents. "
@@ -184,6 +187,21 @@ public class PaperController {
             @Parameter(description = "Paper document UUID") @PathVariable UUID documentId,
             @Parameter(description = "Section UUID") @PathVariable UUID sectionId) {
         return paperProcessingService.getSectionHistory(documentId, sectionId);
+    }
+
+    @Operation(summary = "Get paper metadata",
+            description = "Returns extracted title, authors and keywords plus DOI, publisher "
+                    + "and year for the View Full Paper display.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Metadata returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Access denied"),
+            @ApiResponse(responseCode = "404", description = "Paper not found")
+    })
+    @GetMapping("/papers/{id}/metadata")
+    public PaperMetadataResponse metadata(
+            @Parameter(description = "Paper document UUID") @PathVariable UUID id) {
+        return paperProcessingService.getPaperMetadata(id);
     }
 
     @Operation(summary = "Validate paper against standard",
@@ -619,8 +637,10 @@ public class PaperController {
     }
 
     private void requirePaperReplaceable(UUID projectId, List<PaperSection> sections) {
+        // Template boilerplate (% comments) is not student work — same rule as
+        // deleteSection/resetSections, which use hasStudentContent.
         boolean hasWork = sections.stream().anyMatch(s ->
-                (s.getContentTex() != null && !s.getContentTex().isBlank())
+                paperStandardService.hasStudentContent(s.getContentTex())
                 || s.getAssignedUser() != null);
         if (hasWork) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,

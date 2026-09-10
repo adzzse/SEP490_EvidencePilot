@@ -1,27 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import api from '../../services/api.js';
+import { useMediaUrls } from '../../hooks/useMediaUrls.js';
 import DeleteConfirm from '../ui/DeleteConfirm.jsx';
 
 export default function FilePanel({ compact, isOpen, width, onResizeStart, sections, assignedSections, selectedSectionId, onSelectSection, selectedPaper, onSelectPaper, onViewFullPaper, papers, onUploadPaper, sources, onUploadSource, onDeleteSource, mediaAssets, onUploadMedia, onDeleteMedia, onInsertMedia, showToast, isLocked, onSaveDraft, saveStatus }) {
   const { t } = useTranslation();
   const [mediaSearchQuery, setMediaSearchQuery] = useState('');
   const [hoveredMedia, setHoveredMedia] = useState(null);
-  const [mediaUrlMap, setMediaUrlMap] = useState({});
 
-  // Signed URLs are not part of the list response — fetch them like PreviewPane does.
-  useEffect(() => {
-    if (!mediaAssets || mediaAssets.length === 0) {
-      setMediaUrlMap({});
-      return undefined;
-    }
-    let cancelled = false;
-    api.post('/api/media/urls', { ids: mediaAssets.map(a => a.id) })
-      .then(r => { if (!cancelled) setMediaUrlMap(r.data || {}); })
-      .catch(() => { if (!cancelled) setMediaUrlMap({}); });
-    return () => { cancelled = true; };
-  }, [mediaAssets]);
+  // Signed URLs are not part of the list response — shared hook dedupes
+  // concurrent mounts into one /api/media/urls POST.
+  const mediaUrlMap = useMediaUrls(mediaAssets);
 
   if (!isOpen) return null;
   const saveLabel = saveStatus === 'saving' ? t('saving') : saveStatus === 'saved' ? t('saved') : saveStatus === 'error' ? t('saveFailed') : null;

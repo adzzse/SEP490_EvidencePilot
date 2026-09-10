@@ -24,6 +24,7 @@ import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.DocumentTextRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectDocumentRepository;
+import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 
 import com.evidencepilot.client.openalex.OpenAlexClient;
@@ -71,6 +72,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final DocumentChunkRepository documentChunkRepository;
     private final DocumentTextRepository documentTextRepository;
     private final ProjectRepository projectRepository;
+    private final ProjectMemberRepository memberRepository;
     private final CollectionRepository collectionRepository;
     private final CollectionDocumentRepository collectionDocumentRepository;
     private final ProjectDocumentRepository projectDocumentRepository;
@@ -192,8 +194,20 @@ public class DocumentServiceImpl implements DocumentService {
         User currentUser = currentUserService.requireCurrentUser();
         var pageable = PagingRequest.pageable(
                 page, size, sort, DOCUMENT_SORT_FIELDS, "createdAt,desc");
+        // Library scope is ownership-blind: seed and shared sources are uploaded
+        // by project instructors, so an instructor would otherwise see an empty
+        // library. Include own uploads plus sources in my projects/collections.
+        Set<UUID> projectIds = memberRepository.findByUserId(currentUser.getId()).stream()
+                .map(member -> member.getProject().getId())
+                .collect(java.util.stream.Collectors.toSet());
+        Set<UUID> collectionDocIds = collectionRepository
+                .findByInstructorIdAndActiveTrue(currentUser.getId()).stream()
+                .flatMap(collection -> collectionDocumentRepository
+                        .findByCollectionId(collection.getId()).stream())
+                .map(link -> link.getDocument().getId())
+                .collect(java.util.stream.Collectors.toSet());
         var results = documentRepository.findAll(
-                sourceLibrarySpec(currentUser.getId(), q, processingStatus), pageable);
+                sourceLibrarySpec(currentUser.getId(), projectIds, collectionDocIds, q, processingStatus), pageable);
         return PagedResponse.from(results.map(this::toSourceLibraryItem));
     }
 
@@ -918,12 +932,18 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     private Specification<Document> sourceLibrarySpec(
-            UUID uploadedBy, String q, ProcessingStatus processingStatus) {
+            UUID ownerId, Set<UUID> projectIds, Set<UUID> collectionDocIds,
+            String q, ProcessingStatus processingStatus) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
-            predicates.add(cb.equal(root.get("uploadedBy").get("id"), uploadedBy));
             predicates.add(cb.equal(root.get("docType"), DocumentType.SOURCE));
             predicates.add(cb.equal(root.get("active"), true));
+
+            List<Predicate> scope = new ArrayList<>();
+            scope.add(cb.equal(root.get("uploadedBy").get("id"), ownerId));
+            if (!projectIds.isEmpty()) scope.add(root.get("project").get("id").in(projectIds));
+            if (!collectionDocIds.isEmpty()) scope.add(root.get("id").in(collectionDocIds));
+            predicates.add(cb.or(scope.toArray(Predicate[]::new)));
 
             if (processingStatus != null) {
                 predicates.add(cb.equal(root.get("processingStatus"), processingStatus));

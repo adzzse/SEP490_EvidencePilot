@@ -122,12 +122,18 @@ services:
       RABBITMQ_VIRTUAL_HOST: ${RABBITMQ_VIRTUAL_HOST}
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      # Listener QoS — must be forwarded explicitly; --env-file alone only
+      # feeds compose interpolation, never the container environment.
+      RABBITMQ_LISTENER_CONCURRENCY: ${RABBITMQ_LISTENER_CONCURRENCY:-2}
+      RABBITMQ_LISTENER_PREFETCH: ${RABBITMQ_LISTENER_PREFETCH:-2}
+      RABBITMQ_EXTRACTION_MAX_CONCURRENCY: ${RABBITMQ_EXTRACTION_MAX_CONCURRENCY:-3}
 
       # ── AI Model (from .env) ─────────────────────────────────────────────────
       AI_MODEL_BASE_URL: ${AI_MODEL_BASE_URL}
       AI_MODEL_API_KEY: ${AI_MODEL_API_KEY:-}
       AI_MODEL_READ_TIMEOUT_SECONDS: ${AI_MODEL_READ_TIMEOUT_SECONDS}
       AI_MODEL_MAX_RETRIES: ${AI_MODEL_MAX_RETRIES:-3}
+      AI_MODEL_MAX_CONCURRENT_REQUESTS: ${AI_MODEL_MAX_CONCURRENT_REQUESTS:-3}
       AI_MODEL_MIN_INTERVAL_MS: ${AI_MODEL_MIN_INTERVAL_MS:-4000}
 
       # ── Seed accounts (from .env) ──────────────────────────────────────────

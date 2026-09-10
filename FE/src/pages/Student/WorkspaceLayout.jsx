@@ -1676,6 +1676,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       {showFullPaperPreview && (
         <FullPaperPreview
           sections={sections}
+          paperId={selectedPaper?.id}
           paperTitle={selectedPaper?.originalFilename || selectedPaper?.title || t('paper')}
           mediaAssets={mediaAssets}
           onClose={() => setShowFullPaperPreview(false)}

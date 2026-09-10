@@ -49,7 +49,22 @@ public class ProjectCollectionService {
     private final CollectionDocumentRepository collectionDocumentRepository;
     private final CurrentUserService currentUserService;
 
-    public List<CollectionResponse> getLinkedCollections(UUID projectId) {
+    /**
+     * Seed-only collection creation: no auth checks, the seed job runs as
+     * ADMIN and membership comes from the sheet, not the requester.
+     */
+    @Transactional
+    public Collection createSeedCollection(User owner, String title, String description) {
+        Collection collection = new Collection();
+        collection.setTitle(title);
+        collection.setDescription(description);
+        collection.setInstructor(owner);
+        collection.setActive(true);
+        collection.setCreatedAt(LocalDateTime.now());
+        return collectionRepository.save(collection);
+    }
+
+        public List<CollectionResponse> getLinkedCollections(UUID projectId) {
         User currentUser = currentUserService.requireCurrentUser();
         Project project = requireActiveProject(projectId);
         currentUserService.requireProjectAccess(currentUser, project);

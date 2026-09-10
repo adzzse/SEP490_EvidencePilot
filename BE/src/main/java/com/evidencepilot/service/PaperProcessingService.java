@@ -1,6 +1,7 @@
 package com.evidencepilot.service;
 
 import com.evidencepilot.dto.response.PaperSectionResponse;
+import com.evidencepilot.dto.response.PaperMetadataResponse;
 import com.evidencepilot.dto.response.PaperStandardSuggestionResponse;
 import com.evidencepilot.dto.response.PaperValidationResponse;
 
@@ -29,6 +30,8 @@ public interface PaperProcessingService {
             List<AiModelClient.ExtractionBlock> blocks);
 
     PaperSectionResponse getSectionHistory(UUID documentId, UUID sectionId);
+
+    PaperMetadataResponse getPaperMetadata(UUID documentId);
 
     PaperValidationResponse validateSections(UUID documentId);
 

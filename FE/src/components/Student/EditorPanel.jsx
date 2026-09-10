@@ -171,9 +171,6 @@ export default function EditorPanel({
             {currentSection && <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1 py-0.5 rounded shrink-0">v{currentSection.version || 1}</span>}
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            {readOnlyLabel && (
-              <span className="text-[9px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-md border border-amber-200 dark:border-amber-800">{readOnlyLabel}</span>
-            )}
             {reviewError && (
               <span className="hidden md:inline max-w-[180px] truncate text-[10px] font-semibold text-rose-600" title={reviewError}>{reviewError}</span>
             )}
@@ -320,13 +317,13 @@ export default function EditorPanel({
             <span className="text-indigo-600">{'\\section{'}</span>
             <span className="min-w-0 truncate font-semibold text-(--text-primary)">{currentSection.sectionTitle}</span>
             <span className="text-indigo-600">{'}'}</span>
-            {readOnlyLabel && <span className="ml-auto pl-3 text-[9px] font-sans font-bold uppercase tracking-wide text-(--text-tertiary)">{readOnlyLabel}</span>}
+            {readOnlyLabel && <span className="ml-auto pl-3 shrink-0 font-sans"><span className="text-[9px] font-bold uppercase tracking-wide text-amber-700 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-200 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">{readOnlyLabel}</span></span>}
           </div>
         )}
         <div className="flex-1 min-h-0 overflow-hidden">
           <LatexEditor key={review ? `${review.viewMode}-${review.activeRequestId}-${selectedSectionId}` : selectedSectionId || 'no-section'} ref={editorRef} content={displayContent} savedContent={currentSection?.contentTex || ''} savedVersion={currentSection?.version}
             feedbackItems={sectionFeedback} activeFeedbackId={review?.activeFeedbackId || activeFeedbackId} feedbackVisible={Boolean(review) || feedbackOpen} onFeedbackClick={handleFeedbackClick} onFeedbackChange={measureFeedback}
-            onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} />
+            onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} mediaAssets={mediaAssets} />
         </div>
       </div>
       <div onMouseDown={onEditorResizeStart} className={`${narrow || threePanes ? 'hidden' : 'flex'} w-1.5 hover:bg-indigo-500 cursor-col-resize self-stretch transition-all shrink-0 z-10 relative group items-center justify-center border-l border-r border-(--border)`} title={t('dragToResize')}>

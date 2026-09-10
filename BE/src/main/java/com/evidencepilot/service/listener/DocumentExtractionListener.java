@@ -13,7 +13,8 @@ public class DocumentExtractionListener {
 
     private final DocumentExtractionWorker worker;
 
-    @RabbitListener(queues = RabbitMQConfig.EXTRACTION_QUEUE)
+    @RabbitListener(queues = RabbitMQConfig.EXTRACTION_QUEUE,
+            containerFactory = "extractionListenerContainerFactory")
     public void handle(ExtractionRequest request) {
         worker.process(request.documentId());
     }

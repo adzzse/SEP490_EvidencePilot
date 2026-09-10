@@ -62,6 +62,9 @@ class DocumentServiceImplAccessTest {
     private ProjectRepository projectRepository;
 
     @Mock
+    private com.evidencepilot.repository.ProjectMemberRepository memberRepository;
+
+    @Mock
     private CollectionRepository collectionRepository;
 
     @Mock
@@ -801,6 +804,39 @@ class DocumentServiceImplAccessTest {
     }
 
     @Test
+    void sourceLibraryConsultsProjectAndCollectionMembership() {
+        User user = user();
+        Project project = project();
+        com.evidencepilot.model.ProjectMember membership = new com.evidencepilot.model.ProjectMember();
+        membership.setProject(project);
+        membership.setUser(user);
+        com.evidencepilot.model.Collection collection = collection();
+        Document shared = document(null);
+        shared.setUploadedBy(user());
+        shared.setDocType(DocumentType.SOURCE);
+        CollectionDocument link = new CollectionDocument();
+        link.setCollection(collection);
+        link.setDocument(shared);
+
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(memberRepository.findByUserId(user.getId())).thenReturn(List.of(membership));
+        when(collectionRepository.findByInstructorIdAndActiveTrue(user.getId()))
+                .thenReturn(List.of(collection));
+        when(collectionDocumentRepository.findByCollectionId(collection.getId()))
+                .thenReturn(List.of(link));
+        when(documentRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(shared)));
+
+        var page = service().getSourceLibrary(
+                0, 20, "createdAt,desc", "", ProcessingStatus.READY);
+
+        assertThat(page.content()).hasSize(1);
+        verify(memberRepository).findByUserId(user.getId());
+        verify(collectionRepository).findByInstructorIdAndActiveTrue(user.getId());
+        verify(collectionDocumentRepository).findByCollectionId(collection.getId());
+    }
+
+    @Test
     void updateSourceTrimsTitleAndChecksOwnership() {
         User user = user();
         com.evidencepilot.model.Collection collection = collection();
@@ -879,6 +915,7 @@ class DocumentServiceImplAccessTest {
                 documentChunkRepository,
                 documentTextRepository,
                 projectRepository,
+                memberRepository,
                 collectionRepository,
                 collectionDocumentRepository,
                 projectDocumentRepository,

@@ -761,7 +761,7 @@ class AdminExcelSeedServiceTest {
                 });
         var job = new AdminExcelSeedService.SeedJob();
         int n = t.service().commitSources(
-                List.of(doiRow("P", "10.48550/arXiv.2004.04906", "2")), job, Map.of("P", project));
+                List.of(doiRow("P", "10.1234/no-oa-pdf", "2")), job);
         assertThat(n).isOne();
         assertThat(job.getErrors()).isEmpty();
         var captor = org.mockito.ArgumentCaptor.forClass(com.evidencepilot.model.Document.class);
@@ -781,8 +781,7 @@ class AdminExcelSeedServiceTest {
         when(t.members().findByProjectId(project.getId()))
                 .thenReturn(List.of(doiMembership(project, instructor)));
         when(t.documents().countActiveProjectSourcesByDoi(any(), any(), anyString())).thenReturn(0L);
-        when(t.openAlex().fetchWork(anyString())).thenThrow(
-                new com.evidencepilot.client.openalex.OpenAlexClient.OpenAlexApiException("not found", 404));
+        // DataCite arXiv DOIs skip the doomed direct lookup entirely.
         when(t.openAlex().downloadPdf(anyString())).thenAnswer(inv ->
                 new java.io.ByteArrayInputStream("%PDF-1.4 fake-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         when(t.storage().writeWithSha256(anyString(), any(byte[].class), anyString())).thenReturn("hash");
@@ -815,15 +814,45 @@ class AdminExcelSeedServiceTest {
     }
 
     @Test
-    void commitSourcesUsesTitleMatchAndPersistsCitationGraph() {
+    void commitSourcesSkipsDirectLookupForDataCiteArxivDoi() {
         var t = doiService();
         var project = doiProject("P");
         var instructor = doiInstructor();
+        when(t.projects().findAll()).thenReturn(List.of(project));
         when(t.members().findByProjectId(project.getId()))
                 .thenReturn(List.of(doiMembership(project, instructor)));
         when(t.documents().countActiveProjectSourcesByDoi(any(), any(), anyString())).thenReturn(0L);
-        when(t.openAlex().fetchWork(anyString())).thenThrow(
-                new com.evidencepilot.client.openalex.OpenAlexClient.OpenAlexApiException("not found", 404));
+        when(t.openAlex().downloadPdf(anyString())).thenAnswer(inv ->
+                new java.io.ByteArrayInputStream("%PDF-1.4 fake-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        when(t.storage().writeWithSha256(anyString(), any(byte[].class), anyString())).thenReturn("hash");
+        when(t.documents().save(any(com.evidencepilot.model.Document.class))).thenAnswer(inv -> {
+            var d = (com.evidencepilot.model.Document) inv.getArgument(0);
+            if (d.getId() == null) d.setId(java.util.UUID.randomUUID());
+            return d;
+        });
+        when(t.persistence().markDocumentAsUploaded(any(), any(), any()))
+                .thenReturn(new com.evidencepilot.model.Document());
+        var job = new AdminExcelSeedService.SeedJob();
+        int n = t.service().commitSources(List.of(
+                row("project_title", "P", "doi", "10.48550/arXiv.1706.03762",
+                        "title", "Attention Is All You Need",
+                        "authors", "Vaswani, A.", "publication_year", "2017",
+                        "publisher", "NeurIPS", "cited_by_count", "102400",
+                        "abstract_or_text", "Transformer.", "_row", "2")), job);
+        assertThat(n).isOne();
+        assertThat(job.getErrors()).isEmpty();
+        verify(t.openAlex(), never()).fetchWork(anyString());
+    }
+
+    @Test
+    void commitSourcesSkipsDirectLookupForDataCiteArxivDoi() {
+        var t = doiService();
+        var project = doiProject("P");
+        var instructor = doiInstructor();
+        when(t.projects().findAll()).thenReturn(List.of(project));
+        when(t.members().findByProjectId(project.getId()))
+                .thenReturn(List.of(doiMembership(project, instructor)));
+        when(t.documents().countActiveProjectSourcesByDoi(any(), any(), anyString())).thenReturn(0L);
         var live = doiWork(null);
         when(t.openAlex().findWorkByTitle(anyString())).thenReturn(live);
         when(t.documents().save(any(com.evidencepilot.model.Document.class))).thenAnswer(inv -> {
@@ -871,8 +900,8 @@ class AdminExcelSeedServiceTest {
                 .thenReturn(new com.evidencepilot.model.Document());
         var job = new AdminExcelSeedService.SeedJob();
         int n = t.service().commitSources(List.of(
-                doiRow("P1", "10.48550/arXiv.2004.04906", "2"),
-                doiRow("P2", "10.48550/arXiv.2004.04906", "3")), job, Map.of("P1", p1, "P2", p2));
+                doiRow("P1", "10.1234/shared-doi", "2"),
+                doiRow("P2", "10.1234/shared-doi", "3")), job);
         assertThat(n).isEqualTo(2);
         assertThat(job.getSuccessfulRows()).isEqualTo(2);
         assertThat(job.getProcessed()).isEqualTo(2);
@@ -898,5 +927,103 @@ class AdminExcelSeedServiceTest {
         assertThat(job.getSkippedRows()).isEqualTo(1);
         assertThat(job.getProcessed()).isEqualTo(1);
         verify(t.openAlex(), never()).fetchWork(anyString());
+    }
+
+    private static Map<String, String> collectionRow(String title, String owner, String dois, String rowNum) {
+        return row("collection_title", title, "description", "", "owner_email", owner,
+                "source_dois", dois, "_row", rowNum);
+    }
+
+    @Test
+    void collectionsSheetValidation() {
+        var sheets = new HashMap<String, List<Map<String, String>>>();
+        sheets.put("users", List.of(
+                row("email", "prof@example.test", "role", "INSTRUCTOR", "_row", "2")));
+        sheets.put("projects", List.of(row("project_title", "P", "_row", "2")));
+        sheets.put("sources", List.of(
+                row("project_title", "P", "doi", "10.1234/abc", "_row", "2")));
+        sheets.put("collections", List.of(
+                collectionRow("C1", "prof@example.test", "10.1234/abc", "2"),
+                collectionRow("C1", "ghost@example.test", "10.9999/nope; not-a-doi", "3"),
+                collectionRow("", "prof@example.test", "", "4")));
+        var errors = service().validate(sheets);
+        assertThat(errors).anyMatch(m -> m.contains("duplicate collection_title"));
+        assertThat(errors).anyMatch(m -> m.contains("owner_email must be"));
+        assertThat(errors).anyMatch(m -> m.contains("unknown sources-sheet doi"));
+        assertThat(errors).anyMatch(m -> m.contains("invalid DOI format"));
+        assertThat(errors).anyMatch(m -> m.contains("collection_title required"));
+        assertThat(errors).anyMatch(m -> m.contains("at least one DOI"));
+    }
+
+    @Test
+    void commitCollectionsCreatesAndLinksByDoi() {
+        var users = mock(com.evidencepilot.repository.UserRepository.class);
+        var documents = mock(com.evidencepilot.repository.DocumentRepository.class);
+        var collections = mock(com.evidencepilot.service.impl.ProjectCollectionService.class);
+        var service = new AdminExcelSeedService(
+                mock(AdminService.class),
+                users,
+                mock(com.evidencepilot.repository.ProjectRepository.class),
+                mock(com.evidencepilot.repository.ProjectMemberRepository.class),
+                documents,
+                mock(com.evidencepilot.repository.DocumentTextRepository.class),
+                mock(com.evidencepilot.repository.DocumentChunkRepository.class),
+                mock(DocumentService.class),
+                mock(MediaAssetService.class),
+                mock(PaperProcessingService.class),
+                mock(com.evidencepilot.client.openalex.OpenAlexClient.class),
+                mock(OpenAlexIngestionService.class),
+                mock(DocumentObjectStorage.class),
+                mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
+                collections,
+                mock(com.fasterxml.jackson.databind.ObjectMapper.class));
+        var owner = doiInstructor();
+        when(users.findByEmail("prof@example.test"))
+                .thenReturn(java.util.Optional.of(owner));
+        var doc = new com.evidencepilot.model.Document();
+        doc.setId(java.util.UUID.randomUUID());
+        when(documents.findActiveSourcesByDoi(
+                eq(com.evidencepilot.model.enums.DocumentType.SOURCE), eq("10.1234/abc")))
+                .thenReturn(List.of(doc));
+        var collection = new com.evidencepilot.model.Collection();
+        collection.setId(java.util.UUID.randomUUID());
+        when(collections.createSeedCollection(eq(owner), eq("C1"), any()))
+                .thenReturn(collection);
+        var job = new AdminExcelSeedService.SeedJob();
+        int n = service.commitCollections(
+                List.of(collectionRow("C1", "prof@example.test", "10.1234/abc; 10.1234/abc", "2")), job);
+        assertThat(n).isEqualTo(1);
+        verify(collections, times(1)).addSource(doc, collection, owner);
+        assertThat(job.getErrors()).isEmpty();
+    }
+
+    @Test
+    void commitCollectionsSkipsUnknownOwner() {
+        var users = mock(com.evidencepilot.repository.UserRepository.class);
+        var collections = mock(com.evidencepilot.service.impl.ProjectCollectionService.class);
+        var service = new AdminExcelSeedService(
+                mock(AdminService.class),
+                users,
+                mock(com.evidencepilot.repository.ProjectRepository.class),
+                mock(com.evidencepilot.repository.ProjectMemberRepository.class),
+                mock(com.evidencepilot.repository.DocumentRepository.class),
+                mock(com.evidencepilot.repository.DocumentTextRepository.class),
+                mock(com.evidencepilot.repository.DocumentChunkRepository.class),
+                mock(DocumentService.class),
+                mock(MediaAssetService.class),
+                mock(PaperProcessingService.class),
+                mock(com.evidencepilot.client.openalex.OpenAlexClient.class),
+                mock(OpenAlexIngestionService.class),
+                mock(DocumentObjectStorage.class),
+                mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
+                collections,
+                mock(com.fasterxml.jackson.databind.ObjectMapper.class));
+        when(users.findByEmail(anyString())).thenReturn(java.util.Optional.empty());
+        var job = new AdminExcelSeedService.SeedJob();
+        int n = service.commitCollections(
+                List.of(collectionRow("C1", "ghost@example.test", "10.1234/abc", "2")), job);
+        assertThat(n).isZero();
+        assertThat(job.getErrors()).anyMatch(m -> m.contains("unresolvable owner"));
+        verify(collections, never()).createSeedCollection(any(), any(), any());
     }
 }

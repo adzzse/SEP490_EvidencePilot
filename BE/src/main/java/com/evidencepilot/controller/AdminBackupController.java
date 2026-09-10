@@ -7,6 +7,8 @@ import com.evidencepilot.repository.EvidenceRevisionTraceRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
+import com.evidencepilot.service.AdminSeedExportService;
+import com.evidencepilot.service.DocumentObjectStorage;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -49,6 +51,8 @@ public class AdminBackupController {
     private final PaperSectionRepository paperSectionRepository;
     private final EvidenceRevisionTraceRepository traceRepository;
     private final AuditLogRepository auditLogRepository;
+    private final AdminSeedExportService seedExportService;
+    private final DocumentObjectStorage documentObjectStorage;
 
     @GetMapping(value = "/csv", produces = "text/csv")
     public ResponseEntity<StreamingResponseBody> backupCsv(@RequestParam(required = false) UUID projectId) {
@@ -81,31 +85,49 @@ public class AdminBackupController {
                 .body(body);
     }
 
-    private static <T> void writePages(BufferedWriter writer, String table,
-            Function<Pageable, Slice<T>> fetch, Function<T, String[]> cells) throws IOException {
-        Pageable page = PageRequest.of(0, 500, Sort.by("id"));
-        while (true) {
-            Slice<T> batch = fetch.apply(page);
-            for (T item : batch) {
-                String[] values = cells.apply(item);
-                write(writer, table, values[0], values[1]);
+    @GetMapping(value = "/seed-bundle", produces = "application/zip")
+    public ResponseEntity<StreamingResponseBody> backupSeedBundle(
+            @RequestParam(required = false) UUID projectId) throws java.io.IOException {
+        AdminSeedExportService.SeedBundle bundle = seedExportService.buildBundle(projectId);
+        String filename = "seed-backup-" + LocalDate.now()
+                + (projectId == null ? "-all" : "-" + projectId) + ".zip";
+        StreamingResponseBody body = out -> {
+            try (java.util.zip.ZipOutputStream zip = new java.util.zip.ZipOutputStream(
+                    out, StandardCharsets.UTF_8)) {
+                zip.putNextEntry(new java.util.zip.ZipEntry("seed.xlsx"));
+                zip.write(bundle.xlsx());
+                zip.closeEntry();
+                for (AdminSeedExportService.PaperFileEntry file : bundle.paperFiles()) {
+                    try (java.io.InputStream in = documentObjectStorage.getStream(file.objectKey())) {
+                        if (in == null) continue;
+                        zip.putNextEntry(new java.util.zip.ZipEntry(file.zipPath()));
+                        in.transferTo(zip);
+                        zip.closeEntry();
+                    } catch (Exception e) {
+                        throw new IllegalStateException("Backup missing paper file: " + file.zipPath(), e);
+                    }
+                }
             }
-            if (!batch.hasNext()) return;
-            page = batch.nextPageable();
+        };
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(new MediaType("application", "zip", StandardCharsets.UTF_8))
+                .body(body);
+    }
+
+    private static void write(BufferedWriter w, String table, String id, String extra) {
+        try {
+            w.write(table + "," + id + "," + (extra == null ? "" : extra.replaceAll("[\\r\\n]+", " ")) + "\n");
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
         }
     }
 
-    private static void write(BufferedWriter writer, String table, String id, String extra) throws IOException {
-        writer.write(csvCell(table) + "," + csvCell(id) + "," + csvCell(extra) + "\n");
-    }
-
-    private static String csvCell(String raw) {
-        String value = raw == null ? "" : raw;
-        String trimmed = value.stripLeading();
-        String leading = value.substring(0, value.length() - trimmed.length());
-        if ((!trimmed.isEmpty() && "=+-@".indexOf(trimmed.charAt(0)) >= 0)
-                || leading.indexOf('\t') >= 0 || leading.indexOf('\r') >= 0) value = "'" + value;
-        return "\"" + value.replace("\"", "\"\"") + "\"";
+    private static String esc(String s) {
+        if (s == null) return "";
+        String v = s.replaceAll("[\\r\\n]+", " ");
+        if (v.contains(",") || v.contains("\"")) return "\"" + v.replace("\"", "\"\"") + "\"";
+        return v;
     }
 
 

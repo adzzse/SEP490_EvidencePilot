@@ -28,11 +28,24 @@ public class PaperSection {
     @JoinColumn(name = "assigned_user_id", columnDefinition = "BINARY(16)", referencedColumnName = "id")
     private User assignedUser;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_section_id", columnDefinition = "BINARY(16)", referencedColumnName = "id")
+    private PaperSection parentSection;
+
     @Column(name = "section_order", nullable = false)
     private Integer sectionOrder;
 
     @Column(name = "section_title", nullable = false)
     private String sectionTitle;
+
+    @Column(name = "heading_level", nullable = false)
+    private Integer headingLevel = 2;
+
+    @Column(name = "source_block_start")
+    private Integer sourceBlockStart;
+
+    @Column(name = "source_block_end")
+    private Integer sourceBlockEnd;
 
     @Column(name = "content_tex", nullable = false, columnDefinition = "LONGTEXT")
     private String contentTex;

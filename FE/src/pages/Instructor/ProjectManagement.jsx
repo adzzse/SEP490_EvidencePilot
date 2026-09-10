@@ -7,7 +7,7 @@ import api from '../../services/api.js';
 import { commonText, instructorText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
 import {
-  PAGINATION_LIMIT,
+  CARD_GRID_PAGE_SIZE,
   API_ROUTES,
   PROJECT_STATUSES,
 } from '../../constants';
@@ -52,7 +52,7 @@ export default function ProjectManagement() {
     try {
       const params = {
         page,
-        size: PAGINATION_LIMIT,
+        size: CARD_GRID_PAGE_SIZE,
         sort: 'createdAt,desc',
       };
       if (debouncedSearch) {
@@ -141,7 +141,7 @@ export default function ProjectManagement() {
     }
   };
 
-  const totalPages = Math.ceil(total / PAGINATION_LIMIT);
+  const totalPages = Math.ceil(total / CARD_GRID_PAGE_SIZE);
 
   return (
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary) font-sans">

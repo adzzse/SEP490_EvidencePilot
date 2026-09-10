@@ -29,11 +29,14 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -502,6 +505,63 @@ class DocumentExtractionWorkerTest {
         verify(persistence).markQueuedForRetry(documentId);
         verify(persistence, never()).markFailed(eq(documentId), any());
         verify(persistence, never()).markReady(any(), any(Integer.class));
+    }
+
+    @Test
+    void processEmbedsMultipleBatchesPreservingChunkOrder() {
+        UUID documentId = UUID.randomUUID();
+        Document document = document(documentId);
+        List<AiModelClient.ExtractionBlock> blocks = new ArrayList<>();
+        List<String> paras = new ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            paras.add("para-" + i);
+            blocks.add(new AiModelClient.ExtractionBlock("paragraph", "para-" + i, null, null));
+        }
+        String markdown = String.join("\n\n", paras);
+        String checkpointKey = "documents/processed/" + documentId + "/extraction.json";
+        ExtractionBundle extractedBundle = mock(ExtractionBundle.class);
+        when(extractedBundle.document()).thenReturn(
+                new AiModelClient.ExtractedDocument(markdown, blocks, List.of()));
+
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(documentObjectStorage.exists(checkpointKey)).thenReturn(false);
+        when(aiModelClient.extractDocument(eq("source.pdf"), anyString(), eq(false)))
+                .thenReturn(extractedBundle);
+        when(aiModelClient.generateEmbeddings(any())).thenAnswer(invocation -> {
+            List<String> texts = invocation.getArgument(0);
+            return texts.stream().map(text -> {
+                Matcher matcher = Pattern.compile("para-(\\d+)").matcher(text);
+                matcher.find();
+                return Collections.nCopies(768, Float.parseFloat(matcher.group(1)));
+            }).toList();
+        });
+        when(sparseVectorGenerator.generate(anyString()))
+                .thenReturn(new SparseVector(List.of(), List.of()));
+        when(persistence.saveExtraction(eq(documentId), eq("mineru"), eq(markdown), any()))
+                .thenAnswer(invocation -> {
+                    List<String> texts = invocation.getArgument(3);
+                    List<DocumentChunk> saved = new ArrayList<>();
+                    for (int i = 0; i < texts.size(); i++) {
+                        DocumentChunk chunk = chunk(document, texts.get(i));
+                        chunk.setChunkIndex(i);
+                        saved.add(chunk);
+                    }
+                    return saved;
+                });
+
+        worker().process(documentId);
+
+        // 100 paragraphs / 3 per chunk = 34 chunks = 2 embedding batches (32 + 2).
+        verify(aiModelClient, times(2)).generateEmbeddings(any());
+        ArgumentCaptor<ExtractionResultPayload> payload = ArgumentCaptor.forClass(ExtractionResultPayload.class);
+        verify(qdrantService).upsertVectors(payload.capture());
+        List<ExtractionResultPayload.ChunkPayload> chunks = payload.getValue().chunks();
+        assertThat(chunks).hasSize(34);
+        for (int i = 0; i < chunks.size(); i++) {
+            assertThat(chunks.get(i).chunkIndex()).isEqualTo(i);
+            assertThat(chunks.get(i).denseEmbedding().getFirst()).isEqualTo((float) (3 * i));
+        }
+        verify(persistence).markReady(documentId, 34);
     }
 
     private DocumentExtractionWorkerImpl worker() {

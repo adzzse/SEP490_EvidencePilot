@@ -3,6 +3,8 @@ package com.evidencepilot.controller;
 import com.evidencepilot.dto.response.DocumentResponse;
 import com.evidencepilot.dto.response.JobSubmitResponse;
 import com.evidencepilot.dto.response.PaperSectionResponse;
+import com.evidencepilot.dto.response.PaperMetadataResponse;
+import com.evidencepilot.service.PaperStandardService;
 import com.evidencepilot.dto.response.PaperStandardSuggestionResponse;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.FeedbackRequest;
@@ -63,11 +65,12 @@ class PaperControllerTest {
     private final SectionCitationReviewService sectionCitationReviewService = mock(SectionCitationReviewService.class);
     private final EvidenceTraceService evidenceTraceService = mock(EvidenceTraceService.class);
     private final SubmissionReadinessService submissionReadinessService = mock(SubmissionReadinessService.class);
+    private final PaperStandardService paperStandardService = mock(PaperStandardService.class);
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = standaloneSetup(new PaperController(documentService, paperService, citationValidationService, projectRepository, documentRepository, paperSectionRepository, instructorFeedbackRepository, feedbackRequestRepository, currentUserService, checkpointService, aiEvaluationService, sectionCitationReviewService, evidenceTraceService, submissionReadinessService))
+        mockMvc = standaloneSetup(new PaperController(documentService, paperService, citationValidationService, projectRepository, documentRepository, paperSectionRepository, instructorFeedbackRepository, feedbackRequestRepository, currentUserService, checkpointService, aiEvaluationService, sectionCitationReviewService, evidenceTraceService, submissionReadinessService, paperStandardService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -118,6 +121,90 @@ class PaperControllerTest {
         UUID id = UUID.randomUUID();
         mockMvc.perform(get("/api/papers/{id}/sections", id)).andExpect(status().isOk());
         verify(paperService).getPaperSections(id);
+    }
+
+    @Test
+    void metadata_delegatesPaperId() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(paperService.getPaperMetadata(id)).thenReturn(
+                new PaperMetadataResponse(id, "Title", List.of(), "k1", null, null, null));
+        mockMvc.perform(get("/api/papers/{id}/metadata", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Title"));
+        verify(paperService).getPaperMetadata(id);
+    }
+
+    @Test
+    void upload_replacesPristineStandardStub() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        Project project = new Project();
+        project.setId(projectId);
+        project.setTargetStandard(PaperStandard.IEEE);
+        Document stub = new Document();
+        stub.setId(UUID.randomUUID());
+        stub.setProject(project);
+        PaperSection templateSection = new PaperSection();
+        templateSection.setId(UUID.randomUUID());
+        templateSection.setDocument(stub);
+        templateSection.setSectionTitle("Abstract");
+        templateSection.setContentTex("% EvidencePilot IEEE template\n% Summarize the problem.");
+        // Real comment-stripping rule: template boilerplate is not student work.
+        PaperStandardService realStandards = new PaperStandardService(
+                mock(com.evidencepilot.service.AiModelClient.class),
+                new com.fasterxml.jackson.databind.ObjectMapper());
+        PaperController controller = new PaperController(documentService, paperService,
+                citationValidationService, projectRepository, documentRepository, paperSectionRepository,
+                instructorFeedbackRepository, feedbackRequestRepository, currentUserService, checkpointService,
+                aiEvaluationService, sectionCitationReviewService, evidenceTraceService,
+                submissionReadinessService, realStandards);
+        MockMvc mvc = standaloneSetup(controller)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+        when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(projectId, DocumentType.PAPER))
+                .thenReturn(List.of(stub));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(stub.getId()))
+                .thenReturn(List.of(templateSection));
+        when(instructorFeedbackRepository.findByRequestProjectId(projectId)).thenReturn(List.of());
+        when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(projectId)).thenReturn(List.of());
+        when(documentService.uploadDocument(eq(projectId), any(), eq(DocumentType.PAPER)))
+                .thenReturn(mock(DocumentResponse.class));
+        MockMultipartFile file = new MockMultipartFile("file", "paper.pdf", "application/pdf", new byte[]{1, 2, 3});
+
+        mvc.perform(multipart("/api/papers").file(file).param("projectId", projectId.toString()))
+                .andExpect(status().isCreated());
+
+        verify(paperSectionRepository).deleteByDocumentId(stub.getId());
+        verify(documentRepository).delete(stub);
+    }
+
+    @Test
+    void upload_rejectsPaperWithStudentWork() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        Project project = new Project();
+        project.setId(projectId);
+        PaperSection worked = new PaperSection();
+        worked.setId(UUID.randomUUID());
+        worked.setContentTex("student draft text");
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+        Document stub = new Document();
+        stub.setId(UUID.randomUUID());
+        stub.setProject(project);
+        when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(projectId, DocumentType.PAPER))
+                .thenReturn(List.of(stub));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(stub.getId()))
+                .thenReturn(List.of(worked));
+        when(paperStandardService.hasStudentContent("student draft text")).thenReturn(true);
+        MockMultipartFile file = new MockMultipartFile("file", "paper.pdf", "application/pdf", new byte[]{1, 2, 3});
+
+        mockMvc.perform(multipart("/api/papers").file(file).param("projectId", projectId.toString()))
+                .andExpect(status().isConflict());
     }
 
     @Test
@@ -467,6 +554,8 @@ class PaperControllerTest {
                 null,
                 1,
                 "Section",
+                null,
+                2,
                 content,
                 null,
                 2,

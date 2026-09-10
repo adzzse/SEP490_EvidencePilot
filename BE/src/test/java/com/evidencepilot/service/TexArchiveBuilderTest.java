@@ -38,6 +38,7 @@ class TexArchiveBuilderTest {
                 projects,
                 documents,
                 sections,
+                mock(com.evidencepilot.repository.DocumentMetadataRepository.class),
                 new PaperStandardService(mock(AiModelClient.class), new ObjectMapper()),
                 media,
                 sourceMatchingService);
@@ -92,6 +93,25 @@ class TexArchiveBuilderTest {
         } finally {
             Files.deleteIfExists(archive);
         }
+    }
+
+    @Test
+    void translateSupSubEmitsValidLatex() {
+        assertThat(TexArchiveBuilder.translateSupSub("Elizamary Nascimento<sup>1*</sup>"))
+                .isEqualTo("Elizamary Nascimento$^{1*}$");
+        assertThat(TexArchiveBuilder.translateSupSub("H<sub>2</sub>O"))
+                .isEqualTo("H$_{2}$O");
+        assertThat(TexArchiveBuilder.translateSupSub("plain text"))
+                .isEqualTo("plain text");
+    }
+
+    @Test
+    void translateSupSubToleratesAttributesCaseAndMalformedTags() {
+        assertThat(TexArchiveBuilder.translateSupSub("a<SUP id=\"f1\">2</SUP>b"))
+                .isEqualTo("a$^{2}$b");
+        assertThat(TexArchiveBuilder.translateSupSub("a<sup>2b"))
+                .isEqualTo("a<sup>2b");
+        assertThat(TexArchiveBuilder.translateSupSub(null)).isNull();
     }
 
     private static String text(ZipFile zip, String entry) throws Exception {

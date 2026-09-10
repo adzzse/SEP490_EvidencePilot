@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { driver } from 'driver.js';
-import 'driver.js/dist/driver.css';
 import AppHeader from '../../components/layout/AppHeader.jsx';
 import { instructorText, commonText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
@@ -64,7 +62,13 @@ export default function InstructorDashboard() {
     return () => { isMounted = false; };
   }, []);
 
-  const startTour = () => {
+  const startTour = async () => {
+    // ponytail: driver.js (+css) loads on first tour click, not with the page.
+    const [{ driver }, _css] = await Promise.all([
+      import('driver.js'),
+      import('driver.js/dist/driver.css'),
+    ]);
+    void _css;
     const isVi = language === 'vi';
     const steps = isVi
       ? [

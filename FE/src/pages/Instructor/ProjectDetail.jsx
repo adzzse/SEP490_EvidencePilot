@@ -1618,7 +1618,7 @@ export default function ProjectDetail() {
             <div><span className="font-bold text-[var(--text-secondary)]">{ct.status}:</span> <StatusBadge status={sourceDetail.processingStatus || 'READY'} /></div>
             <div><span className="font-bold text-[var(--text-secondary)]">{t.typeLabel}</span> <span>{sourceDetail.docType || 'SOURCE'}</span></div>
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => { setViewerFile({ fileUrl: API_ROUTES.DOCUMENTS.DOWNLOAD(sourceDetail.id), fileName: sourceDetail.originalFilename || sourceDetail.title }); }} className="rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)]">{t.previewSource || 'Preview'}</button>
+              <button onClick={() => { setShowSourceDetail(false); setViewerFile({ fileUrl: API_ROUTES.DOCUMENTS.DOWNLOAD(sourceDetail.id), fileName: sourceDetail.originalFilename || sourceDetail.title }); }} className="rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)]">{t.previewSource || 'Preview'}</button>
               <button onClick={() => setShowSourceDetail(false)} className="rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:opacity-80">{ct.close}</button>
             </div>
           </div>

@@ -7,6 +7,9 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { latex } from 'codemirror-lang-latex';
 import { undo, redo } from '@codemirror/commands';
 import { changeSpans, createChangeTracker, normalizeSource, remapAnchor, resolveAnchor, sourceFingerprint } from '../../utils/student/feedbackAnchors.js';
+import { useMediaUrlMap } from '../../hooks/useMediaUrls.js';
+import { blockLineNumbers, findBlockAt } from '../../utils/formatters/editorAssetBlocks.js';
+import { resolveAssetUrl } from '../../utils/formatters/markdownBlocks.js';
 
 const lightTheme = EditorView.theme({
   '&': { backgroundColor: '#ffffff' },
@@ -69,7 +72,39 @@ const reviewRanges = StateField.define({
   provide: field => EditorView.decorations.from(field),
 });
 
+// --- Markdown table / math block highlighting: line tint so pipes align. ---
+function buildBlockMarks(doc) {
+  const { tableLines, mathLines } = blockLineNumbers(doc.toString());
+  const marks = [];
+  for (let lineNo = 1; lineNo <= doc.lines; lineNo++) {
+    if (!tableLines.has(lineNo) && !mathLines.has(lineNo)) continue;
+    const line = doc.line(lineNo);
+    marks.push(Decoration.line({
+      class: tableLines.has(lineNo) ? 'cm-md-table' : 'cm-md-math',
+    }).range(line.from));
+  }
+  return Decoration.set(marks, true);
+}
+
+const blockMarks = StateField.define({
+  create: state => buildBlockMarks(state.doc),
+  update: (marks, transaction) => (transaction.docChanged
+    ? buildBlockMarks(transaction.newDoc)
+    : marks.map(transaction.changes)),
+  provide: field => EditorView.decorations.from(field),
+});
+
+// Block text plus adjacent lines — the figure ref often sits right below a table.
+function blockContextSlice(doc, block) {
+  const firstLine = doc.lineAt(block.from);
+  const lastLine = doc.lineAt(Math.min(block.to, doc.length));
+  const from = firstLine.number > 1 ? doc.line(firstLine.number - 1).from : firstLine.from;
+  const to = lastLine.number < doc.lines ? doc.line(lastLine.number + 1).to : lastLine.to;
+  return doc.sliceString(from, to);
+}
+
 class InfoIconWidget extends WidgetType {
+
   constructor(findingIndex, pos, tone) {
     super();
     this.findingIndex = findingIndex;
@@ -137,6 +172,47 @@ class CitePillWidget extends WidgetType {
 
 const CITE_RE = /\\cite\{([^}]+)\}/g;
 
+// --- <sup>/<sub> preservation: render formatted, reveal raw markup on
+// cursor proximity (same pattern as the \cite pill masking above). ---
+
+const SUPSUB_RE = /<(sup|sub)(\s[^<>]*)?>([^<>]*)<\/\1>/gi;
+
+class SupSubWidget extends WidgetType {
+  constructor(tag, text) {
+    super();
+    this.tag = tag;
+    this.text = text;
+  }
+
+  toDOM() {
+    const el = document.createElement(this.tag);
+    el.className = 'cm-supsub';
+    el.textContent = this.text;
+    el.title = `<${this.tag}>${this.text}</${this.tag}>`;
+    return el;
+  }
+
+  eq(other) { return other.tag === this.tag && other.text === this.text; }
+  ignoreEvent() { return false; }
+}
+
+function buildSupSubMarks(view) {
+  const decorations = [];
+  const head = view.state.selection.main.head;
+  const doc = view.state.doc.toString();
+  SUPSUB_RE.lastIndex = 0;
+  let match;
+  while ((match = SUPSUB_RE.exec(doc))) {
+    const from = match.index;
+    const to = from + match[0].length;
+    if (head >= from - 1 && head <= to + 1) continue;
+    decorations.push(Decoration.replace({
+      widget: new SupSubWidget(match[1].toLowerCase(), match[3]),
+    }).range(from, to));
+  }
+  return Decoration.set(decorations, true);
+}
+
 function buildCiteMask(view, citationIndexRef) {
   const decorations = [];
   const head = view.state.selection.main.head;
@@ -157,7 +233,7 @@ function buildCiteMask(view, citationIndexRef) {
 
 const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = content, savedVersion,
   feedbackItems, activeFeedbackId, feedbackVisible = false, onFeedbackClick, onFeedbackChange,
-  onChange, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onLayoutChange, onUserScroll, citationIndex = {} }, ref) {
+  onChange, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onLayoutChange, onUserScroll, citationIndex = {}, mediaAssets = [] }, ref) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
   const trackerRef = useRef(null);
@@ -175,6 +251,39 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
   const citationIndexRef = useRef({});
   const citationIndexVersionRef = useRef(0);
   const prevCitationIndexRef = useRef(citationIndex);
+  // Signed URLs for the asset peek — shared hook dedupes concurrent mounts.
+  const mediaUrlMap = useMediaUrlMap(mediaAssets);
+  const mediaUrlMapRef = useRef({});
+  mediaUrlMapRef.current = mediaUrlMap;
+  // Asset peek: { url, kind, x, y, pinned } — original cropped image for the
+  // table/math block under the cursor.
+  const [assetPeek, setAssetPeek] = useState(null);
+  const [peekOpen, setPeekOpen] = useState(false);
+  const assetPeekFnRef = useRef(null);
+  assetPeekFnRef.current = (view) => {
+    const sel = view.state.selection.main;
+    if (!sel.empty) {
+      setAssetPeek(null);
+      return;
+    }
+    const block = findBlockAt(view.state.doc.toString(), sel.head);
+    if (!block) {
+      setAssetPeek(null);
+      return;
+    }
+    const url = resolveAssetUrl(blockContextSlice(view.state.doc, block), mediaUrlMapRef.current);
+    if (!url) {
+      setAssetPeek(null);
+      return;
+    }
+    const coords = view.coordsAtPos(sel.head);
+    const box = containerRef.current?.getBoundingClientRect();
+    const x = coords && box
+      ? Math.min(Math.max(coords.left - box.left, 8), Math.max((box.width || 300) - 40, 8))
+      : 8;
+    const y = coords && box ? Math.max(coords.top - box.top - 32, 4) : 4;
+    setAssetPeek(prev => (prev && prev.pinned ? prev : { url, kind: block.kind, x, y, pinned: false }));
+  };
   if (prevCitationIndexRef.current !== citationIndex) {
     prevCitationIndexRef.current = citationIndex;
     citationIndexVersionRef.current += 1;
@@ -374,6 +483,9 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
         lastEmittedRef.current = text;
         onChangeRef.current(text);
       }
+      if (update.selectionSet || update.docChanged) {
+        assetPeekFnRef.current?.(update.view);
+      }
     });
 
     const config = {
@@ -387,6 +499,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
         EditorView.lineWrapping,
         reviewRanges,
         feedbackRanges,
+        blockMarks,
         EditorView.domEventHandlers({
           click(event, view) {
             if (!event.target.closest('[data-feedback-id]')) return false;
@@ -399,8 +512,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
         }),
         // \cite{} pill masking with cursor-proximity reveal + atomic navigation
         ViewPlugin.fromClass(
-          class CitationMasker {
-            constructor(view) {
+          class CitationMasker {            constructor(view) {
               this.version = citationIndexVersionRef.current;
               this.decorations = buildCiteMask(view, citationIndexRef);
             }
@@ -417,6 +529,19 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
               view => view.plugin(plugin)?.decorations ?? Decoration.none,
             ),
           },
+        ),
+        // <sup>/<sub> preservation with cursor-proximity reveal
+        ViewPlugin.fromClass(
+          class SupSubFormatter {
+            constructor(view) {
+              this.decorations = buildSupSubMarks(view);
+            }
+            update(update) {
+              if (!update.docChanged && !update.selectionSet) return;
+              this.decorations = buildSupSubMarks(update.view);
+            }
+          },
+          { decorations: plugin => plugin.decorations },
         ),
         updateListener,
         EditorView.theme({
@@ -438,6 +563,8 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
           '.cm-review-finding--high': { borderBottomStyle: 'solid' },
           '.cm-review-finding--medium': { borderBottomStyle: 'dashed' },
           '.cm-review-finding--low': { borderBottomStyle: 'dotted' },
+          '.cm-md-table': { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.16)' : 'rgba(99, 102, 241, 0.07)', boxShadow: 'inset 2px 0 0 #6366f1' },
+          '.cm-md-math': { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.16)' : 'rgba(245, 158, 11, 0.07)', boxShadow: 'inset 2px 0 0 #f59e0b' },
           '.cm-feedback-range': { backgroundColor: 'rgba(20, 184, 166, 0.16)', boxShadow: 'inset 0 -2px #0d9488', cursor: 'pointer' },
           '.cm-feedback-active': { backgroundColor: 'rgba(20, 184, 166, 0.3)', outline: '1px solid #0d9488' },
           '.cm-finding-widget': {
@@ -494,6 +621,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
     const handleScroll = () => {
       onScrollRef.current?.();
       onUserScrollRef.current?.(); // e.g. instantly close the inline citation card
+      setAssetPeek(prev => (prev && prev.pinned ? prev : null));
     };
     viewRef.current.scrollDOM.addEventListener('scroll', handleScroll, { passive: true });
 
@@ -555,7 +683,46 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
     }
   }, [findings]);
 
-  return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
+  const showPeekCard = assetPeek && (peekOpen || assetPeek.pinned);
+
+  return (
+    <div ref={containerRef} className="h-full w-full overflow-hidden relative">
+      {assetPeek && !assetPeek.pinned && (
+        <button
+          type="button"
+          title="Original image"
+          aria-label="Original image"
+          onMouseEnter={() => setPeekOpen(true)}
+          onMouseLeave={() => setPeekOpen(false)}
+          onFocus={() => setPeekOpen(true)}
+          onBlur={() => setPeekOpen(false)}
+          onClick={() => setAssetPeek(prev => (prev ? { ...prev, pinned: true } : prev))}
+          style={{ left: assetPeek.x, top: assetPeek.y }}
+          className="absolute z-20 w-7 h-7 flex items-center justify-center rounded-lg bg-indigo-600 text-white shadow-lg hover:bg-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-300 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+        </button>
+      )}
+      {showPeekCard && (
+        <div className="absolute z-20 top-2 right-2 w-72 max-w-[calc(100%-1rem)] rounded-xl border border-(--border) bg-(--surface) shadow-xl overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-(--border-light) bg-(--surface-secondary)">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-(--text-secondary)">
+              Original image{assetPeek.kind ? ` · ${assetPeek.kind}` : ''}
+            </span>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => { setAssetPeek(null); setPeekOpen(false); }}
+              className="text-(--text-tertiary) hover:text-(--text-primary) p-0.5 rounded transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <img src={assetPeek.url} alt="Original cropped figure" loading="lazy" decoding="async" className="w-full max-h-64 object-contain bg-white" />
+        </div>
+      )}
+    </div>
+  );
 });
 
 export default LatexEditor;

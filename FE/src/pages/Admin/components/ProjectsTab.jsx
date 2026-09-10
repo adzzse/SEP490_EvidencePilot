@@ -41,7 +41,7 @@ function ProjectsSection({ api }) {
   const [detailProject, setDetailProject] = useState(null);
   const [detailTab, setDetailTab] = useState('members');
 
-  const params = { page, size: 20 };
+  const params = { page, size: 5 };
   if (q.trim()) params.q = q.trim();
   if (statusFilter) params.status = statusFilter;
   if (instructorFilter) params.instructor = instructorFilter;

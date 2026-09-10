@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import ReactCrop from 'react-image-crop';
-import 'react-image-crop/dist/ReactCrop.css';
+// ponytail: crop UI (~60KB) loads only when the avatar modal opens.
+const ReactCrop = lazy(() => Promise.all([
+  import('react-image-crop'),
+  import('react-image-crop/dist/ReactCrop.css'),
+]).then(([mod]) => mod));
 import api from '../services/api.js';
 import { AppHeader, LoadingSkeleton, Breadcrumb, Modal } from '../components';
 import OtpInput from '../components/ui/OtpInput.jsx';
@@ -1148,6 +1151,7 @@ export function ProfileContent({ embedded = false }) {
         <div className="space-y-4 text-xs">
           {avatarSrc && (
             <div className="flex justify-center">
+              <Suspense fallback={<div className="py-8 text-xs text-(--text-tertiary)">…</div>}>
               <ReactCrop
                 crop={avatarCrop}
                 onChange={(_, percentCrop) => setAvatarCrop(percentCrop)}
@@ -1175,6 +1179,7 @@ export function ProfileContent({ embedded = false }) {
                   }}
                 />
               </ReactCrop>
+              </Suspense>
             </div>
           )}
           {avatarError && (

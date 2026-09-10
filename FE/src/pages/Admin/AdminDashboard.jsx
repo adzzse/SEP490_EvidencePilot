@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -134,17 +134,12 @@ export default function AdminDashboard() {
       || viT(`admin.${item.labelKey}`).toLowerCase().includes(q));
   }, [navQuery]);
 
-  const [active, setActive] = useState(() => {
-    const saved = localStorage.getItem('admin_active_tab');
-    return SECTIONS[saved] ? saved : 'dashboard';
-  });
+  // ponytail: entering the admin page always lands on the dashboard —
+  // the last-visited tab is intentionally not restored.
+  const [active, setActive] = useState('dashboard');
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
-
-  useEffect(() => {
-    localStorage.setItem('admin_active_tab', active);
-  }, [active]);
 
   const Section = SECTIONS[active];
 

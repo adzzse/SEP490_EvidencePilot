@@ -27,6 +27,10 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 @Service
 @RequiredArgsConstructor
@@ -80,6 +84,10 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
             extracted = extract(document);
             writeCheckpoint(checkpointKey, extracted);
         }
+        // MinerU false-positive headings are demoted before any consumer
+        // (chunks, stored markdown aside, sections) sees the AST. Idempotent,
+        // so documents checkpointed before V-normalization stay consistent.
+        extracted = normalizeExtraction(extracted);
 
         List<String> chunks = DocumentChunker.chunk(extracted.blocks());
         if (chunks.isEmpty()) {
@@ -115,6 +123,14 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
         }
         documentPersistenceService.markReady(document.getId(), payloadChunks.size());
         log.info("Completed extraction for document {} with {} chunks", document.getId(), payloadChunks.size());
+    }
+
+    private static AiModelClient.ExtractedDocument normalizeExtraction(
+            AiModelClient.ExtractedDocument extracted) {
+        return new AiModelClient.ExtractedDocument(
+                extracted.markdown(),
+                BlockNormalizer.normalizeBlocks(extracted.blocks()),
+                extracted.images());
     }
 
     private AiModelClient.ExtractedDocument extract(Document document) {
@@ -268,22 +284,51 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
         }
     }
 
+    private static final int EMBEDDING_IN_FLIGHT = 2;
+
     private List<List<Float>> embed(List<String> chunks) {
-        List<List<Float>> embeddings = new ArrayList<>();
-        for (int start = 0; start < chunks.size(); start += EMBEDDING_BATCH_SIZE) {
-            int end = Math.min(start + EMBEDDING_BATCH_SIZE, chunks.size());
-            List<List<Float>> batch = aiModelClient.generateEmbeddings(chunks.subList(start, end));
-            if (batch.size() != end - start) {
-                throw new DocumentExtractionException("Embedding count does not match chunk count");
+        int batches = (chunks.size() + EMBEDDING_BATCH_SIZE - 1) / EMBEDDING_BATCH_SIZE;
+        if (batches <= 1) {
+            return embedBatch(chunks, 0, chunks.size());
+        }
+        ExecutorService pool = Executors.newFixedThreadPool(Math.min(EMBEDDING_IN_FLIGHT, batches));
+        try {
+            List<Future<List<List<Float>>>> futures = new ArrayList<>();
+            for (int start = 0; start < chunks.size(); start += EMBEDDING_BATCH_SIZE) {
+                int from = start;
+                int to = Math.min(start + EMBEDDING_BATCH_SIZE, chunks.size());
+                futures.add(pool.submit(() -> embedBatch(chunks.subList(from, to), from, to)));
             }
-            for (List<Float> vector : batch) {
-                if (vector.size() != EMBEDDING_DIMENSION) {
-                    throw new DocumentExtractionException("Embedding dimension must be " + EMBEDDING_DIMENSION);
+            // Gather in submission order — chunk indices must match the payload.
+            List<List<Float>> embeddings = new ArrayList<>();
+            for (Future<List<List<Float>>> future : futures) {
+                try {
+                    embeddings.addAll(future.get());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new DocumentExtractionException("Embedding interrupted");
+                } catch (ExecutionException e) {
+                    if (e.getCause() instanceof RuntimeException runtime) throw runtime;
+                    throw new DocumentExtractionException("Embedding failed: " + e.getCause());
                 }
             }
-            embeddings.addAll(batch);
+            return embeddings;
+        } finally {
+            pool.shutdown();
         }
-        return embeddings;
+    }
+
+    private List<List<Float>> embedBatch(List<String> batch, int from, int to) {
+        List<List<Float>> vectors = aiModelClient.generateEmbeddings(batch);
+        if (vectors.size() != to - from) {
+            throw new DocumentExtractionException("Embedding count does not match chunk count");
+        }
+        for (List<Float> vector : vectors) {
+            if (vector.size() != EMBEDDING_DIMENSION) {
+                throw new DocumentExtractionException("Embedding dimension must be " + EMBEDDING_DIMENSION);
+            }
+        }
+        return vectors;
     }
 
 }

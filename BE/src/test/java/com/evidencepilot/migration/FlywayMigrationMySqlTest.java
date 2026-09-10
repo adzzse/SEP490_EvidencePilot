@@ -81,6 +81,7 @@ class FlywayMigrationMySqlTest {
                         "uq_review_snapshots_lookup",
                         "uq_project_media_storage",
                         "uq_document_references_order",
+                        "chk_document_metadata_authors",
                         "chk_document_references_edge_type",
                         "chk_export_jobs_status",
                         "uq_evidence_revision_traces_round_finding",
@@ -92,6 +93,7 @@ class FlywayMigrationMySqlTest {
                 String.class))
                 .contains(
                         "citation_review_rounds",
+                        "document_metadata",
                         "evidence_revision_traces",
                         "ai_model_gate_state",
                         "ai_model_call_leases",
@@ -116,6 +118,15 @@ class FlywayMigrationMySqlTest {
                 .contains(
                         "handoff_confirmed_by", "handoff_confirmed_at",
                         "handoff_content_version", "handoff_input_fingerprint");
+        assertThat(jdbcTemplate.queryForList("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'paper_sections'
+                        """, String.class))
+                .contains(
+                        "parent_section_id", "heading_level",
+                        "source_block_start", "source_block_end");
         assertThat(jdbcTemplate.queryForList("""
                         SELECT column_name
                         FROM information_schema.columns

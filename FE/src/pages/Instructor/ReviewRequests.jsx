@@ -4,6 +4,7 @@ import { StatusBadge, LoadingSkeleton, EmptyState, TourLauncher, AppHeader, Brea
 import { instructorText, commonText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
 import { formatDateTime } from '../../utils/formatters/date';
+import { CARD_GRID_PAGE_SIZE } from '../../constants';
 import api from '../../services/api.js';
 
 export default function ReviewRequests() {
@@ -21,6 +22,7 @@ export default function ReviewRequests() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [viewMode, setViewMode] = useState('list');
+  const [page, setPage] = useState(0);
 
   const tourSteps = [
     { element: '#review-table', popover: { title: t.reviewQueue, description: t.reviewQueueDesc, side: 'top', align: 'start' } },
@@ -74,7 +76,14 @@ export default function ReviewRequests() {
     setProjectFilter('');
     setDateFrom('');
     setDateTo('');
+    setPage(0);
   };
+
+  useEffect(() => { setPage(0); }, [searchQuery, projectFilter, dateFrom, dateTo]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / CARD_GRID_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const paged = filtered.slice(safePage * CARD_GRID_PAGE_SIZE, (safePage + 1) * CARD_GRID_PAGE_SIZE);
 
   const reviewLink = searchParams.get('review');
   const linkedRequest = requests.find(req => req.id === reviewLink)
@@ -183,7 +192,7 @@ export default function ReviewRequests() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-36 bg-(--surface-tertiary) rounded-2xl animate-pulse" />)}
+              {Array.from({ length: CARD_GRID_PAGE_SIZE }).map((_, i) => <div key={i} className="h-36 bg-(--surface-tertiary) rounded-2xl animate-pulse" />)}
             </div>
           )
         ) : filtered.length === 0 ? (
@@ -205,7 +214,7 @@ export default function ReviewRequests() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-(--border-light) text-xs text-(--text-secondary)">
-                  {filtered.map((req) => {
+                  {paged.map((req) => {
                     const proj = projectById.get(String(req.projectId));
                     const projectTitle = proj?.title || `${t.project} #${String(req.projectId).slice(0, 8)}`;
                     return (
@@ -251,7 +260,7 @@ export default function ReviewRequests() {
           </div>
         ) : (
           <div id="review-table" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map((req) => {
+            {paged.map((req) => {
               const proj = projectById.get(String(req.projectId));
               const projectTitle = proj?.title || `${t.project} #${String(req.projectId).slice(0, 8)}`;
               return (
@@ -281,6 +290,14 @@ export default function ReviewRequests() {
                 </EntityCard>
               );
             })}
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex justify-between items-center mt-6 text-xs">
+            <button disabled={safePage === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{ct.back}</button>
+            <span className="text-(--text-tertiary) font-mono font-bold">{t.page} {safePage + 1} {t.of} {totalPages}</span>
+            <button disabled={safePage >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{ct.next}</button>
           </div>
         )}
       </main>

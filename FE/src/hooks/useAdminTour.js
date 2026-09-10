@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { driver } from 'driver.js';
-import 'driver.js/dist/driver.css';
+
+// ponytail: driver.js (+css) loads on first tour start, not with the bundle.
+const loadDriver = () => Promise.all([
+  import('driver.js'),
+  import('driver.js/dist/driver.css'),
+]).then(([mod]) => mod.driver);
 
 export function useAdminTour(tourKey, stepsFactory) {
   const [active, setActive] = useState(false);
@@ -9,22 +13,28 @@ export function useAdminTour(tourKey, stepsFactory) {
 
   useEffect(() => {
     if (!active) return;
-    const raw = typeof stepsFactory === 'function' ? stepsFactory() : stepsFactory;
-    const steps = raw.filter((s) => !s.element || document.querySelector(s.element));
-    const d = driver({
-      animate: true,
-      showProgress: true,
-      showButtons: ['next', 'previous', 'close'],
-      steps,
-      onDestroyStarted: () => {
-        setActive(false);
-        if (tourKey) localStorage.setItem(`tour_seen_${tourKey}`, '1');
-      },
+    let cancelled = false;
+    let instance = null;
+    loadDriver().then((createDriver) => {
+      if (cancelled) return;
+      const raw = typeof stepsFactory === 'function' ? stepsFactory() : stepsFactory;
+      const steps = raw.filter((s) => !s.element || document.querySelector(s.element));
+      instance = createDriver({
+        animate: true,
+        showProgress: true,
+        showButtons: ['next', 'previous', 'close'],
+        steps,
+        onDestroyed: () => {
+          setActive(false);
+          if (tourKey) localStorage.setItem(`tour_seen_${tourKey}`, '1');
+        },
+      });
+      instance.drive();
     });
-    d.drive();
     return () => {
+      cancelled = true;
       try {
-        d.destroy();
+        instance?.destroy();
       } catch {
         // ignore
       }

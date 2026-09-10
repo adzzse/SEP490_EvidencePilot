@@ -1,0 +1,14 @@
+const XLSX = require('xlsx');
+const path = 'D:/FPT/FA26/SEP490/Prototype_3/SEP490_EvidencePilot/BE/src/main/resources/DataDemo/seed.xlsx';
+const wb = XLSX.readFile(path);
+const users = XLSX.utils.sheet_to_json(wb.Sheets.users, { defval: '' });
+console.log('total users:', users.length);
+console.log('evidencepilot.dev:', users.filter(u => String(u.email).includes('evidencepilot.dev')).map(u => `${u.email}/${u.role}`));
+console.log('instructors:', users.filter(u => u.role === 'INSTRUCTOR').map(u => u.email).join(', '));
+const sources = XLSX.utils.sheet_to_json(wb.Sheets.sources, { defval: '' });
+const blankTitle = sources.filter(r => !String(r.title).trim());
+const blankDoi = sources.filter(r => !String(r.doi).trim());
+console.log('sources:', sources.length, 'blank-title:', blankTitle.length, 'blank-doi:', blankDoi.length);
+console.log('sample blank-title rows:', JSON.stringify(blankTitle.slice(0, 3)));
+const members = XLSX.utils.sheet_to_json(wb.Sheets.members, { defval: '' });
+console.log('members:', members.length);
