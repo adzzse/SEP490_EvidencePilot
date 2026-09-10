@@ -4,13 +4,16 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
+import TourLauncher from '../ui/TourLauncher.jsx';
+import ProfileModal from '../ui/ProfileModal.jsx';
 
-export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onOpenNotification, historyDisabled, handleRunAiReview, loadingAiReview, canRunAiReview, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv }) {
+export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onOpenNotification, historyDisabled, handleRunAiReview, loadingAiReview, canRunAiReview, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey }) {
   const { user } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
   const { t } = useTranslation();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const canExport = project?.status === 'APPROVED' || project?.status === 'ARCHIVED';
   const citationReviewTitle = loadingAiReview ? t('reviewing') : canRunAiReview ? t('citationReviewDescription') : t('citationReviewUnavailable');
   const iconButton = 'p-2 hover:bg-(--surface-secondary) rounded-lg text-(--text-secondary) transition-colors disabled:opacity-30';
@@ -72,6 +75,7 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
           <button data-tour="header-dark-mode" onClick={toggleTheme} className={iconButton} title={theme === 'light' ? t('darkMode') : t('lightMode')} aria-label={theme === 'light' ? t('darkMode') : t('lightMode')}>
             {theme === 'light' ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>}
           </button>
+          {tourSteps && <TourLauncher steps={tourSteps} tourKey={tourKey || 'student-workspace'} className={`${iconButton} w-8 h-8 flex items-center justify-center`} />}
           <div className="flex bg-(--surface-secondary) p-0.5 rounded-lg border border-(--border) text-[10px] font-bold">
             <button onClick={() => language !== 'en' && toggleLanguage()} className={`px-2 py-1 rounded-md transition ${language === 'en' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>EN</button>
             <button onClick={() => language !== 'vi' && toggleLanguage()} className={`px-2 py-1 rounded-md transition ${language === 'vi' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>VN</button>
@@ -89,10 +93,17 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
             </button>
             {showExportMenu && <div className="absolute right-0 top-full mt-2 w-60 bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999]">{exportMenu}</div>}
           </div>
-          <div data-tour="header-avatar" className="w-8 h-8 bg-(--brand) text-(--on-brand) rounded-full text-xs flex items-center justify-center font-bold shrink-0" title={user?.firstName ? `${user.firstName} ${user.lastName || ''}` : t('profile')}>
-            {user?.firstName?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
-          </div>
-          {project?.currentUserRole && <span className="hidden xl:inline text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider">{project.currentUserRole}</span>}
+          <button type="button" data-tour="header-avatar" onClick={() => setShowProfile(true)} className="flex items-center gap-2 rounded-lg hover:bg-(--surface-secondary) p-1 transition-colors" title={t('profile')}>
+            <div className="w-8 h-8 bg-(--brand) text-(--on-brand) rounded-full text-xs flex items-center justify-center font-bold shrink-0">
+              {user?.avatarUrl ? (
+                <img src={user.avatarUrl} alt="" className="w-full h-full object-cover rounded-full" />
+              ) : (
+                user?.firstName?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'
+              )}
+            </div>
+            {project?.currentUserRole && <span className="hidden lg:inline text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider">{project.currentUserRole}</span>}
+          </button>
+          <ProfileModal open={showProfile} onClose={() => setShowProfile(false)} />
         </div>
 
         <div className="relative sm:hidden">

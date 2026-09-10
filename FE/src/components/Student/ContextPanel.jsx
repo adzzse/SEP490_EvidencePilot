@@ -127,6 +127,7 @@ export default function ContextPanel({
   isLocked,
 }) {
   const [showSourceModal, setShowSourceModal] = useState(false);
+  const [sourceSearchQuery, setSourceSearchQuery] = useState('');
   const [sourceMode, setSourceMode] = useState('doi');
   const [doiInput, setDoiInput] = useState('');
   const [doiErrors, setDoiErrors] = useState([]);
@@ -242,10 +243,11 @@ export default function ContextPanel({
 
   const activeClass = (tab) =>
     `flex-1 py-3 text-xs font-bold uppercase tracking-wider flex flex-col justify-center items-center gap-1 transition-all relative ${activeTab === tab ? 'text-(--brand-foreground)' : 'text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary)'}`;
+  const visibleSources = (sources || []).filter(src => (src.originalFilename || '').toLowerCase().includes(sourceSearchQuery.trim().toLowerCase()));
 
   return (
     <>
-      <aside data-tour="context-panel" style={{ width: compact ? 'min(24rem, calc(100vw - 3.5rem))' : width }} className={`${compact ? 'absolute inset-y-0 right-0' : 'relative shrink-0'} z-40 bg-(--surface) border-l border-(--border) flex flex-col shadow-[-8px_0_24px_-6px_rgba(0,0,0,0.25)] overflow-hidden`}>
+      <aside data-tour="context-panel" style={{ width: compact ? 'min(24rem, calc(100vw - 3.5rem))' : width }} className="absolute inset-y-0 right-0 z-40 bg-(--surface) border-l border-(--border) flex flex-col shadow-[-8px_0_24px_-6px_rgba(0,0,0,0.25)] overflow-hidden">
         <div className="flex border-b border-(--border) bg-(--surface) relative shrink-0">
           <button data-tour="context-info-tab" onClick={() => setActiveTab('Source')} className={activeClass('Source')}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -269,14 +271,25 @@ export default function ContextPanel({
         <div className="flex-1 overflow-y-auto bg-(--surface-secondary)/50 p-4">
           {activeTab === 'Source' && (
             <div className="p-5 flex flex-col gap-6 animate-in fade-in duration-300">
-              <button type="button" onClick={onOpenSourceMap} aria-haspopup="dialog"
-                className="w-full min-h-10 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm font-semibold text-(--text-primary) hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand) cursor-pointer">
-                {t('sourceMap.title')}
-              </button>
-              {!reviewContent && <button onClick={() => { setDoiErrors([]); setShowSourceModal(true); }} disabled={isLocked} className="w-full flex items-center justify-center gap-2 bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-40 text-(--on-brand) font-bold text-sm py-3 px-4 rounded-xl shadow-md transition-colors">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-                {t('insertSource')}
-              </button>}
+              <div className="flex items-center gap-2">
+                <input type="text" value={sourceSearchQuery} onChange={event => setSourceSearchQuery(event.target.value)} placeholder={t('searchSources')}
+                  aria-label={t('searchSources')}
+                  className="min-w-0 flex-1 text-xs border border-(--border) rounded-lg px-2.5 py-2 bg-(--surface) outline-none focus:ring-1 focus:ring-indigo-500 text-(--text-primary)" />
+                {!reviewContent && <button type="button" onClick={() => { setDoiErrors([]); setShowSourceModal(true); }} disabled={isLocked}
+                  className="group shrink-0 flex items-center overflow-hidden bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-40 disabled:hover:bg-(--brand) text-(--on-brand) font-bold text-xs h-8 rounded-lg shadow-sm transition-colors" title={t('insertSource')} aria-label={t('insertSource')}>
+                  <span className="flex items-center justify-center w-8 h-8 shrink-0">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                  </span>
+                  <span className="max-w-0 group-hover:max-w-[140px] group-focus-visible:max-w-[140px] group-hover:pr-3 group-focus-visible:pr-3 overflow-hidden whitespace-nowrap opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-all duration-200">{t('insertSource')}</span>
+                </button>}
+                <button type="button" onClick={onOpenSourceMap} aria-haspopup="dialog" title={t('sourceMap.title')} aria-label={t('sourceMap.title')}
+                  className="group shrink-0 flex items-center overflow-hidden h-8 rounded-lg border border-(--border) bg-(--surface) text-(--text-secondary) hover:text-(--brand-foreground) hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors">
+                  <span className="flex items-center justify-center w-8 h-8 shrink-0">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+                  </span>
+                  <span className="max-w-0 group-hover:max-w-[140px] group-focus-visible:max-w-[140px] group-hover:pr-2.5 group-focus-visible:pr-2.5 overflow-hidden whitespace-nowrap text-xs font-semibold opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-all duration-200">{t('sourceMap.title')}</span>
+                </button>
+              </div>
 
               {showSourceModal && (
                 <div className="bg-(--surface) border border-(--border) rounded-xl p-4 shadow-lg space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
@@ -335,8 +348,8 @@ export default function ContextPanel({
               <div>
                 <h3 className="text-[11px] font-bold text-(--text-tertiary) tracking-widest mb-3 uppercase flex items-center gap-2"><div className="h-px bg-(--border) flex-1"></div> {t('availableSource')} <div className="h-px bg-(--border) flex-1"></div></h3>
                 <div className="flex flex-col gap-3">
-                  {sources.length === 0 ? <div className="text-sm text-(--text-secondary) italic text-center p-4">{t('noUploadedSources')}</div> : (
-                    sources.map(src => {
+                  {visibleSources.length === 0 ? <div className="text-sm text-(--text-secondary) italic text-center p-4">{sources.length === 0 ? t('noUploadedSources') : t('sourceMap.noMatches')}</div> : (
+                    visibleSources.map(src => {
                       const sourceDownloadUrl = getSourceDownloadUrl(src.processingError);
                       return (
                         <div key={src.id} onClick={() => src.fileUrl && src.fileUrl !== 'pending' ? setViewerFile({ fileUrl: `/api/documents/${src.id}/download`, fileName: src.originalFilename }) : showToast(t('fileUrlUnavailable'))} className="bg-(--surface) border border-(--border) rounded-xl p-3.5 hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors cursor-pointer">
@@ -412,11 +425,13 @@ export default function ContextPanel({
           {activeTab === 'Review' && (reviewContent ||
             <div className="flex flex-col gap-4 animate-in fade-in duration-200">
               <div className="flex justify-between items-center mb-1 bg-(--surface) border border-(--border) rounded-xl p-3.5 shadow-sm">
-                <div>
-                  <p className="text-[10px] text-(--text-tertiary) uppercase tracking-wider font-bold">{t('projectStatus')}</p>
+                <div className="flex-1">
+                  <p className="text-[10px] text-(--text-tertiary) uppercase tracking-wider font-bold flex items-center justify-between gap-2">{t('projectStatus')}
+                    {userProjectRole === 'LEADER' && isLocked && <button type="button" onClick={() => setShowSubmitReviewModal(true)} className="text-[10px] font-bold normal-case tracking-normal px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors cursor-pointer" title={t('submitReviewDescription')}>{t('viewConfirmations')}</button>}
+                  </p>
                   <p className="text-sm font-bold text-(--text-primary) mt-0.5">{project?.status ? t(`status.${project.status}`, { defaultValue: project.status }) : t('unknown')}</p>
                 </div>
-                {userProjectRole === 'LEADER' && <button onClick={() => setShowSubmitReviewModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all" title={t('submitReviewDescription')}>{t(isLocked ? 'viewConfirmations' : 'submitReview')}</button>}
+                {userProjectRole === 'LEADER' && !isLocked && <button onClick={() => setShowSubmitReviewModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all" title={t('submitReviewDescription')}>{t('submitReview')}</button>}
               </div>
               <h3 className="text-[11px] font-bold text-(--text-tertiary) tracking-widest uppercase flex items-center gap-2 mt-2"><div className="h-px bg-(--border) flex-1"></div> {t('reviewHistory')} <div className="h-px bg-(--border) flex-1"></div></h3>
               <div className="space-y-4">

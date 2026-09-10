@@ -37,10 +37,12 @@ public record ReviewReadinessResponse(
             Long revision,
             UUID assignedUserId,
             String assignedUserName,
+            String assignedUserCode,
             String currentInputFingerprint,
             String handoffState,
             UUID confirmedById,
             String confirmedByName,
+            String confirmedByCode,
             LocalDateTime confirmedAt,
             Integer confirmedContentVersion,
             List<String> blockers

@@ -10,6 +10,12 @@ export default function FullPaperPreview({ sections, paperTitle, mediaAssets, on
   const generatedReferences = [];
   const hasReferenceSection = sections.some(section =>
     isReferenceSectionTitle(section.sectionTitle));
+  const displayTitle = (paperTitle || '')
+    .replace(/\.[a-z0-9]+$/i, '')
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
   useEffect(() => {
     const dialog = dialogRef.current;
     dialog.showModal();
@@ -17,13 +23,12 @@ export default function FullPaperPreview({ sections, paperTitle, mediaAssets, on
   }, []);
 
   return (
-    <dialog ref={dialogRef} onCancel={onClose} aria-label={t('viewFullPaper')} className="fixed inset-0 m-auto h-[90vh] w-[90vw] max-h-none max-w-none rounded-2xl border-0 p-0 bg-transparent shadow-2xl backdrop:bg-slate-900/60 backdrop:backdrop-blur-sm">
+    <dialog ref={dialogRef} onCancel={onClose} onClick={event => { if (event.target === dialogRef.current) onClose(); }} aria-label={t('viewFullPaper')} className="fixed inset-0 m-auto h-[90vh] w-[90vw] max-h-none max-w-none rounded-2xl border-0 p-0 bg-transparent shadow-2xl backdrop:bg-slate-900/60 backdrop:backdrop-blur-sm">
       <div className="flex w-full h-full bg-(--surface) rounded-2xl border border-(--border) overflow-hidden">
         {/* Left: Pages */}
         <div className="hidden md:flex w-56 bg-(--surface-secondary) border-r border-(--border) flex-col shrink-0">
-          <div className="px-4 py-3 border-b border-(--border) flex items-center justify-between shrink-0">
+          <div className="px-4 py-3 border-b border-(--border) shrink-0">
             <h3 className="text-xs font-bold text-(--text-primary) uppercase tracking-wider">{t('pages')} ({sections.length})</h3>
-            <span className="text-[9px] text-(--text-tertiary) font-mono">{paperTitle}</span>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {sections.map((sec, i) => (
@@ -48,6 +53,12 @@ export default function FullPaperPreview({ sections, paperTitle, mediaAssets, on
           <button onClick={onClose} className="md:hidden sticky top-0 ml-auto mb-2 p-2 rounded-lg bg-white border border-slate-200 text-slate-600 shadow-sm" aria-label={t('close')}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
+          {displayTitle && (
+            <>
+              <h1 className="text-2xl font-bold text-slate-900 text-center">{displayTitle}</h1>
+              <hr className="my-4 border-slate-200" />
+            </>
+          )}
           {sections.length === 0 ? (
             <p className="text-sm text-slate-400 italic text-center py-16">{t('noSections')}</p>
           ) : (

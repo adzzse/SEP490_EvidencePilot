@@ -34,9 +34,9 @@ export default function EditorPanel({
   textSize, setTextSize, showToast, editorRef, mediaAssets, isLocked,
   findings = [], onFindingClick,
   onOpenSourceMap, onViewFullPaper,
-  onRunCitationReview, onOpenCitationReview, reviewBusy = false, reviewProgress = null,
+  onOpenCitationReview, reviewBusy = false, reviewProgress = null,
   reviewFindingsCount = 0, reviewError = null,
-  canRunCitationReview = false, onEditorUserScroll,
+  onEditorUserScroll,
   isReviewVisible = true, onToggleReviewVisible,
   feedback, feedbackOpen = false, setFeedbackOpen, activeFeedbackId, onSelectFeedback,
   feedbackRequestId, setFeedbackRequestId, feedbackScope, setFeedbackScope,
@@ -49,7 +49,6 @@ export default function EditorPanel({
   const isOwnSection = canEditCurrentSection
     ?? (assignedSections && assignedSections.some(s => String(s.id) === String(selectedSectionId)));
   const readOnlyLabel = review ? rt.paperReadOnly : isLocked ? t('projectLocked') : !isOwnSection ? t('readOnly') : '';
-  const citationReviewTitle = reviewBusy ? t('reviewing') : canRunCitationReview && !isLocked ? t('citationReviewDescription') : t('citationReviewUnavailable');
   const saveTitle = saveStatus === 'saving' ? t('saving') : isLocked ? t('saveReadOnly') : !isOwnSection ? t('noAssignedSection') : t('saveSectionHelp');
   const [previewZoom, setPreviewZoom] = useState(100);
   const generatedReferences = [];
@@ -163,18 +162,6 @@ export default function EditorPanel({
         {review.viewMode === 'submitted' && review.snapshotState === 'LEGACY_NO_SNAPSHOT' && <p role="alert">{rt.legacySnapshotNotice}</p>}
         {review.viewMode === 'submitted' && review.snapshotState === 'LOAD_ERROR' && <p role="alert">{rt.snapshotLoadError} <button type="button" onClick={() => review.setSnapshotRetry(value => value + 1)}>{ct.retry}</button></p>}
       </div>}
-      <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex rounded-lg border border-(--border) bg-(--surface) p-0.5" aria-label={t('studentFeedback.view')}>
-          {narrow && <button type="button" aria-pressed={!showPreview} onClick={() => setShowPreview(false)} className={`rounded-md px-3 py-1.5 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${!showPreview ? 'bg-(--brand-soft) text-(--brand-foreground)' : ''}`}>LaTeX</button>}
-          <button type="button" aria-pressed={previewVisible} onClick={() => { setFeedbackOpen?.(false); setShowPreview(true); }} className={`rounded-md px-3 py-1.5 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${previewVisible ? 'bg-(--brand-soft) text-(--brand-foreground)' : ''}`}>{t('preview')}</button>
-          {!review && <button type="button" data-tour="editor-feedback" aria-expanded={feedbackOpen} aria-controls="student-feedback-panel" onClick={() => setFeedbackOpen?.(!feedbackOpen)}
-            className={`rounded-md px-3 py-1.5 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${feedbackOpen ? 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300' : ''}`}>
-            {t('studentFeedback.title')}{feedback?.items.length ? ` (${feedback.items.length})` : ''}
-          </button>}
-        </div>
-        {selectedPaper && <button type="button" onClick={onViewFullPaper} className="rounded-lg border border-(--border) bg-(--surface) px-3 py-1.5 font-semibold text-(--brand-foreground) hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand)">{t('viewFullPaper')}</button>}
-        {feedbackOpen && canShowThree && !narrow && <label className="flex items-center gap-1.5 text-(--text-secondary)"><input type="checkbox" checked={keepPreview} onChange={event => setKeepPreview(event.target.checked)} />{t('studentFeedback.keepPreview')}</label>}
-      </div>
       <div className={`flex-1 min-h-0 min-w-0 flex gap-2 ${narrow ? 'flex-col' : ''}`}>
       <div style={{ flex: narrow ? '1 1 0' : threePanes ? '1 1 480px' : `${editorWidth} 1 0` }} className={`bg-(--surface) rounded-lg shadow-sm border border-(--border) ${narrow && previewVisible ? 'hidden' : 'flex'} flex-col overflow-hidden min-w-0 min-h-0`}>
         <div data-tour="editor-toolbar" className="h-10 border-b border-(--border-light) flex items-center justify-between px-3 bg-(--surface) shadow-sm shrink-0 z-10">
@@ -225,20 +212,15 @@ export default function EditorPanel({
                 </button>
               </>
             )}
-            {!review && selectedPaper && canRunCitationReview !== null && (
-              <span className="inline-flex" title={citationReviewTitle}>
-                <button
-                  type="button"
-                  onClick={onRunCitationReview}
-                  disabled={!canRunCitationReview || reviewBusy || isLocked}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-40 ${reviewBusy ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600' : 'bg-(--brand) hover:bg-(--brand-hover) text-(--on-brand)'}`}
-                  aria-label={t('aiReview')}
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-                  <span className="hidden lg:inline">{reviewBusy ? t('loading') : reviewFindingsCount > 0 ? t('rerunReview') : t('aiReview')}</span>
-                </button>
-              </span>
-            )}
+            <div className="flex rounded-lg border border-(--border) bg-(--surface-tertiary) p-0.5 shrink-0 text-[11px]" aria-label={t('studentFeedback.view')}>
+              {narrow && <button type="button" aria-pressed={!showPreview} onClick={() => setShowPreview(false)} className={`rounded-md px-2 py-1 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${!showPreview ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-secondary)'}`}>LaTeX</button>}
+              <button type="button" aria-pressed={previewVisible} onClick={() => { setFeedbackOpen?.(false); setShowPreview(true); }} className={`rounded-md px-2 py-1 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${previewVisible ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-secondary)'}`}>{t('preview')}</button>
+              {!review && <button type="button" data-tour="editor-feedback" aria-expanded={feedbackOpen} aria-controls="student-feedback-panel" onClick={() => setFeedbackOpen?.(!feedbackOpen)}
+                className={`rounded-md px-2 py-1 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${feedbackOpen ? 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300' : 'text-(--text-secondary)'}`}>
+                {t('studentFeedback.title')}{feedback?.items.length ? ` (${feedback.items.length})` : ''}
+              </button>}
+            </div>
+            {feedbackOpen && canShowThree && !narrow && <label className="hidden xl:flex items-center gap-1.5 text-[11px] text-(--text-secondary) shrink-0"><input type="checkbox" checked={keepPreview} onChange={event => setKeepPreview(event.target.checked)} />{t('studentFeedback.keepPreview')}</label>}
             {!review && <span className="inline-flex" title={saveTitle}>
               <button onClick={handleSaveDraft} disabled={saveStatus === 'saving' || !isOwnSection || isLocked} className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-50 ${saveStatus === 'saving' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30' : saveStatus === 'saved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30' : saveStatus === 'error' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30' : 'bg-(--surface-tertiary) text-(--text-secondary) hover:bg-(--border)'}`}>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
@@ -362,6 +344,11 @@ export default function EditorPanel({
             {t('preview')}
           </div>
           <div className="flex items-center gap-1">
+            {selectedPaper && onViewFullPaper && (
+              <button type="button" onClick={onViewFullPaper} className="w-7 h-7 flex items-center justify-center rounded transition-colors hover:bg-(--surface-secondary) text-(--text-secondary) hover:text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)" title={t('viewFullPaper')} aria-label={t('viewFullPaper')}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+              </button>
+            )}
             <button type="button" onClick={onOpenSourceMap} className="w-7 h-7 flex items-center justify-center rounded transition-colors hover:bg-(--surface-secondary) text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)" title={t('sourceMap.title')} aria-label={t('sourceMap.title')} aria-haspopup="dialog">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m7 7 10 10M7 17 17 7M7 7h10v10H7z" /><circle cx="7" cy="7" r="2" /><circle cx="17" cy="7" r="2" /><circle cx="7" cy="17" r="2" /><circle cx="17" cy="17" r="2" /></svg>
             </button>

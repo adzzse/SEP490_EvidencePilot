@@ -1,12 +1,22 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AppHeader, EmptyState, LoadingSkeleton, TourLauncher, StatusBadge, Modal } from '../../components';
+import { AppHeader, EmptyState, LoadingSkeleton, StatusBadge, Modal } from '../../components';
 import { commonText, studentText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
-import { PAGINATION_LIMIT } from '../../utils/constants';
-import { formatDate } from '../../utils/formatters/date';
+import { PROJECT_STATUSES } from '../../utils/constants';
+import { formatDateTime } from '../../utils/formatters/date';
 import api from '../../services/api';
+const LAST_VISITED_KEY = 'ep_project_last_visited';
+
+function readLastVisited() {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_VISITED_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
 function getPaginationRange(currentPage, totalPages) {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, i) => i);
@@ -43,16 +53,23 @@ export default function Projects() {
 
   // Filters & Pagination
   const [page, setPage] = useState(0);
-  const [pageSize] = useState(PAGINATION_LIMIT);
-  const [activeTab, setActiveTab] = useState('ALL'); // ALL, IN_PROGRESS, ASSIGNED, COMPLETED
+  const [pageSize] = useState(4);
+  const [activeTab, setActiveTab] = useState('ALL'); // ALL + full ProjectStatus set
   const [searchQuery, setSearchQuery] = useState('');
   const [isGridView, setIsGridView] = useState(true);
   const [showGuide, setShowGuide] = useState(false);
+  const [lastVisited, setLastVisited] = useState(readLastVisited);
 
-  const tourSteps = [
-    { element: '#projects-grid', popover: { title: t.tourProjects, description: t.tourProjectsDesc, side: 'bottom', align: 'start' } },
-    { element: '.project-card:first', popover: { title: t.tourWorkspace, description: t.tourWorkspaceDesc, side: 'top', align: 'center' } },
-  ];
+  const openProject = (id) => {
+    const next = { ...readLastVisited(), [id]: Date.now() };
+    try {
+      localStorage.setItem(LAST_VISITED_KEY, JSON.stringify(next));
+    } catch {
+      /* storage unavailable — navigation still works */
+    }
+    setLastVisited(next);
+    navigate(`/student/projects/${id}`);
+  };
 
   // Fetch KPI Stats (From overall project list)
   const fetchStats = useCallback(async () => {
@@ -60,7 +77,7 @@ export default function Projects() {
       const res = await api.get('/api/projects', { params: { size: 100 } });
       const list = Array.isArray(res.data?.content) ? res.data.content : [];
       const total = list.length;
-      const inProg = list.filter(p => ['IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'RETURNED'].includes(p.status)).length;
+      const inProg = list.filter(p => ['CREATED', 'ASSIGNED', 'IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'RETURNED'].includes(p.status)).length;
       const comp = list.filter(p => ['APPROVED', 'ARCHIVED', 'COMPLETED'].includes(p.status)).length;
       setStats({ total, inProgress: inProg, completed: comp });
     } catch {
@@ -68,28 +85,22 @@ export default function Projects() {
     }
   }, []);
 
-  // Fetch Paginated & Filtered Projects
-  const fetchProjects = useCallback(async (pIndex = page, statusFilter = activeTab, q = searchQuery) => {
+  // Fetch full filtered set (up to 100); ordering by last-visited + paging happen client-side
+  const fetchProjects = useCallback(async (statusFilter = activeTab, q = searchQuery) => {
     try {
       setLoading(true);
       setError(false);
-      const params = { page: pIndex, size: pageSize };
+      const params = { page: 0, size: 100 };
       if (q.trim()) params.q = q.trim();
-      if (statusFilter !== 'ALL') {
-        if (statusFilter === 'IN_PROGRESS') params.status = 'IN_PROGRESS';
-        else if (statusFilter === 'ASSIGNED') params.status = 'ASSIGNED';
-        else if (statusFilter === 'COMPLETED') params.status = 'APPROVED';
-      }
+      if (statusFilter !== 'ALL') params.status = statusFilter;
 
       const res = await api.get('/api/projects', { params });
       const rawContent = Array.isArray(res.data?.content) ? res.data.content : [];
-      const totalP = res.data?.totalPages || (rawContent.length > 0 ? 1 : 0);
-      const totalE = res.data?.totalElements || rawContent.length;
 
       setProjectsData({
         content: rawContent,
-        totalPages: totalP,
-        totalElements: totalE
+        totalPages: 1,
+        totalElements: rawContent.length
       });
     } catch (err) {
       console.error('Failed to fetch projects:', err);
@@ -97,15 +108,15 @@ export default function Projects() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, activeTab, searchQuery]);
+  }, [activeTab, searchQuery]);
 
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
 
   useEffect(() => {
-    fetchProjects(page, activeTab, searchQuery);
-  }, [fetchProjects, page, activeTab, searchQuery]);
+    fetchProjects(activeTab, searchQuery);
+  }, [fetchProjects, activeTab, searchQuery]);
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -127,7 +138,16 @@ export default function Projects() {
     return t.openWorkspace;
   };
 
-  const projects = projectsData.content;
+  const sortedProjects = [...projectsData.content].sort((a, b) => {
+    const visitedA = lastVisited[a.id] || 0;
+    const visitedB = lastVisited[b.id] || 0;
+    if (visitedB !== visitedA) return visitedB - visitedA;
+    return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''));
+  });
+  const totalElements = sortedProjects.length;
+  const totalPages = Math.max(1, Math.ceil(totalElements / pageSize));
+  const safePage = Math.min(page, totalPages - 1);
+  const projects = sortedProjects.slice(safePage * pageSize, safePage * pageSize + pageSize);
 
   return (
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary) font-sans pb-12">
@@ -212,9 +232,7 @@ export default function Projects() {
           <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto p-1 bg-(--surface-secondary) border border-(--border) rounded-xl">
             {[
               { key: 'ALL', label: t.allStatuses },
-              { key: 'IN_PROGRESS', label: t.inProgress },
-              { key: 'ASSIGNED', label: t.assignedStatus },
-              { key: 'COMPLETED', label: t.completed },
+              ...PROJECT_STATUSES.map(status => ({ key: status, label: ct.statusLabels?.[status] || status.replaceAll('_', ' ') })),
             ].map(tab => (
               <button
                 key={tab.key}
@@ -255,11 +273,11 @@ export default function Projects() {
 
         {/* Content Area */}
         {loading ? (
-          <LoadingSkeleton count={6} height="h-44" />
+          <LoadingSkeleton count={4} height="h-44" />
         ) : error ? (
           <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 p-6 rounded-2xl text-center">
             <p className="font-semibold text-sm">{t.projectsLoadFailed}</p>
-            <button onClick={() => fetchProjects(page, activeTab, searchQuery)} className="mt-3 px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition-colors cursor-pointer">
+            <button onClick={() => fetchProjects(activeTab, searchQuery)} className="mt-3 px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition-colors cursor-pointer">
               {ct.retry}
             </button>
           </div>
@@ -274,7 +292,7 @@ export default function Projects() {
             {projects.map((project) => (
               <div
                 key={project.id}
-                onClick={() => navigate(`/student/projects/${project.id}`)}
+                onClick={() => openProject(project.id)}
                 className="project-card bg-(--surface) border border-(--border) hover:border-indigo-400 dark:hover:border-indigo-600 rounded-2xl p-5 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex flex-col justify-between group cursor-pointer"
               >
                 <div className="space-y-3">
@@ -303,7 +321,7 @@ export default function Projects() {
                 <div className="pt-4 mt-4 border-t border-(--border-light) space-y-3">
                   <div className="flex items-center justify-between text-[11px] text-(--text-tertiary)">
                     <span>
-                      {t.lastUpdated.replace('{{date}}', formatDate(project.updatedAt || project.createdAt, language))}
+                      {t.lastUpdated.replace('{{date}}', formatDateTime(project.updatedAt || project.createdAt, language))}
                     </span>
                     {project.currentUserRole && (
                       <span className="font-semibold text-slate-500 dark:text-slate-400">
@@ -315,7 +333,7 @@ export default function Projects() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      navigate(`/student/projects/${project.id}`);
+                      openProject(project.id);
                     }}
                     className="w-full py-2.5 px-4 bg-[#0c162e] hover:bg-[#152447] text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                   >
@@ -344,7 +362,7 @@ export default function Projects() {
                   {projects.map((project) => (
                     <tr
                       key={project.id}
-                      onClick={() => navigate(`/student/projects/${project.id}`)}
+                      onClick={() => openProject(project.id)}
                       className="hover:bg-(--surface-secondary) transition cursor-pointer"
                     >
                       <td className="px-6 py-4">
@@ -364,7 +382,7 @@ export default function Projects() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/student/projects/${project.id}`);
+                            openProject(project.id);
                           }}
                           className="px-3.5 py-1.5 bg-[#0c162e] hover:bg-[#152447] text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer inline-flex items-center gap-1"
                         >
@@ -381,22 +399,22 @@ export default function Projects() {
         )}
 
         {/* Pagination Footer (Matching exact design in screenshot) */}
-        {!loading && !error && projectsData.totalElements > 0 && (
+        {!loading && !error && totalElements > 0 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-(--border) text-xs font-semibold text-(--text-secondary)">
             <span>
               {t.showingProjectsRange
                 ? t.showingProjectsRange
-                    .replace('{{start}}', page * pageSize + 1)
-                    .replace('{{end}}', Math.min((page + 1) * pageSize, projectsData.totalElements))
-                    .replace('{{total}}', projectsData.totalElements)
-                : `Hiển thị ${page * pageSize + 1}-${Math.min((page + 1) * pageSize, projectsData.totalElements)} trong tổng số ${projectsData.totalElements} dự án`}
+                    .replace('{{start}}', safePage * pageSize + 1)
+                    .replace('{{end}}', Math.min((safePage + 1) * pageSize, totalElements))
+                    .replace('{{total}}', totalElements)
+                : `Hiển thị ${safePage * pageSize + 1}-${Math.min((safePage + 1) * pageSize, totalElements)} trong tổng số ${totalElements} dự án`}
             </span>
 
             <div className="flex items-center gap-1.5">
               {/* Prev Button */}
               <button
                 onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
+                disabled={safePage === 0}
                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-500 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xs cursor-pointer"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -405,7 +423,7 @@ export default function Projects() {
               </button>
 
               {/* Page Number Buttons */}
-              {getPaginationRange(page, Math.max(1, projectsData.totalPages)).map((item, idx) => {
+              {getPaginationRange(safePage, totalPages).map((item, idx) => {
                 if (typeof item === 'string') {
                   return (
                     <span key={`${item}-${idx}`} className="text-gray-400 text-xs px-1 select-none">
@@ -413,7 +431,7 @@ export default function Projects() {
                     </span>
                   );
                 }
-                const isActive = page === item;
+                const isActive = safePage === item;
                 return (
                   <button
                     key={item}
@@ -431,8 +449,8 @@ export default function Projects() {
 
               {/* Next Button */}
               <button
-                onClick={() => setPage(p => Math.min(projectsData.totalPages - 1, p + 1))}
-                disabled={page >= Math.max(0, projectsData.totalPages - 1)}
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={safePage >= totalPages - 1}
                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-500 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xs cursor-pointer"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -443,8 +461,6 @@ export default function Projects() {
           </div>
         )}
       </main>
-
-      <TourLauncher steps={tourSteps} tourKey="projects" />
 
       <Modal open={showGuide} onClose={() => setShowGuide(false)} title={t.guideTitle} closeLabel={ct.close}>
         <ol className="space-y-3 text-xs">

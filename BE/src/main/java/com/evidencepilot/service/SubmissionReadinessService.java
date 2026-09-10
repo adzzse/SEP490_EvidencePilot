@@ -268,10 +268,14 @@ public class SubmissionReadinessService {
                         section.getId(), paper.getId(), section.getSectionTitle(),
                         section.getSectionOrder(), section.getVersion(), section.getOptVersion(),
                         assigned != null ? assigned.getId() : null, displayName(assigned),
+                        assigned != null ? assigned.getStudentCode() : null,
                         currentInputFingerprint, handoffState,
                         section.getHandoffConfirmedBy() != null
                                 ? section.getHandoffConfirmedBy().getId() : null,
-                        displayName(section.getHandoffConfirmedBy()), section.getHandoffConfirmedAt(),
+                        displayName(section.getHandoffConfirmedBy()),
+                        section.getHandoffConfirmedBy() != null
+                                ? section.getHandoffConfirmedBy().getStudentCode() : null,
+                        section.getHandoffConfirmedAt(),
                         section.getHandoffContentVersion(), List.copyOf(blockers)));
                 fingerprintParts.add(String.join(":",
                         "section", section.getId().toString(), currentInputFingerprint,

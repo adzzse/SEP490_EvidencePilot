@@ -40,9 +40,8 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
         <div className="px-4 py-2.5 border-b border-(--border) bg-(--surface-tertiary)/40 flex items-center justify-between">
           <span className="text-xs font-bold text-(--text-primary) truncate max-w-[180px]">{selectedPaper?.originalFilename || selectedPaper?.title || t('paper')}</span>
           {selectedPaper && (
-            <button onClick={onViewFullPaper} className="ml-2 text-xs font-medium text-(--brand) hover:underline hidden sm:inline-flex items-center gap-1" title={t('viewFullPaper')}>
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-              {t('viewFullPaper')}
+            <button type="button" onClick={onViewFullPaper} className="ml-2 w-7 h-7 shrink-0 flex items-center justify-center rounded-md text-(--text-secondary) hover:text-(--brand-foreground) hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors" title={t('viewFullPaper')} aria-label={t('viewFullPaper')}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
             </button>
           )}
         </div>
@@ -116,6 +115,11 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
             ))
           )}
         </div>
+        {!compact && onResizeStart && (
+          <div onMouseDown={onResizeStart} className="absolute top-0 bottom-0 -right-[3px] w-[7px] cursor-col-resize z-10 group flex items-center justify-center" title={t('dragToResize')} aria-hidden="true">
+            <div className="h-8 w-[3px] rounded bg-(--border) group-hover:bg-indigo-500 transition-colors"></div>
+          </div>
+        )}
       </aside>
 
       {/* Hover preview portal — appended to document.body so no sidebar overflow can clip it */}

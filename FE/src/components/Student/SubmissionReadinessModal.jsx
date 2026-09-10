@@ -22,12 +22,13 @@ const SECTION_BLOCKER_KEYS = {
   SECTION_CONFIRMED: 'sectionBlockerHandoffMissing',
 };
 
-export default function SubmissionReadinessModal({ open, onClose, projectId, dirtySectionIds, onSubmitted }) {
+export default function SubmissionReadinessModal({ open, onClose, projectId, dirtySectionIds, onSubmitted, submittedPending = false }) {
   const { t } = useTranslation();
   const [readiness, setReadiness] = useState(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [openPanel, setOpenPanel] = useState('checks');
 
   const load = useCallback(async () => {
     if (!open || !projectId) return;
@@ -45,6 +46,7 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
   }, [open, projectId, t]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (open) setOpenPanel('checks'); }, [open]);
 
   const submit = async (bypassSectionConfirmation) => {
     if (loading || submitting || !readiness?.submissionFingerprint
@@ -92,54 +94,75 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
           <p className="py-8 text-center text-sm text-(--text-tertiary)">{t('loading')}</p>
         ) : readiness && (
           <>
-            <div className={`rounded-xl border p-3 ${readiness.state === 'READY' ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200' : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200'}`}>
-              <p className="text-sm font-bold">{t(readiness.state === 'READY' ? 'reviewReady' : 'reviewNotReady')}</p>
-              {!readiness.canSubmit && <p className="mt-1 text-xs">{t('leaderSubmissionOnly')}</p>}
-            </div>
+            {submittedPending && readiness.state !== 'READY' ? (
+              <div className="rounded-xl border p-3 border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-200">
+                <p className="text-sm font-bold">{t('reviewSubmittedPending')}</p>
+              </div>
+            ) : (
+              <div className={`rounded-xl border p-3 ${readiness.state === 'READY' ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200' : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200'}`}>
+                <p className="text-sm font-bold">{t(readiness.state === 'READY' ? 'reviewReady' : 'reviewNotReady')}</p>
+                {!readiness.canSubmit && <p className="mt-1 text-xs">{t('leaderSubmissionOnly')}</p>}
+              </div>
+            )}
 
-            {readiness.revision && <p role={['UNCHANGED', 'UNVERIFIABLE'].includes(readiness.revision.state) ? 'alert' : 'status'} className="text-sm">
+            {readiness.revision && readiness.revision.state !== 'FIRST_SUBMISSION' && <p role={['UNCHANGED', 'UNVERIFIABLE'].includes(readiness.revision.state) ? 'alert' : 'status'} className="text-sm">
               {t(`feedbackRevision.${readiness.revision.state}`)}
             </p>}
-            <section className="rounded-xl border border-(--border) bg-(--surface-secondary)/50 p-3">
-              <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-(--text-secondary)">{t('submissionChecks')}</h3>
-              <ul className="space-y-2">
-                {(readiness.checks || []).map(check => (
-                  <li key={check.code} className="flex items-start gap-2 text-xs text-(--text-primary)">
-                    <span aria-hidden="true" className={check.status === 'SATISFIED' ? 'text-emerald-600' : 'text-rose-600'}>{check.status === 'SATISFIED' ? '✓' : '✕'}</span>
-                    <span>{t(CHECK_KEYS[check.code] || check.code, { defaultValue: check.message })}</span>
-                  </li>
-                ))}
-              </ul>
+            <section className="overflow-hidden rounded-xl border border-(--border) bg-(--surface-secondary)/50">
+              <button type="button" onClick={() => setOpenPanel(value => value === 'checks' ? null : 'checks')} aria-expanded={openPanel === 'checks'} className="flex w-full items-center justify-between gap-2 p-3 text-xs font-bold uppercase tracking-wide text-(--text-secondary) hover:bg-(--surface-secondary)">
+                {t('submissionChecks')}
+                <svg className={`w-4 h-4 shrink-0 transition-transform ${openPanel === 'checks' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {openPanel === 'checks' && (
+                <ul className="space-y-2 px-3 pb-3">
+                  {(readiness.checks || []).map(check => (
+                    <li key={check.code} className="flex items-start gap-2 text-xs text-(--text-primary)">
+                      <span aria-hidden="true" className={check.status === 'SATISFIED' ? 'text-emerald-600' : 'text-rose-600'}>{check.status === 'SATISFIED' ? '✓' : '✕'}</span>
+                      <span>{t(CHECK_KEYS[check.code] || check.code, { defaultValue: check.message })}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
 
             {(
-              <section className="space-y-2">
-                {(readiness.papers || []).map(paper => (
-                  <div key={paper.id} className="rounded-xl border border-(--border) bg-(--surface) p-3">
-                    <h3 className="text-xs font-bold text-(--text-primary)">{paper.title || paper.originalFilename || t('paper')}</h3>
-                    <ul className="mt-2 space-y-1.5">
-                      {(paper.sections || []).map(section => (
-                        <li key={section.id} className="text-[11px] text-(--text-secondary)">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="truncate">{section.title}</span>
-                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${section.handoffState === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                              {t(section.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : section.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}
-                            </span>
-                          </div>
-                          <p>{t('feedbackAssignee')}: {section.assignedUserName || t('feedbackUnassigned')}</p>
-                          <p>{t('feedbackConfirmedBy')}: {section.confirmedByName || '—'} · {formatDateTime(section.confirmedAt)}</p>
-                          {(section.blockers || []).length > 0 && (
-                            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-rose-700 dark:text-rose-300">
-                              {section.blockers.map(code => (
-                                <li key={code}>{t(SECTION_BLOCKER_KEYS[code] || code)}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
+              <section className="overflow-hidden rounded-xl border border-(--border) bg-(--surface)">
+                <button type="button" onClick={() => setOpenPanel(value => value === 'sections' ? null : 'sections')} aria-expanded={openPanel === 'sections'} className="flex w-full items-center justify-between gap-2 p-3 text-xs font-bold uppercase tracking-wide text-(--text-secondary) hover:bg-(--surface-secondary)">
+                  {t('submissionPaperSections')}
+                  <svg className={`w-4 h-4 shrink-0 transition-transform ${openPanel === 'sections' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                </button>
+                {openPanel === 'sections' && (
+                  <div className="space-y-2 px-3 pb-3">
+                    {(readiness.papers || []).map(paper => (
+                      <div key={paper.id} className="rounded-xl border border-(--border) bg-(--surface-secondary)/50 p-3">
+                        <h3 className="text-xs font-bold text-(--text-primary)">{paper.title || paper.originalFilename || t('paper')}</h3>
+                        <ul className="mt-2 space-y-1.5">
+                          {(paper.sections || []).map(section => (
+                            <li key={section.id} className="space-y-1 text-[11px] text-(--text-secondary)">
+                              <div className="flex items-center gap-2">
+                                <span className="truncate">{section.title}</span>
+                                <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:border-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">
+                                  v{section.contentVersion} - {section.assignedUserName || t('feedbackUnassigned')}{section.assignedUserCode ? ` - ${section.assignedUserCode}` : ''}
+                                </span>
+                                <span className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${section.handoffState === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {t(section.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : section.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}
+                                </span>
+                              </div>
+                              {section.confirmedAt && <p>{t('confirmedAt')}: {formatDateTime(section.confirmedAt)}</p>}
+                              {(section.blockers || []).length > 0 && (
+                                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-rose-700 dark:text-rose-300">
+                                  {section.blockers.map(code => (
+                                    <li key={code}>{t(SECTION_BLOCKER_KEYS[code] || code)}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </section>
             )}
           </>
