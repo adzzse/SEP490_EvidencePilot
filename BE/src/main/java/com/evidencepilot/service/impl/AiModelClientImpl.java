@@ -209,7 +209,7 @@ public class AiModelClientImpl implements AiModelClient {
             long budgetMillis = remainingMillis(deadline) - 1_000;
             if (budgetMillis <= 0) throw generationFailure(503, "GENERATION_DEADLINE_EXCEEDED", null);
             body.put("budget_ms", budgetMillis);
-            GenerationResult generation = requestGeneration(body, deadline, selection.catalogFingerprint());
+            GenerationResult generation = requestGeneration(body, deadline, selection);
             if (generation.modelIndex() < modelIndex
                     || generation.modelIndex() == modelIndex && generation.attempt() < attempt) {
                 throw generationFailure(502, "INVALID_GENERATION_RESPONSE", null);
@@ -238,7 +238,7 @@ public class AiModelClientImpl implements AiModelClient {
         }
     }
 
-    private GenerationResult requestGeneration(Map<String, Object> body, long deadline, String catalogFingerprint) {
+    private GenerationResult requestGeneration(Map<String, Object> body, long deadline, GenerationSelection selection) {
         Request request;
         try {
             byte[] payload = objectMapper.writeValueAsBytes(body);
@@ -282,19 +282,21 @@ public class AiModelClientImpl implements AiModelClient {
                     || !jsonText(value.get("provider")) || !jsonText(value.get("model"))
                     || !jsonText(value.get("response"))
                     || !index(value.get("model_index"))
+                    || value.get("model_index").intValue() >= selection.modelIds().size()
                     || !jsonText(value.get("catalog_fingerprint"))
-                    || !catalogFingerprint.equals(value.get("catalog_fingerprint").textValue())
+                    || !selection.catalogFingerprint().equals(value.get("catalog_fingerprint").textValue())
                     || !value.path("attempt").isInt() || value.path("attempt").asInt() < 1
                     || value.path("attempt").asInt() > 2 || !value.has("next_model_index")) {
                 throw generationFailure(502, "INVALID_GENERATION_RESPONSE", null);
             }
             JsonNode next = value.get("next_model_index");
-            if (!next.isNull() && (!index(next) || next.intValue() != value.path("model_index").intValue() + 1)) {
+            if (!next.isNull() && (!index(next) || next.intValue() >= selection.modelIds().size()
+                    || next.intValue() != value.path("model_index").intValue() + 1)) {
                 throw generationFailure(502, "INVALID_GENERATION_RESPONSE", null);
             }
             return new GenerationResult(value.get("provider").textValue(), value.get("model").textValue(),
                     value.get("response").textValue(), true, value.get("model_index").intValue(),
-                    value.get("attempt").intValue(), next.isNull() ? null : next.intValue(), catalogFingerprint);
+                    value.get("attempt").intValue(), next.isNull() ? null : next.intValue(), selection.catalogFingerprint());
         } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
             throw generationFailure(502, "INVALID_GENERATION_RESPONSE", null);
         } catch (IOException exception) {

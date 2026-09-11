@@ -937,7 +937,7 @@ public class AdminExcelSeedService {
                     }
                 }
                 if (work == null) {
-                    if (job != null) job.errors.add("sources row " + r.get("_row") + ": DOI not resolvable: " + doi);
+                    if (job != null) job.failed("sources row " + r.get("_row") + ": DOI not resolvable: " + doi, 1);
                     continue;
                 }
                 byte[] pdf = null;

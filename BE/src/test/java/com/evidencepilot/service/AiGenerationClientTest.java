@@ -177,6 +177,17 @@ class AiGenerationClientTest {
     }
 
     @Test
+    void responseIndexMustStayInsideSelectedChain() {
+        var selected = new AiModelClient.GenerationSelection(
+                2, "remote", List.of("model-1"), CATALOG, "c".repeat(64));
+        response = request -> output(1, 1, null, "valid");
+        assertThatThrownBy(() -> client.generateValidated(
+                selected, "system", "prompt", null, 300_000, generated -> generated.response()))
+                .hasMessageContaining("INVALID_GENERATION_RESPONSE");
+        assertThat(requests).hasSize(1);
+    }
+
+    @Test
     void disconnectedTransportIsNotRetried() {
         server.removeContext("/ai/generate");
         server.createContext("/ai/generate", exchange -> {
@@ -245,7 +256,7 @@ class AiGenerationClientTest {
         long started = System.nanoTime();
         assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(client, "requestGeneration",
                 Map.<String, Object>of("system", "test", "prompt", "test"),
-                started + TimeUnit.MILLISECONDS.toNanos(250), CATALOG))
+                started + TimeUnit.MILLISECONDS.toNanos(250), SELECTION))
                 .hasMessageContaining("GENERATION_DEADLINE_EXCEEDED");
         assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)).isLessThan(2_000);
     }

@@ -64,7 +64,12 @@ function PromptConfigSection({ api }) {
       setDefaults(originals.data || {});
       setEffective(nextEffective);
       setConfig(generation.data);
-      if (!preserveModel) setModelDraft(generation.data?.modelIds || []);
+      if (!preserveModel) {
+        const saved = generation.data?.modelIds || [];
+        const allowed = generation.data?.catalog?.allowedModels || [];
+        setModelDraft(generation.data?.serviceStatus === 'OUT_OF_SYNC' && !saved.every((model) => allowed.includes(model))
+          ? generation.data.catalog.defaultModels : saved);
+      }
       if (!dirtyRef.current) openEffective(nextEffective, keyRef.current);
     } catch (error) {
       if (!signal?.aborted) setErr(errorMessage(error));
@@ -85,6 +90,7 @@ function PromptConfigSection({ api }) {
     setPending((current) => current === 'validate' || current === 'trial' ? '' : current);
     setValidation(null);
     setTrial(null);
+    setStatus('');
   };
 
   const changeKey = (nextKey) => {
@@ -92,6 +98,7 @@ function PromptConfigSection({ api }) {
     if (dirty && !window.confirm(t('admin.aiDiscardDraft'))) return;
     keyRef.current = nextKey;
     setKey(nextKey);
+    invalidateChecks();
     openEffective(effective, nextKey);
   };
 
@@ -138,7 +145,7 @@ function PromptConfigSection({ api }) {
     try {
       const response = await api.post(`/api/admin/prompts/${id}/validate`);
       if (seq === validationSeq.current) {
-        setValidation(response.data);
+        setValidation({ ...response.data, templateId: id });
         setStatus(response.data.valid ? t('admin.promptValid') : (response.data.errors || []).join('; '));
       }
     } catch (error) { if (seq === validationSeq.current) setErr(errorMessage(error)); }
@@ -159,7 +166,7 @@ function PromptConfigSection({ api }) {
         catalog_fingerprint: config.catalog.catalogFingerprint,
       }, { timeout: 70000 });
       if (seq === trialSeq.current) {
-        setTrial(response.data);
+        setTrial({ ...response.data, templateId: openedId });
         setStatus(response.data.expectationMatched ? t('admin.aiTrialMatched') : t('admin.aiTrialMismatch'));
       }
     } catch (error) { if (seq === trialSeq.current) setErr(errorMessage(error)); }
@@ -171,7 +178,7 @@ function PromptConfigSection({ api }) {
       const next = [...current]; next[index] = value;
       return next.filter((model, position) => position === 0 || model);
     });
-    trialSeq.current += 1; setTrial(null);
+    trialSeq.current += 1; setTrial(null); setStatus('');
   };
 
   const showConfirm = (value, event) => {
@@ -184,7 +191,7 @@ function PromptConfigSection({ api }) {
   };
 
   const applyModel = async () => {
-    setPending('model'); setErr('');
+    invalidateChecks(); setPending('model'); setErr('');
     try {
       await api.put('/api/admin/ai/configuration', {
         expectedRevision: config.revision,
@@ -201,14 +208,14 @@ function PromptConfigSection({ api }) {
 
   const applyPrompt = async () => {
     const current = effective.find((value) => value.template_key === key);
-    setPending('prompt'); setErr('');
+    invalidateChecks(); setPending('prompt'); setErr('');
     try {
       await api.post(`/api/admin/prompts/${confirm.prompt.id}/activate`, {
         expectedActiveFingerprint: current.fingerprint,
         expectedGenerationFingerprint: config.fingerprint,
       });
       closeConfirm(); setStatus(t('admin.promptActivated'));
-      await fetchAll(undefined);
+      await fetchAll(undefined, true);
     } catch (error) {
       setErr(errorMessage(error)); closeConfirm();
       if (error.response?.status === 409) await fetchAll(undefined, true);
@@ -231,7 +238,11 @@ function PromptConfigSection({ api }) {
   const currentPrompt = effective.find((value) => value.template_key === key);
   const versions = items.filter((item) => item.template_key === key);
   const catalog = config?.catalog;
-  const modelChanged = config && JSON.stringify(modelDraft) !== JSON.stringify(config.modelIds || []);
+  const modelChanged = config && (config.serviceStatus === 'OUT_OF_SYNC'
+    || JSON.stringify(modelDraft) !== JSON.stringify(config.modelIds || []));
+  const trialMatchesConfirm = trial && confirm?.prompt
+    && trial.templateId === confirm.prompt.id
+    && trial.generationFingerprint === config?.fingerprint;
   const promptCount = codePoints(form.system_text);
 
   return (
@@ -281,14 +292,14 @@ function PromptConfigSection({ api }) {
             <h2 className="font-bold">{t('admin.aiValidateAndTrial')}</h2>
             <div className="grid sm:grid-cols-2 gap-3"><label className="text-xs font-semibold">{t('admin.aiTrialCase')}<select value={trialCase} onChange={(event) => { setTrialCase(event.target.value); invalidateChecks(); }} className="mt-1 w-full px-3 py-2 border border-(--border) rounded-xl bg-(--surface)">{CASES.map((value) => <option key={value} value={value}>{t(`admin.aiCase${value}`)}</option>)}</select></label><label className="flex items-end gap-2 pb-2 text-xs"><input type="checkbox" checked={trialChain} onChange={(event) => { setTrialChain(event.target.checked); invalidateChecks(); }} />{t('admin.aiTrialWholeChain')}</label></div>
             <div className="flex flex-wrap gap-2"><button type="button" disabled={!openedId || pending === 'validate'} onClick={() => validate()} className="px-3 py-2 text-xs font-bold border border-(--border) rounded-xl disabled:opacity-40">{t('admin.promptValidate')}</button><button type="button" disabled={editorMode === 'draft' || !catalog || !modelDraft[0] || pending === 'trial'} onClick={runTrial} className="px-3 py-2 text-xs font-bold bg-[#0c162e] text-white rounded-xl disabled:opacity-40">{pending === 'trial' ? t('admin.working') : t('admin.aiRunTrial')}</button>{trial && <button type="button" onClick={downloadTrial} className="px-3 py-2 text-xs font-bold border border-(--border) rounded-xl">{t('admin.aiDownloadTrial')}</button>}</div>
-            {validation && <p className="text-xs">{validation.valid ? t('admin.promptValid') : validation.errors.join('; ')}</p>}
+            {validation?.templateId === openedId && <p className="text-xs">{validation.valid ? t('admin.promptValid') : validation.errors.join('; ')}</p>}
             {trial && <div className="rounded-xl bg-(--surface-secondary) p-3 text-xs space-y-1"><p><b>{t('admin.aiExpectedActual')}:</b> {trial.caseId} · {trial.expectationMatched ? t('admin.aiMatched') : t('admin.aiMismatch')}</p><p><b>{t('admin.aiActualModel')}:</b> {trial.model}</p><p><b>{t('admin.aiDuration')}:</b> {trial.durationMs} ms</p><p className="font-mono break-all">{trial.promptFingerprint} · {trial.generationFingerprint}</p></div>}
           </section>
         </section>
       </div>
 
       <Modal open={Boolean(confirm)} onClose={closeConfirm} title={t('admin.aiConfirmApply')} closeLabel={t('close')}>
-        {confirm?.type === 'model' ? <div className="space-y-4 text-sm"><p>{t('admin.aiModelScope')}</p><p className="font-mono">{(config?.modelIds || []).join(' → ')}<br />↓<br />{modelDraft.join(' → ')}</p><button type="button" disabled={pending === 'model'} onClick={applyModel} className="w-full px-4 py-2 bg-[#0c162e] text-white rounded-xl font-bold">{t('admin.aiApplyModel')}</button></div> : confirm?.prompt && <div className="space-y-4 text-sm"><p>{t('admin.aiPromptApplySummary', { before: currentPrompt?.version, after: confirm.prompt.version })}</p>{!trial && <p className="text-amber-700">{t('admin.aiNotTrialed')}</p>}<button type="button" disabled={pending === 'prompt'} onClick={applyPrompt} className="w-full px-4 py-2 bg-[#0c162e] text-white rounded-xl font-bold">{t('admin.activate')}</button></div>}
+        {confirm?.type === 'model' ? <div className="space-y-4 text-sm"><p>{t('admin.aiModelScope')}</p><p className="font-mono">{(config?.modelIds || []).join(' → ')}<br />↓<br />{modelDraft.join(' → ')}</p><button type="button" disabled={pending === 'model'} onClick={applyModel} className="w-full px-4 py-2 bg-[#0c162e] text-white rounded-xl font-bold">{t('admin.aiApplyModel')}</button></div> : confirm?.prompt && <div className="space-y-4 text-sm"><p>{t('admin.aiPromptApplySummary', { before: currentPrompt?.version, after: confirm.prompt.version })}</p>{!trialMatchesConfirm && <p className="text-amber-700">{t('admin.aiNotTrialed')}</p>}<button type="button" disabled={pending === 'prompt'} onClick={applyPrompt} className="w-full px-4 py-2 bg-[#0c162e] text-white rounded-xl font-bold">{t('admin.activate')}</button></div>}
       </Modal>
     </div>
   );

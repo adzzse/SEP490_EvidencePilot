@@ -9,12 +9,7 @@ COPY pom.xml .
 RUN mvn dependency:go-offline -B --no-transfer-progress
 
 COPY src ./src
-ARG MAVEN_SKIP_TESTS=false
-RUN if [ "$MAVEN_SKIP_TESTS" = "true" ]; then \
-    mvn package -DskipTests -B --no-transfer-progress; \
-    else \
-    mvn package -B --no-transfer-progress; \
-    fi
+RUN mvn package -B --no-transfer-progress
 
 # ────────────────────────────────────────────────────────────────
 # Stage 2: Runtime
