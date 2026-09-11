@@ -147,7 +147,7 @@ public class DocumentObjectStorage {
                                 || character >= 'a' && character <= 'f')) {
             throw new IllegalArgumentException("Extraction cache requires a lowercase SHA-256 hash");
         }
-        return "documents/processed/cache/v2/sha256/" + fileHashSha256
+        return "documents/processed/cache/v3/sha256/" + fileHashSha256
                 + (enrichHierarchy ? "/extraction.zip" : "/source-extraction.zip");
     }
 
