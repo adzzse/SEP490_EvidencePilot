@@ -67,10 +67,10 @@ public interface AiModelClient {
             }
             boolean knownType = switch (type) {
                 case "heading", "paragraph", "list", "table", "figure_caption",
-                        "equation", "code", "reference" -> true;
+                        "image", "equation", "code", "reference" -> true;
                 default -> false;
             };
-            if (!knownType) {
+            if (!knownType || "image".equals(type) && !ExtractionBundle.validImagePath(text)) {
                 return false;
             }
             return "heading".equals(type)
@@ -91,7 +91,10 @@ public interface AiModelClient {
                     && blocks.stream().allMatch(block -> block != null && block.valid())
                     && images != null
                     && images.stream().allMatch(ExtractionBundle::validImagePath)
-                    && images.stream().distinct().count() == images.size();
+                    && images.stream().distinct().count() == images.size()
+                    && blocks.stream()
+                            .filter(block -> "image".equals(block.type()))
+                            .allMatch(block -> images.contains(block.text()));
         }
     }
 

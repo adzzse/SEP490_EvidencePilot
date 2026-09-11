@@ -95,7 +95,9 @@ class AiModelClientTest {
 
         assertThat(bundle.document().markdown()).isEqualTo("# Extracted\n\n![](images/figure.jpg)");
         assertThat(bundle.document().blocks()).extracting(AiModelClient.ExtractionBlock::type)
-                .containsExactly("heading", "paragraph");
+                .containsExactly("heading", "paragraph", "image");
+        assertThat(bundle.document().blocks().get(2).text())
+                .isEqualTo("images/figure.jpg");
         try (InputStream image = bundle.openImage("images/figure.jpg")) {
             assertThat(image.readAllBytes()).containsExactly(1, 2, 3);
         }
@@ -162,6 +164,17 @@ class AiModelClientTest {
                 .hasMessageContaining("not configured");
     }
 
+    @Test
+    void imageBlockMustReferenceAListedManifestImage() {
+        var document = new AiModelClient.ExtractedDocument(
+                "# Paper",
+                List.of(new AiModelClient.ExtractionBlock(
+                        "image", "images/figure.jpg", null, null)),
+                List.of());
+
+        assertThat(document.valid()).isFalse();
+    }
+
     private static byte[] extractionZip() throws IOException {
         var output = new ByteArrayOutputStream();
         try (var zip = new ZipOutputStream(output, StandardCharsets.UTF_8)) {
@@ -169,7 +182,9 @@ class AiModelClientTest {
             zip.write("""
                     {"blocks":[
                       {"type":"heading","text":"Extracted","level":1,"caption":null},
-                      {"type":"paragraph","text":"Body","level":null,"caption":null}
+                      {"type":"paragraph","text":"Body","level":null,"caption":null},
+                      {"type":"image","text":"images/figure.jpg","level":null,
+                       "caption":"Figure 3. Architecture"}
                     ],"images":["images/figure.jpg"]}
                     """.getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();

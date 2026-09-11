@@ -216,6 +216,44 @@ class PaperProcessingServiceImplTest {
     }
 
     @Test
+    void preservesImagePositionInExtractedSection() {
+        UUID documentId = UUID.randomUUID();
+        Document document = new Document();
+        document.setId(documentId);
+        DocumentText text = new DocumentText();
+        text.setDocument(document);
+        text.setExtractedText("# Paper title\n\n## Introduction\n\nBody.");
+        document.setDocumentText(text);
+        List<AiModelClient.ExtractionBlock> blocks = List.of(
+                heading("Paper title", 1),
+                heading("Introduction", 2),
+                para("Before figure."),
+                new AiModelClient.ExtractionBlock(
+                        "image", "images/figure.jpg", null, "Figure 3. Architecture"),
+                para("After figure."));
+
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId))
+                .thenReturn(List.of());
+        List<PaperSection> saved = new ArrayList<>();
+        when(paperSectionRepository.saveAll(anyList())).thenAnswer(call -> {
+            List<PaperSection> sections = call.getArgument(0);
+            saved.addAll(sections);
+            return sections;
+        });
+
+        service().detectAndPersistSections(documentId, blocks);
+
+        assertThat(saved).extracting(PaperSection::getSectionTitle)
+                .containsExactly("Paper Info", "Introduction");
+        assertThat(saved.get(1).getContentTex()).isEqualTo(
+                "Before figure.\n\n"
+                        + "\\includegraphics{images/figure.jpg}\n\n"
+                        + "Figure 3. Architecture\n\n"
+                        + "After figure.");
+    }
+
+    @Test
     void promotesInlineAbstractAndPreservesNumberedSections() {
         UUID documentId = UUID.randomUUID();
         Document document = new Document();

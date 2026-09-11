@@ -5,6 +5,7 @@ import com.evidencepilot.dto.ExtractionResultPayload;
 import com.evidencepilot.dto.SparseVector;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentChunk;
+import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
@@ -439,6 +440,55 @@ class DocumentExtractionWorkerTest {
     }
 
     @Test
+    void processPaperPreservesImageInItsSectionAndEmbedsOnlyCaption() throws IOException {
+        UUID documentId = UUID.randomUUID();
+        Document document = projectSourceDocument(documentId);
+        document.setDocType(DocumentType.PAPER);
+        document.setOriginalFilename("paper.pdf");
+        var text = new com.evidencepilot.model.DocumentText();
+        text.setDocument(document);
+        text.setExtractedText("Body.");
+        document.setDocumentText(text);
+        TestBundle archive = paperBundleWithImage();
+        String checkpointKey = "documents/processed/" + documentId + "/extraction.json";
+        String storedMarkdown = "## Introduction\n\nBody.\n\n"
+                + "\\includegraphics{images/figure.jpg}";
+        String chunkText = "## Introduction\n\nBody.\n\nFigure 3. Architecture";
+        DocumentChunk savedChunk = chunk(document, chunkText);
+        AtomicReference<List<PaperSection>> sectionResult = new AtomicReference<>();
+
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(documentObjectStorage.exists(checkpointKey)).thenReturn(false);
+        when(aiModelClient.extractDocument(eq("paper.pdf"), anyString(), eq(true)))
+                .thenReturn(archive.bundle());
+        when(aiModelClient.generateEmbeddings(List.of(chunkText)))
+                .thenReturn(List.of(Collections.nCopies(768, 0.1f)));
+        when(sparseVectorGenerator.generate(chunkText))
+                .thenReturn(new SparseVector(List.of(), List.of()));
+        when(persistence.saveExtraction(
+                documentId, "mineru", storedMarkdown, List.of(chunkText)))
+                .thenReturn(List.of(savedChunk));
+        doAnswer(call -> {
+            List<AiModelClient.ExtractionBlock> blocks = call.getArgument(1);
+            sectionResult.set(new com.evidencepilot.service.impl.BlockTreeIngestor(
+                    new ObjectMapper()).ingest(document, blocks).sections());
+            return List.of();
+        }).when(paperProcessingService).detectAndPersistSections(eq(documentId), any());
+
+        worker().process(documentId);
+
+        assertThat(sectionResult.get()).singleElement().satisfies(section ->
+                assertThat(section.getContentTex()).isEqualTo(
+                        "Body.\n\n\\includegraphics{images/figure.jpg}\n\n"
+                                + "Figure 3. Architecture"));
+        verify(mediaAssetService).importExtractedImage(
+                eq(document), eq("images/figure.jpg"), any(), eq(3L), eq("image/jpeg"));
+        verify(persistence).saveExtraction(
+                documentId, "mineru", storedMarkdown, List.of(chunkText));
+        assertThat(Files.exists(archive.path())).isFalse();
+    }
+
+    @Test
     void processLatexPaperPersistsSectionsWithoutAiExtraction() {
         UUID documentId = UUID.randomUUID();
         Document document = document(documentId);
@@ -634,6 +684,31 @@ class DocumentExtractionWorkerTest {
             zip.closeEntry();
             zip.putNextEntry(new ZipEntry("document.md"));
             zip.write(markdown.getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("images/figure.jpg"));
+            zip.write(new byte[] {1, 2, 3});
+            zip.closeEntry();
+        }
+        return new TestBundle(archive, ExtractionBundle.open(archive));
+    }
+
+    private static TestBundle paperBundleWithImage() throws IOException {
+        Path archive = Files.createTempFile("worker-paper-image-", ".zip");
+        try (ZipOutputStream zip = new ZipOutputStream(
+                Files.newOutputStream(archive), StandardCharsets.UTF_8)) {
+            zip.putNextEntry(new ZipEntry("extraction.json"));
+            zip.write("""
+                    {"blocks":[
+                      {"type":"heading","text":"Introduction","level":2,"caption":null},
+                      {"type":"paragraph","text":"Body.","level":null,"caption":null},
+                      {"type":"image","text":"images/figure.jpg","level":null,
+                       "caption":"Figure 3. Architecture"}
+                    ],"images":["images/figure.jpg"]}
+                    """.getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("document.md"));
+            zip.write("## Introduction\n\nBody.\n\n![](images/figure.jpg)"
+                    .getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
             zip.putNextEntry(new ZipEntry("images/figure.jpg"));
             zip.write(new byte[] {1, 2, 3});

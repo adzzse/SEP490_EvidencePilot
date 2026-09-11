@@ -6,6 +6,7 @@ import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.UserRepository;
+import com.evidencepilot.service.impl.BlockTreeIngestor;
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.impl.EvidenceTraceService;
 import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
@@ -51,7 +52,7 @@ import static org.mockito.Mockito.mock;
         "spring.profiles.active=test", "app.dev-bypass.enabled=true"}, showSql = false)
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Import({AdminExcelSeedService.class, DevBypassPolicy.class, PaperProcessingServiceImpl.class,
+@Import({AdminExcelSeedService.class, DevBypassPolicy.class, PaperProcessingServiceImpl.class, BlockTreeIngestor.class,
         CurrentUserServiceImpl.class, PaperStandardService.class, AdminSeedMySqlTest.Config.class})
 class AdminSeedMySqlTest {
     @Container static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46");
@@ -139,12 +140,11 @@ class AdminSeedMySqlTest {
         assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal()).isSameAs(actor);
     }
 
-    @Test void generatedSectionCollisionIsReportedWithoutOverwrite() throws Exception {
+    @Test void legacySectionsSheetIsIgnoredWithoutOverwrite() throws Exception {
         String title = alias();
         var job = run(bundle(title, "ACM", true));
-        assertThat(job.getStatus()).isEqualTo("PARTIAL");
-        assertThat(job.getFailedRows()).isOne();
-        assertThat(job.getErrors()).anyMatch(error -> error.contains("section order conflicts"));
+        assertThat(job.getStatus()).isEqualTo("DONE");
+        assertThat(job.getResult().get("sections")).isZero();
         assertThat(count("SELECT COUNT(*) FROM paper_sections s JOIN documents d ON d.id=s.document_id JOIN projects p ON p.id=d.project_id WHERE p.title=? AND s.content_tex='MUST NOT OVERWRITE'", title)).isZero();
     }
 

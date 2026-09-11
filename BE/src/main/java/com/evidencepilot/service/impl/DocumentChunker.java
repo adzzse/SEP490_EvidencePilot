@@ -81,6 +81,9 @@ final class DocumentChunker {
     }
 
     private static String render(AiModelClient.ExtractionBlock block) {
+        if ("image".equals(block.type())) {
+            return block.caption() == null ? "" : block.caption().strip();
+        }
         String text = block.text().strip();
         if (block.caption() == null || block.caption().isBlank()) {
             return text;

@@ -221,6 +221,11 @@ public class BlockTreeIngestor {
             if (block == null || block.text() == null || block.text().isBlank()) {
                 continue;
             }
+            if ("image".equals(block.type())) {
+                frontMatter = frontMatter(seeds, frontMatter, from, to);
+                frontMatter.append(renderContent(block));
+                continue;
+            }
             if ("heading".equals(block.type()) && block.level() != null && block.level() == 1) {
                 if (!titleSet) {
                     metadata.setTitle(truncate(block.text().strip(), 1000));
@@ -352,9 +357,20 @@ public class BlockTreeIngestor {
                     current = new Seed("Full Text", i, i + 1);
                     currentIsReferences = false;
                 }
-                current.append(block.text().strip());
+                current.append(renderContent(block));
             }
         }
+    }
+
+    private static String renderContent(AiModelClient.ExtractionBlock block) {
+        String text = block.text().strip();
+        if (!"image".equals(block.type())) {
+            return text;
+        }
+        String image = "\\includegraphics{" + text + "}";
+        return block.caption() == null || block.caption().isBlank()
+                ? image
+                : image + "\n\n" + block.caption().strip();
     }
 
     /** Deeper level, or dotted number (3.1 under 3): stays inside the current section. */

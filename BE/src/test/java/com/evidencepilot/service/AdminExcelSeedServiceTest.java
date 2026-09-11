@@ -222,6 +222,17 @@ class AdminExcelSeedServiceTest {
     }
 
     @Test
+    void submittedReviewStatusIsRejectedAtPreview() {
+        var sheets = Map.of("projects", List.of(row(
+                "project_title", "Review fixture",
+                "status", "SUBMITTED_FOR_REVIEW",
+                "_row", "2")));
+
+        assertThat(service().validate(sheets)).containsExactly(
+                "projects row 2: read-only/review status not allowed on seed: SUBMITTED_FOR_REVIEW");
+    }
+
+    @Test
     void unknownStandardIsRejected() {
         var sheets = Map.of(
                 "projects", List.of(row("project_title", "P", "_row", "2")),
