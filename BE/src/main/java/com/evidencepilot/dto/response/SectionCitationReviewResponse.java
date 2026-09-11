@@ -18,14 +18,28 @@ public record SectionCitationReviewResponse(
         LocalDateTime reviewedAt,
         String provider,
         String model,
+        String generationFingerprint,
+        List<String> modelsUsed,
         boolean complete,
         String summary,
         List<Finding> findings,
         List<String> limitations
 ) {
     public SectionCitationReviewResponse {
+        modelsUsed = modelsUsed == null
+                ? model == null || model.isBlank() ? List.of() : List.of(model)
+                : List.copyOf(modelsUsed);
         findings = findings == null ? List.of() : List.copyOf(findings);
         limitations = limitations == null ? List.of() : List.copyOf(limitations);
+    }
+
+    public SectionCitationReviewResponse(String reviewVersion, String ruleCatalogVersion, UUID sectionId,
+            Integer sectionVersion, String reviewInputFingerprint, String sectionContentFingerprint,
+            LocalDateTime reviewedAt, String provider, String model, boolean complete, String summary,
+            List<Finding> findings, List<String> limitations) {
+        this(reviewVersion, ruleCatalogVersion, sectionId, sectionVersion, reviewInputFingerprint,
+                sectionContentFingerprint, reviewedAt, provider, model, null, null, complete, summary,
+                findings, limitations);
     }
 
     public enum FindingType {

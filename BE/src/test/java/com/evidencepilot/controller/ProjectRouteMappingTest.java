@@ -200,7 +200,8 @@ class ProjectRouteMappingTest {
                 "POST /api/users/email-change/confirm",
                 "DELETE /api/users/email-change/cancel",
                 "POST /api/users/avatar",
-                "GET /api/users/me/activity"));
+                "GET /api/users/me/activity",
+                "GET /api/papers/{id}/metadata"));
     }
 
     @Test

@@ -30,9 +30,13 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class AiGenerationClientTest {
+    private static final String CATALOG = "a".repeat(64);
+    private static final AiModelClient.GenerationSelection SELECTION = new AiModelClient.GenerationSelection(
+            1, "remote", List.of("model-0", "model-1", "model-2"), CATALOG, "b".repeat(64));
     private final ObjectMapper mapper = new ObjectMapper();
     private final List<JsonNode> requests = java.util.Collections.synchronizedList(new ArrayList<>());
     private final AiModelCallPolicy policy = mock(AiModelCallPolicy.class);
+    private final AiGenerationConfigService generationConfig = mock(AiGenerationConfigService.class);
     private final java.util.concurrent.ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private HttpServer server;
     private AiModelClientImpl client;
@@ -42,6 +46,7 @@ class AiGenerationClientTest {
     @BeforeEach
     void start() throws Exception {
         when(policy.tryAcquireLease(anyInt(), anyLong())).thenReturn("lease");
+        when(generationConfig.current()).thenReturn(java.util.Optional.of(SELECTION));
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.setExecutor(executor);
         server.createContext("/ai/generate", exchange -> {
@@ -57,7 +62,7 @@ class AiGenerationClientTest {
         server.start();
         client = new AiModelClientImpl(RestClient.create(), new com.evidencepilot.client.ai.config.AiClientConfig().aiGenerationClient(),
                 "http://127.0.0.1:" + server.getAddress().getPort(), mapper, 3,
-                new AiModelCallGate(new Semaphore(4), policy), "test-key");
+                new AiModelCallGate(new Semaphore(4), policy), generationConfig, "test-key");
     }
 
     @AfterEach
@@ -69,7 +74,8 @@ class AiGenerationClientTest {
     private String output(int model, int attempt, Integer next, String text) {
         try {
             var body = mapper.createObjectNode().put("provider", "remote").put("model", "model-" + model)
-                    .put("response", text).put("done", true).put("model_index", model).put("attempt", attempt);
+                    .put("response", text).put("done", true).put("model_index", model).put("attempt", attempt)
+                    .put("catalog_fingerprint", CATALOG);
             if (next == null) body.putNull("next_model_index"); else body.put("next_model_index", next);
             return mapper.writeValueAsString(body);
         } catch (Exception exception) { throw new AssertionError(exception); }
@@ -92,9 +98,28 @@ class AiGenerationClientTest {
         assertThat(requests.get(1).path("validation_feedback").asText()).doesNotContain("private output");
         assertThat(requests.get(1).path("prompt").asText()).isEqualTo("prompt");
         assertThat(requests.get(1).at("/response_format/json_schema/schema/type").asText()).isEqualTo("object");
+        assertThat(requests.get(1).path("model_ids").toString()).isEqualTo("[\"model-0\",\"model-1\",\"model-2\"]");
+        assertThat(requests.get(1).path("catalog_fingerprint").asText()).isEqualTo(CATALOG);
         verify(policy).recordFinalOutcome(false);
         verify(policy, never()).recordFinalOutcome(true);
         verify(policy).releaseLease("lease");
+    }
+
+    @Test
+    void explicitSelectionIsUnchangedAcrossBusinessRepair() {
+        var selected = new AiModelClient.GenerationSelection(
+                2, "remote", List.of("model-1", "model-0"), CATALOG, "c".repeat(64));
+        response = request -> requests.size() == 1
+                ? output(0, 1, 1, "invalid") : output(0, 2, 1, "valid");
+        String result = client.generateValidated(selected, "system", "prompt", null, 300_000, generated -> {
+            if (generated.response().equals("invalid")) throw new IllegalArgumentException("invalid");
+            return generated.response();
+        });
+        assertThat(result).isEqualTo("valid");
+        assertThat(requests).hasSize(2).allSatisfy(request -> {
+            assertThat(request.path("model_ids").toString()).isEqualTo("[\"model-1\",\"model-0\"]");
+            assertThat(request.path("catalog_fingerprint").asText()).isEqualTo(CATALOG);
+        });
     }
 
     @Test
@@ -128,12 +153,13 @@ class AiGenerationClientTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"done", "model_index", "attempt", "next_model_index"})
+    @ValueSource(strings = {"done", "model_index", "attempt", "next_model_index", "catalog_fingerprint"})
     void missingMetadataFailsWithoutDomainValidation(String field) {
         response = request -> {
             var body = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.valueToTree(
                     Map.of("provider", "remote", "model", "model-0", "response", "{}", "done", true,
-                            "model_index", 0, "attempt", 1, "next_model_index", 1));
+                            "model_index", 0, "attempt", 1, "next_model_index", 1,
+                            "catalog_fingerprint", CATALOG));
             body.remove(field);
             return body.toString();
         };
@@ -218,7 +244,8 @@ class AiGenerationClientTest {
         });
         long started = System.nanoTime();
         assertThatThrownBy(() -> ReflectionTestUtils.invokeMethod(client, "requestGeneration",
-                Map.of("system", "test", "prompt", "test"), started + TimeUnit.MILLISECONDS.toNanos(250)))
+                Map.<String, Object>of("system", "test", "prompt", "test"),
+                started + TimeUnit.MILLISECONDS.toNanos(250), CATALOG))
                 .hasMessageContaining("GENERATION_DEADLINE_EXCEEDED");
         assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)).isLessThan(2_000);
     }

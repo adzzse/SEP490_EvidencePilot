@@ -73,6 +73,7 @@ class AdminSeedExportServiceTest {
                 mock(com.evidencepilot.repository.DocumentRepository.class),
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
+                mock(com.evidencepilot.repository.PaperSectionRepository.class),
                 mock(DocumentService.class),
                 mock(MediaAssetService.class),
                 mock(PaperProcessingService.class),
@@ -81,7 +82,10 @@ class AdminSeedExportServiceTest {
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 mock(com.evidencepilot.service.impl.ProjectCollectionService.class),
-                mock(com.fasterxml.jackson.databind.ObjectMapper.class));
+                mock(com.fasterxml.jackson.databind.ObjectMapper.class),
+                new DevBypassPolicy(true, new org.springframework.mock.env.MockEnvironment()
+                        .withProperty("spring.profiles.active", "test")),
+                mock(org.springframework.transaction.PlatformTransactionManager.class));
     }
 
     @Test

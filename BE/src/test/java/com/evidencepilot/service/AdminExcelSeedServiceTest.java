@@ -739,8 +739,8 @@ class AdminExcelSeedServiceTest {
                 List.of(doiRow("P", "10.1234/bogus-doi-xyz", "2")), job, Map.of("P", project));
         assertThat(n).isZero();
         assertThat(job.getErrors()).anyMatch(m -> m.contains("DOI not resolvable"));
-        assertThat(job.getFailedRows()).isEqualTo(1);
-        assertThat(job.getProcessed()).isEqualTo(1);
+        assertThat(job.getFailedRows()).isZero();
+        assertThat(job.getProcessed()).isZero();
         verify(t.documents(), never()).save(any(com.evidencepilot.model.Document.class));
     }
 
@@ -761,7 +761,7 @@ class AdminExcelSeedServiceTest {
                 });
         var job = new AdminExcelSeedService.SeedJob();
         int n = t.service().commitSources(
-                List.of(doiRow("P", "10.1234/no-oa-pdf", "2")), job);
+                List.of(doiRow("P", "10.1234/no-oa-pdf", "2")), job, Map.of("P", project));
         assertThat(n).isOne();
         assertThat(job.getErrors()).isEmpty();
         var captor = org.mockito.ArgumentCaptor.forClass(com.evidencepilot.model.Document.class);
@@ -838,14 +838,14 @@ class AdminExcelSeedServiceTest {
                         "title", "Attention Is All You Need",
                         "authors", "Vaswani, A.", "publication_year", "2017",
                         "publisher", "NeurIPS", "cited_by_count", "102400",
-                        "abstract_or_text", "Transformer.", "_row", "2")), job);
+                        "abstract_or_text", "Transformer.", "_row", "2")), job, Map.of("P", project));
         assertThat(n).isOne();
         assertThat(job.getErrors()).isEmpty();
         verify(t.openAlex(), never()).fetchWork(anyString());
     }
 
     @Test
-    void commitSourcesSkipsDirectLookupForDataCiteArxivDoi() {
+    void commitSourcesUsesTitleFallbackForDataCiteArxivDoi() {
         var t = doiService();
         var project = doiProject("P");
         var instructor = doiInstructor();
@@ -901,7 +901,7 @@ class AdminExcelSeedServiceTest {
         var job = new AdminExcelSeedService.SeedJob();
         int n = t.service().commitSources(List.of(
                 doiRow("P1", "10.1234/shared-doi", "2"),
-                doiRow("P2", "10.1234/shared-doi", "3")), job);
+                doiRow("P2", "10.1234/shared-doi", "3")), job, Map.of("P1", p1, "P2", p2));
         assertThat(n).isEqualTo(2);
         assertThat(job.getSuccessfulRows()).isEqualTo(2);
         assertThat(job.getProcessed()).isEqualTo(2);
@@ -968,6 +968,7 @@ class AdminExcelSeedServiceTest {
                 documents,
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
+                mock(com.evidencepilot.repository.PaperSectionRepository.class),
                 mock(DocumentService.class),
                 mock(MediaAssetService.class),
                 mock(PaperProcessingService.class),
@@ -976,7 +977,8 @@ class AdminExcelSeedServiceTest {
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 collections,
-                mock(com.fasterxml.jackson.databind.ObjectMapper.class));
+                mock(com.fasterxml.jackson.databind.ObjectMapper.class), localPolicy(),
+                mock(org.springframework.transaction.PlatformTransactionManager.class));
         var owner = doiInstructor();
         when(users.findByEmail("prof@example.test"))
                 .thenReturn(java.util.Optional.of(owner));
@@ -1009,6 +1011,7 @@ class AdminExcelSeedServiceTest {
                 mock(com.evidencepilot.repository.DocumentRepository.class),
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
+                mock(com.evidencepilot.repository.PaperSectionRepository.class),
                 mock(DocumentService.class),
                 mock(MediaAssetService.class),
                 mock(PaperProcessingService.class),
@@ -1017,7 +1020,8 @@ class AdminExcelSeedServiceTest {
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 collections,
-                mock(com.fasterxml.jackson.databind.ObjectMapper.class));
+                mock(com.fasterxml.jackson.databind.ObjectMapper.class), localPolicy(),
+                mock(org.springframework.transaction.PlatformTransactionManager.class));
         when(users.findByEmail(anyString())).thenReturn(java.util.Optional.empty());
         var job = new AdminExcelSeedService.SeedJob();
         int n = service.commitCollections(

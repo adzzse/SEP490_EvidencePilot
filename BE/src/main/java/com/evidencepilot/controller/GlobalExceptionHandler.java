@@ -2,6 +2,7 @@ package com.evidencepilot.controller;
 
 import com.evidencepilot.client.openalex.OpenAlexClient;
 import com.evidencepilot.service.AiModelClient;
+import com.evidencepilot.service.AiGenerationConfigService;
 import com.evidencepilot.dto.response.ApiErrorResponse;
 import com.evidencepilot.exception.AiValidationException;
 import com.evidencepilot.exception.ResourceNotFoundException;
@@ -88,6 +89,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(response.getStatusCode())
                 .header("Retry-After", String.valueOf(retryMillis / 1000 + (retryMillis % 1000 == 0 ? 0 : 1)))
                 .body(response.getBody());
+    }
+
+    @ExceptionHandler(AiGenerationConfigService.Conflict.class)
+    public ResponseEntity<ApiErrorResponse> handleAiConfigConflict(
+            AiGenerationConfigService.Conflict exception,
+            HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, exception.getMessage(), request,
+                Map.of("code", exception.getCode()));
     }
 
     @ExceptionHandler(OpenAlexClient.OpenAlexApiException.class)

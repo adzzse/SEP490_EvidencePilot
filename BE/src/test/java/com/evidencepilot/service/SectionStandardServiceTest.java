@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -49,6 +50,11 @@ class SectionStandardServiceTest {
     private CurrentUserService currentUserService;
     @Mock
     private PromptTemplateService prompts;
+    @Mock
+    private AiGenerationConfigService generationConfig;
+
+    private static final AiModelClient.GenerationSelection SELECTION = new AiModelClient.GenerationSelection(
+            1, "provider", List.of("model"), "a".repeat(64), "b".repeat(64));
 
     private SectionStandardService service;
 
@@ -56,18 +62,22 @@ class SectionStandardServiceTest {
     void setUp() {
         org.mockito.Mockito.lenient().when(prompts.resolve("CHECK_STANDARD")).thenReturn(
                 new PromptTemplateService.ResolvedPrompt("CHECK_STANDARD", "code-default", PromptTemplateService.CHECK_STANDARD_DEFAULT));
+        org.mockito.Mockito.lenient().when(aiModelClient.generationSelection()).thenReturn(SELECTION);
+        org.mockito.Mockito.lenient().when(generationConfig.current()).thenReturn(Optional.of(SELECTION));
+        org.mockito.Mockito.lenient().when(generationConfig.isCurrent(SELECTION)).thenReturn(true);
         // The client tests cover continuation; these tests exercise the supplied domain validator.
         org.mockito.Mockito.lenient().doAnswer(invocation -> {
-            AiModelClient.GenerationResult generated = aiModelClient.generateStrict(invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2));
-            java.util.function.Function<AiModelClient.GenerationResult, ?> validator = invocation.getArgument(3);
+            AiModelClient.GenerationResult generated = aiModelClient.generateStrict(invocation.getArgument(1), invocation.getArgument(2), invocation.getArgument(3));
+            java.util.function.Function<AiModelClient.GenerationResult, ?> validator = invocation.getArgument(5);
             try {
                 return validator.apply(generated);
             } catch (IllegalArgumentException invalid) {
                 throw new AiModelClient.AiApiException("/ai/generate", 502,
                         "INVALID_GENERATION_RESPONSE", "INVALID_GENERATION_RESPONSE", null, null);
             }
-        }).when(aiModelClient).generateValidated(anyString(), anyString(),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        }).when(aiModelClient).generateValidated(org.mockito.ArgumentMatchers.any(), anyString(), anyString(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any());
 
         service = new SectionStandardService(
                 aiModelClient,
@@ -75,7 +85,27 @@ class SectionStandardServiceTest {
                 evaluationRepository,
                 currentUserService,
                 new ObjectMapper(),
-                org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class), prompts);
+                org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class), prompts,
+                generationConfig);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"SUPPORTED,MET,We surveyed 120 participants.", "MISSING,NOT_MET,", "UNTRUSTED,NOT_MET,"})
+    void trialUsesTheProductionValidator(String caseId, String verdict, String evidence) {
+        String output = """
+                {"summary":"fixture","limitations":[],"items":[
+                  {"requirement":"State the sample size.","verdict":"%s","evidence":"%s","reason":"fixture","missing":"","suggestion":""}
+                ]}
+                """.formatted(verdict, evidence == null ? "" : evidence);
+        when(aiModelClient.generateStrict(anyString(), anyString(), anyMap())).thenReturn(
+                new AiModelClient.GenerationResult("provider", "model", output));
+
+        var response = service.trial(prompts.resolve("CHECK_STANDARD"), SELECTION, caseId, 60_000);
+
+        assertThat(response.outputValid()).isTrue();
+        assertThat(response.expectationMatched()).isTrue();
+        assertThat(response.generationFingerprint()).isEqualTo(SELECTION.fingerprint());
+        assertThat(response.result().path("items").path(0).path("verdict").asText()).isEqualTo(verdict);
     }
 
     @ParameterizedTest

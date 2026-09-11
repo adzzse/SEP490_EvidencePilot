@@ -382,7 +382,7 @@ class PaperControllerTest {
         user.setId(userId);
         when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(paperSectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
-        when(sectionCitationReviewService.reviewInputFingerprint(section))
+        when(sectionCitationReviewService.prepareReview(section))
                 .thenReturn("fingerprint");
         when(aiEvaluationService.submitSectionCitationReview(
                 projectId, documentId, sectionId, "fingerprint", userId))

@@ -16,6 +16,7 @@ import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ReviewSnapshotRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiModelClient;
+import com.evidencepilot.service.AiGenerationConfigService;
 import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.PaperStandardService;
 import com.evidencepilot.service.PromptTemplateService;
@@ -57,25 +58,57 @@ class SectionCitationReviewServiceTest {
     private final SourceMatchingService sourceMatchingService = mock(SourceMatchingService.class);
     private final AuditService auditService = mock(AuditService.class);
     private final PromptTemplateService prompts = mock(PromptTemplateService.class);
+    private final AiGenerationConfigService generationConfig = mock(AiGenerationConfigService.class);
+    private static final AiModelClient.GenerationSelection SELECTION = new AiModelClient.GenerationSelection(
+            1, "provider", List.of("model"), "a".repeat(64), "b".repeat(64));
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @org.junit.jupiter.api.BeforeEach
     void configureDomainValidation() {
         when(prompts.resolve("CITATION_REVIEW")).thenReturn(new PromptTemplateService.ResolvedPrompt(
                 "CITATION_REVIEW", "code-default", SectionCitationReviewPrompt.SYSTEM));
+        org.mockito.Mockito.lenient().when(aiModelClient.generationSelection()).thenReturn(SELECTION);
+        org.mockito.Mockito.lenient().when(generationConfig.current()).thenReturn(Optional.of(SELECTION));
 
         // The client tests cover continuation; these tests exercise the supplied domain validator.
         org.mockito.Mockito.lenient().doAnswer(invocation -> {
-            AiModelClient.GenerationResult generated = aiModelClient.generateForReview(invocation.getArgument(0), invocation.getArgument(1));
-            java.util.function.Function<AiModelClient.GenerationResult, ?> validator = invocation.getArgument(3);
+            AiModelClient.GenerationResult generated = aiModelClient.generateForReview(invocation.getArgument(1), invocation.getArgument(2));
+            java.util.function.Function<AiModelClient.GenerationResult, ?> validator = invocation.getArgument(5);
             try {
                 return validator.apply(generated);
             } catch (IllegalArgumentException invalid) {
                 throw new AiModelClient.AiApiException("/ai/generate", 502,
                         "INVALID_GENERATION_RESPONSE", "INVALID_GENERATION_RESPONSE", null, null);
             }
-        }).when(aiModelClient).generateValidated(anyString(), anyString(),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        }).when(aiModelClient).generateValidated(org.mockito.ArgumentMatchers.any(), anyString(), anyString(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void syntheticTrialsUseTheProductionCitationValidatorWithoutPersistence() {
+        UUID sectionId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        String missing = findingVerdict(0, "UNSUBSTANTIATED_CLAIM", "No retrieved evidence", "HIGH", "[]");
+        String discrepancy = findingVerdict(0, "SOURCE_DISCREPANCY", "Participant counts differ", "HIGH", """
+                [{"source_id":"00000000-0000-0000-0000-000000000002",\
+                "chunk_id":"00000000-0000-0000-0000-000000000003",\
+                "quote":"The experiment included 80 participants.","relation":"CONTRADICTS"}]
+                """.replace("\n", ""));
+        var outputs = java.util.Map.of(
+                "SUPPORTED", review(sectionId, 0, okVerdict(0)),
+                "MISSING", review(sectionId, 0, missing),
+                "UNTRUSTED", review(sectionId, 0, discrepancy));
+
+        for (var fixture : outputs.entrySet()) {
+            when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
+                    new AiModelClient.GenerationResult("provider", "model", fixture.getValue()));
+            var response = service().trial(prompts.resolve("CITATION_REVIEW"), SELECTION,
+                    fixture.getKey(), 60_000);
+            assertThat(response.outputValid()).isTrue();
+            assertThat(response.expectationMatched()).isTrue();
+            assertThat(response.generationFingerprint()).isEqualTo(SELECTION.fingerprint());
+        }
+        verifyNoInteractions(snapshotRepository, userRepository, auditService);
     }
 
     @Test
@@ -1158,7 +1191,7 @@ class SectionCitationReviewServiceTest {
                 new PaperStandardService(mock(AiModelClient.class), objectMapper),
                 sourceMatchingService,
                 auditService,
-                objectMapper, prompts);
+                objectMapper, prompts, generationConfig);
     }
 
     private static String review(UUID sectionId, int batchIndex, String... verdicts) {

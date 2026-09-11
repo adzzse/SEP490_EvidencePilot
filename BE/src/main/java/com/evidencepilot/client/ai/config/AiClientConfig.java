@@ -10,6 +10,7 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 import java.util.concurrent.Semaphore;
+import java.util.Set;
 
 /**
  * Spring configuration for the external Python model service.
@@ -82,7 +83,9 @@ public class AiClientConfig {
             protected void prepareConnection(java.net.HttpURLConnection connection, String method)
                     throws java.io.IOException {
                 super.prepareConnection(connection, method);
-                if ("/health".equals(connection.getURL().getPath())) connection.setReadTimeout(5_000);
+                if (Set.of("/health", "/ai/generation-config").contains(connection.getURL().getPath())) {
+                    connection.setReadTimeout(5_000);
+                }
             }
         };
         requestFactory.setConnectTimeout(Duration.ofSeconds(5));

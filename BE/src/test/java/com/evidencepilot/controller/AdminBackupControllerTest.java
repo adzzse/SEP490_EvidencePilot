@@ -5,6 +5,8 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
+import com.evidencepilot.service.AdminSeedExportService;
+import com.evidencepilot.service.DocumentObjectStorage;
 import com.evidencepilot.repository.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,9 +51,12 @@ class AdminBackupControllerTest {
         @Bean PaperSectionRepository sections() { return mock(PaperSectionRepository.class); }
         @Bean EvidenceRevisionTraceRepository traces() { return mock(EvidenceRevisionTraceRepository.class); }
         @Bean AuditLogRepository audits() { return mock(AuditLogRepository.class); }
+        @Bean AdminSeedExportService seedExport() { return mock(AdminSeedExportService.class); }
+        @Bean DocumentObjectStorage objectStorage() { return mock(DocumentObjectStorage.class); }
         @Bean AdminBackupController backup(UserRepository u, ProjectRepository p, DocumentRepository d,
-                PaperSectionRepository s, EvidenceRevisionTraceRepository t, AuditLogRepository a) {
-            return new AdminBackupController(u, p, d, s, t, a);
+                PaperSectionRepository s, EvidenceRevisionTraceRepository t, AuditLogRepository a,
+                AdminSeedExportService export, DocumentObjectStorage storage) {
+            return new AdminBackupController(u, p, d, s, t, a, export, storage);
         }
     }
 

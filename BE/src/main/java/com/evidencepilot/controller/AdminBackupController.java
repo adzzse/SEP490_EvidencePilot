@@ -115,20 +115,31 @@ public class AdminBackupController {
                 .body(body);
     }
 
-    private static void write(BufferedWriter w, String table, String id, String extra) {
-        try {
-            w.write(table + "," + id + "," + (extra == null ? "" : extra.replaceAll("[\\r\\n]+", " ")) + "\n");
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
+    private static <T> void writePages(BufferedWriter writer, String table,
+            Function<Pageable, Slice<T>> fetch, Function<T, String[]> cells) throws IOException {
+        Pageable page = PageRequest.of(0, 500, Sort.by("id"));
+        while (true) {
+            Slice<T> batch = fetch.apply(page);
+            for (T item : batch) {
+                String[] values = cells.apply(item);
+                write(writer, table, values[0], values[1]);
+            }
+            if (!batch.hasNext()) return;
+            page = batch.nextPageable();
         }
     }
 
-    private static String esc(String s) {
-        if (s == null) return "";
-        String v = s.replaceAll("[\\r\\n]+", " ");
-        if (v.contains(",") || v.contains("\"")) return "\"" + v.replace("\"", "\"\"") + "\"";
-        return v;
+    private static void write(BufferedWriter writer, String table, String id, String extra) throws IOException {
+        writer.write(csvCell(table) + "," + csvCell(id) + "," + csvCell(extra) + "\n");
     }
 
+    private static String csvCell(String raw) {
+        String value = raw == null ? "" : raw;
+        String trimmed = value.stripLeading();
+        String leading = value.substring(0, value.length() - trimmed.length());
+        if ((!trimmed.isEmpty() && "=+-@".indexOf(trimmed.charAt(0)) >= 0)
+                || leading.indexOf('\t') >= 0 || leading.indexOf('\r') >= 0) value = "'" + value;
+        return "\"" + value.replace("\"", "\"\"") + "\"";
+    }
 
 }

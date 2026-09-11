@@ -354,7 +354,9 @@ public class EvidenceTraceService {
                     "reviewVersion", review.reviewVersion(),
                     "ruleCatalogVersion", review.ruleCatalogVersion(),
                     "provider", review.provider() == null ? "" : review.provider(),
-                    "model", review.model() == null ? "" : review.model()));
+                    "model", review.model() == null ? "" : review.model(),
+                    "modelsUsed", review.modelsUsed(),
+                    "generationFingerprint", review.generationFingerprint() == null ? "" : review.generationFingerprint()));
         } catch (JsonProcessingException exception) {
             return null;
         }

@@ -382,9 +382,16 @@ class SubmissionReadinessServiceTest {
         var templates = org.mockito.Mockito.mock(com.evidencepilot.repository.PromptTemplateRepository.class);
         var evaluations = org.mockito.Mockito.mock(com.evidencepilot.repository.SectionStandardEvaluationRepository.class);
         var transactions = org.mockito.Mockito.mock(org.springframework.transaction.PlatformTransactionManager.class);
-        var prompts = new PromptTemplateService(templates, currentUserService, transactions);
+        var generationRepository = org.mockito.Mockito.mock(com.evidencepilot.repository.AiGenerationConfigRepository.class);
+        var generationConfig = org.mockito.Mockito.mock(AiGenerationConfigService.class);
+        var selection = new AiModelClient.GenerationSelection(1, "remote", List.of("model"),
+                "a".repeat(64), "b".repeat(64));
+        when(generationConfig.current()).thenReturn(Optional.of(selection));
+        var prompts = new PromptTemplateService(templates, currentUserService, transactions,
+                generationRepository, generationConfig, org.mockito.Mockito.mock(AuditService.class));
         var standards = new SectionStandardService(org.mockito.Mockito.mock(AiModelClient.class), paperSectionRepository,
-                evaluations, currentUserService, objectMapper, transactions, prompts);
+                evaluations, currentUserService, objectMapper, transactions, prompts,
+                generationConfig);
         service = new SubmissionReadinessService(projectRepository, documentRepository, paperSectionRepository,
                 feedbackRequestRepository, standards, currentUserService, objectMapper);
         var original = new com.evidencepilot.model.PromptTemplate();
@@ -413,6 +420,7 @@ class SubmissionReadinessServiceTest {
         String objective = standards.inputFingerprint(f.section());
         evaluation.setInputFingerprint(objective);
         evaluation.setPromptFingerprint(prompts.resolve("CHECK_STANDARD").fingerprint());
+        evaluation.setGenerationFingerprint(selection.fingerprint());
         when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(f.project().getId(), DocumentType.PAPER)).thenReturn(List.of(f.paper()));
         when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(f.paper().getId())).thenReturn(List.of(f.section()));
         when(paperSectionRepository.findByIdWithDocument(f.section().getId())).thenReturn(Optional.of(f.section()));
@@ -426,7 +434,10 @@ class SubmissionReadinessServiceTest {
         assertThat(before.canSubmit()).isTrue();
         assertThat(standards.latest(f.paper().getId(), f.section().getId()).orElseThrow().stale()).isFalse();
 
-        prompts.activate(candidate.getId());
+        var lockedGeneration = new com.evidencepilot.model.AiGenerationConfig();
+        when(generationRepository.lockCurrent()).thenReturn(Optional.of(lockedGeneration));
+        when(generationConfig.selectionOf(lockedGeneration)).thenReturn(Optional.of(selection));
+        prompts.activate(candidate.getId(), evaluation.getPromptFingerprint(), selection.fingerprint());
 
         assertThat(standards.latest(f.paper().getId(), f.section().getId()).orElseThrow().stale()).isTrue();
         var after = service.assess(f.project(), f.leader()).response();

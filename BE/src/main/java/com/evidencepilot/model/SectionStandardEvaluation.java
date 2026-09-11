@@ -49,6 +49,15 @@ public class SectionStandardEvaluation {
     @Column(name = "prompt_fingerprint", length = 64)
     private String promptFingerprint;
 
+    @Column(name = "generation_fingerprint", length = 64)
+    private String generationFingerprint;
+
+    @Column(name = "generation_provider", length = 100)
+    private String generationProvider;
+
+    @Column(name = "generation_model", length = 255)
+    private String generationModel;
+
     @Column(name = "pass_threshold")
     private Integer passThreshold;
 

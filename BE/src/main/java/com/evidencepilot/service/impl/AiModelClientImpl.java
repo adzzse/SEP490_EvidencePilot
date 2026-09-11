@@ -2,6 +2,7 @@ package com.evidencepilot.service.impl;
 
 import com.evidencepilot.client.ai.gate.AiModelCallGate;
 import com.evidencepilot.service.AiModelClient;
+import com.evidencepilot.service.AiGenerationConfigService;
 import com.evidencepilot.service.ExtractionBundle;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -67,7 +68,7 @@ public class AiModelClientImpl implements AiModelClient {
             "INVALID_GENERATION_REQUEST", "GENERATION_CONFIGURATION_ERROR", "GENERATION_UNAVAILABLE",
             "GENERATION_DEADLINE_EXCEEDED", "GENERATION_RATE_LIMITED", "GENERATION_QUOTA_EXCEEDED",
             "GENERATION_REQUEST_REJECTED", "GENERATION_REFUSED", "INVALID_GENERATION_RESPONSE",
-            "GENERATION_INCOMPLETE");
+            "GENERATION_INCOMPLETE", "GENERATION_CONFIG_CHANGED");
 
     private final RestClient restClient;
     private final OkHttpClient generationClient;
@@ -76,6 +77,7 @@ public class AiModelClientImpl implements AiModelClient {
     private final ObjectMapper objectMapper;
     private final int maxRetries;
     private final AiModelCallGate aiModelCallGate;
+    private final AiGenerationConfigService generationConfigService;
 
     @Autowired
     public AiModelClientImpl(@Qualifier("aiRestClient") RestClient restClient,
@@ -84,6 +86,7 @@ public class AiModelClientImpl implements AiModelClient {
             ObjectMapper objectMapper,
             @Value("${ai.model.max-retries:3}") int maxRetries,
             AiModelCallGate aiModelCallGate,
+            AiGenerationConfigService generationConfigService,
             @Value("${ai.model.api-key:}") String apiKey) {
         this.restClient = restClient;
         this.generationClient = generationClient;
@@ -92,6 +95,7 @@ public class AiModelClientImpl implements AiModelClient {
         this.objectMapper = objectMapper;
         this.maxRetries = Math.max(0, maxRetries);
         this.aiModelCallGate = aiModelCallGate;
+        this.generationConfigService = generationConfigService;
     }
 
     @SuppressWarnings("unchecked")
@@ -101,6 +105,42 @@ public class AiModelClientImpl implements AiModelClient {
                 .uri(baseUrl + "/health")
                 .retrieve()
                 .body(Map.class));
+    }
+
+    @Override
+    public GenerationCatalog generationCatalog() {
+        JsonNode value = call("/ai/generation-config", 0, () -> restClient.get()
+                .uri(baseUrl + "/ai/generation-config")
+                .retrieve()
+                .body(JsonNode.class));
+        JsonNode limits = value == null ? null : value.get("limits");
+        if (value == null || !value.isObject() || value.path("protocol_version").asInt(-1) != 1
+                || !jsonText(value.get("provider")) || !stringArray(value.get("allowed_models"))
+                || !stringArray(value.get("default_models")) || !jsonText(value.get("catalog_fingerprint"))
+                || !value.get("catalog_fingerprint").textValue().matches("[0-9a-f]{64}")
+                || limits == null || !limits.isObject() || limits.path("chain_length").asInt(-1) != 3
+                || limits.path("system_chars").asInt(-1) <= 0 || limits.path("prompt_chars").asInt(-1) <= 0) {
+            throw new AiApiException("/ai/generation-config", 502,
+                    "AI service returned an incompatible generation catalog", null);
+        }
+        List<String> allowed = strings(value.get("allowed_models"));
+        List<String> defaults = strings(value.get("default_models"));
+        if (allowed.stream().distinct().count() != allowed.size()
+                || defaults.stream().distinct().count() != defaults.size()
+                || !allowed.containsAll(defaults) || allowed.stream().anyMatch(model -> model.length() > 255)
+                || limits.get("system_chars").intValue() != 8000
+                || limits.get("prompt_chars").intValue() != 48000) {
+            throw new AiApiException("/ai/generation-config", 502,
+                    "AI service returned an incompatible generation catalog", null);
+        }
+        return new GenerationCatalog(1, value.get("provider").textValue(), allowed, defaults,
+                value.get("catalog_fingerprint").textValue(), limits.get("system_chars").intValue(),
+                limits.get("prompt_chars").intValue());
+    }
+
+    @Override
+    public GenerationSelection generationSelection() {
+        return generationConfigService.current().orElseGet(() -> generationConfigService.initialize(generationCatalog()));
     }
 
     @Override
@@ -121,14 +161,23 @@ public class AiModelClientImpl implements AiModelClient {
     @Override
     public <T> T generateValidated(String system, String prompt, Map<String, Object> jsonSchema,
             Function<GenerationResult, T> validator) {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(300);
+        return generateValidated(generationSelection(), system, prompt, jsonSchema, 300_000, validator);
+    }
+
+    @Override
+    public <T> T generateValidated(GenerationSelection selection, String system, String prompt,
+            Map<String, Object> jsonSchema, long budgetMillis, Function<GenerationResult, T> validator) {
+        if (selection == null || budgetMillis <= 0 || budgetMillis > 300_000) {
+            throw generationFailure(422, "INVALID_GENERATION_REQUEST", null);
+        }
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(budgetMillis);
         if (baseUrl.isBlank()) {
             throw generationFailure(503, "GENERATION_CONFIGURATION_ERROR", null);
         }
         aiModelCallGate.checkCircuit(GENERATION_ENDPOINT);
         return aiModelCallGate.execute(GENERATION_ENDPOINT, deadline, () -> {
             try {
-                T result = generate(system, prompt, jsonSchema, validator, deadline);
+                T result = generate(selection, system, prompt, jsonSchema, validator, deadline);
                 aiModelCallGate.recordFinalOutcome(GENERATION_ENDPOINT, false);
                 return result;
             } catch (RuntimeException exception) {
@@ -139,11 +188,13 @@ public class AiModelClientImpl implements AiModelClient {
         });
     }
 
-    private <T> T generate(String system, String prompt, Map<String, Object> jsonSchema,
+    private <T> T generate(GenerationSelection selection, String system, String prompt, Map<String, Object> jsonSchema,
             Function<GenerationResult, T> validator, long deadline) {
         Map<String, Object> body = new java.util.LinkedHashMap<>();
         body.put("system", system == null ? "" : system);
         body.put("prompt", prompt);
+        body.put("model_ids", selection.modelIds());
+        body.put("catalog_fingerprint", selection.catalogFingerprint());
         if (jsonSchema != null && !jsonSchema.isEmpty()) {
             body.put("response_format", Map.of(
                     "type", "json_schema",
@@ -158,7 +209,7 @@ public class AiModelClientImpl implements AiModelClient {
             long budgetMillis = remainingMillis(deadline) - 1_000;
             if (budgetMillis <= 0) throw generationFailure(503, "GENERATION_DEADLINE_EXCEEDED", null);
             body.put("budget_ms", budgetMillis);
-            GenerationResult generation = requestGeneration(body, deadline);
+            GenerationResult generation = requestGeneration(body, deadline, selection.catalogFingerprint());
             if (generation.modelIndex() < modelIndex
                     || generation.modelIndex() == modelIndex && generation.attempt() < attempt) {
                 throw generationFailure(502, "INVALID_GENERATION_RESPONSE", null);
@@ -187,7 +238,7 @@ public class AiModelClientImpl implements AiModelClient {
         }
     }
 
-    private GenerationResult requestGeneration(Map<String, Object> body, long deadline) {
+    private GenerationResult requestGeneration(Map<String, Object> body, long deadline, String catalogFingerprint) {
         Request request;
         try {
             byte[] payload = objectMapper.writeValueAsBytes(body);
@@ -231,6 +282,8 @@ public class AiModelClientImpl implements AiModelClient {
                     || !jsonText(value.get("provider")) || !jsonText(value.get("model"))
                     || !jsonText(value.get("response"))
                     || !index(value.get("model_index"))
+                    || !jsonText(value.get("catalog_fingerprint"))
+                    || !catalogFingerprint.equals(value.get("catalog_fingerprint").textValue())
                     || !value.path("attempt").isInt() || value.path("attempt").asInt() < 1
                     || value.path("attempt").asInt() > 2 || !value.has("next_model_index")) {
                 throw generationFailure(502, "INVALID_GENERATION_RESPONSE", null);
@@ -241,7 +294,7 @@ public class AiModelClientImpl implements AiModelClient {
             }
             return new GenerationResult(value.get("provider").textValue(), value.get("model").textValue(),
                     value.get("response").textValue(), true, value.get("model_index").intValue(),
-                    value.get("attempt").intValue(), next.isNull() ? null : next.intValue());
+                    value.get("attempt").intValue(), next.isNull() ? null : next.intValue(), catalogFingerprint);
         } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
             throw generationFailure(502, "INVALID_GENERATION_RESPONSE", null);
         } catch (IOException exception) {
@@ -259,6 +312,15 @@ public class AiModelClientImpl implements AiModelClient {
 
     private static boolean index(JsonNode value) {
         return value != null && value.isInt() && value.intValue() >= 0 && value.intValue() <= 2;
+    }
+
+    private static boolean stringArray(JsonNode value) {
+        return value != null && value.isArray() && !value.isEmpty() && value.size() <= 3
+                && java.util.stream.StreamSupport.stream(value.spliterator(), false).allMatch(AiModelClientImpl::jsonText);
+    }
+
+    private static List<String> strings(JsonNode value) {
+        return java.util.stream.StreamSupport.stream(value.spliterator(), false).map(JsonNode::textValue).toList();
     }
 
     private static long remainingMillis(long deadline) {

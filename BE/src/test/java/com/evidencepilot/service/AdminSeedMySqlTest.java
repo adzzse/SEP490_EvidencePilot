@@ -43,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 
 @Testcontainers(disabledWithoutDocker = true)
 @DataJpaTest(properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate",
@@ -229,7 +230,8 @@ class AdminSeedMySqlTest {
             jdbc.update("INSERT INTO audit_logs(id,actor_id,action,severity,entity_type,entity_id,occurred_at) VALUES(UUID_TO_BIN(?),UUID_TO_BIN(?),?,'INFO',?,UUID_TO_BIN(?),NOW())",
                     UUID.randomUUID().toString(), instructor.getId().toString(), entity[1].equals(projectB) ? "UNRELATED_EXPORT_FIXTURE" : "FIXTURE", entity[0], entity[1]);
         }
-        var export = new com.evidencepilot.controller.AdminBackupController(users, projects, documentRows, sections, traceRows, auditRows);
+        var export = new com.evidencepilot.controller.AdminBackupController(users, projects, documentRows, sections,
+                traceRows, auditRows, mock(AdminSeedExportService.class), mock(DocumentObjectStorage.class));
         var output = new ByteArrayOutputStream();
         export.backupCsv(UUID.fromString(projectA)).getBody().writeTo(output);
         String csv = output.toString(java.nio.charset.StandardCharsets.UTF_8);

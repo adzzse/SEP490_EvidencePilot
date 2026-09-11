@@ -38,7 +38,7 @@ class AiModelClientTest {
 
     private static AiModelClientImpl client(RestClient restClient, String baseUrl, int maxRetries) {
         return new AiModelClientImpl(restClient, new okhttp3.OkHttpClient(), baseUrl, new ObjectMapper(), maxRetries,
-                new AiModelCallGate(new Semaphore(4)), "");
+                new AiModelCallGate(new Semaphore(4)), org.mockito.Mockito.mock(AiGenerationConfigService.class), "");
     }
 
     @Test

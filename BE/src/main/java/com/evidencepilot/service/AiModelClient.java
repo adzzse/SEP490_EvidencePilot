@@ -8,6 +8,10 @@ public interface AiModelClient {
 
     Map<String, Object> health();
 
+    GenerationCatalog generationCatalog();
+
+    GenerationSelection generationSelection();
+
     GenerationResult generate(String system, String prompt);
 
     GenerationResult generateForReview(String system, String prompt);
@@ -17,16 +21,41 @@ public interface AiModelClient {
     <T> T generateValidated(String system, String prompt, Map<String, Object> jsonSchema,
             Function<GenerationResult, T> validator);
 
+    <T> T generateValidated(GenerationSelection selection, String system, String prompt,
+            Map<String, Object> jsonSchema, long budgetMillis,
+            Function<GenerationResult, T> validator);
+
     ExtractionBundle extractDocument(String filename, String downloadUrl, boolean enrichHierarchy);
 
     List<Float> generateEmbedding(String text);
 
     List<List<Float>> generateEmbeddings(List<String> texts);
 
+    record GenerationCatalog(int protocolVersion, String provider,
+            List<String> allowedModels, List<String> defaultModels,
+            String catalogFingerprint, int maxSystemChars, int maxPromptChars) {
+        public GenerationCatalog {
+            allowedModels = List.copyOf(allowedModels);
+            defaultModels = List.copyOf(defaultModels);
+        }
+    }
+
+    record GenerationSelection(long revision, String provider, List<String> modelIds,
+            String catalogFingerprint, String fingerprint) {
+        public GenerationSelection {
+            modelIds = List.copyOf(modelIds);
+        }
+    }
+
     record GenerationResult(String provider, String model, String response, boolean done,
-            int modelIndex, int attempt, Integer nextModelIndex) {
+            int modelIndex, int attempt, Integer nextModelIndex, String catalogFingerprint) {
+        public GenerationResult(String provider, String model, String response, boolean done,
+                int modelIndex, int attempt, Integer nextModelIndex) {
+            this(provider, model, response, done, modelIndex, attempt, nextModelIndex, null);
+        }
+
         public GenerationResult(String provider, String model, String response) {
-            this(provider, model, response, true, 0, 1, null);
+            this(provider, model, response, true, 0, 1, null, null);
         }
     }
 

@@ -8,6 +8,11 @@ import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.PromptTemplateService;
+import com.evidencepilot.service.AiModelClient;
+import com.evidencepilot.service.AiGenerationConfigService;
+import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.SectionStandardService;
+import com.evidencepilot.service.impl.SectionCitationReviewService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,7 +43,17 @@ class AdminPromptControllerTest {
 
     @Configuration static class Config {
         @Bean PromptTemplateService prompts() { return mock(PromptTemplateService.class); }
-        @Bean AdminPromptController controller(PromptTemplateService service) { return new AdminPromptController(service); }
+        @Bean AiModelClient aiModelClient() { return mock(AiModelClient.class); }
+        @Bean AiGenerationConfigService generationConfigService() { return mock(AiGenerationConfigService.class); }
+        @Bean CurrentUserService currentUserService() { return mock(CurrentUserService.class); }
+        @Bean SectionStandardService sectionStandardService() { return mock(SectionStandardService.class); }
+        @Bean SectionCitationReviewService sectionCitationReviewService() { return mock(SectionCitationReviewService.class); }
+        @Bean AdminPromptController controller(PromptTemplateService service, AiModelClient aiModelClient,
+                AiGenerationConfigService generationConfigService, CurrentUserService currentUserService,
+                SectionStandardService sectionStandardService, SectionCitationReviewService sectionCitationReviewService) {
+            return new AdminPromptController(service, aiModelClient, generationConfigService,
+                    sectionStandardService, sectionCitationReviewService);
+        }
     }
 
     @BeforeEach void setup() {
@@ -69,9 +84,9 @@ class AdminPromptControllerTest {
     @ParameterizedTest @EnumSource(value = UserRole.class, names = {"STUDENT", "INSTRUCTOR"})
     void nonAdminCannotReadCreateValidateOrActivate(UserRole role) throws Exception {
         authenticate(role);
-        for (String path : List.of("", "/defaults"))
+        for (String path : List.of("", "/defaults", "/effective"))
             mvc.perform(get("/api/admin/prompts" + path).header("Authorization", "Bearer fixture")).andExpect(status().isForbidden());
-        for (String path : List.of("", "/" + UUID.randomUUID() + "/validate", "/" + UUID.randomUUID() + "/activate"))
+        for (String path : List.of("", "/try", "/" + UUID.randomUUID() + "/validate", "/" + UUID.randomUUID() + "/activate"))
             mvc.perform(post("/api/admin/prompts" + path).header("Authorization", "Bearer fixture")
                     .contentType("application/json").content("{}"))
                     .andExpect(status().isForbidden());
@@ -86,7 +101,7 @@ class AdminPromptControllerTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.valid").value(true))
                 .andExpect(jsonPath("$.validation_type").value("CONFIGURATION"))
                 .andExpect(jsonPath("$.runtime_verified").value(false));
-        verify(service, never()).activate(any());
+        verify(service, never()).activate(any(), anyString(), anyString());
     }
 
     @Test void anonymousCannotValidate() throws Exception {

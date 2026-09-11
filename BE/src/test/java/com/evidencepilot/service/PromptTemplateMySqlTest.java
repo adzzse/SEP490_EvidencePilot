@@ -37,7 +37,7 @@ import static org.mockito.Mockito.doAnswer;
         "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect"}, showSql = false)
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Import(PromptTemplateService.class)
+@Import({PromptTemplateService.class, AiGenerationConfigService.class})
 class PromptTemplateMySqlTest {
     @Container static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46");
     @DynamicPropertySource static void database(DynamicPropertyRegistry registry) {
@@ -49,8 +49,22 @@ class PromptTemplateMySqlTest {
     @Autowired PromptTemplateService service;
     @Autowired PlatformTransactionManager transactions;
     @Autowired JdbcTemplate jdbc;
+    @Autowired AiGenerationConfigService generationConfig;
     @SpyBean PromptTemplateRepository repository;
     @MockBean CurrentUserService users;
+    @MockBean AuditService auditService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void initializeGeneration() {
+        generationConfig.initialize(new AiModelClient.GenerationCatalog(1, "remote",
+                List.of("model-a", "model-b"), List.of("model-a"), "a".repeat(64), 8000, 48000));
+        var actor = new com.evidencepilot.model.User();
+        actor.setId(UUID.randomUUID());
+        actor.setEmail("prompt-test-" + actor.getId() + "@example.test");
+        jdbc.update("INSERT INTO users (id, email, password_hash, role, account_status) VALUES (UUID_TO_BIN(?), ?, 'hash', 'ADMIN', 'ACTIVE')",
+                actor.getId().toString(), actor.getEmail());
+        org.mockito.Mockito.when(users.requireCurrentUser()).thenReturn(actor);
+    }
 
     @Test void concurrentActivationsLeaveExactlyOneActiveVersion() throws Exception {
         var first = draft("CHECK_STANDARD");
@@ -60,10 +74,12 @@ class PromptTemplateMySqlTest {
             var outcomes = List.of(first, second).stream().map(target -> pool.submit(() -> {
                 barrier.await(10, TimeUnit.SECONDS);
                 try {
-                    service.activate(target.getId());
+                    activate(target);
                     return 200;
                 } catch (ResponseStatusException exception) {
                     return exception.getStatusCode().value();
+                } catch (AiGenerationConfigService.Conflict exception) {
+                    return 409;
                 }
             })).toList();
             for (var outcome : outcomes) assertThat(outcome.get(20, TimeUnit.SECONDS)).isIn(200, 409);
@@ -74,14 +90,14 @@ class PromptTemplateMySqlTest {
 
     @Test void failureAfterSiblingDeactivationRollsBackAndPreservesPreviousActive() {
         var previous = draft("CHECK_STANDARD");
-        service.activate(previous.getId());
+        activate(previous);
         var candidate = draft("CHECK_STANDARD");
         doAnswer(call -> {
             assertThat(activeCount("CHECK_STANDARD")).isZero();
             throw new DataIntegrityViolationException("Injected activation failure");
         })
                 .when(repository).saveAndFlush(argThat(template -> candidate.getId().equals(template.getId())));
-        assertThatThrownBy(() -> service.activate(candidate.getId()))
+        assertThatThrownBy(() -> activate(candidate))
                 .isInstanceOfSatisfying(ResponseStatusException.class, ex -> assertThat(ex.getStatusCode().value()).isEqualTo(409));
         assertThat(activeCount("CHECK_STANDARD")).isOne();
         assertThat(service.resolve("CHECK_STANDARD").version()).isEqualTo(previous.getVersion());
@@ -91,8 +107,8 @@ class PromptTemplateMySqlTest {
     @Test void differentPromptKeysRemainIndependentAndDuplicateVersionsConflict() {
         var check = draft("CHECK_STANDARD");
         var citation = draft("CITATION_REVIEW");
-        service.activate(check.getId());
-        service.activate(citation.getId());
+        activate(check);
+        activate(citation);
         assertThat(service.resolve("CHECK_STANDARD").version()).isEqualTo(check.getVersion());
         assertThat(service.resolve("CITATION_REVIEW").version()).isEqualTo(citation.getVersion());
         assertThatThrownBy(() -> service.create(check.getTemplateKey(), check.getVersion(), check.getSystemText(), null))
@@ -102,12 +118,12 @@ class PromptTemplateMySqlTest {
     @Test void resolverSeesActivationCommittedDuringAnExistingCallerTransaction() {
         var before = draft("CHECK_STANDARD");
         var after = draft("CHECK_STANDARD");
-        service.activate(before.getId());
+        activate(before);
         new TransactionTemplate(transactions).executeWithoutResult(status -> {
             assertThat(repository.findByTemplateKeyAndActiveTrue("CHECK_STANDARD").orElseThrow().getVersion()).isEqualTo(before.getVersion());
             assertThat(service.resolve("CHECK_STANDARD").version()).isEqualTo(before.getVersion());
             try (var pool = Executors.newSingleThreadExecutor()) {
-                pool.submit(() -> service.activate(after.getId())).get(15, TimeUnit.SECONDS);
+                pool.submit(() -> activate(after)).get(15, TimeUnit.SECONDS);
             } catch (Exception exception) {
                 throw new AssertionError(exception);
             }
@@ -117,6 +133,13 @@ class PromptTemplateMySqlTest {
 
     private PromptTemplate draft(String key) {
         return service.create(key, UUID.randomUUID().toString(), service.defaults().get(key), "display-only");
+    }
+
+    private PromptTemplate activate(PromptTemplate template) {
+        var effective = service.effective().stream()
+                .filter(value -> value.templateKey().equals(template.getTemplateKey())).findFirst().orElseThrow();
+        var generation = generationConfig.current().orElseThrow();
+        return service.activate(template.getId(), effective.fingerprint(), generation.fingerprint());
     }
 
     private int activeCount(String key) {

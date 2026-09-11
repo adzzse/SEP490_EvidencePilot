@@ -3,6 +3,7 @@ package com.evidencepilot.service;
 import com.evidencepilot.model.PromptTemplate;
 import com.evidencepilot.model.User;
 import com.evidencepilot.repository.PromptTemplateRepository;
+import com.evidencepilot.repository.AiGenerationConfigRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,9 +31,15 @@ class PromptTemplateServiceTest {
     @Mock PromptTemplateRepository repository;
     @Mock CurrentUserService users;
     @Mock PlatformTransactionManager transactions;
+    @Mock AiGenerationConfigRepository generationConfigRepository;
+    @Mock AiGenerationConfigService generationConfigService;
+    @Mock AuditService auditService;
     PromptTemplateService service;
 
-    @BeforeEach void setup() { service = new PromptTemplateService(repository, users, transactions); }
+    @BeforeEach void setup() {
+        service = new PromptTemplateService(repository, users, transactions,
+                generationConfigRepository, generationConfigService, auditService);
+    }
 
     @Test void bothCanonicalDefaultsCreateInactiveDraftsAndPassTheirConfigurationContract() {
         when(users.requireCurrentUser()).thenReturn(new User());
@@ -62,8 +69,13 @@ class PromptTemplateServiceTest {
             assertBadRequest(key, "v1", service.defaults().get(other), null);
             for (String version : new String[]{null, "", " ", "v".repeat(51)})
                 assertBadRequest(key, version, service.defaults().get(key), null);
-            for (String text : new String[]{null, "", " ", service.defaults().get(key) + "x".repeat(48000)})
+            for (String text : new String[]{null, "", " ", sizedPrompt(service.defaults().get(key), 8001, "x")})
                 assertBadRequest(key, "v1", text, null);
+            assertThatCode(() -> service.create(key, "v8000", sizedPrompt(service.defaults().get(key), 8000, "😀"), null))
+                    .doesNotThrowAnyException();
+            clearInvocations(repository, users);
+            assertBadRequest(key, "v8001", sizedPrompt(service.defaults().get(key), 8001, "😀"), null);
+            assertBadRequest(key, "raw-whitespace", sizedPrompt(service.defaults().get(key), 8000, "x") + " ", null);
             assertBadRequest(key, "v1", service.defaults().get(key), "m".repeat(101));
         }
         verifyNoInteractions(repository, users);
@@ -72,6 +84,10 @@ class PromptTemplateServiceTest {
     private void assertBadRequest(String key, String version, String text, String model) {
         assertThatThrownBy(() -> service.create(key, version, text, model))
                 .isInstanceOfSatisfying(ResponseStatusException.class, ex -> assertThat(ex.getStatusCode().value()).isEqualTo(400));
+    }
+
+    private String sizedPrompt(String base, int codePoints, String filler) {
+        return base + filler.repeat(codePoints - base.codePointCount(0, base.length()));
     }
 
     @Test void duplicateVersionAndConcurrentDuplicateReturnConflict() {
@@ -116,7 +132,15 @@ class PromptTemplateServiceTest {
         invalid.setSystemText("invalid");
         when(repository.findById(invalid.getId())).thenReturn(Optional.of(invalid));
         when(repository.lockVersions("CHECK_STANDARD")).thenReturn(List.of(invalid));
-        assertThatThrownBy(() -> service.activate(invalid.getId()))
+        var config = new com.evidencepilot.model.AiGenerationConfig();
+        var selection = new AiModelClient.GenerationSelection(1, "remote", List.of("model"),
+                "a".repeat(64), "b".repeat(64));
+        when(generationConfigRepository.lockCurrent()).thenReturn(Optional.of(config));
+        when(generationConfigService.selectionOf(config)).thenReturn(Optional.of(selection));
+        when(users.requireCurrentUser()).thenReturn(new User());
+        String active = new PromptTemplateService.ResolvedPrompt("CHECK_STANDARD", "code-default",
+                PromptTemplateService.CHECK_STANDARD_DEFAULT).fingerprint();
+        assertThatThrownBy(() -> service.activate(invalid.getId(), active, selection.fingerprint()))
                 .isInstanceOfSatisfying(ResponseStatusException.class, ex -> assertThat(ex.getStatusCode().value()).isEqualTo(422));
         verify(repository, never()).save(any());
         verify(repository, never()).flush();

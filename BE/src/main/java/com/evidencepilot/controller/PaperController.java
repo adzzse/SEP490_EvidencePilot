@@ -381,8 +381,7 @@ public class PaperController {
         User currentUser = currentUserService.requireCurrentUser();
         PaperSection section = requireReviewSection(documentId, sectionId);
         currentUserService.requireSectionContentWriteAccess(currentUser, section);
-        String reviewInputFingerprint =
-                sectionCitationReviewService.reviewInputFingerprint(section);
+        String reviewInputFingerprint = sectionCitationReviewService.prepareReview(section);
         return ResponseEntity.accepted().body(aiEvaluationService.submitSectionCitationReview(
                 section.getDocument().getProject().getId(),
                 documentId,

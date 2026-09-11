@@ -665,6 +665,32 @@ public class AdminExcelSeedService {
         return jobs.get(id);
     }
 
+    private void preflight(Map<String, List<Map<String, String>>> sheets) {
+        var titles = sheets.getOrDefault("projects", List.of()).stream().map(row -> row.get("project_title")).toList();
+        if (titles.stream().map(title -> title.toLowerCase(Locale.ROOT)).distinct().count() != titles.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Duplicate project aliases");
+        }
+        if (!titles.isEmpty() && !projectRepository.findExistingTitles(titles).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Project title already exists; use new aliases or the existing project APIs");
+        }
+        var emails = new java.util.HashSet<String>();
+        for (var row : sheets.getOrDefault("users", List.of())) emails.add(row.get("email").toLowerCase(Locale.ROOT));
+        for (var row : sheets.getOrDefault("members", List.of())) emails.add(row.getOrDefault("user_email", "").toLowerCase(Locale.ROOT));
+        for (var row : sheets.getOrDefault("sections", List.of())) {
+            if (!row.getOrDefault("assigned_user_email", "").isBlank()) emails.add(row.get("assigned_user_email").toLowerCase(Locale.ROOT));
+        }
+        Map<String, User> users = new LinkedHashMap<>();
+        if (!emails.isEmpty()) userRepository.findAllByEmailIn(emails).forEach(user -> users.put(user.getEmail().toLowerCase(Locale.ROOT), user));
+        for (var row : sheets.getOrDefault("users", List.of())) {
+            String email = row.get("email").toLowerCase(Locale.ROOT);
+            UserRole role = UserRole.valueOf(row.get("role").toUpperCase(Locale.ROOT));
+            User existing = users.get(email);
+            if (existing != null && (existing.getRole() != role || existing.getAccountStatus() == AccountStatus.DELETED)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "User " + email + " already exists with a different role/status");
+            }
+        }
+    }
+
     private void runJob(SeedJob job, ParsedSeed parsed, ZipBundle bundle, Authentication auth) {
         job.status = "RUNNING";
         var context = SecurityContextHolder.getContext();
@@ -673,19 +699,12 @@ public class AdminExcelSeedService {
         try {
             job.result = Map.of("users", 0, "projects", 0, "members", 0, "sources", 0, "papers", 0, "sections", 0);
             var userRows = parsed.sheets().getOrDefault("users", List.of());
-            long invited = userRows.stream()
-                    .filter(r -> sendInvitationRequested(r.getOrDefault("send_invitation", "")))
-                    .count();
-            counts.put("users", commitUsers(userRows, job));
-            counts.put("users_invited", (int) invited);
-            counts.put("users_silent", userRows.size() - (int) invited);
-            counts.put("projects", commitProjects(parsed.sheets().getOrDefault("projects", List.of()), job));
-            counts.put("members", commitMembers(parsed.sheets().getOrDefault("members", List.of()), job));
-            counts.put("sources", commitSources(parsed.sheets().getOrDefault("sources", List.of()), job));
-            counts.put("papers", commitPapers(parsed.sheets().getOrDefault("papers", List.of()), bundle.files(), job));
-            counts.put("collections", commitCollections(parsed.sheets().getOrDefault("collections", List.of()), job));
-            job.result = counts;
-            job.status = job.errors.isEmpty() ? "DONE" : "DONE";
+            commitUsers(userRows, job);
+            var projects = commitProjects(parsed.sheets().getOrDefault("projects", List.of()), job);
+            commitMembers(parsed.sheets().getOrDefault("members", List.of()), job, projects);
+            commitSources(parsed.sheets().getOrDefault("sources", List.of()), job, projects);
+            commitPapers(parsed.sheets().getOrDefault("papers", List.of()), bundle.files(), job, projects);
+            commitSections(parsed.sheets().getOrDefault("sections", List.of()), job, projects);
         } catch (Exception e) {
             log.error("Seed job {} failed", job.getId(), e);
             job.failed(job.currentStep + ": " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()), job.pendingRows);
