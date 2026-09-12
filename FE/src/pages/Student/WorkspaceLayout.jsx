@@ -630,19 +630,26 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   }, [projectId, loadProjectData, navigate]);
 
   useEffect(() => {
-    if (isReview || !project?.id || !hasActiveExtraction(sources)) return undefined;
+    if (isReview || !project?.id || !hasActiveExtraction([...sources, ...papers])) return undefined;
 
     let cancelled = false;
     let timer;
     const refresh = async () => {
       try {
-        const [sourceList, mediaResponse] = await Promise.all([
+        const [sourceList, paperResponse, mediaResponse] = await Promise.all([
           loadAllProjectSources(project.id),
+          api.get(`/api/projects/${project.id}/papers`),
           api.get(`/api/media/projects/${project.id}`),
         ]);
         if (!cancelled) {
           setSources(sourceList);
           setMediaAssets(mediaResponse.data || []);
+          const paperList = paperResponse.data || [];
+          setPapers(paperList);
+          setSelectedPaper(current => {
+            const updated = paperList.find(paper => String(paper.id) === String(current?.id));
+            return updated && updated.processingStatus !== current.processingStatus ? updated : current;
+          });
         }
       } catch {
         if (!cancelled) timer = window.setTimeout(refresh, 5000);
@@ -656,7 +663,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [project?.id, sources]);
+  }, [isReview, project?.id, sources, papers]);
 
   const assignedSections = user ? sections.filter(s => String(s.assignedUserId) === String(user.id)) : [];
   const isLocked = isReview || project?.status === 'SUBMITTED_FOR_REVIEW' || project?.status === 'APPROVED' || project?.status === 'ARCHIVED';
@@ -871,6 +878,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   };
 
   const handleDeletePaper = async (paperId) => {
+    if (isLocked) { showToast(t('projectLocked')); return; }
     setPapers(prev => prev.filter(p => String(p.id) !== String(paperId)));
     if (selectedPaper && String(selectedPaper.id) === String(paperId)) setSelectedPaper(null);
     const paper = papers.find(p => String(p.id) === String(paperId));
@@ -883,6 +891,10 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
         await api.delete(`/api/papers/${paperId}`);
         showToast(t('paperDeleted'));
       } catch { showToast(t('deleteFailed')); }
+      try {
+        const mediaResponse = await api.get(`/api/media/projects/${project.id}`);
+        setMediaAssets(mediaResponse.data || []);
+      } catch { setLoadErrors(errs => [...errs, 'media']); }
       const r = await api.get(`/api/projects/${project.id}/papers`);
       const list = r.data || [];
       setPapers(list);
@@ -893,6 +905,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     }, async () => {
       const r = await api.get(`/api/projects/${project.id}/papers`);
       setPapers(r.data || []);
+      if (selectedPaper && String(selectedPaper.id) === String(paperId)) setSelectedPaper(paper);
     });
   };
 
@@ -1471,7 +1484,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
           </button>
         </div>
 
-        <FilePanel compact={isCompactWorkspace} isOpen={isFileTreeOpen} width={fileTreeWidth} onResizeStart={handleLeftDividerMouseDown} sections={sections} assignedSections={assignedSections} selectedSectionId={selectedSectionId} onSelectSection={handleSelectSection} selectedPaper={selectedPaper} onSelectPaper={handleSelectPaper} onViewFullPaper={() => setShowFullPaperPreview(true)} papers={papers} onUploadPaper={isLocked ? undefined : handleUploadPaper} sources={sources} onUploadSource={isLocked ? undefined : handleUploadSource} onDeleteSource={isReview ? undefined : handleDeleteSource} mediaAssets={mediaAssets} onUploadMedia={isLocked ? undefined : handleUploadMedia} onDeleteMedia={isReview ? undefined : handleDeleteMedia} onInsertMedia={canEditCurrentSection ? handleInsertMedia : undefined} showToast={showToast} isLocked={isLocked} onSaveDraft={isReview ? undefined : handleSaveDraft} saveStatus={saveStatus} />
+        <FilePanel compact={isCompactWorkspace} isOpen={isFileTreeOpen} width={fileTreeWidth} onResizeStart={handleLeftDividerMouseDown} sections={sections} assignedSections={assignedSections} selectedSectionId={selectedSectionId} onSelectSection={handleSelectSection} selectedPaper={selectedPaper} onSelectPaper={handleSelectPaper} onViewFullPaper={() => setShowFullPaperPreview(true)} papers={papers} onUploadPaper={isLocked || pendingDelete ? undefined : handleUploadPaper} onDeletePaper={isLocked ? undefined : handleDeletePaper} sources={sources} onUploadSource={isLocked ? undefined : handleUploadSource} onDeleteSource={isReview ? undefined : handleDeleteSource} mediaAssets={mediaAssets} onUploadMedia={isLocked ? undefined : handleUploadMedia} onDeleteMedia={isReview ? undefined : handleDeleteMedia} onInsertMedia={canEditCurrentSection ? handleInsertMedia : undefined} showToast={showToast} isLocked={isLocked} onSaveDraft={isReview ? undefined : handleSaveDraft} saveStatus={saveStatus} />
 
         <EditorPanel onViewFullPaper={() => setShowFullPaperPreview(true)} review={isReview ? review : null} compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={isReview ? undefined : handleSaveDraft} insertLatexTag={isReview ? undefined : insertLatexTag} insertSymbol={isReview ? undefined : insertSymbol} handleFindReplace={isReview ? undefined : handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} isLocked={isLocked} findings={editorFindings} onFindingClick={handleFindingClick} onOpenSourceMap={openSourceMap} onOpenCitationReview={handleOpenCitationReview} reviewBusy={loadingAiReview} reviewProgress={aiReviewProgress} reviewFindingsCount={(aiReviewResult?.findings || []).length} reviewError={aiReviewError?.message} onEditorUserScroll={closeReviewOverlay} isReviewVisible={isReviewVisible} onToggleReviewVisible={toggleReviewVisible} citationIndex={citationIndex}
           feedback={isReview ? undefined : feedback} feedbackOpen={feedbackOpen} setFeedbackOpen={setFeedbackOpen} activeFeedbackId={activeFeedbackId} onSelectFeedback={isReview ? item => { review.selectFeedback(item); setActiveTab('Review'); setIsDrawerOpen(true); if (isCompactWorkspace) setIsFileTreeOpen(false); } : handleSelectFeedback}

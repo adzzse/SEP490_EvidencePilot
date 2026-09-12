@@ -29,6 +29,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.Map;
@@ -159,6 +161,54 @@ class DocumentServiceImplAccessTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("corpus is locked");
         verify(documentRepository, never()).save(source);
+    }
+
+    @Test
+    void deletePaperInvalidatesOnlyItsPdfCacheAfterCommit() {
+        Document paper = document(project());
+        String hash = "a".repeat(64);
+        paper.setOriginalFilename("paper.PDF");
+        paper.setFileHashSha256(hash);
+        when(currentUserService.requireCurrentUser()).thenReturn(user());
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service().deleteDocument(paper.getId());
+            verify(documentObjectStorage, never()).delete(anyString());
+            verify(qdrantService, never()).deleteVectors(paper.getId());
+
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+
+            verify(documentObjectStorage).delete(DocumentObjectStorage.extractionCacheKey(hash, true));
+            verify(documentObjectStorage, times(1)).delete(anyString());
+            verify(documentObjectStorage).deleteExtractionCheckpoint(paper.getId(), hash);
+            verify(qdrantService).deleteVectors(paper.getId());
+            assertThat(paper.isActive()).isFalse();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void rolledBackPaperDeletionKeepsExtractionCache() {
+        Document paper = document(project());
+        paper.setOriginalFilename("paper.pdf");
+        paper.setFileHashSha256("a".repeat(64));
+        when(currentUserService.requireCurrentUser()).thenReturn(user());
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service().deleteDocument(paper.getId());
+            TransactionSynchronizationManager.getSynchronizations().forEach(
+                    synchronization -> synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+            verify(documentObjectStorage, never()).delete(anyString());
+            verify(qdrantService, never()).deleteVectors(paper.getId());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test
@@ -301,7 +351,8 @@ class DocumentServiceImplAccessTest {
         project.setStatus(ProjectStatus.IN_PROGRESS);
         Document source = document(project);
         source.setDocType(DocumentType.SOURCE);
-        source.setFileHashSha256("file-hash");
+        source.setOriginalFilename("source.pdf");
+        source.setFileHashSha256("a".repeat(64));
 
         when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
@@ -309,7 +360,8 @@ class DocumentServiceImplAccessTest {
 
         verify(projectCollectionService).removeSource(source);
         verify(mediaAssetService).deleteExtractedForDocument(source);
-        verify(documentObjectStorage).deleteExtractionCheckpoint(source.getId(), "file-hash");
+        verify(documentObjectStorage).deleteExtractionCheckpoint(source.getId(), source.getFileHashSha256());
+        verify(documentObjectStorage, never()).delete(anyString());
         verify(qdrantService).deleteVectors(source.getId());
         assertThat(source.isActive()).isFalse();
         assertThat(source.getDownloadToken()).isNotBlank();

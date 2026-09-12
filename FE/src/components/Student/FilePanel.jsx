@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useMediaUrls } from '../../hooks/useMediaUrls.js';
 import DeleteConfirm from '../ui/DeleteConfirm.jsx';
 
-export default function FilePanel({ compact, isOpen, width, onResizeStart, sections, assignedSections, selectedSectionId, onSelectSection, selectedPaper, onSelectPaper, onViewFullPaper, papers, onUploadPaper, sources, onUploadSource, onDeleteSource, mediaAssets, onUploadMedia, onDeleteMedia, onInsertMedia, showToast, isLocked, onSaveDraft, saveStatus }) {
+export default function FilePanel({ compact, isOpen, width, onResizeStart, sections, assignedSections, selectedSectionId, onSelectSection, selectedPaper, onSelectPaper, onViewFullPaper, papers, onUploadPaper, onDeletePaper, sources, onUploadSource, onDeleteSource, mediaAssets, onUploadMedia, onDeleteMedia, onInsertMedia, showToast, isLocked, onSaveDraft, saveStatus }) {
   const { t } = useTranslation();
   const [mediaSearchQuery, setMediaSearchQuery] = useState('');
   const [hoveredMedia, setHoveredMedia] = useState(null);
@@ -30,10 +30,19 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
         <div className="px-4 py-2.5 border-b border-(--border) bg-(--surface-tertiary)/40 flex items-center justify-between">
           <span className="text-xs font-bold text-(--text-primary) truncate max-w-[180px]">{selectedPaper?.originalFilename || selectedPaper?.title || t('paper')}</span>
           {selectedPaper && (
-            <button type="button" onClick={onViewFullPaper} className="ml-2 w-7 h-7 shrink-0 flex items-center justify-center rounded-md text-(--text-secondary) hover:text-(--brand-foreground) hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors" title={t('viewFullPaper')} aria-label={t('viewFullPaper')}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-            </button>
+            <div className="flex items-center shrink-0">
+              <button type="button" onClick={onViewFullPaper} className="ml-2 w-7 h-7 shrink-0 flex items-center justify-center rounded-md text-(--text-secondary) hover:text-(--brand-foreground) hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors" title={t('viewFullPaper')} aria-label={t('viewFullPaper')}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+              </button>
+              {onDeletePaper && !isLocked && <DeleteConfirm message={t('deletePaperConfirm')} onConfirm={() => onDeletePaper(selectedPaper.id)} triggerLabel={`${t('delete')} ${t('paper')}`} confirmLabel={t('delete')} cancelLabel={t('cancel')} className="w-7 h-7 flex items-center justify-center rounded-md text-(--text-secondary) hover:text-red-600 transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </DeleteConfirm>}
+            </div>
           )}
+          {!selectedPaper && papers.length === 0 && onUploadPaper && !isLocked && <label className="w-7 h-7 flex items-center justify-center rounded-md text-(--text-secondary) hover:text-indigo-600 cursor-pointer focus-within:ring-2 focus-within:ring-(--focus)" title={t('uploadNewPaper')}>
+            <input type="file" accept=".pdf,.docx,.md,.markdown,.tex" aria-label={t('uploadNewPaper')} className="sr-only" onChange={e => { if (e.target.files?.[0]) onUploadPaper(e.target.files[0]); e.target.value = ''; }} />
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+          </label>}
         </div>
         <div className="px-3 py-2 border-b border-(--border) flex items-center justify-between">
           <span className="text-[10px] font-bold text-(--text-secondary) tracking-wider uppercase">{t('sections')}</span>

@@ -730,7 +730,8 @@ public class DocumentServiceImpl implements DocumentService {
         doc.setActive(false);
         doc.setDownloadToken(UUID.randomUUID().toString());
         documentRepository.save(doc);
-        deleteDerivedDataAfterCommit(doc.getId(), doc.getFileHashSha256());
+        deleteDerivedDataAfterCommit(doc.getId(), doc.getFileHashSha256(),
+                doc.getDocType() == DocumentType.PAPER && ".pdf".equals(fileExtension(doc.getOriginalFilename())));
     }
 
     private void deleteAfterFailedMetadataUpdate(String objectKey, UUID documentId, RuntimeException failure) {
@@ -750,12 +751,19 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
-    private void deleteDerivedDataAfterCommit(UUID documentId, String fileHashSha256) {
+    private void deleteDerivedDataAfterCommit(UUID documentId, String fileHashSha256, boolean invalidateCache) {
         Runnable cleanup = () -> {
             try {
                 documentObjectStorage.deleteExtractionCheckpoint(documentId, fileHashSha256);
             } catch (RuntimeException e) {
                 log.warn("Failed to delete extraction checkpoint for document {}", documentId, e);
+            }
+            if (invalidateCache && fileHashSha256 != null) {
+                try {
+                    documentObjectStorage.delete(DocumentObjectStorage.extractionCacheKey(fileHashSha256, true));
+                } catch (RuntimeException e) {
+                    log.warn("Failed to delete paper extraction cache for document {}", documentId, e);
+                }
             }
             try {
                 qdrantService.deleteVectors(documentId);
