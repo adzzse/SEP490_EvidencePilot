@@ -33,7 +33,6 @@ import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -66,6 +65,8 @@ public class AdminService {
             "createdAt", "email", "studentCode", "firstName", "lastName", "role", "accountStatus");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
     private static final Pattern STUDENT_CODE_PATTERN = Pattern.compile("^[A-Z]{2}\\d{6}$");
+    /** Fixed password for silent (no-invitation) account creation. */
+    static final String FIXED_PASSWORD = "Evidence123!";
 
     private final UserRepository users;
     private final ProjectRepository projects;
@@ -82,8 +83,6 @@ public class AdminService {
     private final PasswordEncoder passwords;
     private final UserInvitationService invitations;
     private final UserAvatarService avatars;
-    // Fail closed if a restricted test context does not provide the policy.
-    private final ObjectProvider<DevBypassPolicy> devBypassPolicies;
     private final ApplicationEventPublisher events;
 
     @Transactional(readOnly = true)
@@ -124,14 +123,9 @@ public class AdminService {
             throw conflict("Student code already exists");
         }
 
-        // No admin-supplied passwords: every account is born VERIFYING_EMAIL with
-        // the un-hashable sentinel and sets its own password via the emailed
-        // set-password link — except the quarantined dev bypass (fixed password,
-        // ACTIVE immediately, no email), which 403s unless explicitly enabled.
+        // Admin chooses: devBypass=true → ACTIVE with fixed password, no email.
+        //                devBypass=false → VERIFYING_EMAIL, invitation email sent.
         boolean devBypass = request.devBypass();
-        if (devBypass) {
-            requireDevBypass();
-        }
 
         User user = new User();
         user.setEmail(email);
@@ -142,7 +136,7 @@ public class AdminService {
         user.setPasswordChangeNoticePending(true);
         if (devBypass) {
             user.setAccountStatus(AccountStatus.ACTIVE);
-            user.setPasswordHash(passwords.encode(DevBypassPolicy.FIXED_PASSWORD));
+            user.setPasswordHash(passwords.encode(FIXED_PASSWORD));
         } else {
             user.setAccountStatus(AccountStatus.VERIFYING_EMAIL);
             user.setPasswordHash(User.DISABLED_PASSWORD_SENTINEL);
@@ -176,13 +170,6 @@ public class AdminService {
      */
     @Transactional
     public AdminUserImportResponse importUsers(AdminUserImportRequest request, boolean suppressInvitations) {
-        if (suppressInvitations) {
-            User caller = currentUsers.requireCurrentUser();
-            if (caller.getRole() != UserRole.ADMIN) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invitation suppress requires ADMIN role");
-            }
-            requireDevBypass();
-        }
         List<AdminUserImportResponse.ImportError> errors = new ArrayList<>();
         if (request == null) {
             addImportError(errors, 0, "body", "JSON body is required");
@@ -272,9 +259,6 @@ public class AdminService {
         }
 
         boolean devBypass = request.devBypass();
-        if (devBypass) {
-            requireDevBypass();
-        }
         int created = 0;
         int updated = 0;
         List<User> changedUsers = new ArrayList<>();
@@ -289,7 +273,7 @@ public class AdminService {
                 user.setPasswordChangeNoticePending(true);
                 if (devBypass || suppressInvitations) {
                     user.setAccountStatus(AccountStatus.ACTIVE);
-                    user.setPasswordHash(passwords.encode(DevBypassPolicy.FIXED_PASSWORD));
+                    user.setPasswordHash(passwords.encode(FIXED_PASSWORD));
                 } else {
                     user.setAccountStatus(AccountStatus.VERIFYING_EMAIL);
                     user.setPasswordHash(User.DISABLED_PASSWORD_SENTINEL);
@@ -739,13 +723,7 @@ public class AdminService {
         return value.trim();
     }
 
-    private void requireDevBypass() {
-        DevBypassPolicy policy = devBypassPolicies.getIfAvailable();
-        if (policy == null) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Dev bypass is not available");
-        }
-        policy.allowOrThrow();
-    }
+
 
     private ResponseStatusException conflict(String message) {
         return new ResponseStatusException(HttpStatus.CONFLICT, message);

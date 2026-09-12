@@ -52,7 +52,7 @@ import static org.mockito.Mockito.mock;
         "spring.profiles.active=test", "app.dev-bypass.enabled=true"}, showSql = false)
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Import({AdminExcelSeedService.class, DevBypassPolicy.class, PaperProcessingServiceImpl.class, BlockTreeIngestor.class,
+@Import({AdminExcelSeedService.class, PaperProcessingServiceImpl.class, BlockTreeIngestor.class,
         CurrentUserServiceImpl.class, PaperStandardService.class, AdminSeedMySqlTest.Config.class})
 class AdminSeedMySqlTest {
     @Container static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46");

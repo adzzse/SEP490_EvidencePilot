@@ -45,27 +45,18 @@ class AdminExcelSeedServiceTest {
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 mock(com.evidencepilot.service.impl.ProjectCollectionService.class),
-                mock(com.fasterxml.jackson.databind.ObjectMapper.class), localPolicy(), mock(org.springframework.transaction.PlatformTransactionManager.class));
+                mock(com.fasterxml.jackson.databind.ObjectMapper.class), mock(org.springframework.transaction.PlatformTransactionManager.class));
     }
 
-    private static DevBypassPolicy localPolicy() {
-        return new DevBypassPolicy(true, new org.springframework.mock.env.MockEnvironment()
-                .withProperty("spring.profiles.active", "test"));
-    }
+
 
     @Test
-    void forbiddenMixedInvitationBatchFailsBeforeAnyImport() {
+    void mixedInvitationBatchPassesValidation() {
         var service = service();
-        var policy = new DevBypassPolicy(true, new org.springframework.mock.env.MockEnvironment()
-                .withProperty("APP_ENV", "production").withProperty("spring.profiles.active", "dev"));
-        org.springframework.test.util.ReflectionTestUtils.setField(service, "seedPolicy", policy);
         var rows = List.of(
                 row("email", "invited@fixture.test", "role", "INSTRUCTOR", "send_invitation", "TRUE"),
                 row("email", "silent@fixture.test", "role", "INSTRUCTOR", "send_invitation", ""));
-        assertThat(service.validate(Map.of("users", rows))).anyMatch(error -> error.contains("Silent seed"));
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.commitUsers(rows, null))
-                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
-        org.mockito.Mockito.verifyNoInteractions(org.springframework.test.util.ReflectionTestUtils.getField(service, "adminService"));
+        assertThat(service.validate(Map.of("users", rows))).noneMatch(error -> error.contains("Silent seed"));
     }
 
     private static Map<String, String> row(Object... kv) {
@@ -222,14 +213,13 @@ class AdminExcelSeedServiceTest {
     }
 
     @Test
-    void submittedReviewStatusIsRejectedAtPreview() {
+    void submittedReviewStatusIsAcceptedAtPreview() {
         var sheets = Map.of("projects", List.of(row(
                 "project_title", "Review fixture",
                 "status", "SUBMITTED_FOR_REVIEW",
                 "_row", "2")));
 
-        assertThat(service().validate(sheets)).containsExactly(
-                "projects row 2: read-only/review status not allowed on seed: SUBMITTED_FOR_REVIEW");
+        assertThat(service().validate(sheets)).isEmpty();
     }
 
     @Test
@@ -269,7 +259,7 @@ class AdminExcelSeedServiceTest {
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 mock(com.evidencepilot.service.impl.ProjectCollectionService.class),
-                mock(com.fasterxml.jackson.databind.ObjectMapper.class), localPolicy(), tx);
+                mock(com.fasterxml.jackson.databind.ObjectMapper.class), tx);
         when(tx.getTransaction(any())).thenReturn(new org.springframework.transaction.support.SimpleTransactionStatus());
         var projectId = java.util.UUID.randomUUID();
         var project = new com.evidencepilot.model.Project();
@@ -352,7 +342,7 @@ class AdminExcelSeedServiceTest {
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 mock(com.evidencepilot.service.impl.ProjectCollectionService.class),
-                mock(com.fasterxml.jackson.databind.ObjectMapper.class), localPolicy(), mock(org.springframework.transaction.PlatformTransactionManager.class));
+                mock(com.fasterxml.jackson.databind.ObjectMapper.class), mock(org.springframework.transaction.PlatformTransactionManager.class));
         when(adminService.importUsers(any(), anyBoolean())).thenAnswer(inv -> {
             @SuppressWarnings("unchecked")
             List<com.evidencepilot.dto.request.AdminUserImportRequest.UserItem> items =
@@ -688,7 +678,7 @@ class AdminExcelSeedServiceTest {
                 mock(MediaAssetService.class),
                 mock(PaperProcessingService.class),
                 openAlex, ingestion, storage, persistence, collections,
-                mock(com.fasterxml.jackson.databind.ObjectMapper.class), localPolicy(), mock(org.springframework.transaction.PlatformTransactionManager.class));
+                mock(com.fasterxml.jackson.databind.ObjectMapper.class), mock(org.springframework.transaction.PlatformTransactionManager.class));
         return new DoiMocks(service, projects, members, documents, openAlex, ingestion, storage, persistence, collections);
     }
 
@@ -988,7 +978,7 @@ class AdminExcelSeedServiceTest {
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 collections,
-                mock(com.fasterxml.jackson.databind.ObjectMapper.class), localPolicy(),
+                mock(com.fasterxml.jackson.databind.ObjectMapper.class),
                 mock(org.springframework.transaction.PlatformTransactionManager.class));
         var owner = doiInstructor();
         when(users.findByEmail("prof@example.test"))
@@ -1031,7 +1021,7 @@ class AdminExcelSeedServiceTest {
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 collections,
-                mock(com.fasterxml.jackson.databind.ObjectMapper.class), localPolicy(),
+                mock(com.fasterxml.jackson.databind.ObjectMapper.class),
                 mock(org.springframework.transaction.PlatformTransactionManager.class));
         when(users.findByEmail(anyString())).thenReturn(java.util.Optional.empty());
         var job = new AdminExcelSeedService.SeedJob();

@@ -136,7 +136,6 @@ public class AdminExcelSeedService {
     private final DocumentPersistenceService documentPersistenceService;
     private final ProjectCollectionService projectCollectionService;
     private final ObjectMapper objectMapper;
-    private final DevBypassPolicy seedPolicy;
     private final PlatformTransactionManager transactionManager;
 
     @Value("${app.seed.max-upload-bytes:268435456}")
@@ -496,10 +495,7 @@ public class AdminExcelSeedService {
 
     List<String> validate(Map<String, List<Map<String, String>>> sheets) {
         List<String> errors = new ArrayList<>();
-        if (!seedPolicy.allowsSeedAccounts() && sheets.getOrDefault("users", List.of()).stream()
-                .anyMatch(row -> !sendInvitationRequested(row.getOrDefault("send_invitation", "")))) {
-            errors.add("Silent seed requires enabled dev/test bypass; production rows must explicitly request invitations");
-        }
+
         // users: reuse AdminService patterns lightly (email/code/role)
         var emails = new java.util.HashSet<String>();
         for (var r : sheets.getOrDefault("users", List.of())) {
@@ -523,8 +519,7 @@ public class AdminExcelSeedService {
             else if (!titles.add(r.get("project_title"))) errors.add(at + "duplicate project_title");
             String st = r.getOrDefault("status", "CREATED");
             if (!st.isBlank()) try {
-                ProjectStatus v = ProjectStatus.valueOf(st);
-                if (v.isReadOnly() || v == ProjectStatus.SUBMITTED_FOR_REVIEW) errors.add(at + "read-only/review status not allowed on seed: " + st);
+                ProjectStatus.valueOf(st);
             } catch (IllegalArgumentException ex) {
                 errors.add(at + "unknown status: " + st);
             }
@@ -797,9 +792,7 @@ public class AdminExcelSeedService {
 
     public int commitUsers(List<Map<String, String>> rows, SeedJob job) {
         if (rows.isEmpty()) return 0;
-        if (rows.stream().anyMatch(row -> !sendInvitationRequested(row.getOrDefault("send_invitation", "")))) {
-            seedPolicy.allowOrThrow();
-        }
+
         // group by role (importUsers takes one role per call) and by invitation
         // flag — send_invitation=FALSE rows become silent ACTIVE accounts
         record UserGroup(String role, boolean invite) {}

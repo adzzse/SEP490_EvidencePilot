@@ -83,8 +83,6 @@ class AdminSeedExportServiceTest {
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 mock(com.evidencepilot.service.impl.ProjectCollectionService.class),
                 mock(com.fasterxml.jackson.databind.ObjectMapper.class),
-                new DevBypassPolicy(true, new org.springframework.mock.env.MockEnvironment()
-                        .withProperty("spring.profiles.active", "test")),
                 mock(org.springframework.transaction.PlatformTransactionManager.class));
     }
 

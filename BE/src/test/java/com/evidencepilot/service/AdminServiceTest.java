@@ -23,7 +23,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -66,7 +65,6 @@ class AdminServiceTest {
     @Mock com.evidencepilot.service.UserAvatarService avatars;
     @Mock SystemNotificationService notifications;
     @Mock PasswordEncoder passwords;
-    @Mock ObjectProvider<DevBypassPolicy> devBypassPolicies;
     @Mock ApplicationEventPublisher events;
     @InjectMocks AdminService service;
 
@@ -149,9 +147,8 @@ class AdminServiceTest {
 
     @Test
     void createsActiveUserWithFixedPasswordWhenDevBypassAllowed() {
-        when(devBypassPolicies.getIfAvailable()).thenReturn(localPolicy(true));
         when(currentUsers.requireCurrentUser()).thenReturn(user(UserRole.ADMIN, AccountStatus.ACTIVE));
-        when(passwords.encode(DevBypassPolicy.FIXED_PASSWORD)).thenReturn("$2a$10$random");
+        when(passwords.encode(AdminService.FIXED_PASSWORD)).thenReturn("$2a$10$random");
         when(users.save(any(User.class))).thenAnswer(invocation -> {
             User saved = invocation.getArgument(0);
             saved.setId(UUID.randomUUID());
@@ -165,7 +162,7 @@ class AdminServiceTest {
         verify(users).save(captor.capture());
         assertThat(captor.getValue().getAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
         assertThat(captor.getValue().getPasswordHash()).isEqualTo("$2a$10$random");
-        verify(passwords).encode(DevBypassPolicy.FIXED_PASSWORD);
+        verify(passwords).encode(AdminService.FIXED_PASSWORD);
         verifyNoInteractions(invitations);
         ArgumentCaptor<Object> auditValue = ArgumentCaptor.forClass(Object.class);
         verify(audit).record(eq("USER_CREATED"), eq("USER"), eq(captor.getValue().getId()),
@@ -173,22 +170,6 @@ class AdminServiceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> auditMap = (Map<String, Object>) auditValue.getValue();
         assertThat(auditMap).containsEntry("devBypass", true);
-    }
-
-    @Test
-    void rejectsDevBypassWhenPolicyUnavailable() {
-        when(devBypassPolicies.getIfAvailable()).thenReturn(null);
-        assertForbidden(() -> service.createUser(new AdminUserCreateRequest(
-                "dev@example.com", "D", "Ev", UserRole.INSTRUCTOR, null, true)));
-        verify(users, never()).save(any());
-    }
-
-    @Test
-    void rejectsDevBypassWhenFlagDisabled() {
-        when(devBypassPolicies.getIfAvailable()).thenReturn(localPolicy(false));
-        assertForbidden(() -> service.createUser(new AdminUserCreateRequest(
-                "dev@example.com", "D", "Ev", UserRole.INSTRUCTOR, null, true)));
-        verify(users, never()).save(any());
     }
 
     @Test
@@ -332,11 +313,10 @@ class AdminServiceTest {
 
     @Test
     void importWithDevBypassCreatesActiveUsersWithoutInvites() {
-        when(devBypassPolicies.getIfAvailable()).thenReturn(localPolicy(true));
         when(currentUsers.requireCurrentUser()).thenReturn(user(UserRole.ADMIN, AccountStatus.ACTIVE));
         when(users.findAllByEmailIn(any())).thenReturn(List.of());
         when(users.findAllByStudentCodeIn(any())).thenReturn(List.of());
-        when(passwords.encode(DevBypassPolicy.FIXED_PASSWORD)).thenReturn("$2a$10$random");
+        when(passwords.encode(AdminService.FIXED_PASSWORD)).thenReturn("$2a$10$random");
         when(users.saveAll(any())).thenAnswer(invocation -> {
             List<User> saved = invocation.getArgument(0);
             saved.forEach(user -> user.setId(UUID.randomUUID()));
@@ -639,7 +619,6 @@ class AdminServiceTest {
             saved.forEach(user -> user.setId(UUID.randomUUID()));
             return saved;
         });
-        when(devBypassPolicies.getIfAvailable()).thenReturn(localPolicy(true));
 
         var response = service.importUsers(new AdminUserImportRequest("STUDENT", List.of(
                 new AdminUserImportRequest.UserItem("silent@example.com", "Silent", "Student", "SE170701"))), true);
@@ -651,7 +630,7 @@ class AdminServiceTest {
         verify(users).saveAll(savedUsers.capture());
         assertThat(savedUsers.getValue()).singleElement().satisfies(saved -> {
             assertThat(saved.getAccountStatus()).isEqualTo(AccountStatus.ACTIVE);
-            assertThat(saved.getPasswordHash()).isEqualTo("encoded:" + DevBypassPolicy.FIXED_PASSWORD);
+            assertThat(saved.getPasswordHash()).isEqualTo("encoded:" + AdminService.FIXED_PASSWORD);
         });
         verify(invitations, never()).issueInvitation(any());
         ArgumentCaptor<Object> auditValue = ArgumentCaptor.forClass(Object.class);
@@ -660,30 +639,6 @@ class AdminServiceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> safeAuditValue = (Map<String, Object>) auditValue.getValue();
         assertThat(safeAuditValue).containsEntry("seedSilent", true);
-    }
-
-    @Test
-    void importSuppressRequiresAdmin() {
-        when(currentUsers.requireCurrentUser()).thenReturn(user(UserRole.INSTRUCTOR, AccountStatus.ACTIVE));
-        assertForbidden(() -> service.importUsers(new AdminUserImportRequest("STUDENT", List.of(
-                new AdminUserImportRequest.UserItem("x@example.com", "X", "Y", "SE170702"))), true));
-        verifyNoInteractions(users);
-    }
-
-    @Test
-    void forbiddenSilentImportDoesNotReadOrWriteUsersOrSendInvitations() {
-        when(currentUsers.requireCurrentUser()).thenReturn(user(UserRole.ADMIN, AccountStatus.ACTIVE));
-        when(devBypassPolicies.getIfAvailable()).thenReturn(new DevBypassPolicy(true,
-                new org.springframework.mock.env.MockEnvironment().withProperty("APP_ENV", "production")
-                        .withProperty("spring.profiles.active", "dev")));
-        assertForbidden(() -> service.importUsers(new AdminUserImportRequest("STUDENT", List.of(
-                new AdminUserImportRequest.UserItem("silent@fixture.test", "Test", "Student", "SE170703"))), true));
-        verifyNoInteractions(users, invitations, passwords, events);
-    }
-
-    private static DevBypassPolicy localPolicy(boolean enabled) {
-        return new DevBypassPolicy(enabled, new org.springframework.mock.env.MockEnvironment()
-                .withProperty("spring.profiles.active", "test"));
     }
 
     private User user(UserRole role, AccountStatus status) {

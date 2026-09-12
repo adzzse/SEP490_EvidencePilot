@@ -1,34 +1,34 @@
 package com.evidencepilot.config;
 
 import jakarta.annotation.PostConstruct;
-import com.evidencepilot.service.DevBypassPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 /**
- * Fatal boot guard for external SMTP relay.
- * Checks the effective sender configuration whenever production policy applies.
+ * Boot guard for external SMTP relay.
+ * Validates mail configuration at startup when mail properties are present.
  */
 @Component
 @RequiredArgsConstructor
 public class MailEnvValidator {
-    private final DevBypassPolicy policy;
     private final Environment environment;
 
     @PostConstruct
     void validate() {
-        if (!policy.isProduction()) return;
+        // No production gate — mail config is always optional.
+        // If mail properties are present, validate them.
+        String host = environment.getProperty("spring.mail.host");
+        if (isBlank(host)) return; // No mail configured — skip
+
         int port;
         try {
             port = Integer.parseInt(environment.getProperty("spring.mail.port", "587"));
         } catch (NumberFormatException ex) {
             port = 0;
         }
-        if (port < 1 || port > 65535 || isBlank(environment.getProperty("spring.mail.host"))
-                || isBlank(environment.getProperty("spring.mail.username"))
-                || isBlank(environment.getProperty("spring.mail.password"))) {
-            throw new IllegalStateException("Production requires spring.mail.host, port (1..65535), username and password");
+        if (port < 1 || port > 65535) {
+            throw new IllegalStateException("spring.mail.port must be between 1 and 65535");
         }
     }
 

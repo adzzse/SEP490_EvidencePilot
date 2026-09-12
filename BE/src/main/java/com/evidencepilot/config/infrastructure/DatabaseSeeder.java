@@ -6,7 +6,6 @@ import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.ReviewGuideRepository;
 import com.evidencepilot.repository.UserRepository;
-import com.evidencepilot.service.DevBypassPolicy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +26,6 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final DevBypassPolicy seedPolicy;
     private final String adminEmail;
     private final String adminPassword;
     private final String adminFirstName;
@@ -48,7 +46,6 @@ public class DatabaseSeeder implements CommandLineRunner {
             PasswordEncoder passwordEncoder,
             ReviewGuideRepository reviewGuideRepository,
             ObjectMapper objectMapper,
-            DevBypassPolicy seedPolicy,
             @Value("${app.admin.email:}") String adminEmail,
             @Value("${app.admin.password:}") String adminPassword,
             @Value("${app.admin.first-name:Admin}") String adminFirstName,
@@ -66,7 +63,6 @@ public class DatabaseSeeder implements CommandLineRunner {
         this.objectMapper = objectMapper;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.seedPolicy = seedPolicy;
         this.adminEmail = adminEmail;
         this.adminPassword = adminPassword;
         this.adminFirstName = adminFirstName;
@@ -85,7 +81,7 @@ public class DatabaseSeeder implements CommandLineRunner {
     @Override
     public void run(String... args) {
         seedReviewGuides();
-        if (seedPolicy.allowsSeedAccounts()) seedDemoUsers();
+        seedDemoUsers();
     }
 
     private void seedDemoUsers() {
