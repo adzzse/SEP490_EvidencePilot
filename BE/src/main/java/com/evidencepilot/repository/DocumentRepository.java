@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Propagation;
@@ -20,6 +22,10 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     @Override
     @EntityGraph(attributePaths = "project")
     Optional<Document> findById(UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT d FROM Document d WHERE d.id = :id")
+    Optional<Document> findByIdForUpdate(@Param("id") UUID id);
 
     long countByActiveTrueAndDocType(DocumentType docType);
     long countByProcessingStatus(ProcessingStatus processingStatus);

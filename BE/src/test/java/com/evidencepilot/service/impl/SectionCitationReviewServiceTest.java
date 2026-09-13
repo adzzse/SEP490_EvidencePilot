@@ -129,7 +129,7 @@ class SectionCitationReviewServiceTest {
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
         DocumentChunk retrievedChunk = sourceChunk(sourceId, chunkId,
                 "The final model achieved 89.2 percent accuracy on the benchmark evaluation.");
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5)))
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5)))
                 .thenReturn(List.of(
                         List.of(),
                         List.of(new SourceMatchingService.SourceMatch(retrievedChunk, 0.91f))));
@@ -191,7 +191,7 @@ class SectionCitationReviewServiceTest {
         actor.setId(actorId);
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult("provider", "model", review(
                         sectionId, 0,
@@ -235,7 +235,7 @@ class SectionCitationReviewServiceTest {
         actor.setId(actorId);
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult("provider", "model", review(
                         sectionId, 0, findingVerdict(
@@ -263,7 +263,7 @@ class SectionCitationReviewServiceTest {
                 projectId, documentId, sectionId, "Introduction",
                 firstExcerpt + ". " + secondExcerpt + ".");
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult("provider", "model", review(
                         sectionId, 0, findingVerdict(
@@ -299,7 +299,7 @@ class SectionCitationReviewServiceTest {
                 sourceId, chunkId, "This source discusses dataset collection but reports no recall comparison.");
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5)))
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5)))
                 .thenReturn(List.of(List.of(
                         new SourceMatchingService.SourceMatch(retrievedChunk, 0.42f))));
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
@@ -342,7 +342,7 @@ class SectionCitationReviewServiceTest {
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         DocumentChunk supportingChunk = sourceChunk(sourceId, chunkId,
                 "Recall improved by 34 percent in the reported experiments.");
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5)))
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5)))
                 .thenReturn(List.of(List.of(
                         new SourceMatchingService.SourceMatch(supportingChunk, 0.88f))));
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
@@ -376,7 +376,7 @@ class SectionCitationReviewServiceTest {
         PaperSection section = section(
                 projectId, documentId, sectionId, "Introduction", excerpt + ".");
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult("provider", "model", review(
                         sectionId, 0, findingVerdict(
@@ -407,7 +407,7 @@ class SectionCitationReviewServiceTest {
         DocumentChunk retrievedChunk = sourceChunk(
                 sourceId, chunkId, "The final model achieved 89.2 percent accuracy.");
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5)))
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5)))
                 .thenReturn(List.of(List.of(
                         new SourceMatchingService.SourceMatch(retrievedChunk, 0.91f))));
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
@@ -452,7 +452,7 @@ class SectionCitationReviewServiceTest {
         DocumentChunk secondChunk = sourceChunk(
                 secondSourceId, secondChunkId, "The second model achieved 79 percent accuracy.");
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5)))
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5)))
                 .thenReturn(List.of(
                         List.of(new SourceMatchingService.SourceMatch(firstChunk, 0.91f)),
                         List.of(new SourceMatchingService.SourceMatch(secondChunk, 0.90f))));
@@ -489,7 +489,7 @@ class SectionCitationReviewServiceTest {
         PaperSection section = section(
                 projectId, documentId, sectionId, "Introduction", excerpt + ".");
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult("provider", "model", String.format("""
                         {"section_id":"%s","batch_index":0,"verdicts":[{
@@ -517,7 +517,7 @@ class SectionCitationReviewServiceTest {
         PaperSection section = section(
                 projectId, documentId, sectionId, "Introduction", excerpt + ".");
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult("provider", "model", review(
                         sectionId, 0, findingVerdict(
@@ -563,7 +563,7 @@ class SectionCitationReviewServiceTest {
                 .toArray(String[]::new);
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult(
                         "provider", "model", review(sectionId, 0, firstBatchVerdicts)),
@@ -609,7 +609,7 @@ class SectionCitationReviewServiceTest {
                         sourceId, chunkId, quote))
                 .collect(Collectors.joining(","));
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5)))
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5)))
                 .thenReturn(List.of(List.of(
                         new SourceMatchingService.SourceMatch(retrievedChunk, 0.91f))));
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
@@ -642,7 +642,7 @@ class SectionCitationReviewServiceTest {
         actor.setId(actorId);
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult(
                         "retry-provider", "retry-model", review(sectionId, 0, okVerdict(0))));
@@ -670,7 +670,7 @@ class SectionCitationReviewServiceTest {
                 projectId, documentId, sectionId, "Introduction",
                 excerpt + ". " + secondExcerpt + ".");
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult("provider", "model", review(
                         sectionId,
@@ -701,7 +701,7 @@ class SectionCitationReviewServiceTest {
         actor.setId(actorId);
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult("provider", "model", review(
                         sectionId, 0, findingVerdict(
@@ -792,7 +792,7 @@ class SectionCitationReviewServiceTest {
         when(snapshotRepository.findByProjectIdAndStyleAndInputFingerprint(
                 projectId, "section-critique-v4", fingerprint)).thenReturn(Optional.of(snapshot));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5))).thenReturn(List.of());
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5))).thenReturn(List.of());
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult(
                         "provider", "model", review(sectionId, 0, okVerdict(0))));
@@ -834,8 +834,12 @@ class SectionCitationReviewServiceTest {
         actor.setId(actorId);
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5)))
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5)))
                 .thenReturn(emptyMatches(10), emptyMatches(1));
+        Document corpusSource = new Document();
+        corpusSource.setId(UUID.randomUUID());
+        when(sourceMatchingService.retrievableReferenceSources(eq(documentId)))
+                .thenReturn(List.of(corpusSource));
         String[] firstBatchVerdicts = IntStream.range(0, 10)
                 .mapToObj(SectionCitationReviewServiceTest::okVerdict)
                 .toArray(String[]::new);
@@ -886,7 +890,7 @@ class SectionCitationReviewServiceTest {
         actor.setId(actorId);
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
-        when(sourceMatchingService.search(eq(projectId), any(), eq(5)))
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5)))
                 .thenReturn(emptyMatches(10), emptyMatches(10), emptyMatches(1));
         String[] firstBatchVerdicts = IntStream.range(0, 10)
                 .mapToObj(index -> index == 0
@@ -923,9 +927,9 @@ class SectionCitationReviewServiceTest {
             assertThat(finding.endOffset())
                     .isEqualTo(finding.startOffset() + finding.excerpt().length());
         });
-        verify(sourceMatchingService).search(projectId, candidates.subList(0, 10), 5);
-        verify(sourceMatchingService).search(projectId, candidates.subList(10, 20), 5);
-        verify(sourceMatchingService).search(projectId, candidates.subList(20, 21), 5);
+        verify(sourceMatchingService).search(documentId, candidates.subList(0, 10), 5);
+        verify(sourceMatchingService).search(documentId, candidates.subList(10, 20), 5);
+        verify(sourceMatchingService).search(documentId, candidates.subList(20, 21), 5);
         verify(aiModelClient, times(3)).generateForReview(anyString(), anyString());
     }
 
@@ -953,7 +957,7 @@ class SectionCitationReviewServiceTest {
                                 1.0f - rank * 0.1f))
                         .toList())
                 .toList();
-        when(sourceMatchingService.search(projectId, candidates, 5)).thenReturn(matches);
+        when(sourceMatchingService.search(documentId, candidates, 5)).thenReturn(matches);
         String[] verdicts = IntStream.range(0, 10)
                 .mapToObj(SectionCitationReviewServiceTest::okVerdict)
                 .toArray(String[]::new);
@@ -1019,7 +1023,7 @@ class SectionCitationReviewServiceTest {
                 new SourceMatchingService.SourceMatch(
                         sourceChunk(fourthSourceId, UUID.randomUUID(), "fourth"), 0.70f));
         when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
-        when(sourceMatchingService.search(eq(projectId), eq(List.of(excerpt)), eq(20)))
+        when(sourceMatchingService.search(eq(documentId), eq(List.of(excerpt)), eq(20)))
                 .thenReturn(List.of(candidates));
         SectionReviewSourceMatchRequest request = new SectionReviewSourceMatchRequest(List.of(
                 new SectionReviewSourceMatchRequest.Finding(
@@ -1100,17 +1104,18 @@ class SectionCitationReviewServiceTest {
 
     @Test
     void fingerprintChangesWhenSourceCorpusChanges() {
-        UUID projectId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
         UUID sourceId = UUID.randomUUID();
         PaperSection section = section(
-                projectId, UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), documentId, UUID.randomUUID(),
                 "Introduction", "The same saved content");
         Document source = new Document();
         source.setId(sourceId);
         source.setFileHashSha256("source-hash");
         source.setChunkCount(1);
         source.setProcessedAt(LocalDateTime.of(2026, 8, 21, 10, 0));
-        when(sourceMatchingService.retrievableSources(projectId)).thenReturn(List.of(source));
+        when(sourceMatchingService.referenceSources(eq(documentId)))
+                .thenReturn(List.of(source));
         SectionCitationReviewService service = service();
         String originalCorpusFingerprint = service.reviewInputFingerprint(section);
         String contentFingerprint = service.sectionContentFingerprint(section);
@@ -1120,6 +1125,51 @@ class SectionCitationReviewServiceTest {
         assertThat(service.reviewInputFingerprint(section))
                 .isNotEqualTo(originalCorpusFingerprint);
         assertThat(service.sectionContentFingerprint(section)).isEqualTo(contentFingerprint);
+        verify(sourceMatchingService, never()).activeSources(any());
+    }
+
+    @Test
+    void fingerprintIncludesMetadataOnlyStatusMembershipAndOrder() {
+        UUID paperId = UUID.randomUUID();
+        PaperSection section = section(UUID.randomUUID(), paperId, UUID.randomUUID(), "Introduction", "Saved");
+        Document first = new Document();
+        first.setId(UUID.randomUUID());
+        first.setProcessingStatus(com.evidencepilot.model.enums.ProcessingStatus.METADATA_FETCHED);
+        Document second = new Document();
+        second.setId(UUID.randomUUID());
+        second.setProcessingStatus(com.evidencepilot.model.enums.ProcessingStatus.PROCESSING);
+        when(sourceMatchingService.referenceSources(paperId)).thenReturn(List.of(first));
+        var service = service();
+        String initial = service.reviewInputFingerprint(section);
+        first.setProcessingStatus(com.evidencepilot.model.enums.ProcessingStatus.UPLOADED);
+        assertThat(service.reviewInputFingerprint(section)).isNotEqualTo(initial);
+        String uploaded = service.reviewInputFingerprint(section);
+        when(sourceMatchingService.referenceSources(paperId)).thenReturn(List.of(first, second));
+        String added = service.reviewInputFingerprint(section);
+        assertThat(added).isNotEqualTo(uploaded);
+        when(sourceMatchingService.referenceSources(paperId)).thenReturn(List.of(second, first));
+        assertThat(service.reviewInputFingerprint(section)).isNotEqualTo(added);
+        when(sourceMatchingService.referenceSources(paperId)).thenReturn(List.of(first));
+        assertThat(service.reviewInputFingerprint(section)).isEqualTo(uploaded);
+        verify(sourceMatchingService, never()).activeSources(any());
+    }
+
+    @Test
+    void fingerprintChangesWhenEvidenceTitleChanges() {
+        UUID paperId = UUID.randomUUID();
+        PaperSection section = section(UUID.randomUUID(), paperId, UUID.randomUUID(), "Introduction", "External fact.");
+        Document source = new Document();
+        source.setId(UUID.randomUUID());
+        source.setOriginalFilename("before.pdf");
+        source.setTitle("");
+        when(sourceMatchingService.referenceSources(paperId)).thenReturn(List.of(source));
+        var service = service();
+        String initial = service.reviewInputFingerprint(section);
+        source.setOriginalFilename("after.pdf");
+        String renamed = service.reviewInputFingerprint(section);
+        assertThat(renamed).isNotEqualTo(initial);
+        source.setTitle("Updated evidence title");
+        assertThat(service.reviewInputFingerprint(section)).isNotEqualTo(renamed);
     }
 
     @Test
@@ -1130,7 +1180,7 @@ class SectionCitationReviewServiceTest {
         actor.setId(actorId);
         when(sectionRepository.findByIdWithDocument(id)).thenReturn(Optional.of(section));
         when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
-        when(sourceMatchingService.search(eq(project), any(), eq(5))).thenReturn(emptyMatches(1));
+        when(sourceMatchingService.search(eq(document), any(), eq(5))).thenReturn(emptyMatches(1));
         when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
                 new AiModelClient.GenerationResult("provider", "model", review(id, 0, okVerdict(0))));
         java.util.Map<String, ReviewSnapshot> cache = new java.util.HashMap<>();
@@ -1163,7 +1213,7 @@ class SectionCitationReviewServiceTest {
         PaperSection section = section(project, document, id, "Introduction", IntStream.range(0, 11)
                 .mapToObj(i -> "Benchmark " + i + " reports exactly 90 percent accuracy.").collect(Collectors.joining(" ")));
         when(sectionRepository.findByIdWithDocument(id)).thenReturn(Optional.of(section));
-        when(sourceMatchingService.search(eq(project), any(), eq(5))).thenReturn(emptyMatches(10), emptyMatches(1));
+        when(sourceMatchingService.search(eq(document), any(), eq(5))).thenReturn(emptyMatches(10), emptyMatches(1));
         var before = prompts.resolve("CITATION_REVIEW");
         var after = new PromptTemplateService.ResolvedPrompt("CITATION_REVIEW", "v2", before.systemText() + "\nBe concise.");
         var calls = new java.util.concurrent.atomic.AtomicInteger();

@@ -211,7 +211,7 @@ public class SectionCitationReviewService {
         }
 
         List<List<SourceMatchingService.SourceMatch>> matches = sourceMatchingService.search(
-                section.getDocument().getProject().getId(),
+                section.getDocument().getId(),
                 findings.stream().map(SectionReviewSourceMatchRequest.Finding::excerpt).toList(),
                 SOURCE_TOP_K);
         List<SectionReviewSourceMatchesResponse.FindingMatches> response = new ArrayList<>();
@@ -256,7 +256,7 @@ public class SectionCitationReviewService {
         String input = REVIEW_VERSION + '\0' + RULE_CATALOG_VERSION + '\0' + prompt.fingerprint()
                 + '\0' + generationFingerprint
                 + '\0' + standard + '\0' + section.getId() + '\0' + section.getSectionTitle()
-                + '\0' + sectionContentFingerprint(section) + '\0' + corpusRevision(project.getId());
+                + '\0' + sectionContentFingerprint(section) + '\0' + corpusRevision(section.getDocument().getId());
         return sha256(input);
     }
 
@@ -294,14 +294,17 @@ public class SectionCitationReviewService {
         }
     }
 
-    private String corpusRevision(UUID projectId) {
-        return sourceMatchingService.retrievableSources(projectId).stream()
+    private String corpusRevision(UUID paperId) {
+        return sourceMatchingService.referenceSources(paperId).stream()
                 .map(source -> String.join("\0",
                         source.getId().toString(),
+                        source.getTitle() == null || source.getTitle().isBlank()
+                                ? source.getOriginalFilename() == null ? "" : source.getOriginalFilename()
+                                : source.getTitle(),
+                        source.getProcessingStatus() == null ? "" : source.getProcessingStatus().name(),
                         source.getFileHashSha256() == null ? "" : source.getFileHashSha256(),
                         source.getProcessedAt() == null ? "" : source.getProcessedAt().toString(),
                         source.getChunkCount() == null ? "" : source.getChunkCount().toString()))
-                .sorted()
                 .collect(java.util.stream.Collectors.joining("\1"));
     }
 
@@ -312,11 +315,16 @@ public class SectionCitationReviewService {
             BiConsumer<Integer, Integer> onProgress,
             java.util.function.Consumer<SectionCitationReviewResponse> onCheckpoint, ResolvedPrompt prompt,
             AiModelClient.GenerationSelection selection) {
-        UUID projectId = section.getDocument().getProject().getId();
+        UUID paperId = section.getDocument().getId();
         List<ClaimCandidate> candidates = sectionCandidates(section.getContentTex());
         int batchCount = (candidates.size() + REVIEW_BATCH_SIZE - 1) / REVIEW_BATCH_SIZE;
         List<SectionCitationReviewResponse.Finding> findings = new ArrayList<>();
         List<String> limitations = new ArrayList<>();
+        if (!candidates.isEmpty() && sourceMatchingService.retrievableReferenceSources(paperId).isEmpty()) {
+            limitations.add(sourceMatchingService.referenceSources(paperId).isEmpty()
+                    ? "No references are declared for this paper, so no evidence was retrieved. Add sources to References to enable evidence grounding."
+                    : "None of this paper's references are retrievable yet (missing PDFs or still processing), so no evidence was retrieved. Attach the missing files to enable evidence grounding.");
+        }
         String provider = null;
         LinkedHashSet<String> modelsUsed = new LinkedHashSet<>();
         RuntimeException lastFailure = null;
@@ -329,7 +337,7 @@ public class SectionCitationReviewService {
             List<ClaimCandidate> batch = List.copyOf(candidates.subList(
                     fromIndex, Math.min(candidates.size(), fromIndex + REVIEW_BATCH_SIZE)));
             try {
-                List<CandidateContext> contexts = retrieveCandidateEvidence(projectId, batch);
+                List<CandidateContext> contexts = retrieveCandidateEvidence(paperId, batch);
                 GeneratedReview generated = generateBatchReview(
                         section, normalizedTitle, contexts, batchIndex, batchCount, prompt.systemText(), selection, 300_000);
                 if (provider == null) {
@@ -477,13 +485,13 @@ public class SectionCitationReviewService {
                 + " unsubstantiated claim(s), " + discrepancies + " source discrepanc(ies).";
     }
 
-    public List<RetrievedEvidence> retrieveEvidence(UUID projectId, String chunkContent) {
+    public List<RetrievedEvidence> retrieveEvidence(UUID paperId, String chunkContent) {
         List<String> candidates = candidateClaims(chunkContent);
         if (candidates.isEmpty()) {
             return List.of();
         }
         List<List<SourceMatchingService.SourceMatch>> matches =
-                sourceMatchingService.search(projectId, candidates, RETRIEVAL_TOP_K);
+                sourceMatchingService.search(paperId, candidates, RETRIEVAL_TOP_K);
         Map<UUID, RetrievedEvidence> unique = new LinkedHashMap<>();
         for (int rank = 0; rank < RETRIEVAL_TOP_K && unique.size() < EVIDENCE_CHUNK_LIMIT; rank++) {
             for (List<SourceMatchingService.SourceMatch> candidateMatches : matches) {
@@ -509,9 +517,9 @@ public class SectionCitationReviewService {
     }
 
     private List<CandidateContext> retrieveCandidateEvidence(
-            UUID projectId, List<ClaimCandidate> candidates) {
+            UUID paperId, List<ClaimCandidate> candidates) {
         List<List<SourceMatchingService.SourceMatch>> matches = sourceMatchingService.search(
-                projectId, candidates.stream().map(ClaimCandidate::text).toList(), RETRIEVAL_TOP_K);
+                paperId, candidates.stream().map(ClaimCandidate::text).toList(), RETRIEVAL_TOP_K);
         if (matches.isEmpty()) {
             return candidates.stream()
                     .map(candidate -> new CandidateContext(candidate, List.of()))

@@ -10,6 +10,7 @@ import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.ProjectDocumentRepository;
+import com.evidencepilot.repository.PaperReferenceRepository;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.QdrantClient;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SourceMatchingServiceTest {
-
     private final DocumentRepository documentRepository = mock(DocumentRepository.class);
     private final ProjectDocumentRepository projectDocumentRepository =
             mock(ProjectDocumentRepository.class);
@@ -35,6 +35,8 @@ class SourceMatchingServiceTest {
     private final AiModelClient aiModelClient = mock(AiModelClient.class);
     private final SparseVectorGenerator sparseVectorGenerator = new SparseVectorGenerator();
     private final QdrantClient qdrantClient = mock(QdrantClient.class);
+    private final PaperReferenceRepository paperReferenceRepository =
+            mock(PaperReferenceRepository.class);
 
     @Test
     void activeSourcesKeepsOnlyActiveSourcesAndDeduplicatesProjectMappings() {
@@ -57,34 +59,33 @@ class SourceMatchingServiceTest {
     }
 
     @Test
-    void retrievableSourcesExcludesSourcesThatAreNotReady() {
-        UUID projectId = UUID.randomUUID();
+    void retrievableReferenceSourcesExcludesSourcesThatAreNotReady() {
+        UUID paperId = UUID.randomUUID();
         Document ready = document(DocumentType.SOURCE, true);
         Document completed = document(DocumentType.SOURCE, true);
         completed.setProcessingStatus(ProcessingStatus.COMPLETED);
         Document processing = document(DocumentType.SOURCE, true);
         processing.setProcessingStatus(ProcessingStatus.PROCESSING);
-        when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(
-                projectId, DocumentType.SOURCE))
-                .thenReturn(List.of(ready, completed, processing));
-        when(projectDocumentRepository.findByProjectId(projectId)).thenReturn(List.of());
+        when(paperReferenceRepository.findByPaperIdOrderByAddedAtAsc(paperId))
+                .thenReturn(List.of(reference(ready), reference(completed), reference(processing)));
 
-        assertThat(service().retrievableSources(projectId)).containsExactly(ready, completed);
+        assertThat(service().retrievableReferenceSources(paperId)).containsExactly(ready, completed);
     }
 
     @Test
-    void searchDropsQdrantChunksOutsideTheActiveProjectSourceSet() {
-        UUID projectId = UUID.randomUUID();
+    void searchQueriesOnlyRetrievablePaperReferences() {
+        UUID paperId = UUID.randomUUID();
         Document allowedSource = document(DocumentType.SOURCE, true);
+        Document metadataOnly = document(DocumentType.SOURCE, true);
+        metadataOnly.setProcessingStatus(ProcessingStatus.PROCESSING);
         Document foreignSource = document(DocumentType.SOURCE, true);
         DocumentChunk allowedChunk = chunk(allowedSource);
         DocumentChunk foreignChunk = chunk(foreignSource);
         List<String> excerpts = List.of("A project-scoped external benchmark claim");
         List<Float> embedding = List.of(0.1f, 0.2f);
         SparseVector sparseQuery = sparseVectorGenerator.generate(excerpts.getFirst());
-        when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(
-                projectId, DocumentType.SOURCE)).thenReturn(List.of(allowedSource));
-        when(projectDocumentRepository.findByProjectId(projectId)).thenReturn(List.of());
+        when(paperReferenceRepository.findByPaperIdOrderByAddedAtAsc(paperId))
+                .thenReturn(List.of(reference(allowedSource), reference(metadataOnly)));
         when(aiModelClient.generateEmbeddings(excerpts)).thenReturn(List.of(embedding));
         when(qdrantClient.findClosestChunks(
                 eq(embedding), eq(sparseQuery),
@@ -100,7 +101,7 @@ class SourceMatchingServiceTest {
                 .thenReturn(Optional.of(foreignChunk));
 
         List<List<SourceMatchingService.SourceMatch>> result =
-                service().search(projectId, excerpts, 20);
+                service().search(paperId, excerpts, 20);
 
         assertThat(result).singleElement().satisfies(matches ->
                 assertThat(matches).singleElement().satisfies(match -> {
@@ -111,6 +112,19 @@ class SourceMatchingServiceTest {
                 embedding, sparseQuery, List.of(allowedSource.getId().toString()), 20);
     }
 
+    @Test
+    void referenceSourcesListsReferencesIncludingMetadataOnly() {
+        UUID paperId = UUID.randomUUID();
+        Document ready = document(DocumentType.SOURCE, true);
+        Document metadataOnly = document(DocumentType.SOURCE, true);
+        metadataOnly.setProcessingStatus(ProcessingStatus.PROCESSING);
+        when(paperReferenceRepository.findByPaperIdOrderByAddedAtAsc(paperId))
+                .thenReturn(List.of(reference(ready), reference(metadataOnly)));
+
+        assertThat(service().referenceSources(paperId)).containsExactly(ready, metadataOnly);
+        assertThat(service().retrievableReferenceSources(paperId)).containsExactly(ready);
+    }
+
     private SourceMatchingService service() {
         return new SourceMatchingService(
                 documentRepository,
@@ -118,7 +132,14 @@ class SourceMatchingServiceTest {
                 documentChunkRepository,
                 aiModelClient,
                 sparseVectorGenerator,
-                qdrantClient);
+                qdrantClient,
+                paperReferenceRepository);
+    }
+
+    private static com.evidencepilot.model.PaperReference reference(Document document) {
+        com.evidencepilot.model.PaperReference reference = new com.evidencepilot.model.PaperReference();
+        reference.setSource(document);
+        return reference;
     }
 
     private static ProjectDocument mapping(Document document) {

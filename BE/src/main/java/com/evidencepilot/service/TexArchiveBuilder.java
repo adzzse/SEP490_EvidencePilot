@@ -70,11 +70,10 @@ public class TexArchiveBuilder {
                         .findByDocumentIdOrderBySectionOrderAsc(paper.getId()).stream())
                 .filter(PaperSection::isActive)
                 .toList();
-        CitationBibliography.Result bibliography = CitationBibliography.resolve(
-                sections, sourceMatchingService.activeSources(projectId));
+        CitationBibliography.Result bibliography = bibliographyFor(papers, sections);
         List<String> citationWarnings = new ArrayList<>();
         bibliography.unresolvedKeys().forEach(key -> citationWarnings.add(
-                        "Auto citation `" + key + "` no longer resolves to an active project source."));
+                        "Auto citation `" + key + "` no longer resolves to a declared paper reference."));
 
         try (OutputStream output = Files.newOutputStream(destination);
                 ZipOutputStream zip = new ZipOutputStream(output, StandardCharsets.UTF_8)) {
@@ -160,6 +159,29 @@ public class TexArchiveBuilder {
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to build export archive", exception);
         }
+    }
+    private CitationBibliography.Result bibliographyFor(List<Document> papers, List<PaperSection> sections) {
+        java.util.Map<String, Integer> citationNumbers = new java.util.LinkedHashMap<>();
+        List<CitationBibliography.Entry> entries = new ArrayList<>();
+        List<String> unresolvedKeys = new ArrayList<>();
+        for (Document paper : papers) {
+            List<PaperSection> paperSections = sections.stream()
+                    .filter(section -> section.getDocument() != null
+                            && paper.getId().equals(section.getDocument().getId()))
+                    .toList();
+            CitationBibliography.Result resolved = CitationBibliography.resolve(
+                    paperSections, sourceMatchingService.referenceSources(paper.getId()));
+            for (CitationBibliography.Entry entry : resolved.entries()) {
+                if (citationNumbers.containsKey(entry.key())) {
+                    continue;
+                }
+                citationNumbers.put(entry.key(), entries.size() + 1);
+                entries.add(new CitationBibliography.Entry(
+                        entry.key(), entries.size() + 1, entry.reference(), entry.latex()));
+            }
+            unresolvedKeys.addAll(resolved.unresolvedKeys());
+        }
+        return new CitationBibliography.Result(citationNumbers, entries, unresolvedKeys);
     }
 
     private static String citationWarningText(List<String> warnings) {

@@ -11,6 +11,7 @@ public record CitationValidationResponse(
     int matchedCitations,
     List<String> missingCitations,
     List<String> unmatchedKeys,
+    List<String> unavailableReferences,
     List<String> formattingIssues,
     PaperStandard standardUsed,
     PaperValidationResponse sectionValidation

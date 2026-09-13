@@ -4,6 +4,7 @@ import api from '../../services/api.js';
 import { prepareProjectDoiImport } from '../../utils/student/doiImport.js';
 import { getSourceDownloadUrl } from '../../utils/student/sourceDownload.js';
 import SectionRequirementsPanel from './SectionRequirementsPanel.jsx';
+import PaperReferencesPanel from './PaperReferencesPanel.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
 
 const FUNCTIONAL_TYPES = [
@@ -119,6 +120,8 @@ export default function ContextPanel({
   showToast,
   // Source tab
   sources, isUploading, setIsUploading, project, setViewerFile, fetchSources, onOpenSourceMap,
+  paperReferences = [], referencesLoading = false, referencesError = '', referenceSourceIds = null,
+  canMutateReferences = false, onAddReference, onRemoveReference, onReferencesChanged,
   // Requirements tab
   selectedPaper, selectedSection, isAssignedSection, isSectionDirty, onHandoffChanged, pollAiJob,
   // Review tab
@@ -175,8 +178,9 @@ export default function ContextPanel({
       await api.post(`/api/documents/${sourceId}/file`, formData);
       showToast(t('pdfAttached'));
       if (fetchSources) await fetchSources();
+      if (onReferencesChanged) await onReferencesChanged();
     } catch (error) {
-      showToast(error?.response?.data?.message || t('attachPdfFailed'));
+      showToast(t('attachPdfFailed'));
     } finally {
       setAttachingSourceId(null);
     }
@@ -346,6 +350,20 @@ export default function ContextPanel({
               )}
 
               <div>
+                <h3 className="text-[11px] font-bold text-(--text-tertiary) tracking-widest mb-3 uppercase flex items-center gap-2"><div className="h-px bg-(--border) flex-1"></div> {t('references')} <div className="h-px bg-(--border) flex-1"></div></h3>
+                <PaperReferencesPanel
+                  references={paperReferences}
+                  loading={referencesLoading}
+                  error={referencesError}
+                  canMutate={canMutateReferences && !reviewContent}
+                  isLocked={isLocked}
+                  attachingId={attachingSourceId}
+                  onRemove={onRemoveReference}
+                  onAttach={handleAttachPdf}
+                />
+              </div>
+
+              <div>
                 <h3 className="text-[11px] font-bold text-(--text-tertiary) tracking-widest mb-3 uppercase flex items-center gap-2"><div className="h-px bg-(--border) flex-1"></div> {t('availableSource')} <div className="h-px bg-(--border) flex-1"></div></h3>
                 <div className="flex flex-col gap-3">
                   {visibleSources.length === 0 ? <div className="text-sm text-(--text-secondary) italic text-center p-4">{sources.length === 0 ? t('noUploadedSources') : t('sourceMap.noMatches')}</div> : (
@@ -397,6 +415,19 @@ export default function ContextPanel({
                                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 16V4m0 0L8 8m4-4 4 4M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3" /></svg>
                                 {attachingSourceId === src.id ? t('working') : t('attachPdf')}
                               </label>
+                            </div>
+                          )}
+                          {!reviewContent && canMutateReferences && onAddReference && !referenceSourceIds?.has(String(src.id)) && (
+                            <div className="mt-3">
+                              <button
+                                type="button"
+                                onClick={(event) => { event.stopPropagation(); onAddReference(src.id); }}
+                                disabled={isLocked}
+                                title={t('addToReferences')}
+                                className="flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-(--border) bg-(--surface) px-3 py-1.5 text-[11px] font-bold text-(--text-secondary) transition-colors hover:text-indigo-600 hover:border-indigo-300 focus-visible:ring-2 focus-visible:ring-(--brand) disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                              >
+                                {t('addToReferences')}
+                              </button>
                             </div>
                           )}
                         </div>

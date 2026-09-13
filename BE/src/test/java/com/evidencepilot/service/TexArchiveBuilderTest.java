@@ -51,6 +51,16 @@ class TexArchiveBuilderTest {
         source.setDocType(DocumentType.SOURCE);
         source.setActive(true);
         String citationKey = SourceMatchingService.citationKey(source.getId());
+        Document uncitedReference = new Document();
+        uncitedReference.setId(UUID.randomUUID());
+        uncitedReference.setTitle("Declared but uncited");
+        String uncitedKey = SourceMatchingService.citationKey(uncitedReference.getId());
+        Document unselected = new Document();
+        unselected.setId(UUID.randomUUID());
+        unselected.setTitle("Unselected Source");
+        unselected.setDocType(DocumentType.SOURCE);
+        unselected.setActive(true);
+        String unselectedKey = SourceMatchingService.citationKey(unselected.getId());
         Project project = new Project();
         project.setId(projectId);
         project.setTitle("AI_Project");
@@ -64,14 +74,14 @@ class TexArchiveBuilderTest {
         section.setDocument(paper);
         section.setSectionTitle("Introduction");
         section.setSectionOrder(0);
-        section.setContentTex("Some text with a citation \\cite{" + citationKey + "}.");
+        section.setContentTex("Some text \\cite{" + citationKey + "} and \\cite{" + unselectedKey + "}.");
         section.setActive(true);
         when(projects.findById(projectId)).thenReturn(Optional.of(project));
         when(documents.findByProjectIdAndDocTypeAndActiveTrue(
                 projectId, DocumentType.PAPER)).thenReturn(List.of(paper));
         when(sections.findByDocumentIdOrderBySectionOrderAsc(paper.getId()))
                 .thenReturn(List.of(section));
-        when(sourceMatchingService.activeSources(projectId)).thenReturn(List.of(source));
+        when(sourceMatchingService.referenceSources(paper.getId())).thenReturn(List.of(uncitedReference, source));
         var archive = Files.createTempFile("tex-builder-test-", ".zip");
 
         try {
@@ -87,9 +97,15 @@ class TexArchiveBuilderTest {
                 assertThat(text(zip, "references.tex"))
                         .contains("\\begin{thebibliography}{99}")
                         .contains("\\bibitem{" + citationKey + "}")
-                        .contains("A. Researcher", "Evidence Source", "2026");
+                        .contains("A. Researcher", "Evidence Source", "2026")
+                        .doesNotContain(unselectedKey, "Unselected Source");
+                assertThat(text(zip, "references.tex").indexOf("\\bibitem{" + uncitedKey + "}"))
+                        .isLessThan(text(zip, "references.tex").indexOf("\\bibitem{" + citationKey + "}"));
+                assertThat(text(zip, "references.tex")).contains("Declared but uncited");
+                assertThat(text(zip, "CITATION_WARNINGS.md")).contains(unselectedKey);
             }
             verify(media).writeProjectMedia(any(), any());
+            verify(sourceMatchingService, org.mockito.Mockito.never()).activeSources(any());
         } finally {
             Files.deleteIfExists(archive);
         }

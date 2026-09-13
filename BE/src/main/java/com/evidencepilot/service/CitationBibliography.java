@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -31,12 +32,11 @@ public final class CitationBibliography {
         Map<String, Integer> citationNumbers = new LinkedHashMap<>();
         List<Entry> entries = new ArrayList<>();
         List<String> unresolvedKeys = new ArrayList<>();
-        for (String key : citationKeys(sections)) {
-            Document source = sourcesByKey.get(key);
-            if (source == null) {
-                unresolvedKeys.add(key);
-                continue;
-            }
+        citationKeys(sections).stream().filter(key -> !sourcesByKey.containsKey(key))
+                .forEach(unresolvedKeys::add);
+        for (Map.Entry<String, Document> declared : sourcesByKey.entrySet()) {
+            String key = declared.getKey();
+            Document source = declared.getValue();
             int number = entries.size() + 1;
             citationNumbers.put(key, number);
             entries.add(new Entry(
@@ -57,16 +57,16 @@ public final class CitationBibliography {
                 .replace("^", "\\textasciicircum{}");
     }
 
-    private static Set<String> citationKeys(List<PaperSection> sections) {
+    public static Set<String> citationKeys(List<PaperSection> sections) {
         Set<String> keys = new LinkedHashSet<>();
         for (PaperSection section : sections) {
             Matcher matcher = CITE_PATTERN.matcher(
-                    section.getContentTex() == null ? "" : section.getContentTex());
+                    section.getContentTex() == null ? "" : section.getContentTex().replaceAll("(?m)(?<!\\\\)%.*$", ""));
             while (matcher.find()) {
                 for (String key : matcher.group(1).split(",")) {
                     String trimmed = key.trim();
                     if (SourceMatchingService.citationDocumentId(trimmed).isPresent()) {
-                        keys.add(trimmed);
+                        keys.add(trimmed.toLowerCase(Locale.ROOT));
                     }
                 }
             }

@@ -16,6 +16,10 @@ export const API_ROUTES = Object.freeze({
     BY_ID: (id) => `/api/projects/${id}`,
     SOURCE_MAP: (id) => `/api/projects/${id}/source-map`,
   }),
+  PAPERS: Object.freeze({
+    REFERENCES: (paperId) => `/api/papers/${paperId}/references`,
+    REFERENCE_BY_ID: (paperId, sourceId) => `/api/papers/${paperId}/references/${sourceId}`,
+  }),
   SOURCES: Object.freeze({
     BASE: '/api/sources',
     BATCH: '/api/sources/batch',

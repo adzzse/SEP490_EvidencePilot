@@ -4,9 +4,11 @@ import com.evidencepilot.dto.QdrantSearchResult;
 import com.evidencepilot.dto.SparseVector;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentChunk;
+import com.evidencepilot.model.PaperReference;
 import com.evidencepilot.model.ProjectDocument;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.ProcessingStatus;
+import com.evidencepilot.repository.PaperReferenceRepository;
 import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.ProjectDocumentRepository;
@@ -40,10 +42,11 @@ public class SourceMatchingService {
     private final AiModelClient aiModelClient;
     private final SparseVectorGenerator sparseVectorGenerator;
     private final QdrantClient qdrantClient;
+    private final PaperReferenceRepository paperReferenceRepository;
 
     @Transactional(readOnly = true)
-    public List<List<SourceMatch>> search(UUID projectId, List<String> excerpts, int topK) {
-        List<Document> sources = retrievableSources(projectId);
+    public List<List<SourceMatch>> search(UUID paperId, List<String> excerpts, int topK) {
+        List<Document> sources = retrievableReferenceSources(paperId);
         if (excerpts.isEmpty() || sources.isEmpty()) {
             return excerpts.stream().map(ignored -> List.<SourceMatch>of()).toList();
         }
@@ -91,8 +94,17 @@ public class SourceMatchingService {
     }
 
     @Transactional(readOnly = true)
-    public List<Document> retrievableSources(UUID projectId) {
-        return activeSources(projectId).stream()
+    public List<Document> referenceSources(UUID paperId) {
+        return paperReferenceRepository.findByPaperIdOrderByAddedAtAsc(paperId).stream()
+                .map(PaperReference::getSource)
+                .filter(source -> source != null && source.isActive()
+                        && source.getDocType() == DocumentType.SOURCE)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Document> retrievableReferenceSources(UUID paperId) {
+        return referenceSources(paperId).stream()
                 .filter(document -> document.getProcessingStatus() == ProcessingStatus.READY
                         || document.getProcessingStatus() == ProcessingStatus.COMPLETED)
                 .toList();

@@ -55,7 +55,7 @@ class SourceMapBackfillTest {
     void refreshAllowlistedSources() throws Exception {
         UUID projectId = UUID.fromString(System.getenv("SOURCE_MAP_PROJECT_ID"));
         var transaction = new TransactionTemplate(transactionManager);
-        var sourceMatching = new SourceMatchingService(documents, mappings, null, null, null, null);
+        var sourceMatching = new SourceMatchingService(documents, mappings, null, null, null, null, null);
         List<UUID> allowed = transaction.execute(status -> sourceMatching.activeSources(projectId).stream()
                 .filter(source -> DoiUtils.comparisonKey(source.getDoi()) != null).map(Document::getId).sorted().toList());
         boolean apply = "true".equals(System.getenv("SOURCE_MAP_APPLY"));

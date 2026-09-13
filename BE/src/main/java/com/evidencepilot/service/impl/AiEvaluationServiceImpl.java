@@ -360,7 +360,7 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
                         "No review guide exists for section type: " + sectionType));
         List<String> checklist = parseChecklist(guide.getChecklistJson());
         List<SectionCitationReviewService.RetrievedEvidence> evidence =
-                sectionCitationReviewService.retrieveEvidence(projectId, section.getContentTex());
+                sectionCitationReviewService.retrieveEvidence(section.getDocument().getId(), section.getContentTex());
         log.info("Section suggestion job for section {} (type '{}') matched guide '{}' with {} checklist items",
                 section.getId(), sectionType, guide.getSectionType(), checklist.size());
         return aiModelClient.generateValidated(SectionSuggestionPrompt.SYSTEM,

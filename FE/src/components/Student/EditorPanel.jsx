@@ -4,6 +4,8 @@ import { instructorText, commonText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
 import FeedbackPanel from './FeedbackPanel.jsx';
 import PreviewPane from '../features/PreviewPane';
+import { buildCitationNumbers, buildReferenceEntries } from '../../utils/paperReferences.js';
+import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
 import { useTranslation } from 'react-i18next';
 import { mapScrollPosition } from '../../utils/student/scrollSync.js';
 
@@ -34,24 +36,29 @@ export default function EditorPanel({
   textSize, setTextSize, showToast, editorRef, mediaAssets, isLocked,
   findings = [], onFindingClick,
   onOpenSourceMap, onViewFullPaper,
-  onOpenCitationReview, reviewBusy = false, reviewProgress = null,
+  onRunCitationReview, onOpenCitationReview, reviewBusy = false, reviewProgress = null,
   reviewFindingsCount = 0, reviewError = null,
   onEditorUserScroll,
   isReviewVisible = true, onToggleReviewVisible,
   feedback, feedbackOpen = false, setFeedbackOpen, activeFeedbackId, onSelectFeedback,
   feedbackRequestId, setFeedbackRequestId, feedbackScope, setFeedbackScope,
-  citationIndex = {}
+  citationIndex = {},
+  paperReferences = [],
 }) {
   const { t } = useTranslation();
+  const citationNumbers = useMemo(() => buildCitationNumbers(paperReferences), [paperReferences]);
   const { language } = useLanguage();
   const rt = instructorText[language];
   const ct = commonText[language];
   const isOwnSection = canEditCurrentSection
     ?? (assignedSections && assignedSections.some(s => String(s.id) === String(selectedSectionId)));
+  const canRunCitationReview = !review && !isLocked && Boolean(selectedPaper && selectedSectionId && isOwnSection);
+  const citationReviewTitle = reviewBusy ? t('reviewing') : canRunCitationReview ? t('citationReviewDescription') : t('citationReviewUnavailable');
   const readOnlyLabel = review ? rt.paperReadOnly : isLocked ? t('projectLocked') : !isOwnSection ? t('readOnly') : '';
   const saveTitle = saveStatus === 'saving' ? t('saving') : isLocked ? t('saveReadOnly') : !isOwnSection ? t('noAssignedSection') : t('saveSectionHelp');
   const [previewZoom, setPreviewZoom] = useState(100);
-  const generatedReferences = [];
+  const generatedReferences = useMemo(() => isReferenceSectionTitle(currentSection?.sectionTitle || '')
+    ? buildReferenceEntries(paperReferences) : [], [currentSection?.sectionTitle, paperReferences]);
   const previewPaneRef = useRef(null);
   const containerRef = useRef(null);
   const [availableWidth, setAvailableWidth] = useState(0);
@@ -171,6 +178,14 @@ export default function EditorPanel({
             {currentSection && <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1 py-0.5 rounded shrink-0">v{currentSection.version || 1}</span>}
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
+            {!review && <span data-tour="editor-ai-review" className="inline-flex" title={citationReviewTitle}>
+              <button type="button" onClick={onRunCitationReview} disabled={!canRunCitationReview || reviewBusy}
+                aria-label={t('aiReview')}
+                className="flex h-7 items-center gap-1 rounded-md bg-(--brand) px-2 text-[10px] font-bold text-(--on-brand) transition-colors hover:bg-(--brand-hover) disabled:opacity-50">
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                <span className="hidden lg:inline">{reviewBusy ? t('loading') : t('aiReview')}</span>
+              </button>
+            </span>}
             {reviewError && (
               <span className="hidden md:inline max-w-[180px] truncate text-[10px] font-semibold text-rose-600" title={reviewError}>{reviewError}</span>
             )}
@@ -363,6 +378,7 @@ export default function EditorPanel({
             latex={displayContent}
             mediaAssets={mediaAssets}
             generatedReferences={generatedReferences}
+            citationNumbers={citationNumbers}
             referencesTitle={currentSection?.sectionTitle || 'References'}
           />
         </div>

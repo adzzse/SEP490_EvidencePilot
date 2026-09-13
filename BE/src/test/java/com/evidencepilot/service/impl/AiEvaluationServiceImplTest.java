@@ -483,7 +483,7 @@ class AiEvaluationServiceImplTest {
         when(reviewGuideRepository.findById("Introduction")).thenReturn(Optional.of(guide));
         boolean withoutEvidence = "unsubstantiated-without-evidence".equals(shape);
         when(sectionCitationReviewService.retrieveEvidence(
-                projectId, section.getContentTex())).thenReturn(withoutEvidence
+                documentId, section.getContentTex())).thenReturn(withoutEvidence
                         ? List.of()
                         : List.of(new SectionCitationReviewService.RetrievedEvidence(
                                 sourceId,

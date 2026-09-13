@@ -8,6 +8,7 @@ import {
   splitPassageQuote,
   wrapFindingIndex,
 } from '../src/utils/citationReviewPopover.js';
+import { isReferenceCandidate } from '../src/utils/paperReferences.js';
 
 test('citation review popover derives evidence and navigation state', () => {
   assert.equal(hasNoEvidence({ evidence: [] }), true);
@@ -47,4 +48,19 @@ test('source passage quote split preserves source casing for highlighting', () =
     after: ' after',
   });
   assert.equal(splitPassageQuote('Full passage', 'missing').match, '');
+});
+
+test('citation review insertion is limited to declared paper references', () => {
+  const referenceSourceIds = new Set(['source-1']);
+  const groups = buildSourceGroups([], [
+    { documentId: 'source-1', documentChunkId: 'chunk-1', title: 'Paper A', excerpt: 'Related', similarityScore: 0.6 },
+    { documentId: 'source-2', documentChunkId: 'chunk-2', title: 'Paper B', excerpt: 'Related', similarityScore: 0.5 },
+  ]);
+  assert.equal(groups.length, 2);
+  const insertable = groups
+    .flatMap(group => [...group.evidencePassages, ...group.relatedPassages])
+    .map(passage => passage.candidate)
+    .filter(candidate => isReferenceCandidate(candidate, referenceSourceIds));
+  assert.equal(insertable.length, 1);
+  assert.equal(insertable[0].documentId, 'source-1');
 });

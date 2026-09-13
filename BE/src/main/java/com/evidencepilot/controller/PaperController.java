@@ -2,6 +2,7 @@ package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.response.CitationValidationResponse;
 import com.evidencepilot.dto.response.DocumentResponse;
+import com.evidencepilot.dto.response.PaperReferenceResponse;
 import com.evidencepilot.dto.response.PaperSectionResponse;
 import com.evidencepilot.dto.response.PaperMetadataResponse;
 import com.evidencepilot.dto.response.PaperStandardSuggestionResponse;
@@ -41,6 +42,7 @@ import com.evidencepilot.service.PaperProcessingService;
 import com.evidencepilot.service.PaperStandardService;
 import com.evidencepilot.service.SubmissionReadinessService;
 import com.evidencepilot.service.impl.EvidenceTraceService;
+import com.evidencepilot.service.impl.PaperReferenceService;
 import com.evidencepilot.service.impl.SectionCitationReviewService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -93,6 +95,7 @@ public class PaperController {
     private final EvidenceTraceService evidenceTraceService;
     private final SubmissionReadinessService submissionReadinessService;
     private final PaperStandardService paperStandardService;
+    private final PaperReferenceService paperReferenceService;
 
     @Operation(summary = "List all papers",
             description = "Returns all active paper documents. "
@@ -230,7 +233,7 @@ public class PaperController {
 
     @Operation(summary = "Deep citation scan",
             description = "Parses \\cite{} and \\bibitem{} from all sections, checks key existence "
-                    + "against project sources, and validates citation format against PaperStandard.")
+                    + "against declared paper References, and validates citation format against PaperStandard.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Citation validation result"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
@@ -241,6 +244,53 @@ public class PaperController {
     public CitationValidationResponse validateCitations(
             @Parameter(description = "Paper document UUID") @PathVariable UUID id) {
         return citationValidationService.validateCitations(id);
+    }
+
+    @Operation(summary = "List paper references",
+            description = "Returns the explicit source subset selected for one paper.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Reference list returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Access denied"),
+            @ApiResponse(responseCode = "404", description = "Paper not found")
+    })
+    @GetMapping("/papers/{paperId}/references")
+    public List<PaperReferenceResponse> references(
+            @Parameter(description = "Paper document UUID") @PathVariable UUID paperId) {
+        return paperReferenceService.list(paperId, currentUserService.requireCurrentUser().getId());
+    }
+
+    @Operation(summary = "Add a paper reference",
+            description = "Links a project-visible source to the paper. Idempotent.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Reference added or already present"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Access denied"),
+            @ApiResponse(responseCode = "404", description = "Paper or source not found"),
+            @ApiResponse(responseCode = "409", description = "Project is read-only")
+    })
+    @PostMapping("/papers/{paperId}/references/{sourceId}")
+    public PaperReferenceResponse addReference(
+            @Parameter(description = "Paper document UUID") @PathVariable UUID paperId,
+            @Parameter(description = "Source document UUID") @PathVariable UUID sourceId) {
+        return paperReferenceService.add(paperId, sourceId, currentUserService.requireCurrentUser().getId());
+    }
+
+    @Operation(summary = "Remove a paper reference",
+            description = "Unlinks a source from the paper. Cited references return 409 REFERENCE_IN_USE.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Reference removed"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Access denied"),
+            @ApiResponse(responseCode = "404", description = "Paper or reference not found"),
+            @ApiResponse(responseCode = "409", description = "Reference is cited or project is read-only")
+    })
+    @DeleteMapping("/papers/{paperId}/references/{sourceId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeReference(
+            @Parameter(description = "Paper document UUID") @PathVariable UUID paperId,
+            @Parameter(description = "Source document UUID") @PathVariable UUID sourceId) {
+        paperReferenceService.remove(paperId, sourceId, currentUserService.requireCurrentUser().getId());
     }
 
     @Operation(summary = "Batch update paper sections — single transaction replaces Promise.all",

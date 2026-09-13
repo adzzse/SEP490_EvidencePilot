@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { buildSourceGroups, hasNoEvidence } from '../../utils/citationReviewPopover.js';
+import { isReferenceCandidate } from '../../utils/paperReferences.js';
 
 const CARD_W = 340;
 const CARD_MAX_H = 440;
@@ -36,6 +37,8 @@ export default function InlineCitationCard({
   findingCount = 0,
   candidates = [],
   sources = [],
+  referenceSourceIds = null,
+  retrievableReferenceSourceIds = null,
   review,
   sourcesLoading = false,
   sourcesError = '',
@@ -129,6 +132,13 @@ export default function InlineCitationCard({
     const similarity = Number.isFinite(candidate?.similarityScore)
       ? Math.round(candidate.similarityScore * 100)
       : null;
+    const inReferences = isReferenceCandidate(candidate, referenceSourceIds);
+    const retrievable = isReferenceCandidate(candidate, retrievableReferenceSourceIds);
+    const disabled = !canInsertCitation || !candidate?.citationKey || !inReferences || !retrievable;
+    const guardTitle = !canInsertCitation ? t('saveReadOnly')
+      : !inReferences ? t('citationNotInReferences')
+      : !retrievable ? t('referenceNotRetrievable')
+      : candidate?.citationKey ? `\\cite{${candidate.citationKey}}` : t('noRelatedSources');
     return (
       <div key={passage.key} className="rounded-lg border border-(--border) bg-(--surface-secondary) p-2.5">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -167,8 +177,8 @@ export default function InlineCitationCard({
             <button
               type="button"
               onClick={() => onInsertCitation(finding, candidate)}
-              disabled={!canInsertCitation || !candidate.citationKey}
-              title={!canInsertCitation ? t('saveReadOnly') : candidate.citationKey ? `\\cite{${candidate.citationKey}}` : t('noRelatedSources')}
+              disabled={disabled}
+              title={guardTitle}
               className="rounded bg-(--brand) px-2 py-1.5 text-[11px] font-bold text-(--on-brand) transition-colors hover:bg-(--brand-hover) focus-visible:ring-2 focus-visible:ring-(--brand) focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
             >
               {t('insertCitation')}

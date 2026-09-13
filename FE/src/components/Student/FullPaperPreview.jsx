@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../../services/api.js';
 import PreviewPane from '../features/PreviewPane';
 import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
+import { buildCitationNumbers, buildReferenceEntries } from '../../utils/paperReferences.js';
 import { mergePaperMetadata, parsePaperInfoSection } from '../../utils/formatters/paperInfo.js';
 
 // Allowlist mini-renderer: only <sup>/<sub> become elements, everything else
@@ -27,12 +28,13 @@ function RichText({ text }) {
   return <>{children}</>;
 }
 
-export default function FullPaperPreview({ sections, paperId, paperTitle, mediaAssets, onClose, onAnnotateSection }) {
+export default function FullPaperPreview({ sections, paperId, paperTitle, mediaAssets, paperReferences = [], onClose, onAnnotateSection }) {
   const { t } = useTranslation();
   const dialogRef = useRef(null);
   const sectionRefs = useRef({});
   const [metadata, setMetadata] = useState(null);
-  const generatedReferences = [];
+  const generatedReferences = useMemo(() => buildReferenceEntries(paperReferences), [paperReferences]);
+  const citationNumbers = useMemo(() => buildCitationNumbers(paperReferences), [paperReferences]);
   const hasReferenceSection = sections.some(section =>
     isReferenceSectionTitle(section.sectionTitle));
   // Paper Info section edits win; extraction metadata fills gaps; the
@@ -140,7 +142,7 @@ export default function FullPaperPreview({ sections, paperId, paperTitle, mediaA
                     <PreviewPane
                       sectionTitle={sec.sectionTitle}
                       latex={sec.contentTex || ''}
-                      mediaAssets={mediaAssets}
+                      mediaAssets={mediaAssets} citationNumbers={citationNumbers}
                       generatedReferences={referenceSection ? generatedReferences : []}
                       referencesTitle={sec.sectionTitle || 'References'}
                     />
@@ -152,7 +154,7 @@ export default function FullPaperPreview({ sections, paperId, paperTitle, mediaA
               {!hasReferenceSection && generatedReferences.length > 0 && (
                 <PreviewPane
                   latex=""
-                  mediaAssets={mediaAssets}
+                  mediaAssets={mediaAssets} citationNumbers={citationNumbers}
                   generatedReferences={generatedReferences}
                 />
               )}

@@ -66,11 +66,12 @@ class PaperControllerTest {
     private final EvidenceTraceService evidenceTraceService = mock(EvidenceTraceService.class);
     private final SubmissionReadinessService submissionReadinessService = mock(SubmissionReadinessService.class);
     private final PaperStandardService paperStandardService = mock(PaperStandardService.class);
+    private final com.evidencepilot.service.impl.PaperReferenceService paperReferenceService = mock(com.evidencepilot.service.impl.PaperReferenceService.class);
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = standaloneSetup(new PaperController(documentService, paperService, citationValidationService, projectRepository, documentRepository, paperSectionRepository, instructorFeedbackRepository, feedbackRequestRepository, currentUserService, checkpointService, aiEvaluationService, sectionCitationReviewService, evidenceTraceService, submissionReadinessService, paperStandardService))
+        mockMvc = standaloneSetup(new PaperController(documentService, paperService, citationValidationService, projectRepository, documentRepository, paperSectionRepository, instructorFeedbackRepository, feedbackRequestRepository, currentUserService, checkpointService, aiEvaluationService, sectionCitationReviewService, evidenceTraceService, submissionReadinessService, paperStandardService, paperReferenceService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -156,7 +157,7 @@ class PaperControllerTest {
                 citationValidationService, projectRepository, documentRepository, paperSectionRepository,
                 instructorFeedbackRepository, feedbackRequestRepository, currentUserService, checkpointService,
                 aiEvaluationService, sectionCitationReviewService, evidenceTraceService,
-                submissionReadinessService, realStandards);
+                submissionReadinessService, realStandards, paperReferenceService);
         MockMvc mvc = standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -567,6 +568,51 @@ class PaperControllerTest {
                 null,
                 null,
                 null);
+    }
+
+    @Test
+    void references_delegatesToServiceWithCurrentUser() throws Exception {
+        UUID paperId = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        User user = new User();
+        user.setId(userId);
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        com.evidencepilot.dto.response.PaperReferenceResponse response =
+                new com.evidencepilot.dto.response.PaperReferenceResponse(sourceId, "epkey", "Title",
+                        "Author", 2026, null, com.evidencepilot.model.enums.ProcessingStatus.READY,
+                        null, true, true, false, null, userId);
+        when(paperReferenceService.list(paperId, userId)).thenReturn(List.of(response));
+        when(paperReferenceService.add(paperId, sourceId, userId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/papers/{paperId}/references", paperId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].sourceId").value(sourceId.toString()));
+        mockMvc.perform(post("/api/papers/{paperId}/references/{sourceId}", paperId, sourceId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.citationKey").value("epkey"));
+        mockMvc.perform(delete("/api/papers/{paperId}/references/{sourceId}", paperId, sourceId))
+                .andExpect(status().isNoContent());
+        verify(paperReferenceService).remove(paperId, sourceId, userId);
+    }
+
+    @Test
+    void references_mapsServiceErrorsToStatusEnvelope() throws Exception {
+        UUID paperId = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(paperReferenceService.list(any(), any()))
+                .thenThrow(new com.evidencepilot.exception.ResourceNotFoundException(paperId, "Paper"));
+        doThrow(new ResponseStatusException(HttpStatus.CONFLICT, "REFERENCE_IN_USE: cited"))
+                .when(paperReferenceService).remove(any(), any(), any());
+
+        mockMvc.perform(get("/api/papers/{paperId}/references", paperId))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/papers/{paperId}/references/{sourceId}", paperId, sourceId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("REFERENCE_IN_USE")));
     }
 
     private static DocumentResponse document(DocumentType type, boolean active) {

@@ -94,11 +94,16 @@ public class CitationValidationServiceImpl implements CitationValidationService 
         Project project = document.getProject();
         Set<String> sourceDois = new HashSet<>();
         Set<String> sourceTitles = new HashSet<>();
-        Set<UUID> activeSourceIds = project == null
-                ? Set.of()
-                : sourceMatchingService.activeSources(project.getId()).stream()
-                        .map(Document::getId)
-                        .collect(Collectors.toSet());
+        Set<UUID> referenceIds = new HashSet<>();
+        Set<UUID> retrievableReferenceIds = new HashSet<>();
+        if (project != null) {
+            for (Document reference : sourceMatchingService.referenceSources(documentId)) {
+                referenceIds.add(reference.getId());
+            }
+            for (Document reference : sourceMatchingService.retrievableReferenceSources(documentId)) {
+                retrievableReferenceIds.add(reference.getId());
+            }
+        }
         if (project != null && sectionValidation.standardUsed() != null) {
             List<DocumentReference> refs = documentReferenceRepository
                     .findByDocumentProjectIdAndDocumentDocTypeAndDocumentActiveTrueOrderByDocumentIdAscReferenceIndexAsc(
@@ -113,27 +118,39 @@ public class CitationValidationServiceImpl implements CitationValidationService 
             }
         }
 
+
         List<String> missingCitations = new ArrayList<>();
         List<String> unmatchedKeys = new ArrayList<>();
+        List<String> unavailableReferences = new ArrayList<>();
 
         for (String key : citedKeys) {
-            boolean autoCitation = SourceMatchingService.citationDocumentId(key)
-                    .filter(activeSourceIds::contains)
-                    .isPresent();
-            boolean matchedSource = autoCitation;
-            for (String doi : sourceDois) {
-                if (normalize(key).contains(normalize(doi))
-                        || normalize(doi).contains(normalize(key))) {
-                    matchedSource = true;
-                    break;
+            Optional<UUID> citedId = SourceMatchingService.citationDocumentId(key);
+            boolean autoCitation;
+            boolean matchedSource;
+            if (citedId.isPresent()) {
+                autoCitation = retrievableReferenceIds.contains(citedId.get());
+                matchedSource = autoCitation;
+                if (!autoCitation && referenceIds.contains(citedId.get())) {
+                    unavailableReferences.add(key);
+                    continue;
                 }
-            }
-            if (!matchedSource) {
-                for (String title : sourceTitles) {
-                    String normalizedKey = normalize(key);
-                    if (normalizedKey.length() > 3 && title.contains(normalizedKey)) {
+            } else {
+                autoCitation = false;
+                matchedSource = false;
+                for (String doi : sourceDois) {
+                    if (normalize(key).contains(normalize(doi))
+                            || normalize(doi).contains(normalize(key))) {
                         matchedSource = true;
                         break;
+                    }
+                }
+                if (!matchedSource) {
+                    for (String title : sourceTitles) {
+                        String normalizedKey = normalize(key);
+                        if (normalizedKey.length() > 3 && title.contains(normalizedKey)) {
+                            matchedSource = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -146,7 +163,7 @@ public class CitationValidationServiceImpl implements CitationValidationService 
             }
         }
 
-        int matchedCitations = totalCitations - missingCitations.size();
+        int matchedCitations = totalCitations - missingCitations.size() - unavailableReferences.size();
 
         // per-standard format check
         List<String> formattingIssues = new ArrayList<>();
@@ -174,12 +191,14 @@ public class CitationValidationServiceImpl implements CitationValidationService 
             formattingIssues.add("No citations found in this section. Use \\cite{key} to add citations.");
         }
         return new CitationValidationResponse(
-                hasCitations && missingCitations.isEmpty() && unmatchedKeys.isEmpty() && formattingIssues.isEmpty(),
+                hasCitations && missingCitations.isEmpty() && unmatchedKeys.isEmpty()
+                        && unavailableReferences.isEmpty() && formattingIssues.isEmpty(),
                 document.getTitle() != null ? document.getTitle() : document.getOriginalFilename(),
                 totalCitations,
                 matchedCitations,
                 missingCitations,
                 unmatchedKeys,
+                unavailableReferences,
                 formattingIssues,
                 standard,
                 sectionValidation);

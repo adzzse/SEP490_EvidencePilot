@@ -68,7 +68,7 @@ class FlywayMigrationMySqlTest {
         Integer successfulMigrations = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
                 Integer.class);
-        assertThat(successfulMigrations).isEqualTo(32);
+        assertThat(successfulMigrations).isEqualTo(33);
 
         assertThat(jdbcTemplate.queryForList("""
                         SELECT constraint_name
@@ -88,7 +88,8 @@ class FlywayMigrationMySqlTest {
                         "chk_evidence_revision_traces_student_action",
                         "chk_evidence_revision_traces_ai_recheck_judgment",
                         "chk_ai_generation_config_singleton",
-                        "chk_ai_generation_config_revision");
+                        "chk_ai_generation_config_revision",
+                        "uk_paper_reference");
 
         assertThat(jdbcTemplate.queryForList(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()",
@@ -101,7 +102,8 @@ class FlywayMigrationMySqlTest {
                         "ai_model_call_leases",
                         "ai_model_call_outcomes",
                         "ai_generation_config",
-                        "feedback_replies");
+                        "feedback_replies",
+                        "paper_references");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM ai_generation_config WHERE id = 1 AND revision = 0",
                 Integer.class)).isOne();
@@ -302,10 +304,10 @@ class FlywayMigrationMySqlTest {
                 .migrate()
                 .migrationsExecuted;
 
-        assertThat(migrationsExecuted).isEqualTo(31);
+        assertThat(migrationsExecuted).isEqualTo(32);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
-                Integer.class)).isEqualTo(32);
+                Integer.class)).isEqualTo(33);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT type FROM flyway_schema_history WHERE installed_rank = 1",
                 String.class)).isEqualTo("BASELINE");

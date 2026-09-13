@@ -1,0 +1,29 @@
+package com.evidencepilot.repository;
+
+import com.evidencepilot.model.PaperReference;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface PaperReferenceRepository extends JpaRepository<PaperReference, UUID> {
+    @Query("""
+            SELECT r FROM PaperReference r JOIN FETCH r.source s
+            JOIN r.paper p JOIN p.project project LEFT JOIN s.project sourceProject
+            WHERE p.id = :paperId AND p.active = true
+              AND p.docType = com.evidencepilot.model.enums.DocumentType.PAPER
+              AND s.active = true AND s.docType = com.evidencepilot.model.enums.DocumentType.SOURCE
+              AND (sourceProject.id = project.id OR EXISTS (
+                    SELECT pd.id FROM ProjectDocument pd
+                    WHERE pd.project.id = project.id AND pd.document.id = s.id
+              ))
+            ORDER BY r.addedAt ASC, s.id ASC
+            """)
+    List<PaperReference> findByPaperIdOrderByAddedAtAsc(@Param("paperId") UUID paperId);
+    Optional<PaperReference> findByPaperIdAndSourceId(UUID paperId, UUID sourceId);
+    boolean existsByPaperIdAndSourceId(UUID paperId, UUID sourceId);
+    void deleteByPaperIdAndSourceId(UUID paperId, UUID sourceId);
+}
