@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import AnimateIn from '../../components/ui/AnimateIn';
 import SvgIcon from '../../components/ui/SvgIcon';
 
@@ -12,10 +13,11 @@ const stepIcons = [
   'M19 9h-4V3H9v6H5l7 7 7-7zm-14 9v2h14v-2H5z',
 ];
 
-export default function PreviewSection({ t }) {
+export default function PreviewSection() {
+  const { t } = useTranslation();
   const [step, setStep] = useState(0);
   const [paused, setPaused] = useState(false);
-  const steps = t.preview.steps;
+  const steps = t('home.preview.steps', { returnObjects: true });
   const current = steps[step];
 
   useEffect(() => {
@@ -28,8 +30,8 @@ export default function PreviewSection({ t }) {
     <section className="py-20 bg-(--surface) border-t border-(--border-light)">
       <div className="max-w-6xl mx-auto px-6">
         <AnimateIn>
-          <h2 className="text-2xl md:text-3xl font-bold text-center text-(--text-primary) mb-3">{t.preview.heading}</h2>
-          <p className="text-(--text-secondary) text-center mb-12 max-w-2xl mx-auto">{t.preview.subheading}</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-center text-(--text-primary) mb-3">{t('home.preview.heading')}</h2>
+          <p className="text-(--text-secondary) text-center mb-12 max-w-2xl mx-auto">{t('home.preview.subheading')}</p>
         </AnimateIn>
 
         <AnimateIn delay={150}>
@@ -41,13 +43,13 @@ export default function PreviewSection({ t }) {
                 <span className="w-3 h-3 rounded-full bg-amber-400" />
                 <span className="w-3 h-3 rounded-full bg-emerald-400" />
                 <div className="ml-4 text-xs text-(--text-tertiary) bg-(--surface) px-3 py-1 rounded-md border border-(--border-light) flex-1 max-w-[240px] truncate">
-                  {t.preview.url}
+                  {t('home.preview.url')}
                 </div>
               </div>
 
               <div className="grid md:grid-cols-[220px_1fr] min-h-[330px]">
                 <div className="p-5 bg-(--surface-secondary) border-b md:border-b-0 md:border-r border-(--border-light)">
-                  <div className="space-y-2" role="tablist" aria-label={t.preview.heading}>
+                  <div className="space-y-2" role="tablist" aria-label={t('home.preview.heading')}>
                     {steps.map((item, index) => (
                       <button
                         key={index}
@@ -94,7 +96,7 @@ export default function PreviewSection({ t }) {
                   onClick={() => setPaused(value => !value)}
                   className="text-xs font-semibold text-(--text-secondary) hover:text-(--brand-foreground) rounded-lg px-3 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--focus)"
                 >
-                  {paused ? t.preview.paused : t.preview.autoPlay}
+                  {paused ? t('home.preview.paused') : t('home.preview.autoPlay')}
                 </button>
               </div>
             </div>

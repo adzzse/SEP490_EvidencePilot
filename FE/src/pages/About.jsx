@@ -1,24 +1,23 @@
-import { useLanguage } from '../context/LanguageContext';
-import { homeText } from '../locales/home';
+import { useTranslation } from 'react-i18next';
 import StaticPageLayout from '../components/layout/StaticPageLayout';
 import AnimateIn from '../components/ui/AnimateIn';
 
 export default function About() {
-  const { language } = useLanguage();
-  const t = homeText[language].aboutPage;
+  const { t } = useTranslation();
+  const labels = t('home', { returnObjects: true });
 
   const sections = [
-    { title: t.missionTitle, body: t.missionDesc },
-    { title: t.storyTitle, body: t.storyDesc },
-    { title: t.techTitle, body: t.techDesc },
-    { title: t.teamTitle, body: t.teamDesc },
+    { title: t('home.aboutPage.missionTitle'), body: t('home.aboutPage.missionDesc') },
+    { title: t('home.aboutPage.storyTitle'), body: t('home.aboutPage.storyDesc') },
+    { title: t('home.aboutPage.techTitle'), body: t('home.aboutPage.techDesc') },
+    { title: t('home.aboutPage.teamTitle'), body: t('home.aboutPage.teamDesc') },
   ];
 
   return (
-    <StaticPageLayout t={homeText[language]}>
+    <StaticPageLayout t={labels}>
       <div className="max-w-3xl mx-auto px-6">
         <AnimateIn>
-          <h1 className="text-3xl md:text-4xl font-black text-(--brand-foreground) tracking-tight mb-10">{t.metaTitle}</h1>
+          <h1 className="text-3xl md:text-4xl font-black text-(--brand-foreground) tracking-tight mb-10">{t('home.aboutPage.metaTitle')}</h1>
         </AnimateIn>
 
         {sections.map((s, i) => (

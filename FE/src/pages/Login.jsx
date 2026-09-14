@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
-import { commonText } from '../locales';
 import api from '../services/api.js';
 import { getPostLoginDestination } from './loginOrigin.js';
 import { AuroraBackground } from '../components/ui/aurora-background';
@@ -29,10 +29,10 @@ function MoonIcon({ className = 'w-4 h-4' }) {
 
 export default function Login() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { login } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
-  const t = commonText[language];
   const isDark = theme === 'dark';
 
   const [form, setForm] = useState({ email: '', passwordHash: '' });
@@ -79,7 +79,7 @@ export default function Login() {
       const msg = err.response?.data?.message
         ?? err.response?.data?.error
         ?? err.message
-        ?? (language === 'vi' ? 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.' : 'Login failed. Please check your credentials.');
+        ?? t('auth.login.failed');
       setError(msg);
     } finally {
       setLoading(false);
@@ -100,7 +100,7 @@ export default function Login() {
               <svg className="w-4 h-4 transform group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
-              {t.backToHome || (language === 'vi' ? 'Quay lại Trang chủ' : 'Back to Home')}
+              {t('auth.login.backToHome')}
             </Link>
 
             <div className="flex items-center gap-2">
@@ -111,7 +111,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={toggleTheme}
-                aria-label="Toggle theme"
+                aria-label={t('auth.toggleTheme')}
                 className="flex h-8 w-8 items-center justify-center text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-zinc-700 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
               >
                 {isDark ? <SunIcon /> : <MoonIcon />}
@@ -130,10 +130,10 @@ export default function Login() {
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
-              {t.welcomeBack || 'Welcome back'}
+              {t('auth.login.welcomeBack')}
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-              {t.signInSubtitle || 'Sign in to Evidence Pilot to manage your projects.'}
+              {t('auth.login.subtitle')}
             </p>
           </div>
 
@@ -141,7 +141,7 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                {t.email}
+                {t('auth.login.email')}
               </label>
               <input
                 type="email"
@@ -149,7 +149,7 @@ export default function Login() {
                 value={form.email}
                 onChange={handleChange}
                 required
-                placeholder="you@example.com"
+                placeholder={t('auth.login.emailPlaceholder')}
                 className="w-full bg-slate-50/70 dark:bg-zinc-800/80 border border-slate-300 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all shadow-2xs"
               />
             </div>
@@ -157,7 +157,7 @@ export default function Login() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  {t.password || (language === 'vi' ? 'Mật khẩu' : 'Password')}
+                  {t('auth.login.password')}
                 </label>
               </div>
               <PasswordInput
@@ -188,12 +188,12 @@ export default function Login() {
               disabled={loading}
               className="w-full py-3 mt-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg hover:shadow-indigo-500/25 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              {loading ? (t.signingIn || 'Signing in...') : (t.signIn || 'Sign In')}
+              {loading ? t('auth.login.signingIn') : t('auth.login.signIn')}
             </button>
           </form>
 
           <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6">
-            {t.needAccountHelp || 'Need an account? Contact your administrator.'}
+            {t('auth.login.accountHelp')}
           </p>
         </div>
 

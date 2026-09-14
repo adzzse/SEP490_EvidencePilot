@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import api from '../services/api.js';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -55,12 +56,14 @@ function CameraIcon({ className = 'w-3.5 h-3.5' }) {
 }
 
 function ReadOnlyField({ label, value }) {
+  const { t } = useTranslation();
+
   return (
     <label className="block">
       <span className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         <LockIcon className="w-3 h-3" />
         <span>{label}</span>
-        <span className="ml-auto text-[9px] font-medium tracking-widest text-slate-400 dark:text-slate-500">Immutable</span>
+        <span className="ml-auto text-[9px] font-medium tracking-widest text-slate-400 dark:text-slate-500">{t('auth.setPassword.immutable')}</span>
       </span>
       <input
         type="text"
@@ -77,8 +80,9 @@ function ReadOnlyField({ label, value }) {
 export default function SetPassword() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { login, verifySession } = useAuth();
-  const { language, toggleLanguage } = useLanguage();
+  const { toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
   const token = searchParams.get('token');
 
@@ -113,7 +117,7 @@ export default function SetPassword() {
           lastName: res.data.lastName ?? current.lastName ?? '',
         }));
       })
-      .catch((err) => { if (!cancelled) setPreviewError(err.response?.data?.message || 'Invalid or expired link.'); })
+      .catch((err) => { if (!cancelled) setPreviewError(err.response?.data?.message || t('auth.setPassword.previewInvalid')); })
       .finally(() => { if (!cancelled) setPreviewLoading(false); });
     return () => { cancelled = true; };
   }, [token]);
@@ -132,11 +136,11 @@ export default function SetPassword() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      setError(language === 'vi' ? 'Vui lòng chọn tệp hình ảnh.' : 'Please select an image file.');
+      setError(t('auth.setPassword.selectImageFile'));
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setError(language === 'vi' ? 'Hình ảnh phải nhỏ hơn 5MB.' : 'Image must be smaller than 5MB.');
+      setError(t('auth.setPassword.imageTooLarge'));
       return;
     }
     setError('');
@@ -151,15 +155,15 @@ export default function SetPassword() {
     setError('');
 
     if (!form.firstName.trim() || !form.lastName.trim()) {
-      setError(language === 'vi' ? 'Vui lòng nhập họ và tên.' : 'Please enter your first and last name.');
+      setError(t('auth.setPassword.nameRequired'));
       return;
     }
     if (form.newPassword.length < 8) {
-      setError(language === 'vi' ? 'Mật khẩu phải có ít nhất 8 ký tự.' : 'Password must be at least 8 characters.');
+      setError(t('auth.setPassword.passwordMin'));
       return;
     }
     if (form.newPassword !== form.confirmPassword) {
-      setError(language === 'vi' ? 'Mật khẩu xác nhận không khớp.' : 'Passwords do not match.');
+      setError(t('auth.setPassword.passwordMismatch'));
       return;
     }
 
@@ -188,16 +192,14 @@ export default function SetPassword() {
           // before the dashboard mounts. No window.location.reload().
           await verifySession().catch(() => {});
         } catch {
-          setToast(language === 'vi'
-            ? 'Đã lưu hồ sơ, tải ảnh đại diện thất bại.'
-            : 'Profile saved, avatar upload failed.');
+          setToast(t('auth.setPassword.avatarUploadFailed'));
         }
       }
 
       navigate('/', { replace: true });
     } catch (requestError) {
       setError(requestError.response?.data?.message
-        ?? (language === 'vi' ? 'Liên kết không hợp lệ hoặc đã hết hạn.' : 'Invalid or expired link.'));
+        ?? t('auth.setPassword.invalidOrExpired'));
     } finally {
       setLoading(false);
     }
@@ -216,15 +218,13 @@ export default function SetPassword() {
           className="lg:col-span-2 text-center lg:text-left"
         >
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-light text-(--text-primary) leading-tight tracking-tight mb-5">
-            {language === 'vi' ? 'Chào mừng đến' : 'Welcome to'}{' '}
+            {t('auth.setPassword.welcomeTo')}{' '}
             <span className="font-extrabold bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-400 dark:from-indigo-400 dark:via-blue-300 dark:to-indigo-200 bg-clip-text text-transparent">
-              {language === 'vi' ? 'Evidence Pilot.' : 'Evidence Pilot.'}
+              {t('auth.setPassword.brand')}
             </span>
           </h1>
           <p className="text-base sm:text-lg text-(--text-secondary) leading-relaxed max-w-xl mx-auto lg:mx-0">
-            {language === 'vi'
-              ? 'Nền tảng AI hỗ trợ ánh xạ bằng chứng nghiên cứu và truy vết trích dẫn. Hoàn tất hồ sơ của bạn để bắt đầu.'
-              : 'Your AI-Assisted Research Evidence Mapping & Citation Traceability Platform. Complete your profile to begin.'}
+            {t('auth.setPassword.subtitle')}
           </p>
 
           <div className="mt-8 flex items-center gap-2 justify-center lg:justify-start">
@@ -233,12 +233,12 @@ export default function SetPassword() {
               onClick={toggleLanguage}
               className="rounded-lg border border-slate-200 dark:border-zinc-700 bg-white/70 dark:bg-zinc-900/60 backdrop-blur px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-zinc-800 transition"
             >
-              {language === 'vi' ? 'EN' : 'VN'}
+              {t('auth.setPassword.switchLanguage')}
             </button>
             <button
               type="button"
               onClick={toggleTheme}
-              aria-label="Toggle theme"
+              aria-label={t('auth.toggleTheme')}
               className="rounded-lg border border-slate-200 dark:border-zinc-700 bg-white/70 dark:bg-zinc-900/60 backdrop-blur p-1.5 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-zinc-800 transition"
             >
               {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
@@ -256,21 +256,19 @@ export default function SetPassword() {
           <section className="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-slate-200 dark:border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative">
             <header className="mb-6">
               <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                {language === 'vi' ? 'Hoàn tất hồ sơ của bạn' : 'Complete your profile'}
+                {t('auth.setPassword.completeProfile')}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {language === 'vi'
-                  ? 'Một vài bước nữa để kích hoạt tài khoản của bạn.'
-                  : 'A few more steps to activate your account.'}
+                {t('auth.setPassword.activationSteps')}
               </p>
             </header>
 
             {!token ? (
-              <InvalidLinkState language={language} />
+              <InvalidLinkState />
             ) : previewLoading ? (
               <PreviewSkeleton />
             ) : previewError ? (
-              <InvalidLinkState language={language} message={previewError} />
+              <InvalidLinkState message={previewError} />
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* TOP: Identity — avatar (left, fixed) + names (right, flex-grow) */}
@@ -296,17 +294,17 @@ export default function SetPassword() {
                       className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-slate-200 transition"
                     >
                       <CameraIcon className="w-3 h-3" />
-                      {language === 'vi' ? 'Tải ảnh' : 'Upload'}
+                      {t('auth.setPassword.upload')}
                     </button>
                     <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                      {language === 'vi' ? 'hoặc bỏ qua' : 'or skip'}
+                      {t('auth.setPassword.orSkip')}
                     </span>
                   </div>
 
                   <div className="flex-1 grid grid-cols-1 gap-3 min-w-0">
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-bold text-slate-700 dark:text-slate-300">
-                        {language === 'vi' ? 'Tên' : 'First Name'}
+                        {t('auth.setPassword.firstName')}
                       </span>
                       <input
                         type="text"
@@ -320,7 +318,7 @@ export default function SetPassword() {
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-bold text-slate-700 dark:text-slate-300">
-                        {language === 'vi' ? 'Họ' : 'Last Name'}
+                        {t('auth.setPassword.lastName')}
                       </span>
                       <input
                         type="text"
@@ -338,12 +336,12 @@ export default function SetPassword() {
                 {/* MIDDLE: System Context (2-col grid) — names now live in the TOP row */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <ReadOnlyField
-                    label={language === 'vi' ? 'Vai trò' : 'Role'}
+                    label={t('auth.setPassword.role')}
                     value={preview?.role}
                   />
                   {isStudent ? (
                     <ReadOnlyField
-                      label={language === 'vi' ? 'Mã sinh viên' : 'Student Code'}
+                      label={t('auth.setPassword.studentCode')}
                       value={preview?.studentCode}
                     />
                   ) : (
@@ -354,12 +352,12 @@ export default function SetPassword() {
                 {/* BOTTOM: Security (stacked) */}
                 <div className="space-y-4">
                   <ReadOnlyField
-                    label={language === 'vi' ? 'Email' : 'Email'}
+                    label={t('auth.setPassword.email')}
                     value={preview?.email}
                   />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <PasswordInput
-                      label={language === 'vi' ? 'Mật khẩu mới' : 'New Password'}
+                      label={t('auth.setPassword.newPassword')}
                       name="newPassword"
                       value={form.newPassword}
                       onChange={update('newPassword')}
@@ -367,7 +365,7 @@ export default function SetPassword() {
                       required
                     />
                     <PasswordInput
-                      label={language === 'vi' ? 'Xác nhận mật khẩu' : 'Confirm Password'}
+                      label={t('auth.setPassword.confirmPassword')}
                       name="confirmPassword"
                       value={form.confirmPassword}
                       onChange={update('confirmPassword')}
@@ -389,8 +387,8 @@ export default function SetPassword() {
                   className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 py-3 text-xs font-bold text-white shadow-lg transition-all hover:shadow-indigo-500/25 disabled:opacity-50 cursor-pointer"
                 >
                   {loading
-                    ? (language === 'vi' ? 'Đang lưu...' : 'Saving...')
-                    : (language === 'vi' ? 'Hoàn tất & vào hệ thống' : 'Complete & enter')}
+                    ? t('saving')
+                    : t('auth.setPassword.completeAndEnter')}
                 </button>
               </form>
             )}
@@ -410,14 +408,16 @@ export default function SetPassword() {
   );
 }
 
-function InvalidLinkState({ language, message }) {
+function InvalidLinkState({ message }) {
+  const { t } = useTranslation();
+
   return (
     <div className="space-y-5">
       <p className="rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 p-3 text-xs text-rose-700 dark:text-rose-200">
-        {message || (language === 'vi' ? 'Liên kết mời không hợp lệ hoặc đã hết hạn.' : 'Invitation link is invalid or has expired.')}
+        {message || t('auth.setPassword.invitationInvalid')}
       </p>
       <Link to="/login" className="inline-block rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
-        {language === 'vi' ? 'Quay lại đăng nhập' : 'Back to login'}
+        {t('auth.setPassword.backToLogin')}
       </Link>
     </div>
   );

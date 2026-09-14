@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
-import { commonText, instructorText, studentText } from '../../locales';
 import NotificationBell from '../ui/NotificationBell';
 
 function ThemeIcon({ theme }) {
@@ -22,6 +22,7 @@ export default function AppHeader({ variant = 'app', labels }) {
   const isPublic = variant === 'public';
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const { isAuthenticated, user, role, logout } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
@@ -29,10 +30,6 @@ export default function AppHeader({ variant = 'app', labels }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef(null);
-
-  const it = instructorText[language];
-  const st = studentText[language];
-  const ct = commonText[language];
 
   // Close profile dropdown on outside click
   useEffect(() => {
@@ -47,22 +44,22 @@ export default function AppHeader({ variant = 'app', labels }) {
 
   const links = isPublic
     ? [
-        { label: labels?.nav?.home || 'Home', path: '/' },
-        { label: labels?.nav?.about || 'About', path: '/about' },
-        { label: labels?.nav?.terms || 'Terms', path: '/terms' },
-        { label: labels?.nav?.privacy || 'Privacy', path: '/privacy' },
+        { label: labels?.nav?.home || t('shell.navigation.home'), path: '/' },
+        { label: labels?.nav?.about || t('shell.navigation.about'), path: '/about' },
+        { label: labels?.nav?.terms || t('shell.navigation.terms'), path: '/terms' },
+        { label: labels?.nav?.privacy || t('shell.navigation.privacy'), path: '/privacy' },
       ]
     : role === 'INSTRUCTOR'
       ? [
-          { label: it.dashboard, path: '/instructor/dashboard' },
-          { label: it.collections, path: '/instructor/collections' },
-          { label: it.sourceLibrary, path: '/instructor/source-library' },
-          { label: it.projects, path: '/instructor/projects' },
-          { label: it.requests, path: '/instructor/requests' },
+          { label: t('shell.navigation.dashboard'), path: '/instructor/dashboard' },
+          { label: t('shell.navigation.collections'), path: '/instructor/collections' },
+          { label: t('shell.navigation.sourceLibrary'), path: '/instructor/source-library' },
+          { label: t('shell.navigation.projects'), path: '/instructor/projects' },
+          { label: t('shell.navigation.requests'), path: '/instructor/requests' },
         ]
       : role === 'ADMIN'
-        ? [{ label: ct.dashboard, path: '/admin/dashboard' }]
-        : [{ label: st.projects, path: '/student/projects' }];
+        ? [{ label: t('shell.navigation.dashboard'), path: '/admin/dashboard' }]
+        : [{ label: t('shell.navigation.projects'), path: '/student/projects' }];
 
   const isActive = (path) => {
     return location.pathname === path || (path !== '/instructor/dashboard' && location.pathname.startsWith(`${path}/`));
@@ -81,15 +78,15 @@ export default function AppHeader({ variant = 'app', labels }) {
     navigate('/');
   };
 
-  const themeLabel = theme === 'light' ? ct.darkMode : ct.lightMode;
-  const fullName = user?.firstName || user?.lastName ? `${user?.firstName || ''} ${user?.lastName || ''}`.trim() : (user?.email || ct.profile);
+  const themeLabel = theme === 'light' ? t('shell.theme.darkMode') : t('shell.theme.lightMode');
+  const fullName = user?.firstName || user?.lastName ? `${user?.firstName || ''} ${user?.lastName || ''}`.trim() : (user?.email || t('shell.profile.label'));
   const initials = `${user?.firstName?.[0] || ''}${user?.lastName?.[0] || ''}`.toUpperCase() || 'U';
 
   const roleBadgeLabel = {
-    ADMIN: ct.roleAdmin,
-    INSTRUCTOR: ct.roleInstructor,
-    STUDENT: ct.roleStudent,
-  }[role] || role;
+    ADMIN: t('shell.profile.roles.ADMIN'),
+    INSTRUCTOR: t('shell.profile.roles.INSTRUCTOR'),
+    STUDENT: t('shell.profile.roles.STUDENT'),
+  }[role] || t('shell.profile.roles.UNKNOWN');
 
   return (
     <header className={`${isPublic ? 'fixed left-0 right-0' : 'sticky shrink-0'} top-0 z-50 h-16 border-b border-(--header-border) bg-(--header-bg) text-(--text-primary) shadow-sm backdrop-blur-md`}>
@@ -100,7 +97,7 @@ export default function AppHeader({ variant = 'app', labels }) {
             <span className="hidden sm:inline font-bold text-sm text-(--text-primary) whitespace-nowrap">Evidence Pilot</span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-1 ml-2" aria-label={ct.primaryNavigation}>
+          <nav className="hidden md:flex items-center gap-1 ml-2" aria-label={t('shell.navigation.primary')}>
             {links.map(link => (
               <Link
                 key={link.path}
@@ -165,7 +162,7 @@ export default function AppHeader({ variant = 'app', labels }) {
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-(--text-secondary) hover:bg-(--surface-secondary) hover:text-(--brand-foreground) font-medium transition-colors"
                     >
                       <svg className="w-4 h-4 text-(--text-tertiary)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                      {language === 'vi' ? 'Cài đặt tài khoản' : 'Account Settings'}
+                      {t('shell.profile.accountSettings')}
                     </button>
 
                     <button
@@ -174,7 +171,7 @@ export default function AppHeader({ variant = 'app', labels }) {
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-(--text-secondary) hover:bg-(--surface-secondary) hover:text-(--brand-foreground) font-medium transition-colors"
                     >
                       <svg className="w-4 h-4 text-(--text-tertiary)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                      {language === 'vi' ? 'Không gian & Hoạt động' : 'My Activity'}
+                      {t('shell.profile.myActivity')}
                     </button>
 
                     <div className="border-t border-(--border-light) my-1" />
@@ -185,13 +182,13 @@ export default function AppHeader({ variant = 'app', labels }) {
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-semibold transition-colors"
                     >
                       <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                      {ct.signOut}
+                      {t('shell.profile.signOut')}
                     </button>
                   </div>
                 )}
               </div>
             ) : isPublic ? (
-              <Link to="/login" className="px-4 py-2 text-xs font-bold text-(--brand-foreground) bg-(--brand-soft) hover:brightness-95 rounded-lg transition">{labels?.nav?.login || 'Login'}</Link>
+              <Link to="/login" className="px-4 py-2 text-xs font-bold text-(--brand-foreground) bg-(--brand-soft) hover:brightness-95 rounded-lg transition">{labels?.nav?.login || t('shell.navigation.login')}</Link>
             ) : null}
           </div>
 
@@ -201,7 +198,7 @@ export default function AppHeader({ variant = 'app', labels }) {
             onClick={() => setMenuOpen(value => !value)}
             aria-expanded={menuOpen}
             aria-controls="app-mobile-navigation"
-            aria-label={menuOpen ? ct.closeMenu : ct.openMenu}
+            aria-label={menuOpen ? t('shell.navigation.closeMenu') : t('shell.navigation.openMenu')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               {menuOpen
@@ -214,7 +211,7 @@ export default function AppHeader({ variant = 'app', labels }) {
 
       {menuOpen && (
         <div id="app-mobile-navigation" className="md:hidden absolute inset-x-0 top-full border-b border-(--border) bg-(--surface) shadow-xl px-4 py-4">
-          <nav className="space-y-1" aria-label={ct.mobileNavigation}>
+          <nav className="space-y-1" aria-label={t('shell.navigation.mobile')}>
             {links.map(link => (
               <Link
                 key={link.path}
@@ -237,17 +234,17 @@ export default function AppHeader({ variant = 'app', labels }) {
             {isAuthenticated ? (
               <>
                 <button type="button" onClick={() => go('/profile?tab=account')} className="px-3 py-2.5 text-xs font-semibold text-(--text-secondary) border border-(--border) rounded-xl hover:bg-(--surface-secondary)">
-                  {language === 'vi' ? 'Cài đặt tài khoản' : 'Account'}
+                  {t('shell.profile.account')}
                 </button>
                 <button type="button" onClick={() => go('/profile?tab=activity')} className="px-3 py-2.5 text-xs font-semibold text-(--text-secondary) border border-(--border) rounded-xl hover:bg-(--surface-secondary)">
-                  {language === 'vi' ? 'Hoạt động' : 'Activity'}
+                  {t('shell.profile.activity')}
                 </button>
                 <button type="button" onClick={signOut} className="col-span-2 px-3 py-2.5 text-xs font-semibold text-rose-600 border border-rose-200 dark:border-rose-900 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/30 text-center">
-                  {ct.signOut}
+                  {t('shell.profile.signOut')}
                 </button>
               </>
             ) : isPublic ? (
-              <Link to="/login" onClick={() => setMenuOpen(false)} className="col-span-2 text-center px-3 py-2.5 text-xs font-bold text-(--on-brand) bg-(--brand) rounded-xl">{labels?.nav?.login || 'Login'}</Link>
+              <Link to="/login" onClick={() => setMenuOpen(false)} className="col-span-2 text-center px-3 py-2.5 text-xs font-bold text-(--on-brand) bg-(--brand) rounded-xl">{labels?.nav?.login || t('shell.navigation.login')}</Link>
             ) : null}
           </div>
         </div>

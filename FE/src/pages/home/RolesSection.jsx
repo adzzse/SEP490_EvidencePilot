@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import SvgIcon from '../../components/ui/SvgIcon';
 import AnimateIn from '../../components/ui/AnimateIn';
 
@@ -6,29 +7,33 @@ const roles = [
   { key: 'instructor', icon: 'M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zm-5-5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-4 4h8v-1c0-1.33-2.67-2-4-2s-4 .67-4 2v1z' },
 ];
 
-function RoleCard({ role, t, index }) {
+function RoleCard({ role, index }) {
+  const { t } = useTranslation();
+
   return (
     <AnimateIn delay={100 * index} className="group">
       <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border-light) p-8 h-full hover:shadow-lg hover:border-indigo-200 dark:hover:border-indigo-700 transition-all duration-300">
         <div className="w-12 h-12 bg-(--brand-soft) text-(--brand-foreground) rounded-xl flex items-center justify-center mb-5 group-hover:bg-(--brand) group-hover:text-(--on-brand) transition-all duration-300">
           <SvgIcon path={role.icon} className="w-6 h-6" />
         </div>
-        <h3 className="text-lg font-bold text-(--text-primary) mb-3">{t.roles[role.key].title}</h3>
-        <p className="text-sm text-(--text-secondary) leading-relaxed">{t.roles[role.key].desc}</p>
+        <h3 className="text-lg font-bold text-(--text-primary) mb-3">{t(`home.roles.${role.key}.title`)}</h3>
+        <p className="text-sm text-(--text-secondary) leading-relaxed">{t(`home.roles.${role.key}.desc`)}</p>
       </div>
     </AnimateIn>
   );
 }
 
-export default function RolesSection({ t }) {
+export default function RolesSection() {
+  const { t } = useTranslation();
+
   return (
     <section className="py-20 bg-(--surface)">
       <div className="max-w-6xl mx-auto px-6">
         <AnimateIn>
-          <h2 className="text-2xl md:text-3xl font-bold text-center text-(--text-primary) mb-12">{t.roles.heading}</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-center text-(--text-primary) mb-12">{t('home.roles.heading')}</h2>
         </AnimateIn>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-          {roles.map((role, i) => <RoleCard key={role.key} role={role} t={t} index={i} />)}
+          {roles.map((role, i) => <RoleCard key={role.key} role={role} index={i} />)}
         </div>
       </div>
     </section>

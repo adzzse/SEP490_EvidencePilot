@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AppHeader, EmptyState, LoadingSkeleton, StatusBadge, Modal } from '../../components';
-import { commonText, studentText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { PROJECT_STATUSES } from '../../constants';
@@ -40,10 +40,9 @@ function getPaginationRange(currentPage, totalPages) {
 
 export default function Projects() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { language } = useLanguage();
   const { user } = useAuth();
-  const t = studentText[language];
-  const ct = commonText[language];
 
   // State
   const [projectsData, setProjectsData] = useState({ content: [], totalPages: 0, totalElements: 0 });
@@ -130,12 +129,12 @@ export default function Projects() {
 
   const getCtaText = (status) => {
     if (['APPROVED', 'ARCHIVED', 'COMPLETED'].includes(status)) {
-      return t.viewWorkspace;
+      return t('student.projects.viewWorkspace');
     }
     if (['ASSIGNED', 'CREATED'].includes(status)) {
-      return t.startWorkspace;
+      return t('student.projects.startWorkspace');
     }
-    return t.openWorkspace;
+    return t('student.projects.openWorkspace');
   };
 
   const sortedProjects = [...projectsData.content].sort((a, b) => {
@@ -158,14 +157,14 @@ export default function Projects() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-(--text-primary)">
-              {language === 'vi' ? `Chào mừng trở lại, ${user?.firstName || 'Sinh viên'}` : `Welcome back, ${user?.firstName || 'Student'}`}
+              {t('student.projects.welcome', { name: user?.firstName || t('student.projects.defaultStudentName') })}
             </h1>
-            <p className="text-xs sm:text-sm text-(--text-secondary) mt-1">{t.workspaceDescription}</p>
+            <p className="text-xs sm:text-sm text-(--text-secondary) mt-1">{t('student.projects.workspaceDescription')}</p>
           </div>
           <button onClick={() => setShowGuide(true)}
             className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 bg-(--surface) border border-(--border) rounded-xl text-xs font-bold text-(--text-secondary) hover:text-(--brand-foreground) hover:border-(--brand) transition-colors cursor-pointer">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
-            {t.guideButton}
+            {t('student.projects.guideButton')}
           </button>
         </div>
 
@@ -174,7 +173,7 @@ export default function Projects() {
           {/* Card 1: Total Projects */}
           <div className="bg-(--surface) border border-(--border) rounded-2xl p-5 shadow-xs flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t.totalProjects}</span>
+              <span className="text-[11px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('student.projects.totalProjects')}</span>
               <span className="text-3xl font-black text-(--text-primary) mt-1 block">{stats.total}</span>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
@@ -188,7 +187,7 @@ export default function Projects() {
           {/* Card 2: In Progress */}
           <div className="bg-(--surface) border border-(--border) rounded-2xl p-5 shadow-xs flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t.inProgress}</span>
+              <span className="text-[11px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('student.projects.inProgress')}</span>
               <span className="text-3xl font-black text-amber-600 dark:text-amber-400 mt-1 block">{stats.inProgress}</span>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
@@ -201,7 +200,7 @@ export default function Projects() {
           {/* Card 3: Completed */}
           <div className="bg-(--surface) border border-(--border) rounded-2xl p-5 shadow-xs flex items-center justify-between">
             <div>
-              <span className="text-[11px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t.completed}</span>
+              <span className="text-[11px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('student.projects.completed')}</span>
               <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400 mt-1 block">{stats.completed}</span>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
@@ -221,7 +220,8 @@ export default function Projects() {
             </svg>
             <input
               type="text"
-              placeholder={t.searchProjectsPlaceholder}
+              placeholder={t('student.projects.searchProjectsPlaceholder')}
+              aria-label={t('student.projects.searchLabel')}
               value={searchQuery}
               onChange={handleSearchChange}
               className="w-full pl-10 pr-4 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-medium text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)"
@@ -231,8 +231,8 @@ export default function Projects() {
           {/* Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto p-1 bg-(--surface-secondary) border border-(--border) rounded-xl">
             {[
-              { key: 'ALL', label: t.allStatuses },
-              ...PROJECT_STATUSES.map(status => ({ key: status, label: ct.statusLabels?.[status] || status.replaceAll('_', ' ') })),
+              { key: 'ALL', label: t('student.projects.allStatuses') },
+              ...PROJECT_STATUSES.map(status => ({ key: status, label: t(`status.${status}`) })),
             ].map(tab => (
               <button
                 key={tab.key}
@@ -252,7 +252,8 @@ export default function Projects() {
           <div className="flex items-center gap-1 shrink-0 bg-(--surface-secondary) border border-(--border) p-1 rounded-xl">
             <button
               onClick={() => setIsGridView(true)}
-              title="Grid View"
+              title={t('student.projects.gridView')}
+              aria-label={t('student.projects.gridView')}
               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isGridView ? 'bg-(--surface) text-(--brand-foreground) shadow-xs' : 'text-(--text-tertiary) hover:text-(--text-primary)'}`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -261,7 +262,8 @@ export default function Projects() {
             </button>
             <button
               onClick={() => setIsGridView(false)}
-              title="List View"
+              title={t('student.projects.listView')}
+              aria-label={t('student.projects.listView')}
               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${!isGridView ? 'bg-(--surface) text-(--brand-foreground) shadow-xs' : 'text-(--text-tertiary) hover:text-(--text-primary)'}`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -273,18 +275,20 @@ export default function Projects() {
 
         {/* Content Area */}
         {loading ? (
-          <LoadingSkeleton count={4} height="h-44" />
+          <div role="status" aria-label={t('student.projects.loadingProjects')}>
+            <LoadingSkeleton count={4} height="h-44" />
+          </div>
         ) : error ? (
           <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 p-6 rounded-2xl text-center">
-            <p className="font-semibold text-sm">{t.projectsLoadFailed}</p>
+            <p className="font-semibold text-sm">{t('student.projects.projectsLoadFailed')}</p>
             <button onClick={() => fetchProjects(activeTab, searchQuery)} className="mt-3 px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition-colors cursor-pointer">
-              {ct.retry}
+              {t('student.projects.retry')}
             </button>
           </div>
         ) : projects.length === 0 ? (
           <EmptyState
-            title={stats.total === 0 ? t.noProjects : t.noMatchingProjects}
-            description={stats.total === 0 ? t.noProjectsDescription : t.noMatchingProjectsDesc}
+            title={stats.total === 0 ? t('student.projects.noProjects') : t('student.projects.noMatchingProjects')}
+            description={stats.total === 0 ? t('student.projects.noProjectsDescription') : t('student.projects.noMatchingProjectsDesc')}
           />
         ) : isGridView ? (
           /* Grid View Layout */
@@ -301,7 +305,7 @@ export default function Projects() {
                     <StatusBadge status={project.status} />
                     {project.targetStandard && (
                       <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                        {t.targetStandardLabel}: {project.targetStandard}
+                        {t('student.projects.targetStandardLabel')}: {project.targetStandard}
                       </span>
                     )}
                   </div>
@@ -312,7 +316,7 @@ export default function Projects() {
                       {project.title}
                     </h3>
                     <p className="text-xs text-(--text-secondary) mt-1.5 line-clamp-3 leading-relaxed">
-                      {project.description || t.noDescription}
+                      {project.description || t('student.projects.noDescription')}
                     </p>
                   </div>
                 </div>
@@ -321,11 +325,11 @@ export default function Projects() {
                 <div className="pt-4 mt-4 border-t border-(--border-light) space-y-3">
                   <div className="flex items-center justify-between text-[11px] text-(--text-tertiary)">
                     <span>
-                      {t.lastUpdated.replace('{{date}}', formatDateTime(project.updatedAt || project.createdAt, language))}
+                      {t('student.projects.lastUpdated', { date: formatDateTime(project.updatedAt || project.createdAt, language) })}
                     </span>
                     {project.currentUserRole && (
                       <span className="font-semibold text-slate-500 dark:text-slate-400">
-                        {t.roleLabel}: {project.currentUserRole}
+                        {t('student.projects.roleLabel')}: {project.currentUserRole}
                       </span>
                     )}
                   </div>
@@ -351,11 +355,11 @@ export default function Projects() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-(--surface-secondary) text-(--text-tertiary) font-bold uppercase border-b border-(--border)">
-                    <th className="px-6 py-3.5 font-bold">{t.projectName}</th>
-                    <th className="px-6 py-3.5 font-bold">{t.targetStandardLabel}</th>
-                    <th className="px-6 py-3.5 font-bold">{t.roleLabel}</th>
-                    <th className="px-6 py-3.5 font-bold">{ct.status}</th>
-                    <th className="px-6 py-3.5 font-bold text-right">{ct.actions}</th>
+                    <th className="px-6 py-3.5 font-bold">{t('student.projects.projectName')}</th>
+                    <th className="px-6 py-3.5 font-bold">{t('student.projects.targetStandardLabel')}</th>
+                    <th className="px-6 py-3.5 font-bold">{t('student.projects.roleLabel')}</th>
+                    <th className="px-6 py-3.5 font-bold">{t('student.projects.status')}</th>
+                    <th className="px-6 py-3.5 font-bold text-right">{t('student.projects.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-(--border) text-(--text-primary) font-medium">
@@ -367,7 +371,7 @@ export default function Projects() {
                     >
                       <td className="px-6 py-4">
                         <div className="font-bold text-sm text-(--text-primary)">{project.title}</div>
-                        <div className="text-xs text-(--text-secondary) truncate max-w-md mt-0.5">{project.description || t.noDescription}</div>
+                        <div className="text-xs text-(--text-secondary) truncate max-w-md mt-0.5">{project.description || t('student.projects.noDescription')}</div>
                       </td>
                       <td className="px-6 py-4 font-mono font-semibold text-slate-500">
                         {project.targetStandard || '—'}
@@ -402,12 +406,11 @@ export default function Projects() {
         {!loading && !error && totalElements > 0 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-(--border) text-xs font-semibold text-(--text-secondary)">
             <span>
-              {t.showingProjectsRange
-                ? t.showingProjectsRange
-                    .replace('{{start}}', safePage * pageSize + 1)
-                    .replace('{{end}}', Math.min((safePage + 1) * pageSize, totalElements))
-                    .replace('{{total}}', totalElements)
-                : `Hiển thị ${safePage * pageSize + 1}-${Math.min((safePage + 1) * pageSize, totalElements)} trong tổng số ${totalElements} dự án`}
+              {t('student.projects.showingProjectsRange', {
+                start: safePage * pageSize + 1,
+                end: Math.min((safePage + 1) * pageSize, totalElements),
+                total: totalElements,
+              })}
             </span>
 
             <div className="flex items-center gap-1.5">
@@ -415,6 +418,7 @@ export default function Projects() {
               <button
                 onClick={() => setPage(p => Math.max(0, p - 1))}
                 disabled={safePage === 0}
+                aria-label={t('student.projects.previousPage')}
                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-500 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xs cursor-pointer"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -436,6 +440,7 @@ export default function Projects() {
                   <button
                     key={item}
                     onClick={() => setPage(item)}
+                    aria-label={t('student.projects.pageLabel', { page: item + 1 })}
                     className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition cursor-pointer ${
                       isActive
                         ? 'bg-[#0c162e] text-white shadow-xs'
@@ -451,6 +456,7 @@ export default function Projects() {
               <button
                 onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                 disabled={safePage >= totalPages - 1}
+                aria-label={t('student.projects.nextPage')}
                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-500 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xs cursor-pointer"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -462,9 +468,9 @@ export default function Projects() {
         )}
       </main>
 
-      <Modal open={showGuide} onClose={() => setShowGuide(false)} title={t.guideTitle} closeLabel={ct.close}>
+      <Modal open={showGuide} onClose={() => setShowGuide(false)} title={t('student.projects.guideTitle')} closeLabel={t('close')}>
         <ol className="space-y-3 text-xs">
-          {(t.guideSteps || []).map((step, i) => (
+          {t('student.projects.guideSteps', { returnObjects: true }).map((step, i) => (
             <li key={i} className="flex items-start gap-3">
               <span className="shrink-0 w-5 h-5 rounded-full bg-(--brand) text-(--on-brand) text-[10px] font-black flex items-center justify-center">{i + 1}</span>
               <span className="text-(--text-secondary) leading-relaxed">{step}</span>

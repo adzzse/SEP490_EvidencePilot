@@ -1,8 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
-import { useLanguage } from '../../context/LanguageContext';
-import { homeText } from '../../locales/home';
 import AppHeader from '../../components/layout/AppHeader';
 import LoadingScreen from '../../components/ui/LoadingScreen';
 import HeroSection from './HeroSection';
@@ -24,8 +23,8 @@ const WORKSPACE_BY_ROLE = {
 
 export default function Home() {
   const { isAuthenticated, role, loading } = useAuth();
-  const { language } = useLanguage();
-  const t = homeText[language];
+  const { t } = useTranslation();
+  const labels = t('home', { returnObjects: true });
   const [showSplash, setShowSplash] = useState(() => !sessionStorage.getItem('splashSeen'));
 
   const handleSplashFinish = useCallback(() => {
@@ -55,15 +54,15 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-(--page-bg) text-(--text-primary) font-sans">
-      <AppHeader variant="public" labels={t} />
-      <HeroSection t={t} />
-      <StatsSection t={t} />
-      <RolesSection t={t} />
-      <WorkflowSection t={t} />
-      <FeaturesSection t={t} />
-      <PreviewSection t={t} />
-      <CtaSection t={t} />
-      <FooterSection t={t} />
+      <AppHeader variant="public" labels={labels} />
+      <HeroSection />
+      <StatsSection />
+      <RolesSection />
+      <WorkflowSection />
+      <FeaturesSection />
+      <PreviewSection />
+      <CtaSection />
+      <FooterSection />
     </div>
   );
 }

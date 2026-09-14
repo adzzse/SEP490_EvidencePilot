@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 
 const formatCount = (value) => (
   Number.isFinite(Number(value)) ? Intl.NumberFormat().format(Number(value)) : '—'
 );
 
-export default function StatsSection({ t }) {
+export default function StatsSection() {
   const [stats, setStats] = useState(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     let active = true;
@@ -17,14 +19,14 @@ export default function StatsSection({ t }) {
   }, []);
 
   const items = [
-    { label: t.stats.usersLabel, value: stats?.totalUsers },
-    { label: t.stats.projectsLabel, value: stats?.totalProjects },
-    { label: t.stats.sourcesLabel, value: stats?.totalSources ?? stats?.totalDocuments },
+    { label: t('home.stats.usersLabel'), value: stats?.totalUsers },
+    { label: t('home.stats.projectsLabel'), value: stats?.totalProjects },
+    { label: t('home.stats.sourcesLabel'), value: stats?.totalSources ?? stats?.totalDocuments },
   ];
 
   return (
     <section className="relative z-10 border-y border-(--border-light) bg-(--surface) py-5 sm:py-6" aria-labelledby="platform-stats-heading">
-      <h2 id="platform-stats-heading" className="sr-only">{t.stats.heading}</h2>
+      <h2 id="platform-stats-heading" className="sr-only">{t('home.stats.heading')}</h2>
       <dl className="grid grid-cols-1 sm:grid-cols-3 max-w-4xl mx-auto px-3 sm:px-6" aria-live="polite" aria-busy={!stats}>
         {items.map((item, index) => (
           <div

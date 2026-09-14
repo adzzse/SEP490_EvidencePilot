@@ -1,31 +1,30 @@
-import { useLanguage } from '../context/LanguageContext';
-import { homeText } from '../locales/home';
+import { useTranslation } from 'react-i18next';
 import StaticPageLayout from '../components/layout/StaticPageLayout';
 import AnimateIn from '../components/ui/AnimateIn';
 
 export default function Terms() {
-  const { language } = useLanguage();
-  const t = homeText[language].terms;
+  const { t } = useTranslation();
+  const labels = t('home', { returnObjects: true });
 
   const sections = [
-    { title: t.section1Title, body: t.section1 },
-    { title: t.section2Title, body: t.section2 },
-    { title: t.section3Title, body: [t.section3p1, t.section3p2] },
-    { title: t.section4Title, body: t.section4 },
-    { title: t.section5Title, body: t.section5 },
-    { title: t.section6Title, body: t.section6 },
-    { title: t.section7Title, body: t.section7 },
-    { title: t.section8Title, body: t.section8 },
+    { title: t('home.terms.section1Title'), body: t('home.terms.section1') },
+    { title: t('home.terms.section2Title'), body: t('home.terms.section2') },
+    { title: t('home.terms.section3Title'), body: [t('home.terms.section3p1'), t('home.terms.section3p2')] },
+    { title: t('home.terms.section4Title'), body: t('home.terms.section4') },
+    { title: t('home.terms.section5Title'), body: t('home.terms.section5') },
+    { title: t('home.terms.section6Title'), body: t('home.terms.section6') },
+    { title: t('home.terms.section7Title'), body: t('home.terms.section7') },
+    { title: t('home.terms.section8Title'), body: t('home.terms.section8') },
   ];
 
   return (
-    <StaticPageLayout t={homeText[language]}>
+    <StaticPageLayout t={labels}>
       <div className="max-w-3xl mx-auto px-6">
         <AnimateIn>
-          <h1 className="text-3xl md:text-4xl font-black text-(--brand-foreground) tracking-tight mb-2">{t.metaTitle}</h1>
-          <p className="text-xs font-semibold text-(--text-tertiary) mb-8">{t.lastUpdated}</p>
+          <h1 className="text-3xl md:text-4xl font-black text-(--brand-foreground) tracking-tight mb-2">{t('home.terms.metaTitle')}</h1>
+          <p className="text-xs font-semibold text-(--text-tertiary) mb-8">{t('home.terms.lastUpdated')}</p>
           <div className="bg-(--surface) border border-(--border) rounded-2xl p-6 sm:p-8 mb-8 shadow-xs">
-            <p className="text-(--text-secondary) leading-relaxed">{t.intro}</p>
+            <p className="text-(--text-secondary) leading-relaxed">{t('home.terms.intro')}</p>
           </div>
         </AnimateIn>
 

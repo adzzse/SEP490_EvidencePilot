@@ -1,5 +1,4 @@
-import { useLanguage } from '../../context/LanguageContext';
-import { commonText } from '../../locales';
+import { useTranslation } from 'react-i18next';
 
 const COLORS = {
   PENDING: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800',
@@ -28,12 +27,12 @@ const COLORS = {
 };
 
 export default function StatusBadge({ status, className = '', label }) {
-  const { language } = useLanguage();
+  const { t } = useTranslation();
   const key = status || 'UNKNOWN';
   const color = COLORS[key] || 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
   return (
     <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border ${color} ${className}`}>
-      {label || commonText[language]?.statusLabels?.[key] || key.replaceAll('_', ' ')}
+      {label || t(`status.${key}`, { defaultValue: t('status.UNKNOWN') })}
     </span>
   );
 }

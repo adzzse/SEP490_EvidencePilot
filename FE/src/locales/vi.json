@@ -1,4 +1,350 @@
 {
+  "home": {
+    "nav": {
+      "home": "Trang chủ",
+      "features": "Tính năng",
+      "about": "Giới thiệu",
+      "terms": "Điều khoản",
+      "privacy": "Bảo mật",
+      "login": "Đăng nhập",
+      "signOut": "Đăng xuất",
+      "workspace": "Vào làm việc",
+      "lang": "English",
+      "profile": "Hồ sơ"
+    },
+    "hero": {
+      "titleStart": "Nền tảng",
+      "titleHighlight": "Nghiên cứu Dựa trên Bằng chứng",
+      "titleEnd": "",
+      "subtitle": "Evidence Pilot hỗ trợ dự án nghiên cứu do giảng viên quản lý: sinh viên biên soạn bài viết, quản lý nguồn, chạy Citation Review, sau đó gửi để nhận phản hồi có cấu trúc và xuất kết quả.",
+      "cta": "Đăng nhập",
+      "ctaSub": ""
+    },
+    "stats": {
+      "heading": "Hoạt động trên nền tảng",
+      "usersLabel": "Người dùng",
+      "projectsLabel": "Dự án đang hoạt động",
+      "sourcesLabel": "Nguồn đang hoạt động"
+    },
+    "roles": {
+      "heading": "Dành cho nhóm nghiên cứu có giám sát",
+      "student": {
+        "title": "Sinh viên",
+        "desc": "Làm việc trong dự án được phân công với bài viết, nguồn, Citation Review, gợi ý theo phần và phản hồi có cấu trúc từ giảng viên."
+      },
+      "instructor": {
+        "title": "Giảng viên",
+        "desc": "Tạo và quản lý dự án, tổ chức tài liệu nền, phân công sinh viên và đánh giá bài nộp bằng phản hồi cụ thể."
+      }
+    },
+    "workflow": {
+      "heading": "Từ phân công đến đánh giá",
+      "step1": {
+        "title": "Giảng viên tạo dự án",
+        "desc": "Giảng viên tạo dự án và quản lý toàn bộ trạng thái vòng đời của dự án."
+      },
+      "step2": {
+        "title": "Cấu hình & Phân công",
+        "desc": "Giảng viên chuẩn bị tài liệu nền và phân công sinh viên vào dự án."
+      },
+      "step3": {
+        "title": "Sinh viên phát triển bài viết",
+        "desc": "Sinh viên được giao chỉnh sửa các phần, quản lý nguồn, chạy Citation Review và dùng gợi ý AI theo phần."
+      },
+      "step4": {
+        "title": "Sinh viên gửi đánh giá",
+        "desc": "Sinh viên gửi dự án khi bài viết và bằng chứng hỗ trợ đã sẵn sàng để đánh giá."
+      },
+      "step5": {
+        "title": "Giảng viên đánh giá",
+        "desc": "Giảng viên xem xét bài nộp và đưa ra phản hồi theo từng phần."
+      },
+      "step6": {
+        "title": "Hoàn thiện & Xuất kết quả",
+        "desc": "Nhóm xử lý phản hồi, hoàn thiện công việc và xuất các đầu ra cần thiết."
+      }
+    },
+    "features": {
+      "heading": "Tính năng chính",
+      "subheading": "Công cụ tập trung cho dự án và đánh giá dựa trên bằng chứng",
+      "structuredData": {
+        "title": "Nguồn có cấu trúc",
+        "desc": "Tổ chức tài liệu tải lên, metadata DOI, liên kết và quan hệ nguồn trong từng dự án."
+      },
+      "citationReview": {
+        "title": "Đánh giá trích dẫn",
+        "desc": "Phát hiện nội dung có thể cần trích dẫn, cảnh báo sai lệch nguồn và tìm nguồn liên quan trong dự án."
+      },
+      "feedback": {
+        "title": "Phản hồi trực tiếp",
+        "desc": "Cộng tác liền mạch qua yêu cầu đánh giá tương tác, nhận xét và phản hồi từ giảng viên."
+      },
+      "documentExtraction": {
+        "title": "Trích xuất tài liệu",
+        "desc": "Trích xuất văn bản và hình ảnh có thể tìm kiếm từ tài liệu nghiên cứu đã tải lên."
+      },
+      "vectorSearch": {
+        "title": "Tìm kiếm ngữ nghĩa",
+        "desc": "Tìm bằng chứng liên quan trên tất cả nguồn tài liệu với tìm kiếm ngữ nghĩa vector dựa trên Qdrant."
+      },
+      "realtime": {
+        "title": "Cập nhật thời gian thực",
+        "desc": "Nhận thông báo tức thì về phản hồi, thay đổi trạng thái và cập nhật hệ thống qua WebSocket."
+      }
+    },
+    "preview": {
+      "heading": "Xem quy trình",
+      "subheading": "Theo dõi luồng do giảng viên quản lý từ thiết lập dự án đến đánh giá và xuất kết quả",
+      "url": "app.evidencepilot.io/workspace",
+      "autoPlay": "Tự động chạy",
+      "paused": "Đã tạm dừng",
+      "steps": [
+        {
+          "title": "Tạo dự án",
+          "desc": "Giảng viên tạo dự án và giữ quyền quản lý vòng đời.",
+          "actor": "Giảng viên",
+          "panel": "Quản lý dự án"
+        },
+        {
+          "title": "Cấu hình & Phân công",
+          "desc": "Giảng viên chuẩn bị tài liệu nền và phân công sinh viên.",
+          "actor": "Giảng viên",
+          "panel": "Thiết lập dự án"
+        },
+        {
+          "title": "Phát triển bài viết",
+          "desc": "Sinh viên được giao chỉnh sửa các phần, quản lý nguồn và chạy Citation Review.",
+          "actor": "Sinh viên",
+          "panel": "Không gian sinh viên"
+        },
+        {
+          "title": "Gửi đánh giá",
+          "desc": "Sinh viên gửi công việc hiện tại để giảng viên đánh giá.",
+          "actor": "Sinh viên",
+          "panel": "Yêu cầu đánh giá"
+        },
+        {
+          "title": "Đánh giá & Phản hồi",
+          "desc": "Giảng viên xem xét bài nộp và đưa ra phản hồi có thể hành động.",
+          "actor": "Giảng viên",
+          "panel": "Không gian đánh giá"
+        },
+        {
+          "title": "Hoàn thiện & Xuất",
+          "desc": "Nhóm xử lý phản hồi và xuất các đầu ra cần thiết của dự án.",
+          "actor": "Nhóm",
+          "panel": "Đầu ra dự án"
+        }
+      ]
+    },
+    "cta": {
+      "heading": "Sẵn sàng bắt đầu?",
+      "subtitle": "Đăng nhập bằng tài khoản do quản trị viên cung cấp.",
+      "button": "Đăng nhập"
+    },
+    "footer": {
+      "copyright": "Evidence Pilot. Bảo lưu mọi quyền.",
+      "tagline": "Trao quyền cho cộng tác nghiên cứu dựa trên bằng chứng.",
+      "privacy": "Chính sách bảo mật",
+      "terms": "Điều khoản dịch vụ",
+      "contact": "Liên hệ"
+    },
+    "about": {
+      "heading": "Về Evidence Pilot",
+      "desc": "Evidence Pilot là không gian nghiên cứu có giám sát, kết nối thu thập nguồn, biên soạn bài viết, Citation Review, phản hồi của giảng viên và xuất kết quả. AI và tìm kiếm ngữ nghĩa hỗ trợ quy trình, còn con người chịu trách nhiệm cho các quyết định học thuật."
+    },
+    "terms": {
+      "metaTitle": "Điều khoản Dịch vụ",
+      "lastUpdated": "Cập nhật lần cuối: Tháng 7, 2026",
+      "intro": "Chào mừng bạn đến với Evidence Pilot. Bằng cách truy cập hoặc sử dụng nền tảng của chúng tôi, bạn đồng ý bị ràng buộc bởi các Điều khoản Dịch vụ này. Nếu bạn không đồng ý, vui lòng không sử dụng Dịch vụ.",
+      "section1Title": "1. Chấp nhận Điều khoản",
+      "section1": "Bằng cách sử dụng Evidence Pilot, bạn xác nhận rằng bạn đã đọc, hiểu và đồng ý với các Điều khoản này. Chúng tôi có thể cập nhật các điều khoản này theo thời gian; việc tiếp tục sử dụng sau khi có thay đổi được coi là chấp nhận.",
+      "section2Title": "2. Mô tả Dịch vụ",
+      "section2": "Evidence Pilot cung cấp nền tảng quản lý nghiên cứu có hỗ trợ AI bao gồm tải lên và trích xuất tài liệu, biên soạn bài viết, Citation Review, quy trình phản hồi giảng viên và tìm kiếm ngữ nghĩa. Dịch vụ được cung cấp \"nguyên trạng\" mà không có bất kỳ bảo đảm nào.",
+      "section3Title": "3. Gợi ý do AI Tạo ra",
+      "section3p1": "Evidence Pilot sử dụng trí tuệ nhân tạo để phân tích các phần bài viết và đưa ra phát hiện về trích dẫn, nguồn liên quan và gợi ý viết. Các kết quả đầu ra này chỉ mang tính tư vấn. Chúng không cấu thành kết luận học thuật đã được xác thực, cũng không thay thế phán đoán, chuyên môn và trách nhiệm của nhà nghiên cứu.",
+      "section3p2": "Bạn xác nhận và đồng ý rằng tất cả các gợi ý do AI tạo ra phải được xem xét, xác thực và chỉnh sửa bởi một nhà nghiên cứu có chuyên môn trước khi đưa vào bất kỳ công trình học thuật, bài nộp hoặc ấn phẩm nào. Quyết định cuối cùng về nội dung nghiên cứu, phương pháp luận và kết luận hoàn toàn thuộc trách nhiệm của bạn.",
+      "section4Title": "4. Không Chịu Trách nhiệm về Kết quả Học thuật",
+      "section4": "Evidence Pilot được cung cấp như một công cụ hỗ trợ nghiên cứu. Chúng tôi không bảo đảm về tính chính xác, đầy đủ hoặc phù hợp của các kết quả đầu ra do AI tạo ra cho bất kỳ mục đích học thuật cụ thể nào. Chúng tôi sẽ không chịu trách nhiệm về bất kỳ vấn đề, từ chối hoặc thiếu sót nào trong bài báo nghiên cứu, luận văn, luận án hoặc bất kỳ công trình học thuật nào khác của bạn, bao gồm nhưng không giới hạn ở: phát hiện đạo văn, lỗi thực tế, sai sót trích dẫn, khiếm khuyết phương pháp luận hoặc bất kỳ kết quả học thuật bất lợi nào phát sinh từ việc sử dụng hoặc dựa vào các gợi ý của nền tảng chúng tôi. Hãy sử dụng nền tảng một cách thận trọng và áp dụng phán đoán phản biện của bạn ở mọi bước.",
+      "section5Title": "5. Trách nhiệm của Người dùng",
+      "section5": "Bạn có trách nhiệm: (a) về tính chính xác và hợp pháp của tất cả nội dung bạn tải lên; (b) duy trì bảo mật thông tin đăng nhập tài khoản của bạn; (c) đảm bảo việc sử dụng của bạn tuân thủ chính sách liêm chính học thuật của tổ chức; và (d) xem xét và xác thực tất cả kết quả đầu ra do AI tạo ra trước khi sử dụng.",
+      "section6Title": "6. Sở hữu Trí tuệ",
+      "section6": "Bạn giữ lại tất cả quyền đối với nội dung nghiên cứu, tài liệu và dữ liệu bạn tải lên. Evidence Pilot không tuyên bố quyền sở hữu đối với công trình của bạn. Chúng tôi có thể sử dụng dữ liệu tổng hợp đã được ẩn danh để cải thiện dịch vụ.",
+      "section7Title": "7. Chấm dứt",
+      "section7": "Chúng tôi có quyền đình chỉ hoặc chấm dứt tài khoản vi phạm các Điều khoản này hoặc có hành vi lạm dụng. Bạn có thể xóa tài khoản của mình bất kỳ lúc nào.",
+      "section8Title": "8. Liên hệ",
+      "section8": "Nếu có thắc mắc về các Điều khoản này, vui lòng liên hệ đội ngũ hỗ trợ của chúng tôi."
+    },
+    "privacy": {
+      "metaTitle": "Chính sách Bảo mật",
+      "lastUpdated": "Cập nhật lần cuối: Tháng 7, 2026",
+      "intro": "Chính sách Bảo mật này giải thích cách Evidence Pilot thu thập, sử dụng, lưu trữ và bảo vệ thông tin cá nhân của bạn khi bạn sử dụng nền tảng của chúng tôi.",
+      "section1Title": "1. Thông tin Chúng tôi Thu thập",
+      "section1": "Chúng tôi thu thập thông tin bạn cung cấp trực tiếp: tên, địa chỉ email, tổ chức học thuật và thông tin đăng nhập. Chúng tôi cũng thu thập nội dung bạn tải lên, bao gồm tài liệu, các phần bài viết, metadata nguồn, phản hồi và metadata dự án. Dữ liệu tự động thu thập bao gồm nhật ký sử dụng, địa chỉ IP, loại trình duyệt và phân tích tương tác.",
+      "section2Title": "2. Cách Chúng tôi Sử dụng Thông tin",
+      "section2": "Chúng tôi sử dụng thông tin của bạn để: cung cấp và cải thiện Dịch vụ, xử lý trích xuất tài liệu và Citation Review, hỗ trợ quy trình phản hồi giảng viên, thông báo cập nhật dịch vụ và đảm bảo an ninh nền tảng. Chúng tôi không bán dữ liệu cá nhân của bạn cho bên thứ ba.",
+      "section3Title": "3. Lưu trữ và Bảo mật Dữ liệu",
+      "section3": "Dữ liệu của bạn được lưu trữ an toàn bằng mã hóa tiêu chuẩn ngành. Tài liệu được lưu trữ trong MinIO, dữ liệu có cấu trúc trong MySQL và vector embeddings trong Qdrant. Chúng tôi thực hiện các biện pháp kỹ thuật và tổ chức phù hợp để bảo vệ dữ liệu của bạn.",
+      "section4Title": "4. Dịch vụ Bên thứ Ba",
+      "section4": "Chúng tôi tích hợp với: OpenAlex API để truy xuất siêu dữ liệu bài báo qua DOI và dịch vụ AI bên ngoài để phân tích tài liệu. Các dịch vụ này chỉ nhận dữ liệu cần thiết cho chức năng của họ và bị ràng buộc theo hợp đồng để bảo vệ thông tin của bạn.",
+      "section5Title": "5. Lưu giữ Dữ liệu",
+      "section5": "Chúng tôi lưu giữ dữ liệu của bạn trong suốt thời gian tài khoản của bạn hoạt động hoặc khi cần thiết để cung cấp Dịch vụ. Bạn có thể yêu cầu xóa tài khoản và dữ liệu liên quan bất kỳ lúc nào. Dữ liệu sao lưu có thể được lưu giữ tối đa 90 ngày sau khi xóa.",
+      "section6Title": "6. Quyền của Bạn",
+      "section6": "Tùy thuộc vào khu vực pháp lý của bạn, bạn có quyền: truy cập, chỉnh sửa hoặc xóa dữ liệu cá nhân của mình; hạn chế hoặc phản đối việc xử lý; và nhận bản sao dữ liệu di động. Để thực hiện các quyền này, hãy liên hệ đội ngũ hỗ trợ của chúng tôi.",
+      "section7Title": "7. Cookie",
+      "section7": "Chúng tôi sử dụng cookie thiết yếu cho xác thực và quản lý phiên làm việc. Không có cookie theo dõi của bên thứ ba nào được sử dụng cho mục đích quảng cáo.",
+      "section8Title": "8. Thay đổi Chính sách này",
+      "section8": "Chúng tôi có thể cập nhật Chính sách Bảo mật này. Các thay đổi quan trọng sẽ được thông báo qua email hoặc thông báo trên nền tảng.",
+      "section9Title": "9. Liên hệ",
+      "section9": "Đối với các thắc mắc liên quan đến bảo mật, vui lòng liên hệ đội ngũ hỗ trợ của chúng tôi."
+    },
+    "aboutPage": {
+      "metaTitle": "Về Evidence Pilot",
+      "missionTitle": "Sứ mệnh của Chúng tôi",
+      "missionDesc": "Evidence Pilot được tạo ra để kết nối thu thập nguồn với đánh giá học thuật. Nền tảng cung cấp cho giảng viên và sinh viên được phân công một môi trường có cấu trúc cho biên soạn bài viết, Citation Review, phản hồi và chỉnh sửa.",
+      "storyTitle": "Câu chuyện của Chúng tôi",
+      "storyDesc": "Xuất phát từ những thách thức của sinh viên và người hướng dẫn trong dự án nghiên cứu dựa trên bằng chứng, Evidence Pilot phát triển thành một không gian làm việc tập trung cho trích xuất tài liệu, tìm kiếm ngữ nghĩa, Citation Review, phản hồi có cấu trúc và chỉnh sửa.",
+      "techTitle": "Công nghệ",
+      "techDesc": "Evidence Pilot được xây dựng trên nền tảng công nghệ hiện đại: Java 21 với Spring Boot cho backend, React 19 với Vite cho frontend, MySQL cho dữ liệu có cấu trúc, MinIO cho lưu trữ tệp, Qdrant cho tìm kiếm vector và RabbitMQ cho xử lý bất đồng bộ. Khả năng AI được hỗ trợ bởi dịch vụ tích hợp cho Citation Review và gợi ý theo phần.",
+      "teamTitle": "Vì Cộng đồng Học thuật",
+      "teamDesc": "Evidence Pilot được thiết kế theo luồng dự án hiện tại do giảng viên quản lý và sẽ tiếp tục cải thiện từ phản hồi người dùng cùng yêu cầu học thuật đã được xác thực."
+    }
+  },
+  "auth": {
+    "toggleTheme": "Toggle theme",
+    "login": {
+      "backToHome": "Quay lại Trang chủ",
+      "welcomeBack": "Chào mừng trở lại",
+      "subtitle": "Đăng nhập vào Evidence Pilot để quản lý các dự án nghiên cứu của bạn.",
+      "email": "Email",
+      "emailPlaceholder": "you@example.com",
+      "password": "Mật khẩu",
+      "signingIn": "Đang đăng nhập...",
+      "signIn": "Đăng nhập",
+      "accountHelp": "Chưa có tài khoản? Vui lòng liên hệ quản trị viên.",
+      "failed": "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin."
+    },
+    "setPassword": {
+      "immutable": "Immutable",
+      "previewInvalid": "Invalid or expired link.",
+      "selectImageFile": "Vui lòng chọn tệp hình ảnh.",
+      "imageTooLarge": "Hình ảnh phải nhỏ hơn 5MB.",
+      "nameRequired": "Vui lòng nhập họ và tên.",
+      "passwordMin": "Mật khẩu phải có ít nhất 8 ký tự.",
+      "passwordMismatch": "Mật khẩu xác nhận không khớp.",
+      "avatarUploadFailed": "Đã lưu hồ sơ, tải ảnh đại diện thất bại.",
+      "invalidOrExpired": "Liên kết không hợp lệ hoặc đã hết hạn.",
+      "welcomeTo": "Chào mừng đến",
+      "brand": "Evidence Pilot.",
+      "subtitle": "Nền tảng AI hỗ trợ ánh xạ bằng chứng nghiên cứu và truy vết trích dẫn. Hoàn tất hồ sơ của bạn để bắt đầu.",
+      "switchLanguage": "EN",
+      "completeProfile": "Hoàn tất hồ sơ của bạn",
+      "activationSteps": "Một vài bước nữa để kích hoạt tài khoản của bạn.",
+      "upload": "Tải ảnh",
+      "orSkip": "hoặc bỏ qua",
+      "firstName": "Tên",
+      "lastName": "Họ",
+      "role": "Vai trò",
+      "studentCode": "Mã sinh viên",
+      "email": "Email",
+      "newPassword": "Mật khẩu mới",
+      "confirmPassword": "Xác nhận mật khẩu",
+      "completeAndEnter": "Hoàn tất & vào hệ thống",
+      "invitationInvalid": "Liên kết mời không hợp lệ hoặc đã hết hạn.",
+      "backToLogin": "Quay lại đăng nhập"
+    },
+    "protectedRoute": {
+      "verifyingSession": "Đang xác minh phiên đăng nhập..."
+    }
+  },
+  "shell": {
+    "navigation": {
+      "home": "Trang chủ",
+      "about": "Giới thiệu",
+      "terms": "Điều khoản",
+      "privacy": "Bảo mật",
+      "login": "Đăng nhập",
+      "dashboard": "Bảng điều khiển",
+      "collections": "Bộ sưu tập",
+      "sourceLibrary": "Thư viện nguồn",
+      "projects": "Dự án",
+      "requests": "Yêu cầu",
+      "primary": "Điều hướng chính",
+      "mobile": "Điều hướng trên di động",
+      "openMenu": "Mở menu điều hướng",
+      "closeMenu": "Đóng menu điều hướng"
+    },
+    "profile": {
+      "label": "Hồ sơ",
+      "accountSettings": "Cài đặt tài khoản",
+      "myActivity": "Không gian & Hoạt động",
+      "account": "Cài đặt tài khoản",
+      "activity": "Hoạt động",
+      "signOut": "Đăng xuất",
+      "roles": {
+        "ADMIN": "Quản trị viên",
+        "INSTRUCTOR": "Giảng viên",
+        "STUDENT": "Sinh viên",
+        "UNKNOWN": "Không xác định"
+      }
+    },
+    "theme": {
+      "darkMode": "Chế độ tối",
+      "lightMode": "Chế độ sáng"
+    },
+    "loading": {
+      "tagline": "Đồng hành nghiên cứu dựa trên bằng chứng"
+    },
+    "errorBoundary": {
+      "title": "Đã xảy ra lỗi",
+      "message": "Đã xảy ra lỗi.",
+      "reload": "Tải lại trang"
+    }
+  },
+  "student": {
+    "projects": {
+      "actions": "Hành động",
+      "allStatuses": "Tất cả trạng thái",
+      "completed": "Đã hoàn thành",
+      "defaultStudentName": "Sinh viên",
+      "gridView": "Dạng lưới",
+      "guideButton": "Hướng dẫn",
+      "guideSteps": [
+        "Mở một dự án được phân công để vào không gian làm việc.",
+        "Thêm tài liệu tham khảo (DOI hoặc tải tệp) trong tab Nguồn.",
+        "Chạy Đánh giá AI, sau đó chèn trích dẫn hoặc ghi nhận quyết định cho từng kết quả.",
+        "Xử lý phản hồi của giảng viên trong tab Nhận xét, sau đó gửi dự án để đánh giá."
+      ],
+      "inProgress": "Đang thực hiện",
+      "lastUpdated": "Cập nhật {{date}}",
+      "listView": "Dạng danh sách",
+      "loadingProjects": "Đang tải dự án...",
+      "nextPage": "Trang sau",
+      "noDescription": "Chưa có mô tả.",
+      "noMatchingProjects": "Không tìm thấy dự án phù hợp",
+      "noMatchingProjectsDesc": "Không có dự án nào thuộc trạng thái hoặc từ khóa tìm kiếm này.",
+      "noProjects": "Chưa có dự án được phân công",
+      "noProjectsDescription": "Bạn chưa được phân công vào dự án nào. Vui lòng chờ giảng viên phân công.",
+      "openWorkspace": "Mở Không gian làm việc",
+      "pageLabel": "Trang {{page}}",
+      "previousPage": "Trang trước",
+      "projectName": "Tên dự án",
+      "projectsLoadFailed": "Không thể tải danh sách dự án.",
+      "retry": "Thử lại",
+      "roleLabel": "Vai trò",
+      "searchLabel": "Tìm kiếm dự án",
+      "searchProjectsPlaceholder": "Tìm kiếm dự án theo tên hoặc mô tả...",
+      "showingProjectsRange": "Hiển thị {{start}}-{{end}} trong tổng số {{total}} dự án",
+      "startWorkspace": "Bắt đầu làm bài",
+      "status": "Trạng thái",
+      "targetStandardLabel": "Chuẩn",
+      "totalProjects": "Tổng số dự án",
+      "viewWorkspace": "Xem Kết quả",
+      "welcome": "Chào mừng trở lại, {{name}}",
+      "workspaceDescription": "Làm việc với bài viết, nguồn, Citation Review và phản hồi trong dự án được giảng viên phân công.",
+      "guideTitle": "Cách sử dụng Evidence Pilot"
+    }
+  },
   "studentFeedback": {
     "title": "Nhận xét",
     "review": "Xét duyệt",
@@ -13,6 +359,7 @@
     "threadFilter": "Trạng thái nhận xét",
     "open": "Đang mở",
     "done": "Hội thoại nhận xét này đã được đánh dấu xong.",
+    "doneNotice": "Hội thoại nhận xét này đã được đánh dấu xong.",
     "filters": "Bộ lọc",
     "all": "Tất cả nhận xét",
     "roundFilter": "Vòng xét duyệt",
@@ -235,6 +582,83 @@
   "project": "Dự án",
   "paper": "Bài viết",
   "profile": "Hồ sơ",
+  "profile.account.description": "Quản lý thông tin hồ sơ và mật khẩu tài khoản của bạn.",
+  "profile.account.title": "Thông tin cá nhân & Bảo mật",
+  "profile.actions.edit": "Chỉnh sửa",
+  "profile.actions.resend": "Gửi lại",
+  "profile.actions.saveChanges": "Lưu thay đổi",
+  "profile.actions.updating": "Đang cập nhật...",
+  "profile.activity.description": "Các dự án, bộ sưu tập, nguồn tài liệu và phần bạn đã tương tác gần đây.",
+  "profile.activity.empty": "Chưa có hoạt động nào được ghi nhận.",
+  "profile.activity.latest": "Mới nhất",
+  "profile.activity.loadFailed": "Không thể tải hoạt động gần đây.",
+  "profile.activity.memberCount": "{{count}} thành viên",
+  "profile.activity.next": "Sau",
+  "profile.activity.noMatches": "Không tìm thấy hoạt động phù hợp.",
+  "profile.activity.oldest": "Cũ nhất",
+  "profile.activity.previous": "Trước",
+  "profile.activity.searchLabel": "Tìm kiếm hoạt động",
+  "profile.activity.searchPlaceholder": "Tìm kiếm hoạt động...",
+  "profile.activity.sortLabel": "Sắp xếp",
+  "profile.activity.sourceCount": "{{count}} tài liệu",
+  "profile.activity.title": "Hoạt động gần đây",
+  "profile.avatar.change": "Đổi ảnh đại diện",
+  "profile.avatar.cropTitle": "Cắt ảnh đại diện",
+  "profile.avatar.errors.cropRequired": "Vui lòng chọn vùng cắt.",
+  "profile.avatar.errors.imageOnly": "Vui lòng chọn tệp hình ảnh.",
+  "profile.avatar.errors.maxSize": "Ảnh không được vượt quá 5MB.",
+  "profile.avatar.updated": "Đã cập nhật ảnh đại diện.",
+  "profile.avatar.upload": "Tải lên",
+  "profile.avatar.uploadFailed": "Tải ảnh lên thất bại.",
+  "profile.email.change.cancelFailed": "Không thể hủy yêu cầu đổi email.",
+  "profile.email.change.cancelled": "Đã hủy yêu cầu đổi email.",
+  "profile.email.change.requestFailed": "Không thể yêu cầu đổi email.",
+  "profile.email.change.requested": "Đã gửi liên kết xác thực tới email mới.",
+  "profile.email.changeHint": "Thay đổi email yêu cầu nhập mã OTP gửi tới địa chỉ mới.",
+  "profile.email.confirmed": "Xác thực email thành công!",
+  "profile.email.invalidToken": "Mã xác thực email không hợp lệ hoặc đã hết hạn.",
+  "profile.email.otp.codeHint": "Mã gồm 6 chữ số.",
+  "profile.email.otp.focus": "Tập trung",
+  "profile.email.otp.incomplete": "Vui lòng nhập đủ 6 số.",
+  "profile.email.otp.instructions": ". Nhập mã vào ô bên dưới để xác thực địa chỉ email mới.",
+  "profile.email.otp.invalidCode": "Mã không hợp lệ.",
+  "profile.email.otp.requestFailed": "Không thể gửi mã xác thực.",
+  "profile.email.otp.resendCode": "Gửi lại mã",
+  "profile.email.otp.resendIn": "Gửi lại sau {{seconds}}s",
+  "profile.email.otp.sending": "Đang gửi...",
+  "profile.email.otp.sentTo": "Chúng tôi đã gửi mã 6 số tới",
+  "profile.email.otp.title": "Xác thực email mới",
+  "profile.email.otp.verified": "Đã xác thực ✓",
+  "profile.email.otp.verifiedToSave": "Email đã xác thực. Nhấn Lưu để áp dụng.",
+  "profile.email.otp.verify": "Xác thực email",
+  "profile.email.pending.description": "Liên kết xác nhận đã được gửi tới {{pendingEmail}}. Email hiện tại ({{currentEmail}}) vẫn được giữ nguyên cho tới khi bạn xác nhận qua email.",
+  "profile.email.pending.title": "Đang chờ xác thực email mới",
+  "profile.email.verifiedTitle": "Email đã xác thực",
+  "profile.fields.assignedRole": "Vai trò được cấp",
+  "profile.fields.currentPassword": "Mật khẩu hiện tại",
+  "profile.fields.email": "Địa chỉ email",
+  "profile.fields.firstName": "Tên",
+  "profile.fields.lastName": "Họ",
+  "profile.fields.leaveBlank": "(Để trống nếu không đổi)",
+  "profile.fields.newPassword": "Mật khẩu mới",
+  "profile.password.changedSignIn": "Đã đổi mật khẩu. Vui lòng đăng nhập lại.",
+  "profile.password.confirmAction": "Xác nhận đổi mật khẩu",
+  "profile.password.confirmDescription": "Bạn có chắc chắn muốn thay đổi mật khẩu? Sau khi đổi thành công, phiên đăng nhập hiện tại sẽ kết thúc và bạn sẽ cần đăng nhập lại với mật khẩu mới.",
+  "profile.password.confirmTitle": "Xác nhận đổi mật khẩu",
+  "profile.password.strength.hint": "≥8 ký tự, chữ hoa, số, ký tự đặc biệt",
+  "profile.password.strength.medium": "Trung bình",
+  "profile.password.strength.strong": "Mạnh",
+  "profile.password.strength.weak": "Yếu",
+  "profile.password.updateFailed": "Đổi mật khẩu thất bại. Vui lòng kiểm tra lại mật khẩu hiện tại.",
+  "profile.tabs.label": "Profile Tabs",
+  "profile.updateClaimInvalid": "Mã xác thực email không hợp lệ hoặc đã hết hạn. Vui lòng xác thực lại.",
+  "profile.updateFailed": "Không thể cập nhật hồ sơ.",
+  "profile.updated": "Đã cập nhật hồ sơ.",
+  "profile.validation.currentPasswordRequired": "Vui lòng nhập mật khẩu hiện tại để đổi mật khẩu.",
+  "profile.validation.emailInvalid": "Định dạng email không hợp lệ.",
+  "profile.validation.emailVerificationRequired": "Vui lòng nhấn \"Xác thực email\" và nhập mã OTP trước khi lưu.",
+  "profile.validation.nameRequired": "Họ và tên không được để trống.",
+  "profile.validation.newPasswordRequired": "Vui lòng nhập mật khẩu mới.",
   "moreActions": "Thao tác khác",
   "openMenu": "Mở menu",
   "closeMenu": "Đóng menu",
@@ -286,17 +710,33 @@
   "unknown": "Không xác định",
   "instructor": "Giảng viên",
   "status": {
+    "UNKNOWN": "Không xác định",
     "DRAFT": "Bản nháp",
+    "CREATED": "Đã tạo",
     "ASSIGNED": "Đã phân công",
+    "ACTIVE": "Đang hoạt động",
     "IN_PROGRESS": "Đang thực hiện",
     "SUBMITTED": "Đã gửi",
+    "SUBMITTED_FOR_REVIEW": "Đã gửi để đánh giá",
+    "IN_REVIEW": "Đang đánh giá",
     "UNDER_REVIEW": "Đang đánh giá",
+    "PENDING": "Đang chờ",
     "RETURNED": "Đã trả lại",
     "REVIEWED": "Đã đánh giá",
     "REJECTED": "Đã từ chối",
+    "APPROVED": "Đã phê duyệt",
     "COMPLETED": "Đã hoàn tất",
     "ARCHIVED": "Đã lưu trữ",
-    "PENDING": "Đang chờ"
+    "PENDING_UPLOAD": "Chờ tải lên",
+    "UPLOADED": "Đã tải lên",
+    "METADATA_FETCHED": "Đã lấy metadata",
+    "PDF_DOWNLOADED": "Đã tải PDF",
+    "QUEUED": "Đang chờ",
+    "PROCESSING": "Đang xử lý",
+    "RAW_EXTRACTED": "Đã trích xuất thô",
+    "READY": "Sẵn sàng",
+    "PARTIAL": "Một phần",
+    "FAILED": "Thất bại"
   },
   "unsavedSectionSwitch": "Phần này có thay đổi chưa lưu. Vẫn chuyển phần?",
   "unsavedPaperSwitch": "Bạn có thay đổi chưa lưu. Vẫn chuyển bài viết?",
@@ -424,6 +864,11 @@
   "handoffStateStale": "Cần xác nhận lại",
   "confirmationTime": "Thời gian xác nhận",
   "confirmedBy": "Được xác nhận bởi",
+  "feedbackConfirmedBy": "Được xác nhận bởi",
+  "feedbackAssignee": "Người phụ trách",
+  "feedbackSubmittedPaper": "Bài đã nộp",
+  "feedbackAnnotatePassage": "Nhận xét đoạn văn",
+  "feedbackProjectWorkspace": "Không gian làm việc của dự án",
   "feedbackUnassigned": "Chưa được giao",
   "handoffSavedVersion": "Xác nhận này áp dụng cho bản đã lưu. Lưu thay đổi trước khi xác nhận lại.",
   "viewConfirmations": "Xem xác nhận",
@@ -438,6 +883,12 @@
   "revokeHandoff": "Gỡ xác nhận",
   "confirmHandoff": "Xác nhận phiên bản đã lưu",
   "readinessLoadFailed": "Không thể tải điều kiện nộp review.",
+  "feedbackRevision": {
+    "FIRST_SUBMISSION": "Lần nộp đầu tiên",
+    "CHANGED": "Bài viết đã thay đổi kể từ lần nộp bị trả lại.",
+    "UNCHANGED": "Bài viết chưa thay đổi kể từ lần nộp bị trả lại.",
+    "UNVERIFIABLE": "Không có dữ liệu gốc của lần nộp trước nên không thể xác minh bản chỉnh sửa."
+  },
   "submissionInputChanged": "Dự án đã thay đổi sau khi danh sách điều kiện được tải. Hãy xem lại điều kiện mới rồi nộp lại.",
   "submitReadinessDescription": "Chỉ cho phép nộp khi mọi điều kiện khách quan của dự án đều đạt. Kết quả tự kiểm tra bằng AI không phải điều kiện nộp.",
   "unsavedSectionsBlockSubmission_one": "Có {{count}} phần còn thay đổi chưa lưu. Hãy lưu trước khi nộp.",

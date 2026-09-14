@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export default function LoadingScreen({ onFinish }) {
+  const { t } = useTranslation();
   const [fadeOut, setFadeOut] = useState(false);
 
   useEffect(() => {
@@ -31,7 +33,7 @@ export default function LoadingScreen({ onFinish }) {
         <div className="text-center">
           <h1 className="text-white font-bold text-2xl tracking-tight">Evidence Pilot</h1>
           <p className="text-indigo-300/60 text-sm mt-1 font-medium">
-            {localStorage.getItem('app_lang') === 'vi' ? 'Đồng hành nghiên cứu dựa trên bằng chứng' : 'Empowering evidence-based research'}
+            {t('shell.loading.tagline')}
           </p>
         </div>
       </div>

@@ -1,32 +1,31 @@
-import { useLanguage } from '../context/LanguageContext';
-import { homeText } from '../locales/home';
+import { useTranslation } from 'react-i18next';
 import StaticPageLayout from '../components/layout/StaticPageLayout';
 import AnimateIn from '../components/ui/AnimateIn';
 
 export default function Privacy() {
-  const { language } = useLanguage();
-  const t = homeText[language].privacy;
+  const { t } = useTranslation();
+  const labels = t('home', { returnObjects: true });
 
   const sections = [
-    { title: t.section1Title, body: t.section1 },
-    { title: t.section2Title, body: t.section2 },
-    { title: t.section3Title, body: t.section3 },
-    { title: t.section4Title, body: t.section4 },
-    { title: t.section5Title, body: t.section5 },
-    { title: t.section6Title, body: t.section6 },
-    { title: t.section7Title, body: t.section7 },
-    { title: t.section8Title, body: t.section8 },
-    { title: t.section9Title, body: t.section9 },
+    { title: t('home.privacy.section1Title'), body: t('home.privacy.section1') },
+    { title: t('home.privacy.section2Title'), body: t('home.privacy.section2') },
+    { title: t('home.privacy.section3Title'), body: t('home.privacy.section3') },
+    { title: t('home.privacy.section4Title'), body: t('home.privacy.section4') },
+    { title: t('home.privacy.section5Title'), body: t('home.privacy.section5') },
+    { title: t('home.privacy.section6Title'), body: t('home.privacy.section6') },
+    { title: t('home.privacy.section7Title'), body: t('home.privacy.section7') },
+    { title: t('home.privacy.section8Title'), body: t('home.privacy.section8') },
+    { title: t('home.privacy.section9Title'), body: t('home.privacy.section9') },
   ];
 
   return (
-    <StaticPageLayout t={homeText[language]}>
+    <StaticPageLayout t={labels}>
       <div className="max-w-3xl mx-auto px-6">
         <AnimateIn>
-          <h1 className="text-3xl md:text-4xl font-black text-(--brand-foreground) tracking-tight mb-2">{t.metaTitle}</h1>
-          <p className="text-xs font-semibold text-(--text-tertiary) mb-8">{t.lastUpdated}</p>
+          <h1 className="text-3xl md:text-4xl font-black text-(--brand-foreground) tracking-tight mb-2">{t('home.privacy.metaTitle')}</h1>
+          <p className="text-xs font-semibold text-(--text-tertiary) mb-8">{t('home.privacy.lastUpdated')}</p>
           <div className="bg-(--surface) border border-(--border) rounded-2xl p-6 sm:p-8 mb-8 shadow-xs">
-            <p className="text-(--text-secondary) leading-relaxed">{t.intro}</p>
+            <p className="text-(--text-secondary) leading-relaxed">{t('home.privacy.intro')}</p>
           </div>
         </AnimateIn>
 

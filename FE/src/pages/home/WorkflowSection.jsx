@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import SvgIcon from '../../components/ui/SvgIcon';
 import AnimateIn from '../../components/ui/AnimateIn';
 
@@ -10,7 +11,9 @@ const workflowSteps = [
   { key: 'step6', icon: 'M19 9h-4V3H9v6H5l7 7 7-7zm-14 9v2h14v-2H5z' },
 ];
 
-function WorkflowStep({ step, t, index }) {
+function WorkflowStep({ step, index }) {
+  const { t } = useTranslation();
+
   return (
     <AnimateIn delay={80 * index}>
       <div className="flex flex-col items-center text-center">
@@ -22,22 +25,24 @@ function WorkflowStep({ step, t, index }) {
             {index + 1}
           </div>
         </div>
-        <h4 className="font-bold text-(--text-primary) mb-2">{t.workflow[step.key].title}</h4>
-        <p className="text-sm text-(--text-secondary) leading-relaxed max-w-[260px]">{t.workflow[step.key].desc}</p>
+        <h4 className="font-bold text-(--text-primary) mb-2">{t(`home.workflow.${step.key}.title`)}</h4>
+        <p className="text-sm text-(--text-secondary) leading-relaxed max-w-[260px]">{t(`home.workflow.${step.key}.desc`)}</p>
       </div>
     </AnimateIn>
   );
 }
 
-export default function WorkflowSection({ t }) {
+export default function WorkflowSection() {
+  const { t } = useTranslation();
+
   return (
     <section className="py-20 bg-(--surface-secondary)">
       <div className="max-w-6xl mx-auto px-6">
         <AnimateIn>
-          <h2 className="text-2xl md:text-3xl font-bold text-center text-(--text-primary) mb-16">{t.workflow.heading}</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-center text-(--text-primary) mb-16">{t('home.workflow.heading')}</h2>
         </AnimateIn>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
-          {workflowSteps.map((step, i) => <WorkflowStep key={step.key} step={step} t={t} index={i} />)}
+          {workflowSteps.map((step, i) => <WorkflowStep key={step.key} step={step} index={i} />)}
         </div>
       </div>
     </section>

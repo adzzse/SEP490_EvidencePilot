@@ -1,4 +1,350 @@
 {
+  "home": {
+    "nav": {
+      "home": "Home",
+      "features": "Features",
+      "about": "About",
+      "terms": "Terms",
+      "privacy": "Privacy",
+      "login": "Log In",
+      "signOut": "Sign Out",
+      "workspace": "Go to Workspace",
+      "lang": "Tiếng Việt",
+      "profile": "Profile"
+    },
+    "hero": {
+      "titleStart": "The",
+      "titleHighlight": "Evidence-Powered",
+      "titleEnd": "Research Platform",
+      "subtitle": "Evidence Pilot supports instructor-led research projects: students author papers, manage sources, run Citation Review, and submit their work for structured feedback and export.",
+      "cta": "Sign In",
+      "ctaSub": ""
+    },
+    "stats": {
+      "heading": "Platform Activity",
+      "usersLabel": "Users",
+      "projectsLabel": "Active Projects",
+      "sourcesLabel": "Active Sources"
+    },
+    "roles": {
+      "heading": "Designed for Supervised Research Teams",
+      "student": {
+        "title": "For Students",
+        "desc": "Work inside assigned projects with papers, sources, Citation Review, section suggestions, and structured instructor feedback."
+      },
+      "instructor": {
+        "title": "For Instructors",
+        "desc": "Create and manage projects, organize background sources, assign students, and review submitted work with targeted feedback."
+      }
+    },
+    "workflow": {
+      "heading": "From Assignment to Review",
+      "step1": {
+        "title": "Instructor Creates the Project",
+        "desc": "The instructor creates the project and manages its lifecycle."
+      },
+      "step2": {
+        "title": "Configure & Assign",
+        "desc": "The instructor prepares background materials and assigns students to the project."
+      },
+      "step3": {
+        "title": "Student Develops the Paper",
+        "desc": "Assigned students work on paper sections, sources, Citation Review, and AI-assisted section suggestions."
+      },
+      "step4": {
+        "title": "Student Submits for Review",
+        "desc": "Students submit the project when the paper and supporting evidence are ready for review."
+      },
+      "step5": {
+        "title": "Instructor Reviews",
+        "desc": "The instructor evaluates the submission and provides section-level feedback."
+      },
+      "step6": {
+        "title": "Finalize & Export",
+        "desc": "The team addresses feedback, completes the work, and exports the required outputs."
+      }
+    },
+    "features": {
+      "heading": "Key Features",
+      "subheading": "Focused tools for evidence-backed project work and review",
+      "structuredData": {
+        "title": "Structured Sources",
+        "desc": "Organize uploaded documents, DOI metadata, links, and source relationships inside each project."
+      },
+      "citationReview": {
+        "title": "Citation Review",
+        "desc": "Detect statements that may need citations, flag source discrepancies, and find related project sources."
+      },
+      "feedback": {
+        "title": "Direct Feedback",
+        "desc": "Seamless collaboration through interactive review requests, comments, and instructor feedback."
+      },
+      "documentExtraction": {
+        "title": "Document Extraction",
+        "desc": "Extract searchable text and media from uploaded research documents for downstream review and retrieval."
+      },
+      "vectorSearch": {
+        "title": "Semantic Search",
+        "desc": "Find relevant evidence across all sources with vector-based semantic search powered by Qdrant."
+      },
+      "realtime": {
+        "title": "Real-time Updates",
+        "desc": "Get instant notifications on feedback, status changes, and system updates via WebSocket."
+      }
+    },
+    "preview": {
+      "heading": "See the Workflow",
+      "subheading": "Follow the current instructor-led flow from project setup to review and export",
+      "url": "app.evidencepilot.io/workspace",
+      "autoPlay": "Auto-play",
+      "paused": "Paused",
+      "steps": [
+        {
+          "title": "Create Project",
+          "desc": "The instructor creates the project and retains lifecycle controls.",
+          "actor": "Instructor",
+          "panel": "Project Management"
+        },
+        {
+          "title": "Configure & Assign",
+          "desc": "The instructor prepares background materials and assigns students.",
+          "actor": "Instructor",
+          "panel": "Project Setup"
+        },
+        {
+          "title": "Develop the Paper",
+          "desc": "Assigned students edit paper sections, manage sources, and run Citation Review.",
+          "actor": "Student",
+          "panel": "Student Workspace"
+        },
+        {
+          "title": "Submit for Review",
+          "desc": "The student submits the current work for instructor review.",
+          "actor": "Student",
+          "panel": "Review Request"
+        },
+        {
+          "title": "Review & Respond",
+          "desc": "The instructor evaluates the submission and provides actionable feedback.",
+          "actor": "Instructor",
+          "panel": "Review Workspace"
+        },
+        {
+          "title": "Finalize & Export",
+          "desc": "The team resolves feedback and exports the required project outputs.",
+          "actor": "Team",
+          "panel": "Project Output"
+        }
+      ]
+    },
+    "cta": {
+      "heading": "Ready to Get Started?",
+      "subtitle": "Sign in with the account provided by your administrator.",
+      "button": "Sign In"
+    },
+    "footer": {
+      "copyright": "Evidence Pilot. All rights reserved.",
+      "tagline": "Empowering evidence-based research collaboration.",
+      "privacy": "Privacy Policy",
+      "terms": "Terms of Service",
+      "contact": "Contact"
+    },
+    "about": {
+      "heading": "About Evidence Pilot",
+      "desc": "Evidence Pilot is a supervised research workspace that connects source collection, collaborative paper authoring, citation review, instructor feedback, and export. AI and semantic search assist the workflow while people remain responsible for academic decisions."
+    },
+    "terms": {
+      "metaTitle": "Terms of Service",
+      "lastUpdated": "Last updated: July 2026",
+      "intro": "Welcome to Evidence Pilot. By accessing or using our platform, you agree to be bound by these Terms of Service. If you do not agree, please do not use the Service.",
+      "section1Title": "1. Acceptance of Terms",
+      "section1": "By using Evidence Pilot, you confirm that you have read, understood, and agree to these Terms. We may update these terms from time to time; continued use after changes constitutes acceptance.",
+      "section2Title": "2. Description of Service",
+      "section2": "Evidence Pilot provides an AI-assisted research management platform including document upload and extraction, collaborative paper authoring, citation review, instructor feedback workflows, and semantic search. The Service is provided \"as is\" without warranties of any kind.",
+      "section3Title": "3. AI-Generated Suggestions",
+      "section3p1": "Evidence Pilot uses artificial intelligence to analyze paper sections and generate citation findings, related-source matches, and writing suggestions. These outputs are advisory only. They do not constitute verified academic conclusions, nor do they replace the researcher's own judgment, expertise, and responsibility.",
+      "section3p2": "You acknowledge and agree that all AI-generated suggestions must be reviewed, validated, and edited by a qualified human researcher before being incorporated into any academic work, submission, or publication. Final decisions regarding research content, methodology, and conclusions remain solely your responsibility.",
+      "section4Title": "4. No Liability for Academic Outcomes",
+      "section4": "Evidence Pilot is provided as a research assistance tool. We make no guarantees regarding the accuracy, completeness, or suitability of AI-generated outputs for any specific academic purpose. We shall not be held liable for any issues, rejections, or deficiencies in your research papers, theses, dissertations, or any other academic work, including but not limited to: plagiarism findings, factual errors, citation mistakes, methodological flaws, or any adverse academic outcomes resulting from the use of or reliance on our platform's suggestions. Use the platform with caution and apply your own critical judgment at every step.",
+      "section5Title": "5. User Responsibilities",
+      "section5": "You are responsible for: (a) the accuracy and legality of all content you upload; (b) maintaining the confidentiality of your account credentials; (c) ensuring your use complies with your institution's academic integrity policies; and (d) reviewing and validating all AI-generated outputs before use.",
+      "section6Title": "6. Intellectual Property",
+      "section6": "You retain all rights to the research content, documents, and data you upload. Evidence Pilot claims no ownership over your work. We may use anonymized, aggregated data for service improvement.",
+      "section7Title": "7. Termination",
+      "section7": "We reserve the right to suspend or terminate accounts that violate these Terms or engage in abusive behavior. You may delete your account at any time.",
+      "section8Title": "8. Contact",
+      "section8": "For questions about these Terms, please contact our support team."
+    },
+    "privacy": {
+      "metaTitle": "Privacy Policy",
+      "lastUpdated": "Last updated: July 2026",
+      "intro": "This Privacy Policy explains how Evidence Pilot collects, uses, stores, and protects your personal information when you use our platform.",
+      "section1Title": "1. Information We Collect",
+      "section1": "We collect information you provide directly: name, email address, institutional affiliation, and account credentials. We also collect content you upload, including documents, paper sections, source metadata, feedback, and project metadata. Automatically collected data includes usage logs, IP addresses, browser type, and interaction analytics.",
+      "section2Title": "2. How We Use Your Information",
+      "section2": "We use your information to: provide and improve the Service, process document extraction and Citation Review, enable instructor feedback workflows, communicate service updates, and ensure platform security. We do not sell your personal data to third parties.",
+      "section3Title": "3. Data Storage and Security",
+      "section3": "Your data is stored securely using industry-standard encryption. Documents are stored in object storage (MinIO), structured data in databases (MySQL), and vector embeddings in Qdrant. We implement appropriate technical and organizational measures to protect your data.",
+      "section4Title": "4. Third-Party Services",
+      "section4": "We integrate with: OpenAlex API for DOI-based paper metadata retrieval, and an external AI service for document analysis. These services receive only the data necessary for their function and are contractually bound to protect your information.",
+      "section5Title": "5. Data Retention",
+      "section5": "We retain your data for as long as your account is active or as needed to provide the Service. You may request deletion of your account and associated data at any time. Backup data may be retained for up to 90 days after deletion.",
+      "section6Title": "6. Your Rights",
+      "section6": "Depending on your jurisdiction, you may have the right to: access, correct, or delete your personal data; restrict or object to processing; and receive a portable copy of your data. To exercise these rights, contact our support team.",
+      "section7Title": "7. Cookies",
+      "section7": "We use essential cookies for authentication and session management. No third-party tracking cookies are used for advertising purposes.",
+      "section8Title": "8. Changes to This Policy",
+      "section8": "We may update this Privacy Policy. Material changes will be notified via email or platform notice.",
+      "section9Title": "9. Contact",
+      "section9": "For privacy-related inquiries, please contact our support team."
+    },
+    "aboutPage": {
+      "metaTitle": "About Evidence Pilot",
+      "missionTitle": "Our Mission",
+      "missionDesc": "Evidence Pilot was created to connect source collection with academic evaluation. The platform gives instructors and assigned students a structured environment for paper authoring, citation review, feedback, and revision.",
+      "storyTitle": "Our Story",
+      "storyDesc": "Born from the challenges faced by students and supervisors in evidence-based research projects, Evidence Pilot evolved into a focused workspace for document extraction, semantic search, citation review, structured feedback, and revision.",
+      "techTitle": "Built With",
+      "techDesc": "Evidence Pilot is built on a modern technology stack: Java 21 with Spring Boot for the backend, React 19 with Vite for the frontend, MySQL for structured data, MinIO for file storage, Qdrant for vector search, and RabbitMQ for asynchronous processing. AI capabilities are powered by an integrated service for Citation Review and section suggestions.",
+      "teamTitle": "For the Academic Community",
+      "teamDesc": "Evidence Pilot is designed around the current instructor-led project workflow and will continue to improve from verified user feedback and academic requirements."
+    }
+  },
+  "auth": {
+    "toggleTheme": "Toggle theme",
+    "login": {
+      "backToHome": "Back to Home",
+      "welcomeBack": "Welcome back",
+      "subtitle": "Sign in to Evidence Pilot to manage your research projects.",
+      "email": "Email",
+      "emailPlaceholder": "you@example.com",
+      "password": "Password",
+      "signingIn": "Signing in...",
+      "signIn": "Sign In",
+      "accountHelp": "Need an account? Contact your administrator.",
+      "failed": "Login failed. Please check your credentials."
+    },
+    "setPassword": {
+      "immutable": "Immutable",
+      "previewInvalid": "Invalid or expired link.",
+      "selectImageFile": "Please select an image file.",
+      "imageTooLarge": "Image must be smaller than 5MB.",
+      "nameRequired": "Please enter your first and last name.",
+      "passwordMin": "Password must be at least 8 characters.",
+      "passwordMismatch": "Passwords do not match.",
+      "avatarUploadFailed": "Profile saved, avatar upload failed.",
+      "invalidOrExpired": "Invalid or expired link.",
+      "welcomeTo": "Welcome to",
+      "brand": "Evidence Pilot.",
+      "subtitle": "Your AI-Assisted Research Evidence Mapping & Citation Traceability Platform. Complete your profile to begin.",
+      "switchLanguage": "VN",
+      "completeProfile": "Complete your profile",
+      "activationSteps": "A few more steps to activate your account.",
+      "upload": "Upload",
+      "orSkip": "or skip",
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "role": "Role",
+      "studentCode": "Student Code",
+      "email": "Email",
+      "newPassword": "New Password",
+      "confirmPassword": "Confirm Password",
+      "completeAndEnter": "Complete & enter",
+      "invitationInvalid": "Invitation link is invalid or has expired.",
+      "backToLogin": "Back to login"
+    },
+    "protectedRoute": {
+      "verifyingSession": "Verifying session..."
+    }
+  },
+  "shell": {
+    "navigation": {
+      "home": "Home",
+      "about": "About",
+      "terms": "Terms",
+      "privacy": "Privacy",
+      "login": "Login",
+      "dashboard": "Dashboard",
+      "collections": "Collections",
+      "sourceLibrary": "Source Library",
+      "projects": "Projects",
+      "requests": "Requests",
+      "primary": "Primary navigation",
+      "mobile": "Mobile navigation",
+      "openMenu": "Open navigation menu",
+      "closeMenu": "Close navigation menu"
+    },
+    "profile": {
+      "label": "Profile",
+      "accountSettings": "Account Settings",
+      "myActivity": "My Activity",
+      "account": "Account",
+      "activity": "Activity",
+      "signOut": "Sign Out",
+      "roles": {
+        "ADMIN": "Admin",
+        "INSTRUCTOR": "Instructor",
+        "STUDENT": "Student",
+        "UNKNOWN": "Unknown"
+      }
+    },
+    "theme": {
+      "darkMode": "Dark mode",
+      "lightMode": "Light mode"
+    },
+    "loading": {
+      "tagline": "Empowering evidence-based research"
+    },
+    "errorBoundary": {
+      "title": "Something went wrong",
+      "message": "Something went wrong.",
+      "reload": "Reload page"
+    }
+  },
+  "student": {
+    "projects": {
+      "actions": "Actions",
+      "allStatuses": "All Statuses",
+      "completed": "Completed",
+      "defaultStudentName": "Student",
+      "gridView": "Grid View",
+      "guideButton": "Guide",
+      "guideSteps": [
+        "Open an assigned project to reach its workspace.",
+        "Add reference sources (DOI or file upload) in the Source tab.",
+        "Run Citation Review, then insert citations or record decisions for each finding.",
+        "Address instructor feedback in the Feedback tab, then submit your project for review."
+      ],
+      "inProgress": "In Progress",
+      "lastUpdated": "Updated {{date}}",
+      "listView": "List View",
+      "loadingProjects": "Loading projects...",
+      "nextPage": "Next",
+      "noDescription": "No description provided.",
+      "noMatchingProjects": "No matching projects found",
+      "noMatchingProjectsDesc": "No projects match your current filter or search criteria.",
+      "noProjects": "No assigned projects",
+      "noProjectsDescription": "You have not been assigned to a project yet. Please wait for your instructor to assign one.",
+      "openWorkspace": "Open Workspace",
+      "pageLabel": "Page {{page}}",
+      "previousPage": "Previous",
+      "projectName": "Project Name",
+      "projectsLoadFailed": "Failed to load projects.",
+      "retry": "Retry",
+      "roleLabel": "Role",
+      "searchLabel": "Search projects",
+      "searchProjectsPlaceholder": "Search projects by title or description...",
+      "showingProjectsRange": "Showing {{start}}-{{end}} of {{total}} projects",
+      "startWorkspace": "Start Project",
+      "status": "Status",
+      "targetStandardLabel": "Standard",
+      "totalProjects": "Total Projects",
+      "viewWorkspace": "View Results",
+      "welcome": "Welcome back, {{name}}",
+      "workspaceDescription": "Work with papers, sources, Citation Review, and feedback in projects assigned by your instructor.",
+      "guideTitle": "How Evidence Pilot works"
+    }
+  },
   "studentFeedback": {
     "title": "Feedback",
     "review": "Review",
@@ -13,6 +359,7 @@
     "threadFilter": "Feedback status",
     "open": "Open",
     "done": "This feedback thread is marked done.",
+    "doneNotice": "This feedback thread is marked done.",
     "filters": "Filters",
     "all": "All feedback",
     "roundFilter": "Review round",
@@ -235,6 +582,83 @@
   "project": "Project",
   "paper": "Paper",
   "profile": "Profile",
+  "profile.account.description": "Manage your personal profile details and account password credentials.",
+  "profile.account.title": "Personal Information & Security",
+  "profile.actions.edit": "Edit",
+  "profile.actions.resend": "Resend",
+  "profile.actions.saveChanges": "Save Changes",
+  "profile.actions.updating": "Updating...",
+  "profile.activity.description": "Projects, collections, sources and sections you have interacted with recently.",
+  "profile.activity.empty": "No recent activity recorded yet.",
+  "profile.activity.latest": "Latest",
+  "profile.activity.loadFailed": "Failed to load recent activity.",
+  "profile.activity.memberCount": "{{count}} members",
+  "profile.activity.next": "Next",
+  "profile.activity.noMatches": "No matching activity found.",
+  "profile.activity.oldest": "Oldest",
+  "profile.activity.previous": "Prev",
+  "profile.activity.searchLabel": "Search activity",
+  "profile.activity.searchPlaceholder": "Search activity...",
+  "profile.activity.sortLabel": "Sort",
+  "profile.activity.sourceCount": "{{count}} sources",
+  "profile.activity.title": "Recent Activity",
+  "profile.avatar.change": "Change avatar",
+  "profile.avatar.cropTitle": "Crop avatar",
+  "profile.avatar.errors.cropRequired": "Please select a crop area.",
+  "profile.avatar.errors.imageOnly": "Please choose an image file.",
+  "profile.avatar.errors.maxSize": "Image must not exceed 5MB.",
+  "profile.avatar.updated": "Avatar updated.",
+  "profile.avatar.upload": "Upload",
+  "profile.avatar.uploadFailed": "Avatar upload failed.",
+  "profile.email.change.cancelFailed": "Failed to cancel email change.",
+  "profile.email.change.cancelled": "Email change request cancelled.",
+  "profile.email.change.requestFailed": "Failed to request email change.",
+  "profile.email.change.requested": "Verification link sent to the new email address.",
+  "profile.email.changeHint": "Modifying email requires an OTP code sent to the new address.",
+  "profile.email.confirmed": "Email successfully verified!",
+  "profile.email.invalidToken": "Invalid or expired email verification token.",
+  "profile.email.otp.codeHint": "A 6-digit numeric code.",
+  "profile.email.otp.focus": "Focus",
+  "profile.email.otp.incomplete": "Please enter all 6 digits.",
+  "profile.email.otp.instructions": ". Enter the code below to verify your new address.",
+  "profile.email.otp.invalidCode": "Invalid code.",
+  "profile.email.otp.requestFailed": "Failed to send verification code.",
+  "profile.email.otp.resendCode": "Resend code",
+  "profile.email.otp.resendIn": "Resend in {{seconds}}s",
+  "profile.email.otp.sending": "Sending...",
+  "profile.email.otp.sentTo": "We sent a 6-digit code to",
+  "profile.email.otp.title": "Verify Your New Email",
+  "profile.email.otp.verified": "Verified ✓",
+  "profile.email.otp.verifiedToSave": "Email verified. Press Save to apply.",
+  "profile.email.otp.verify": "Verify Email",
+  "profile.email.pending.description": "Verification link sent to {{pendingEmail}}. Your current email ({{currentEmail}}) remains active until confirmed.",
+  "profile.email.pending.title": "Pending Email Verification",
+  "profile.email.verifiedTitle": "Email verified",
+  "profile.fields.assignedRole": "Assigned role",
+  "profile.fields.currentPassword": "Current password",
+  "profile.fields.email": "Email address",
+  "profile.fields.firstName": "First name",
+  "profile.fields.lastName": "Last name",
+  "profile.fields.leaveBlank": "(Leave blank if unchanged)",
+  "profile.fields.newPassword": "New password",
+  "profile.password.changedSignIn": "Password changed successfully. Please sign in again.",
+  "profile.password.confirmAction": "Confirm Password Update",
+  "profile.password.confirmDescription": "Are you sure you want to update your password? Once updated, your current session will end and you will need to sign in with your new password.",
+  "profile.password.confirmTitle": "Confirm Password Change",
+  "profile.password.strength.hint": "≥8 chars, uppercase, number, symbol",
+  "profile.password.strength.medium": "Medium",
+  "profile.password.strength.strong": "Strong",
+  "profile.password.strength.weak": "Weak",
+  "profile.password.updateFailed": "Failed to update password. Please check your current password.",
+  "profile.tabs.label": "Profile Tabs",
+  "profile.updateClaimInvalid": "Email verification claim is invalid or expired. Please verify again.",
+  "profile.updateFailed": "Failed to update profile.",
+  "profile.updated": "Profile updated successfully.",
+  "profile.validation.currentPasswordRequired": "Please enter your current password to change it.",
+  "profile.validation.emailInvalid": "Please enter a valid email address.",
+  "profile.validation.emailVerificationRequired": "Please click \"Verify Email\" and enter the OTP code before saving.",
+  "profile.validation.nameRequired": "First name and last name are required.",
+  "profile.validation.newPasswordRequired": "Please enter a new password.",
   "moreActions": "More actions",
   "openMenu": "Open menu",
   "closeMenu": "Close menu",
@@ -286,17 +710,33 @@
   "unknown": "Unknown",
   "instructor": "Instructor",
   "status": {
+    "UNKNOWN": "Unknown",
     "DRAFT": "Draft",
+    "CREATED": "Created",
     "ASSIGNED": "Assigned",
+    "ACTIVE": "Active",
     "IN_PROGRESS": "In progress",
     "SUBMITTED": "Submitted",
+    "SUBMITTED_FOR_REVIEW": "Submitted for review",
+    "IN_REVIEW": "In review",
     "UNDER_REVIEW": "Under review",
+    "PENDING": "Pending",
     "RETURNED": "Returned",
     "REVIEWED": "Reviewed",
     "REJECTED": "Rejected",
+    "APPROVED": "Approved",
     "COMPLETED": "Completed",
     "ARCHIVED": "Archived",
-    "PENDING": "Pending"
+    "PENDING_UPLOAD": "Pending Upload",
+    "UPLOADED": "Uploaded",
+    "METADATA_FETCHED": "Metadata Fetched",
+    "PDF_DOWNLOADED": "PDF Downloaded",
+    "QUEUED": "Queued",
+    "PROCESSING": "Processing",
+    "RAW_EXTRACTED": "Raw Extracted",
+    "READY": "Ready",
+    "PARTIAL": "Partial",
+    "FAILED": "Failed"
   },
   "unsavedSectionSwitch": "You have unsaved changes in this section. Switch anyway?",
   "unsavedPaperSwitch": "You have unsaved changes. Switch paper anyway?",
@@ -424,6 +864,11 @@
   "handoffStateStale": "Confirmation required again",
   "confirmationTime": "Confirmation time",
   "confirmedBy": "Confirmed by",
+  "feedbackConfirmedBy": "Confirmed by",
+  "feedbackAssignee": "Assignee",
+  "feedbackSubmittedPaper": "Submitted paper",
+  "feedbackAnnotatePassage": "Annotate passage",
+  "feedbackProjectWorkspace": "Project workspace",
   "feedbackUnassigned": "Unassigned",
   "handoffSavedVersion": "This confirmation applies to the saved version. Save your changes before confirming again.",
   "viewConfirmations": "View confirmations",
@@ -438,6 +883,12 @@
   "revokeHandoff": "Remove confirmation",
   "confirmHandoff": "Confirm saved version",
   "readinessLoadFailed": "Could not load review-submission readiness.",
+  "feedbackRevision": {
+    "FIRST_SUBMISSION": "First submission",
+    "CHANGED": "The paper has changed since the returned submission.",
+    "UNCHANGED": "The paper has not changed since the returned submission.",
+    "UNVERIFIABLE": "The previous submission baseline is unavailable, so the revision cannot be verified."
+  },
   "submissionInputChanged": "The project changed after this checklist was loaded. Review the updated conditions and submit again.",
   "submitReadinessDescription": "Submission is enabled only when every objective project condition passes. AI self-check results are not submission conditions.",
   "unsavedSectionsBlockSubmission_one": "There is {{count}} section with unsaved changes. Save it before submitting.",
