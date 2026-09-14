@@ -1,20 +1,27 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import i18n from '../i18n';
+import { createContext, useContext, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { normalizeLanguage } from '../i18n';
 
 const LanguageContext = createContext(null);
 
 export function LanguageProvider({ children }) {
-  const [language, setLanguage] = useState(() => localStorage.getItem('app_lang') || 'en');
+  const { i18n } = useTranslation();
+  const language = normalizeLanguage(i18n.resolvedLanguage || i18n.language);
 
   useEffect(() => {
-    if (i18n.language !== language) i18n.changeLanguage(language);
+    if (i18n.language !== language) {
+      i18n.changeLanguage(language);
+      return;
+    }
+    try {
+      localStorage.setItem('app_lang', language);
+    } catch {
+      // Persistence is best-effort; runtime language still belongs to i18next.
+    }
     document.documentElement.lang = language;
-  }, [language]);
+  }, [i18n, language]);
 
-  const changeLanguage = (next) => {
-    localStorage.setItem('app_lang', next);
-    setLanguage(next);
-  };
+  const changeLanguage = (next) => i18n.changeLanguage(normalizeLanguage(next));
 
   const toggleLanguage = () => {
     changeLanguage(language === 'vi' ? 'en' : 'vi');

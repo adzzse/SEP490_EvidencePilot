@@ -416,19 +416,6 @@ public class AiModelClientImpl implements AiModelClient {
     }
 
     @Override
-    public List<Float> generateEmbedding(String text) {
-        Map<String, Object> response = call("/ai/embeddings", () -> restClient.post()
-                .uri(baseUrl + "/ai/embeddings")
-                .body(Map.of("text", text))
-                .retrieve()
-                .body(Map.class));
-        if (response == null || !response.containsKey("embedding")) {
-            throw new AiApiException("/ai/embeddings", "returned null or empty embedding", null);
-        }
-        return floatVector(response.get("embedding"), "/ai/embeddings");
-    }
-
-    @Override
     public List<List<Float>> generateEmbeddings(List<String> texts) {
         Map<String, Object> response = call("/ai/embeddings/batch", () -> restClient.post()
                 .uri(baseUrl + "/ai/embeddings/batch")

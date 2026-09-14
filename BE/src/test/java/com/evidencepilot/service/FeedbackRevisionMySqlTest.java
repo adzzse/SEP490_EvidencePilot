@@ -72,6 +72,7 @@ class FeedbackRevisionMySqlTest {
     @Autowired private ObjectMapper json;
     @MockBean private AiModelClient model;
     @MockBean private PromptTemplateService prompts;
+    @MockBean private AiGenerationConfigService generationConfig;
     @MockBean private SystemNotificationService notifications;
     @MockBean private CheckpointService checkpoints;
 

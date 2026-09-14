@@ -4,7 +4,7 @@ import { EntityCard, Modal, EmptyState, AppHeader, Breadcrumb } from '../../comp
 import { instructorText, commonText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
 import { useCollections } from '../../hooks/useCollections';
-import { CARD_GRID_PAGE_SIZE } from '../../utils/constants';
+import { CARD_GRID_PAGE_SIZE } from '../../constants';
 import { formatDate } from '../../utils/formatters/date';
 import api from '../../services/api';
 

@@ -4,7 +4,7 @@ import { AppHeader, EmptyState, LoadingSkeleton, StatusBadge, Modal } from '../.
 import { commonText, studentText } from '../../locales';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
-import { PROJECT_STATUSES } from '../../utils/constants';
+import { PROJECT_STATUSES } from '../../constants';
 import { formatDateTime } from '../../utils/formatters/date';
 import api from '../../services/api';
 const LAST_VISITED_KEY = 'ep_project_last_visited';

@@ -27,8 +27,6 @@ public interface AiModelClient {
 
     ExtractionBundle extractDocument(String filename, String downloadUrl, boolean enrichHierarchy);
 
-    List<Float> generateEmbedding(String text);
-
     List<List<Float>> generateEmbeddings(List<String> texts);
 
     record GenerationCatalog(int protocolVersion, String provider,

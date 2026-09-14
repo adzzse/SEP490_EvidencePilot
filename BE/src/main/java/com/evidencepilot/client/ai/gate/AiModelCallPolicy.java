@@ -7,7 +7,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.UUID;
 
 @Component
@@ -22,23 +21,6 @@ public class AiModelCallPolicy {
 
     public AiModelCallPolicy(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public long reserveStart(long minIntervalMillis) {
-        Timestamp nextAllowed = lockGate();
-        Timestamp now = databaseNow();
-        Instant scheduled = nextAllowed.toInstant().isAfter(now.toInstant())
-                ? nextAllowed.toInstant() : now.toInstant();
-        int updated = jdbcTemplate.update(
-                "UPDATE ai_model_gate_state SET next_allowed_at = ? WHERE gate_key = ?",
-                Timestamp.from(scheduled.plusMillis(Math.max(0, minIntervalMillis))),
-                GATE_KEY);
-        if (updated != 1) {
-            throw new IllegalStateException("AI model gate state is missing");
-        }
-        long waitNanos = Duration.between(now.toInstant(), scheduled).toNanos();
-        return waitNanos <= 0 ? 0 : (waitNanos + 999_999) / 1_000_000;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

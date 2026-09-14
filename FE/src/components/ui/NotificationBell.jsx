@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useNotification } from '../../context/NotificationContext';
 import api from '../../services/api.js';
-import { NOTIFICATION_HOVER_DEBOUNCE_MS } from '../../utils/constants';
+import { NOTIFICATION_HOVER_DEBOUNCE_MS } from '../../constants';
 import { formatDateTime } from '../../utils/formatters/date';
 
 export default function NotificationBell({ onOpen }) {

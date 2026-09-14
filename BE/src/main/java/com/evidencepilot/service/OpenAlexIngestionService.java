@@ -13,10 +13,6 @@ public interface OpenAlexIngestionService {
 
     DocumentResponse ingestByDoi(UUID projectId, UUID collectionId, String doi);
 
-    void persistReferences(UUID documentId);
-
-    void persistCitedBy(UUID documentId);
-
     /**
      * Best-effort persistence of REFERENCES + CITED_BY edges for an already-fetched
      * work. Never throws — failures are logged. No-op when the work carries no

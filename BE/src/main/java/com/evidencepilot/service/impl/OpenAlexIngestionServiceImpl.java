@@ -220,19 +220,6 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
 
     @Override
     @Transactional
-    public void persistReferences(UUID documentId) {
-        Document document = documentRepository.findById(documentId).orElse(null);
-        if (document == null || document.getDoi() == null) return;
-        try {
-            OpenAlexWorkResponse work = openAlexClient.fetchWork(document.getDoi());
-            persistReferences(document, work);
-        } catch (Exception e) {
-            log.warn("Failed to fetch references for document {}: {}", documentId, e.getMessage());
-        }
-    }
-
-    @Override
-    @Transactional
     public void persistCitationGraph(Document document, OpenAlexWorkResponse work) {
         if (document == null || work == null) return;
         tryPersistReferences(document, work);
@@ -302,19 +289,6 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
             pending.add(ref);
         }
         if (!pending.isEmpty()) documentReferenceRepository.saveAll(pending);
-    }
-
-    @Override
-    @Transactional
-    public void persistCitedBy(UUID documentId) {
-        Document document = documentRepository.findById(documentId).orElse(null);
-        if (document == null || document.getDoi() == null) return;
-        try {
-            OpenAlexWorkResponse work = openAlexClient.fetchWork(document.getDoi());
-            persistCitedBy(document, work);
-        } catch (Exception e) {
-            log.warn("Failed to fetch work for cited-by on document {}: {}", documentId, e.getMessage());
-        }
     }
 
     private void tryPersistCitedBy(Document document, OpenAlexWorkResponse work) {

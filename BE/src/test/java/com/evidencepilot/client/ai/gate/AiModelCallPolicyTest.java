@@ -59,25 +59,6 @@ class AiModelCallPolicyTest {
     }
 
     @Test
-    void concurrentInstancesReserveGloballySpacedStarts() throws Exception {
-        CountDownLatch ready = new CountDownLatch(2);
-        CountDownLatch start = new CountDownLatch(1);
-        try (var executor = Executors.newFixedThreadPool(2)) {
-            var first = executor.submit(() -> reserveAfterSignal(ready, start));
-            var second = executor.submit(() -> reserveAfterSignal(ready, start));
-            assertThat(ready.await(2, TimeUnit.SECONDS)).isTrue();
-            start.countDown();
-
-            List<Long> waits = List.of(
-                    first.get(5, TimeUnit.SECONDS),
-                    second.get(5, TimeUnit.SECONDS));
-            assertThat(waits.stream().mapToLong(Long::longValue).max().orElseThrow()
-                    - waits.stream().mapToLong(Long::longValue).min().orElseThrow())
-                    .isGreaterThanOrEqualTo(900);
-        }
-    }
-
-    @Test
     void concurrentInstancesShareTheConcurrencyLimit() throws Exception {
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -104,13 +85,6 @@ class AiModelCallPolicyTest {
 
         policy.recordFinalOutcome(true);
         assertThat(policy.isCircuitOpen()).isTrue();
-    }
-
-    private long reserveAfterSignal(CountDownLatch ready, CountDownLatch start)
-            throws InterruptedException {
-        ready.countDown();
-        assertThat(start.await(2, TimeUnit.SECONDS)).isTrue();
-        return policy.reserveStart(1_000);
     }
 
     private String leaseAfterSignal(CountDownLatch ready, CountDownLatch start)

@@ -519,7 +519,8 @@ public class AdminExcelSeedService {
             else if (!titles.add(r.get("project_title"))) errors.add(at + "duplicate project_title");
             String st = r.getOrDefault("status", "CREATED");
             if (!st.isBlank()) try {
-                ProjectStatus.valueOf(st);
+                ProjectStatus v = ProjectStatus.valueOf(st);
+                if (v.isReadOnly() || v == ProjectStatus.SUBMITTED_FOR_REVIEW) errors.add(at + "read-only/review status not allowed on seed: " + st);
             } catch (IllegalArgumentException ex) {
                 errors.add(at + "unknown status: " + st);
             }

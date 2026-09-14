@@ -126,19 +126,6 @@ class AiModelClientTest {
     }
 
     @Test
-    void generateEmbeddingConvertsNumericArray() {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://ai.test/ai/embeddings"))
-                .andExpect(method(HttpMethod.POST))
-                .andRespond(withSuccess("{\"embedding\":[0.25,-0.5,1]}", MediaType.APPLICATION_JSON));
-
-        assertThat(client(builder.build(), "http://ai.test").generateEmbedding("text"))
-                .containsExactly(0.25f, -0.5f, 1.0f);
-        server.verify();
-    }
-
-    @Test
     void generateEmbeddingsReturnsBatchInOrder() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
