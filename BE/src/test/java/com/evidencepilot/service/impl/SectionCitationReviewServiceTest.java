@@ -59,6 +59,7 @@ class SectionCitationReviewServiceTest {
     private final AuditService auditService = mock(AuditService.class);
     private final PromptTemplateService prompts = mock(PromptTemplateService.class);
     private final AiGenerationConfigService generationConfig = mock(AiGenerationConfigService.class);
+    private final ReviewPersistenceService reviewPersistence = mock(ReviewPersistenceService.class);
     private static final AiModelClient.GenerationSelection SELECTION = new AiModelClient.GenerationSelection(
             1, "provider", List.of("model"), "a".repeat(64), "b".repeat(64));
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
@@ -69,6 +70,9 @@ class SectionCitationReviewServiceTest {
                 "CITATION_REVIEW", "code-default", SectionCitationReviewPrompt.SYSTEM));
         org.mockito.Mockito.lenient().when(aiModelClient.generationSelection()).thenReturn(SELECTION);
         org.mockito.Mockito.lenient().when(generationConfig.current()).thenReturn(Optional.of(SELECTION));
+        org.mockito.Mockito.lenient().when(reviewPersistence.loadBatchSnapshots(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(java.util.Map.of());
 
         // The client tests cover continuation; these tests exercise the supplied domain validator.
         org.mockito.Mockito.lenient().doAnswer(invocation -> {
@@ -172,7 +176,7 @@ class SectionCitationReviewServiceTest {
         });
         verify(aiModelClient).generateForReview(
                 eq(SectionCitationReviewPrompt.SYSTEM), anyString());
-        verify(snapshotRepository).save(any(ReviewSnapshot.class));
+        verify(reviewPersistence).saveFinalSnapshot(any(), anyString(), any());
         verify(auditService).record(
                 "AI_SECTION_CITATION_REVIEW", "PaperSection", sectionId, actor, null, result);
     }
@@ -216,7 +220,7 @@ class SectionCitationReviewServiceTest {
             assertThat(finding.endOffset()).isEqualTo(prefix.length() + excerpt.length());
             assertThat(finding.evidence()).isEmpty();
         });
-        verify(snapshotRepository).save(any(ReviewSnapshot.class));
+        verify(reviewPersistence).saveFinalSnapshot(any(), anyString(), any());
         verify(auditService).record(
                 "AI_SECTION_CITATION_REVIEW", "PaperSection", sectionId, actor, null, result);
     }
@@ -760,7 +764,7 @@ class SectionCitationReviewServiceTest {
     }
 
     @Test
-    void runIgnoresIncompleteCachedSnapshot() throws Exception {
+    void cachedReturnsIncompleteFinalSnapshot() throws Exception {
         UUID projectId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
@@ -797,14 +801,131 @@ class SectionCitationReviewServiceTest {
                 new AiModelClient.GenerationResult(
                         "provider", "model", review(sectionId, 0, okVerdict(0))));
 
-        assertThat(service.cached(documentId, sectionId)).isEmpty();
+        // ponytail: partial finals are served (refresh never blanks finished work),
+        // but run() still repays fully — findings can't be mapped back to batches.
+        assertThat(service.cached(documentId, sectionId))
+                .isPresent()
+                .get()
+                .satisfies(cached -> {
+                    assertThat(cached.complete()).isFalse();
+                    assertThat(cached.limitations()).containsExactly("Batch failed");
+                });
         SectionCitationReviewResponse result = service.run(
                 documentId, projectId, sectionId, fingerprint, actorId);
 
         assertThat(result.complete()).isTrue();
         assertThat(result.provider()).isEqualTo("provider");
         verify(aiModelClient).generateForReview(anyString(), anyString());
-        verify(snapshotRepository).save(snapshot);
+        verify(reviewPersistence).saveFinalSnapshot(any(), eq(fingerprint), eq(result));
+    }
+
+    @Test
+    void runResumesCompletedBatchesFromCheckpoint() {
+        UUID projectId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        List<String> candidates = IntStream.range(0, 11)
+                .mapToObj(index -> "External benchmark claim number " + index
+                        + " reports exactly 90 percent accuracy")
+                .toList();
+        PaperSection section = section(
+                projectId, documentId, sectionId, "Introduction",
+                String.join(". ", candidates) + ".");
+        User actor = new User();
+        actor.setId(actorId);
+        SectionCitationReviewService bootstrap = service();
+        String fingerprint = bootstrap.reviewInputFingerprint(section);
+        SectionCitationReviewResponse.Finding resumedFinding =
+                new SectionCitationReviewResponse.Finding(
+                        SectionCitationReviewResponse.FindingType.UNSUBSTANTIATED_CLAIM,
+                        "resumed claim", 0, 13, "seeded from checkpoint",
+                        SectionCitationReviewResponse.Confidence.HIGH, List.of());
+        SectionCitationReviewResponse batchZero = new SectionCitationReviewResponse(
+                "section-critique-v4",
+                "critique-rules-v2",
+                sectionId,
+                section.getVersion(),
+                fingerprint,
+                bootstrap.sectionContentFingerprint(section),
+                LocalDateTime.of(2026, 8, 11, 10, 30),
+                "provider",
+                "model",
+                false,
+                "Partial review",
+                List.of(resumedFinding),
+                List.of());
+        when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
+        when(userRepository.findById(actorId)).thenReturn(Optional.of(actor));
+        when(reviewPersistence.loadBatchSnapshots(eq(projectId), eq(fingerprint)))
+                .thenReturn(java.util.Map.of(0, batchZero));
+        when(sourceMatchingService.search(eq(documentId), any(), eq(5)))
+                .thenReturn(emptyMatches(1));
+        when(aiModelClient.generateForReview(anyString(), anyString())).thenReturn(
+                new AiModelClient.GenerationResult(
+                        "provider", "model", review(sectionId, 1, okVerdict(10))));
+
+        List<String> progress = new java.util.ArrayList<>();
+        SectionCitationReviewResponse result = service().run(
+                documentId, projectId, sectionId, fingerprint, actorId,
+                (current, total) -> progress.add(current + "/" + total), ignored -> {});
+
+        assertThat(result.complete()).isTrue();
+        assertThat(result.findings()).containsExactly(resumedFinding);
+        assertThat(progress).containsExactly("0/2", "1/2", "2/2");
+        verify(aiModelClient, times(1)).generateForReview(anyString(), anyString());
+        verify(reviewPersistence, never()).saveBatchSnapshot(any(), anyString(), eq(0), any());
+        verify(reviewPersistence).saveBatchSnapshot(any(), anyString(), eq(1), any());
+        verify(reviewPersistence).saveFinalSnapshot(any(), eq(fingerprint), eq(result));
+    }
+
+    @Test
+    void cachedReturnsMergedPartialFromBatchRows() {
+        UUID projectId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        List<String> candidates = IntStream.range(0, 11)
+                .mapToObj(index -> "External benchmark claim number " + index
+                        + " reports exactly 90 percent accuracy")
+                .toList();
+        PaperSection section = section(
+                projectId, documentId, sectionId, "Introduction",
+                String.join(". ", candidates) + ".");
+        SectionCitationReviewService bootstrap = service();
+        String fingerprint = bootstrap.reviewInputFingerprint(section);
+        SectionCitationReviewResponse.Finding resumedFinding =
+                new SectionCitationReviewResponse.Finding(
+                        SectionCitationReviewResponse.FindingType.UNSUBSTANTIATED_CLAIM,
+                        "resumed claim", 0, 13, "seeded from checkpoint",
+                        SectionCitationReviewResponse.Confidence.HIGH, List.of());
+        SectionCitationReviewResponse batchZero = new SectionCitationReviewResponse(
+                "section-critique-v4",
+                "critique-rules-v2",
+                sectionId,
+                section.getVersion(),
+                fingerprint,
+                bootstrap.sectionContentFingerprint(section),
+                LocalDateTime.of(2026, 8, 11, 10, 30),
+                "provider",
+                "model",
+                false,
+                "Partial review",
+                List.of(resumedFinding),
+                List.of());
+        when(sectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
+        when(snapshotRepository.findByProjectIdAndStyleAndInputFingerprint(
+                eq(projectId), eq("section-critique-v4"), eq(fingerprint)))
+                .thenReturn(Optional.empty());
+        when(reviewPersistence.loadBatchSnapshots(eq(projectId), eq(fingerprint)))
+                .thenReturn(java.util.Map.of(0, batchZero));
+
+        Optional<SectionCitationReviewResponse> result = service().cached(documentId, sectionId);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().complete()).isFalse();
+        assertThat(result.get().findings()).containsExactly(resumedFinding);
+        assertThat(result.get().limitations()).singleElement().asString()
+                .contains("Batch 2/2 has not been reviewed yet");
     }
 
     @Test
@@ -868,7 +989,10 @@ class SectionCitationReviewServiceTest {
         assertThat(result.limitations()).singleElement().asString().contains("Batch 2/2");
         assertThat(progress).containsExactly("0/2", "1/2", "2/2");
         verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
-        verify(snapshotRepository, never()).save(any(ReviewSnapshot.class));
+        // ponytail: partial finals persist now — a re-click resumes instead of repaying batch 1.
+        verify(reviewPersistence).saveFinalSnapshot(any(), anyString(),
+                argThat(review -> !review.complete() && review.findings().isEmpty()));
+        verify(reviewPersistence).saveBatchSnapshot(any(), anyString(), eq(0), any());
     }
 
     @Test
@@ -1065,7 +1189,7 @@ class SectionCitationReviewServiceTest {
         assertThat(result.summary()).containsAnyOf("exempt", "not applicable");
         verify(aiModelClient, never()).generateForReview(anyString(), anyString());
         verify(sourceMatchingService, never()).search(any(), any(), anyInt());
-        verify(snapshotRepository).save(any(ReviewSnapshot.class));
+        verify(reviewPersistence).saveFinalSnapshot(any(), anyString(), any());
     }
 
     @Test
@@ -1185,12 +1309,21 @@ class SectionCitationReviewServiceTest {
                 new AiModelClient.GenerationResult("provider", "model", review(id, 0, okVerdict(0))));
         java.util.Map<String, ReviewSnapshot> cache = new java.util.HashMap<>();
         when(snapshotRepository.findByProjectIdAndStyleAndInputFingerprint(eq(project), anyString(), anyString()))
-                .thenAnswer(call -> Optional.ofNullable(cache.get(call.getArgument(2))));
-        when(snapshotRepository.save(any())).thenAnswer(call -> {
-            ReviewSnapshot row = call.getArgument(0);
-            cache.put(row.getInputFingerprint(), row);
-            return row;
-        });
+                .thenAnswer(call -> Optional.ofNullable(cache.get(call.getArgument(1) + "\0" + call.getArgument(2))));
+        org.mockito.Mockito.doAnswer(call -> {
+            String savedFingerprint = call.getArgument(1);
+            SectionCitationReviewResponse saved = call.getArgument(2);
+            ReviewSnapshot row = new ReviewSnapshot();
+            row.setInputFingerprint(savedFingerprint);
+            try {
+                row.setResponseJson(new com.fasterxml.jackson.databind.ObjectMapper()
+                        .findAndRegisterModules().writeValueAsString(saved));
+            } catch (com.fasterxml.jackson.core.JsonProcessingException impossible) {
+                throw new IllegalStateException(impossible);
+            }
+            cache.put("section-critique-v4\0" + savedFingerprint, row);
+            return null;
+        }).when(reviewPersistence).saveFinalSnapshot(any(), anyString(), any());
         var service = service();
         String initial = service.reviewInputFingerprint(section);
         service.run(document, project, id, initial, actorId);
@@ -1229,7 +1362,9 @@ class SectionCitationReviewServiceTest {
         assertThatThrownBy(() -> service.run(document, project, id, expected, UUID.randomUUID()))
                 .isInstanceOf(ResponseStatusException.class).hasMessageContaining("SECTION_REVIEW_INPUT_CHANGED");
         verify(aiModelClient, times(2)).generateForReview(eq(before.systemText()), anyString());
-        verify(snapshotRepository, never()).save(any());
+        // ponytail: the 409 aborts before the final write, but batch 1's snapshot survives it.
+        verify(reviewPersistence, never()).saveFinalSnapshot(any(), anyString(), any());
+        verify(reviewPersistence).saveBatchSnapshot(any(), anyString(), eq(0), any());
     }
 
     private SectionCitationReviewService service() {
@@ -1241,7 +1376,8 @@ class SectionCitationReviewServiceTest {
                 new PaperStandardService(mock(AiModelClient.class), objectMapper),
                 sourceMatchingService,
                 auditService,
-                objectMapper, prompts, generationConfig);
+                objectMapper, prompts, generationConfig,
+                reviewPersistence, new AiReviewPacer(0));
     }
 
     private static String review(UUID sectionId, int batchIndex, String... verdicts) {

@@ -6,7 +6,7 @@ import { useLanguage } from '../context/LanguageContext';
 import useUndoDelete from '../components/ui/UndoDelete.jsx';
 import { normalizeSource, resolveAnchor, sourceFingerprint } from '../utils/student/feedbackAnchors.js';
 
-async function loadAllProjectSources(projectId) {
+export async function loadAllProjectSources(projectId) {
   const sources = [];
   let page = 0;
   let last = false;

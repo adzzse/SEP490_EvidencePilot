@@ -17,7 +17,8 @@ public class AiEvaluationListener {
 
     private final AiEvaluationService aiEvaluationService;
 
-    @RabbitListener(queues = RabbitMQConfig.AI_EVALUATION_QUEUE)
+    @RabbitListener(queues = RabbitMQConfig.AI_EVALUATION_QUEUE,
+            containerFactory = "aiEvaluationListenerContainerFactory")
     public void handle(Map<String, Object> message) {
         process(message);
     }

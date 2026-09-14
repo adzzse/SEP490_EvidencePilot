@@ -27,6 +27,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +53,7 @@ import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SectionCitationReviewService {
 
     public static final String REVIEW_VERSION = "section-critique-v4";
@@ -82,6 +84,8 @@ public class SectionCitationReviewService {
     private final ObjectMapper objectMapper;
     private final PromptTemplateService promptTemplateService;
     private final AiGenerationConfigService generationConfigService;
+    private final ReviewPersistenceService persistence;
+    private final AiReviewPacer pacer;
 
     private static final String NO_GENERATION_SELECTION = "NO_GENERATION_SELECTION";
     private static final String NOT_APPLICABLE = "NOT_APPLICABLE";
@@ -92,17 +96,93 @@ public class SectionCitationReviewService {
         ResolvedPrompt prompt = promptTemplateService.resolve("CITATION_REVIEW");
         String generationFingerprint = generationIdentity(section);
         String reviewInputFingerprint = reviewInputFingerprint(section, prompt, generationFingerprint);
+        UUID projectId = section.getDocument().getProject().getId();
         var cached = reviewSnapshotRepository
                 .findByProjectIdAndStyleAndInputFingerprint(
-                        section.getDocument().getProject().getId(), SNAPSHOT_STYLE,
+                        projectId, SNAPSHOT_STYLE,
                         reviewInputFingerprint)
                 .flatMap(this::readSnapshot)
                 .filter(SectionCitationReviewResponse::complete);
+        // ponytail: a partial final already holds every finished finding — serve it
+        // directly so a refresh never blanks completed work.
+        Optional<SectionCitationReviewResponse> partialFinal = cached.isPresent() ? Optional.empty()
+                : reviewSnapshotRepository
+                        .findByProjectIdAndStyleAndInputFingerprint(
+                                projectId, SNAPSHOT_STYLE, reviewInputFingerprint)
+                        .flatMap(this::readSnapshot);
+        Map<Integer, SectionCitationReviewResponse> batches =
+                (cached.isPresent() || partialFinal.isPresent()) ? Map.of()
+                        : persistence.loadBatchSnapshots(projectId, reviewInputFingerprint);
         requireCurrent(prompt, generationFingerprint);
-        return cached;
+        if (cached.isPresent()) {
+            return cached;
+        }
+        if (partialFinal.isPresent()) {
+            return partialFinal;
+        }
+        if (batches.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(mergeBatchSnapshots(section, reviewInputFingerprint, generationFingerprint, batches));
     }
 
-    @Transactional
+    /**
+     * Rebuilds a partial review from per-batch rows left by an interrupted run,
+     * so a refresh or re-click shows completed batches instead of nothing.
+     */
+    private SectionCitationReviewResponse mergeBatchSnapshots(
+            PaperSection section,
+            String reviewInputFingerprint,
+            String generationFingerprint,
+            Map<Integer, SectionCitationReviewResponse> batches) {
+        List<SectionCitationReviewResponse.Finding> findings = new ArrayList<>();
+        List<String> limitations = new ArrayList<>();
+        String provider = null;
+        LinkedHashSet<String> modelsUsed = new LinkedHashSet<>();
+        LocalDateTime reviewedAt = null;
+        List<Integer> indexes = new ArrayList<>(batches.keySet());
+        indexes.sort(Integer::compareTo);
+        for (int batchIndex : indexes) {
+            SectionCitationReviewResponse batch = batches.get(batchIndex);
+            findings.addAll(batch.findings());
+            limitations.addAll(batch.limitations());
+            if (provider == null) {
+                provider = batch.provider();
+            }
+            modelsUsed.addAll(batch.modelsUsed());
+            if (batch.reviewedAt() != null
+                    && (reviewedAt == null || batch.reviewedAt().isAfter(reviewedAt))) {
+                reviewedAt = batch.reviewedAt();
+            }
+        }
+        int batchCount = (sectionCandidates(section.getContentTex()).size() + REVIEW_BATCH_SIZE - 1)
+                / REVIEW_BATCH_SIZE;
+        for (int batchIndex = 0; batchIndex < batchCount; batchIndex++) {
+            if (!batches.containsKey(batchIndex)) {
+                limitations.add("Batch " + (batchIndex + 1) + "/" + batchCount + " has not been reviewed yet");
+            }
+        }
+        findings.sort(Comparator.comparingInt(SectionCitationReviewResponse.Finding::startOffset));
+        return new SectionCitationReviewResponse(
+                REVIEW_VERSION,
+                RULE_CATALOG_VERSION,
+                section.getId(),
+                section.getVersion(),
+                reviewInputFingerprint,
+                sectionContentFingerprint(section),
+                reviewedAt != null ? reviewedAt : LocalDateTime.now(),
+                provider,
+                null,
+                generationFingerprint,
+                new ArrayList<>(modelsUsed),
+                false,
+                summarize(findings),
+                List.copyOf(findings),
+                List.copyOf(limitations));
+    }
+
+    // ponytail: no @Transactional — the AI loop below outlives any sane DB transaction.
+    // Reads ride per-call repository transactions; writes go through ReviewPersistenceService.
     public SectionCitationReviewResponse run(
             UUID documentId,
             UUID projectId,
@@ -118,7 +198,7 @@ public class SectionCitationReviewService {
                 (current, total) -> {});
     }
 
-    @Transactional
+    // ponytail: see above — transactionless orchestration over short-lived persistence calls.
     public SectionCitationReviewResponse run(
             UUID documentId,
             UUID projectId,
@@ -130,7 +210,7 @@ public class SectionCitationReviewService {
                 requestedByUserId, onProgress, checkpoint -> {});
     }
 
-    @Transactional
+    // ponytail: see above — transactionless orchestration over short-lived persistence calls.
     public SectionCitationReviewResponse run(
             UUID documentId, UUID projectId, UUID sectionId, String expectedReviewInputFingerprint,
             UUID requestedByUserId, BiConsumer<Integer, Integer> onProgress,
@@ -161,14 +241,19 @@ public class SectionCitationReviewService {
             return cached.get();
         }
 
-        SectionCitationReviewResponse review = isPolicyExempt(normalizedTitle)
-                ? notApplicable(
-                        section, reviewInputFingerprint, generationFingerprint, exemptionSummary(normalizedTitle))
-                : generate(section, reviewInputFingerprint, normalizedTitle, onProgress, onCheckpoint, prompt, selection);
-        requireCurrent(prompt, generationFingerprint);
-        if (review.complete()) {
-            saveSnapshot(project, reviewInputFingerprint, review);
+        SectionCitationReviewResponse review;
+        if (isPolicyExempt(normalizedTitle)) {
+            review = notApplicable(
+                    section, reviewInputFingerprint, generationFingerprint, exemptionSummary(normalizedTitle));
+        } else {
+            // Resume: batches finished by an earlier interrupted run are skipped, not repaid.
+            Map<Integer, SectionCitationReviewResponse> resumeBatches =
+                    persistence.loadBatchSnapshots(projectId, reviewInputFingerprint);
+            review = generate(section, reviewInputFingerprint, normalizedTitle, onProgress, onCheckpoint, prompt,
+                    selection, resumeBatches);
         }
+        requireCurrent(prompt, generationFingerprint);
+        persistence.saveFinalSnapshot(project, reviewInputFingerprint, review);
 
         User actor = userRepository.findById(requestedByUserId)
                 .orElseThrow(() -> new ResourceNotFoundException(requestedByUserId, "User"));
@@ -314,7 +399,11 @@ public class SectionCitationReviewService {
             String normalizedTitle,
             BiConsumer<Integer, Integer> onProgress,
             java.util.function.Consumer<SectionCitationReviewResponse> onCheckpoint, ResolvedPrompt prompt,
-            AiModelClient.GenerationSelection selection) {
+            AiModelClient.GenerationSelection selection,
+            Map<Integer, SectionCitationReviewResponse> resumeBatches) {
+        // ponytail: section/document/project ride findByIdWithDocument's join fetch,
+        // so basics stay readable here with no ambient transaction. Keep it that way.
+        Project project = section.getDocument().getProject();
         UUID paperId = section.getDocument().getId();
         List<ClaimCandidate> candidates = sectionCandidates(section.getContentTex());
         int batchCount = (candidates.size() + REVIEW_BATCH_SIZE - 1) / REVIEW_BATCH_SIZE;
@@ -327,19 +416,51 @@ public class SectionCitationReviewService {
         }
         String provider = null;
         LinkedHashSet<String> modelsUsed = new LinkedHashSet<>();
+        // Seed from an interrupted run's batch rows — repaid batches are skipped below.
+        List<Integer> resumedBatchIndexes = new ArrayList<>(resumeBatches.keySet());
+        resumedBatchIndexes.sort(Integer::compareTo);
+        for (int resumedBatchIndex : resumedBatchIndexes) {
+            SectionCitationReviewResponse resumed = resumeBatches.get(resumedBatchIndex);
+            findings.addAll(resumed.findings());
+            limitations.addAll(resumed.limitations());
+            if (provider == null) {
+                provider = resumed.provider();
+            }
+            modelsUsed.addAll(resumed.modelsUsed());
+        }
         RuntimeException lastFailure = null;
-        int completedBatches = 0;
+        int completedBatches = resumeBatches.size();
+        long startedNanos = System.nanoTime();
+        log.info("Citation review start: section={} candidates={} batches={} resumed={}",
+                section.getId(), candidates.size(), batchCount, resumeBatches.size());
         onProgress.accept(0, batchCount);
 
         for (int batchIndex = 0; batchIndex < batchCount; batchIndex++) {
             requireCurrent(prompt, selection.fingerprint());
+            if (resumeBatches.containsKey(batchIndex)) {
+                onProgress.accept(batchIndex + 1, batchCount);
+                continue;
+            }
             int fromIndex = batchIndex * REVIEW_BATCH_SIZE;
             List<ClaimCandidate> batch = List.copyOf(candidates.subList(
                     fromIndex, Math.min(candidates.size(), fromIndex + REVIEW_BATCH_SIZE)));
+            int findingsBefore = findings.size();
+            int limitationsBefore = limitations.size();
+            long batchStartedNanos = System.nanoTime();
+            long retrieveMillis = -1;
+            long llmMillis = -1;
             try {
+                pacer.acquire();
+                long retrieveStartedNanos = System.nanoTime();
                 List<CandidateContext> contexts = retrieveCandidateEvidence(paperId, batch);
+                retrieveMillis = java.util.concurrent.TimeUnit.NANOSECONDS
+                        .toMillis(System.nanoTime() - retrieveStartedNanos);
+                pacer.acquire();
+                long llmStartedNanos = System.nanoTime();
                 GeneratedReview generated = generateBatchReview(
                         section, normalizedTitle, contexts, batchIndex, batchCount, prompt.systemText(), selection, 300_000);
+                llmMillis = java.util.concurrent.TimeUnit.NANOSECONDS
+                        .toMillis(System.nanoTime() - llmStartedNanos);
                 if (provider == null) {
                     provider = generated.provider();
                 }
@@ -373,12 +494,20 @@ public class SectionCitationReviewService {
                                     .toList()));
                 }
                 completedBatches++;
+                persistence.saveBatchSnapshot(project, reviewInputFingerprint, batchIndex,
+                        reviewResult(section, reviewInputFingerprint, selection.fingerprint(), provider, modelsUsed,
+                                false,
+                                new ArrayList<>(findings.subList(findingsBefore, findings.size())),
+                                new ArrayList<>(limitations.subList(limitationsBefore, limitations.size()))));
             } catch (RuntimeException exception) {
                 lastFailure = exception;
                 limitations.add("Batch " + (batchIndex + 1) + "/" + batchCount
                         + " could not be reviewed: " + exception.getMessage());
             } finally {
                 onProgress.accept(batchIndex + 1, batchCount);
+                log.info("Citation review batch {}/{}: retrieve={}ms llm={}ms findings={} (section={})",
+                        batchIndex + 1, batchCount, retrieveMillis, llmMillis,
+                        findings.size() - findingsBefore, section.getId());
             }
             if (completedBatches > 0) {
                 requireCurrent(prompt, selection.fingerprint());
@@ -393,6 +522,9 @@ public class SectionCitationReviewService {
         if (completedBatches == 0 && lastFailure != null) {
             throw lastFailure;
         }
+        log.info("Citation review done: section={} batches={} findings={} limitations={} total={}ms",
+                section.getId(), batchCount, findings.size(), limitations.size(),
+                java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos));
 
         return reviewResult(section, reviewInputFingerprint, selection.fingerprint(), provider, modelsUsed,
                 completedBatches == batchCount, findings, limitations);
@@ -771,26 +903,6 @@ public class SectionCitationReviewService {
         } catch (JsonProcessingException exception) {
             return Optional.empty();
         }
-    }
-
-    private void saveSnapshot(
-            Project project,
-            String fingerprint,
-            SectionCitationReviewResponse review) {
-        ReviewSnapshot snapshot = reviewSnapshotRepository
-                .findByProjectIdAndStyleAndInputFingerprint(
-                        project.getId(), SNAPSHOT_STYLE, fingerprint)
-                .orElseGet(ReviewSnapshot::new);
-        snapshot.setProject(project);
-        snapshot.setStyle(SNAPSHOT_STYLE);
-        snapshot.setInputFingerprint(fingerprint);
-        snapshot.setCreatedAt(LocalDateTime.now());
-        try {
-            snapshot.setResponseJson(objectMapper.writeValueAsString(review));
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Could not serialize section review", exception);
-        }
-        reviewSnapshotRepository.save(snapshot);
     }
 
     private SectionCitationReviewResponse notApplicable(

@@ -52,8 +52,6 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
     : snapshot?.papers || [];
   const selectedConfirmation = confirmationPapers.flatMap(paper => paper.sections)
     .find(section => String(section.id) === String(selectedSectionId));
-  const bypassed = review.viewMode === 'submitted' && snapshot?.papers.some(paper =>
-    paper.sections.some(section => ['UNCONFIRMED', 'STALE'].includes(section.handoffState)));
   return <div className="space-y-3 text-xs">
     <div className="space-y-2 rounded-xl border border-(--border) bg-(--surface) p-3 shadow-sm">
       {orderedRequests.map(req => <button type="button" key={req.id} onClick={() => setActiveRequestId(req.id)} aria-pressed={req.id === activeRequestId} className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left focus-visible:ring-2 focus-visible:ring-(--brand) ${req.id === activeRequestId ? 'border-indigo-200 bg-(--brand-soft) text-(--brand-foreground)' : 'border-(--border-light) text-(--text-secondary) hover:bg-(--surface-secondary)'}`}>
@@ -62,7 +60,6 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
     </div>
     {confirmationPapers.length > 0 && <section aria-label={translate('sectionConfirmations')} className="space-y-2 rounded-xl border border-(--border) bg-(--surface) p-3">
       <h3 className="font-bold">{translate('sectionConfirmations')}</h3>
-      {bypassed && <p role="status" className="font-semibold text-amber-700 dark:text-amber-200">{translate('testSubmissionBypass')}</p>}
       {review.viewMode === 'working' ? <p>{translate('confirmationWorkingCopy')}</p>
         : <p>{translate('confirmationSubmittedBy')}: {snapshot.submittedByName || '—'} · {formatDateTime(snapshot.submittedAt)}</p>}
       {selectedConfirmation && <div>

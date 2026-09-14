@@ -91,12 +91,6 @@ export const DEFAULT_GRAPH_SETTINGS = Object.freeze({
   linkDistance: 160,
 });
 
-export const USER_ROLES = Object.freeze({
-  STUDENT: 'STUDENT',
-  INSTRUCTOR: 'INSTRUCTOR',
-  ADMIN: 'ADMIN',
-});
-
 export const CITATION_STANDARDS = Object.freeze([
   'IEEE',
   'ACM',

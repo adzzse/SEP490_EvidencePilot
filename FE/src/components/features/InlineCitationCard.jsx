@@ -53,6 +53,10 @@ export default function InlineCitationCard({
 }) {
   const { t, i18n } = useTranslation();
   const cardRef = useRef(null);
+  // ponytail: Next/Prev re-anchors + scrolls the editor; ignore the resulting scroll
+  // burst or the card closes the instant it opens on off-screen findings.
+  const findingChangeRef = useRef(0);
+  useEffect(() => { findingChangeRef.current = Date.now(); }, [findingIndex]);
   const noEvidence = hasNoEvidence(finding);
   const sourceGroups = buildSourceGroups(finding?.evidence, candidates, sources);
 
@@ -87,19 +91,30 @@ export default function InlineCitationCard({
   useEffect(() => {
     if (!open) return undefined;
     const close = (event) => {
+      if (Date.now() - findingChangeRef.current < 600) return;
       if (!cardRef.current?.contains(event.target)) onClose();
     };
     window.addEventListener('scroll', close, { passive: true, capture: true });
     return () => window.removeEventListener('scroll', close, { capture: true });
   }, [open, onClose]);
 
-  if (!open || !finding || !anchor) return null;
+  if (!open || !finding) return null;
 
   const dimensions = (() => {
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1280;
     const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
     const width = Math.min(CARD_W, Math.max(0, viewportWidth - 24));
     const maxHeight = Math.min(CARD_MAX_H, Math.max(0, viewportHeight - 24));
+    if (!anchor) {
+      // ponytail: no anchor (unrendered line, stale excerpt) — center top
+      // instead of rendering nothing; the badge click must always open.
+      return {
+        left: Math.max(12, (viewportWidth - width) / 2),
+        top: Math.max(12, viewportHeight * 0.12),
+        width,
+        maxHeight,
+      };
+    }
     let left = anchor.left - width / 2;
     left = Math.max(12, Math.min(left, viewportWidth - width - 12));
     let top = anchor.bottom != null ? anchor.bottom + 10 : anchor.top;

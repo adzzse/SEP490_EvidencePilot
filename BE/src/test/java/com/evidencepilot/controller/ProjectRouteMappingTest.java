@@ -129,6 +129,7 @@ class ProjectRouteMappingTest {
                 "GET /api/sources/projects/{projectId}",
                 "GET /api/sources/{id}",
                 "POST /api/sources",
+                "POST /api/sources/{sourceId}/share-to-project/{projectId}",
                 "PUT /api/sources/{id}",
                 "DELETE /api/sources/{id}",
                 "DELETE /api/sources/projects/{projectId}/sources/{sourceId}",

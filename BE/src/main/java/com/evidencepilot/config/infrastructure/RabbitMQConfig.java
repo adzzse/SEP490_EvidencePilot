@@ -99,8 +99,8 @@ public class RabbitMQConfig {
 
     /**
      * Dedicated factory for the extraction queue: multi-minute MinerU jobs get
-     * parallel consumers (elastic up to max), while export/evaluation listeners
-     * stay on the boot default factory. Retry/backoff/recoverer mirror the
+     * parallel consumers (elastic up to max), while export listeners stay on the
+     * boot default factory. Retry/backoff/recoverer mirror the
      * {@code spring.rabbitmq.listener.simple} properties, so DLQ semantics are
      * identical — only the concurrency envelope differs.
      *
@@ -146,6 +146,47 @@ public class RabbitMQConfig {
                             retry.getMaxInterval().toMillis())
                     .maxAttempts(retry.getMaxAttempts())
                     .recoverer(failedJobRecoverer)
+                    .build());
+        }
+        return factory;
+    }
+
+    /**
+     * Dedicated factory for the AI evaluation queue: citation reviews are
+     * paced client-side against the remote AI throttle (see AiReviewPacer),
+     * so two consumers share the budget smoothly instead of head-of-line
+     * blocking on the boot default of one. Same retry/DLQ semantics as the
+     * default factory; broker-less contexts get no factory (same story as
+     * {@link #extractionListenerContainerFactory}).
+     */
+    @Bean
+    public SimpleRabbitListenerContainerFactory aiEvaluationListenerContainerFactory(
+            ObjectProvider<ConnectionFactory> connectionFactory,
+            Jackson2JsonMessageConverter messageConverter,
+            ObjectProvider<RabbitProperties> propertiesProvider,
+            @Value("${RABBITMQ_EVAL_MAX_CONCURRENCY:2}") int maxConcurrentConsumers) {
+        ConnectionFactory resolved = connectionFactory.getIfAvailable();
+        if (resolved == null) {
+            return null;
+        }
+        RabbitProperties properties = propertiesProvider.getIfAvailable(RabbitProperties::new);
+        var simple = properties.getListener().getSimple();
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        factory.setConnectionFactory(resolved);
+        factory.setMessageConverter(messageConverter);
+        if (simple.getPrefetch() != null) factory.setPrefetchCount(simple.getPrefetch());
+        factory.setConcurrentConsumers(1);
+        factory.setMaxConcurrentConsumers(Math.max(1, maxConcurrentConsumers));
+        log.info("AI evaluation listener concurrency: prefetch={}, max={}",
+                simple.getPrefetch(), maxConcurrentConsumers);
+        if (simple.getRetry().isEnabled()) {
+            var retry = simple.getRetry();
+            factory.setAdviceChain(RetryInterceptorBuilder.stateless()
+                    .backOffOptions(
+                            retry.getInitialInterval().toMillis(),
+                            retry.getMultiplier(),
+                            retry.getMaxInterval().toMillis())
+                    .maxAttempts(retry.getMaxAttempts())
                     .build());
         }
         return factory;

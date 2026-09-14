@@ -99,6 +99,8 @@ export default function UniversalDocumentIngestionModal({
       const targetProjId = String(entityId);
       if (String(doc.projectId) === targetProjId) return true;
       if (Array.isArray(doc.projectIds) && doc.projectIds.some(pid => String(pid) === targetProjId)) return true;
+      // ponytail: library DTO uses projects:[{id}] instead of projectIds
+      if (Array.isArray(doc.projects) && doc.projects.some(p => String(p?.id) === targetProjId)) return true;
     }
 
     // 3. In COLLECTION context, check if doc is already associated with this collection
@@ -106,6 +108,8 @@ export default function UniversalDocumentIngestionModal({
       const targetColId = String(entityId);
       if (String(doc.collectionId) === targetColId) return true;
       if (Array.isArray(doc.collectionIds) && doc.collectionIds.some(cid => String(cid) === targetColId)) return true;
+      // ponytail: library DTO uses collections:[{id}]
+      if (Array.isArray(doc.collections) && doc.collections.some(c => String(c?.id) === targetColId)) return true;
     }
 
     return false;
@@ -329,27 +333,38 @@ export default function UniversalDocumentIngestionModal({
       return;
     }
 
-    let successCount = 0;
-    let failCount = 0;
+    // ponytail: block non-ready docs before POST so a 409 never looks like success
+    const notReady = sourceIdsToShare
+      .map(sid => collectionSources.find(s => String(s.id) === String(sid)))
+      .filter(doc => doc && !['READY', 'COMPLETED'].includes(doc.processingStatus));
+    if (notReady.length > 0) {
+      setCollectionError(`${language === 'vi' ? 'Tài liệu chưa sẵn sàng' : 'Source not ready'}: ${notReady.map(d => `${d.title || d.originalFilename || d.id} (${d.processingStatus || 'UNKNOWN'})`).join(', ')}`);
+      setCollectionSubmitting(false);
+      return;
+    }
 
-    await Promise.allSettled(
-      sourceIdsToShare.map(async (sourceId) => {
-        try {
-          await api.post(API_ROUTES.COLLECTIONS.SHARE_SOURCE(selectedCollectionId, sourceId, entityId));
-          successCount += 1;
-        } catch {
-          failCount += 1;
-        }
-      })
+    const results = await Promise.allSettled(
+      sourceIdsToShare.map((sourceId) =>
+        api.post(API_ROUTES.COLLECTIONS.SHARE_SOURCE(selectedCollectionId, sourceId, entityId)))
     );
+    const failed = sourceIdsToShare.filter((_, i) => results[i].status === 'rejected');
 
     setCollectionSubmitting(false);
-    if (failCount > 0 && successCount === 0) {
-      setCollectionError(language === 'vi' ? 'Không thể chia sẻ tài liệu vào đồ án.' : 'Failed to share documents to project.');
-    } else {
-      if (onSuccess) await onSuccess();
-      onClose();
+    if (failed.length > 0) {
+      const firstMsg = failed.map((_, k) => {
+        const r = results[sourceIdsToShare.indexOf(failed[k])];
+        return r.reason?.response?.data?.message;
+      }).find(Boolean);
+      const titles = new Map(collectionSources.map(s => [String(s.id), s.title || s.originalFilename || s.id]));
+      setCollectionError(`${firstMsg || (language === 'vi' ? 'Không thể chia sẻ tài liệu vào đồ án.' : 'Failed to share documents to project.')} ${failed.map(fid => titles.get(String(fid)) || fid).join(', ')}`);
+      if (failed.length < sourceIdsToShare.length && onSuccess) await onSuccess();
+      return;
     }
+    // ponytail: library list caches projects[] — force refetch so new share shows checked there
+    setLibrarySources([]);
+    setSelectedCollectionSourceIds(new Set());
+    if (onSuccess) await onSuccess();
+    onClose();
   };
 
   // Handle Adding Sources from Library
@@ -369,30 +384,54 @@ export default function UniversalDocumentIngestionModal({
       return;
     }
 
-    try {
-      if (entityType === ENTITY_TYPES.COLLECTION) {
+    if (entityType === ENTITY_TYPES.COLLECTION) {
+      try {
         await api.post(API_ROUTES.COLLECTIONS.BATCH_SOURCES(entityId), {
           sourceIds: sourceIdsToAdd,
         });
-      } else {
-        // Project Context: share selected library sources to project
-        await Promise.allSettled(
-          sourceIdsToAdd.map(async (sid) => {
-            const src = librarySources.find(s => String(s.id) === String(sid));
-            const colId = src?.collectionId || src?.collections?.[0]?.id;
-            if (colId) {
-              await api.post(API_ROUTES.COLLECTIONS.SHARE_SOURCE(colId, sid, entityId));
-            }
-          })
-        );
+      } catch (err) {
+        setLibraryError(err.response?.data?.message || t.libraryAddFailed || 'Failed to add selected sources');
+        setLibrarySubmitting(false);
+        return;
       }
+      setLibrarySubmitting(false);
       if (onSuccess) await onSuccess();
       onClose();
-    } catch (err) {
-      setLibraryError(err.response?.data?.message || t.libraryAddFailed || 'Failed to add selected sources');
-    } finally {
-      setLibrarySubmitting(false);
+      return;
     }
+
+    // Project context: share via library endpoint (works for standalone + collection docs,
+    // preserves collection link so Collection tab keeps showing it checked).
+    const notReady = sourceIdsToAdd
+      .map(sid => librarySources.find(s => String(s.id) === String(sid)))
+      .filter(doc => doc && !['READY', 'COMPLETED'].includes(doc.processingStatus));
+    if (notReady.length > 0) {
+      setLibraryError(`${language === 'vi' ? 'Tài liệu chưa sẵn sàng' : 'Source not ready'}: ${notReady.map(d => `${d.title || d.originalFilename || d.id} (${d.processingStatus || 'UNKNOWN'})`).join(', ')}`);
+      setLibrarySubmitting(false);
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      sourceIdsToAdd.map((sid) => api.post(API_ROUTES.SOURCES.SHARE_TO_PROJECT(sid, entityId)))
+    );
+    const failed = sourceIdsToAdd.filter((_, i) => results[i].status === 'rejected');
+
+    setLibrarySubmitting(false);
+    if (failed.length > 0) {
+      const firstMsg = failed.map((fid) => {
+        const r = results[sourceIdsToAdd.indexOf(fid)];
+        return r.reason?.response?.data?.message;
+      }).find(Boolean);
+      const titles = new Map(librarySources.map(s => [String(s.id), s.title || s.originalFilename || s.id]));
+      setLibraryError(`${firstMsg || t.libraryAddFailed || 'Failed to add selected sources'}: ${failed.map(fid => titles.get(String(fid)) || fid).join(', ')}`);
+      if (failed.length < sourceIdsToAdd.length && onSuccess) await onSuccess();
+      return;
+    }
+    // ponytail: collection tab caches projectIds — stale checked state until refetch
+    setCollectionSources([]);
+    setSelectedLibraryIds(new Set());
+    if (onSuccess) await onSuccess();
+    onClose();
   };
 
   // Tab Definitions Metadata

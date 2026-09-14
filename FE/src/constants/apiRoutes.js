@@ -24,6 +24,7 @@ export const API_ROUTES = Object.freeze({
     BASE: '/api/sources',
     BATCH: '/api/sources/batch',
     BY_ID: (id) => `/api/sources/${id}`,
+    SHARE_TO_PROJECT: (sourceId, projectId) => `/api/sources/${sourceId}/share-to-project/${projectId}`,
   }),
   DOCUMENTS: Object.freeze({
     BASE: '/api/documents',

@@ -39,7 +39,7 @@ public class QdrantClientImpl implements QdrantClient {
     public QdrantClientImpl(
             @Value("${qdrant.url}") String qdrantUrl,
             @Value("${qdrant.api-key}") String qdrantApiKey) {
-        this.baseUrl = trimTrailingSlash(qdrantUrl);
+        this.baseUrl = qdrantUrl.trim().replaceFirst("/+$", "");
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(5));
@@ -314,16 +314,6 @@ public class QdrantClientImpl implements QdrantClient {
                 collectionEnsured = true;
             }
         }
-    }
-
-    // ── Helpers ─────────────────────────────────────────────────────────────────
-
-    private static String trimTrailingSlash(String url) {
-        String normalized = url.trim();
-        while (normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
     }
 
     private static BigDecimal score(Object rawScore) {

@@ -36,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -116,6 +117,23 @@ public class SourceController {
     public void delete(
             @Parameter(description = "Source document UUID") @PathVariable UUID id) {
         documentService.deleteSource(id);
+    }
+
+    @Operation(summary = "Share library source to project",
+            description = "Shares a source from the current user's library to a project by reference. "
+                    + "Works for standalone sources and collection members; preserves the collection link when present "
+                    + "so collection views keep showing the source as shared. Returns suitability score.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Document shared with suitability info"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "404", description = "Source or project not found"),
+            @ApiResponse(responseCode = "409", description = "Source not ready or project corpus is locked")
+    })
+    @PostMapping("/{sourceId}/share-to-project/{projectId}")
+    public Map<String, Object> shareToProject(
+            @Parameter(description = "Source document UUID") @PathVariable UUID sourceId,
+            @Parameter(description = "Target project UUID") @PathVariable UUID projectId) {
+        return documentService.shareLibrarySourceToProject(sourceId, projectId);
     }
 
     @Operation(summary = "Remove shared source from project",

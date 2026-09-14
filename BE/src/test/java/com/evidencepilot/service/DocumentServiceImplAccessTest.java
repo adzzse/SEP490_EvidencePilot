@@ -548,6 +548,62 @@ class DocumentServiceImplAccessTest {
     }
 
     @Test
+    void shareLibraryStandalonePinsWithNullLink() {
+        User user = user();
+        Project project = project();
+        Document source = document(null);
+        source.setDocType(DocumentType.SOURCE);
+        source.setCollection(null);
+        source.setProcessingStatus(ProcessingStatus.READY);
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+        when(collectionDocumentRepository.findByDocumentId(source.getId())).thenReturn(List.of());
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+
+        var result = service().shareLibrarySourceToProject(source.getId(), project.getId());
+
+        assertThat(result.get("document")).isNotNull();
+        verify(projectCollectionService).pinSource(eq(project), eq(source), eq(null), eq(user));
+        verify(currentUserService).requireProjectWriteAccess(user, project);
+    }
+
+    @Test
+    void shareLibraryPreservesCollectionLink() {
+        User user = user();
+        Project project = project();
+        com.evidencepilot.model.Collection collection = collection();
+        Document source = document(null);
+        source.setDocType(DocumentType.SOURCE);
+        source.setCollection(collection);
+        source.setProcessingStatus(ProcessingStatus.READY);
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+
+        service().shareLibrarySourceToProject(source.getId(), project.getId());
+
+        verify(projectCollectionService).pinSource(project, source, collection, user);
+    }
+
+    @Test
+    void shareLibraryRejectsSourceNotReady() {
+        User user = user();
+        Project project = project();
+        Document source = document(null);
+        source.setDocType(DocumentType.SOURCE);
+        source.setCollection(null);
+        source.setProcessingStatus(ProcessingStatus.PROCESSING);
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+
+        assertThatThrownBy(() -> service().shareLibrarySourceToProject(source.getId(), project.getId()))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        e -> assertThat(e.getStatusCode().value()).isEqualTo(409))
+                .hasMessageContaining("not ready to share");
+        verify(projectCollectionService, never()).pinSource(any(), any(), any(), any());
+    }
+
+    @Test
     void attachFileRegistersRollbackCleanupBeforeUpdatingMetadata() {
         User user = user();
         Document document = document(project());
@@ -959,6 +1015,111 @@ class DocumentServiceImplAccessTest {
         assertThat(diag.get("extractionJson")).isEqualTo(Map.of("key", "value"));
         verify(documentObjectStorage).exists(
                 "documents/processed/" + document.getId() + "/file-hash/extraction.json");
+    }
+
+    @Test
+    void linkedProjectMemberCanReadSourceOwnedByAnotherProject() {
+        User student = user();
+        Project owning = project();
+        Project shared = project();
+        Document source = document(owning);
+        source.setDocType(DocumentType.SOURCE);
+        ProjectDocument link = new ProjectDocument();
+        link.setProject(shared);
+        link.setDocument(source);
+        when(currentUserService.requireCurrentUser()).thenReturn(student);
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+        when(projectDocumentRepository.findByDocumentId(source.getId())).thenReturn(List.of(link));
+        doThrow(new ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Project access denied"))
+                .when(currentUserService).requireProjectAccess(student, owning);
+
+        assertThat(service().getSourceById(source.getId()).id()).isEqualTo(source.getId());
+        verify(currentUserService).requireProjectAccess(student, shared);
+    }
+
+    @Test
+    void strangerDeniedFallsBackThroughAllAvenues() {
+        User stranger = user();
+        Project owning = project();
+        Document source = document(owning);
+        source.setDocType(DocumentType.SOURCE);
+        source.setUploadedBy(user());
+        when(currentUserService.requireCurrentUser()).thenReturn(stranger);
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+        when(projectDocumentRepository.findByDocumentId(source.getId())).thenReturn(List.of());
+        // ponytail: owning project exists, so collection/owner branches are out of
+        // scope — only the owning-project denial surfaces.
+        doThrow(new ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Project access denied"))
+                .when(currentUserService).requireProjectAccess(stranger, owning);
+
+        assertThatThrownBy(() -> service().getSourceById(source.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Project access denied");
+    }
+
+    @Test
+    void linkedProjectLeaderCanWriteSourceOwnedByAnotherProject() {
+        User leader = user();
+        Project owning = project();
+        Project shared = project();
+        shared.setStatus(ProjectStatus.IN_PROGRESS);
+        Document source = document(owning);
+        source.setDocType(DocumentType.SOURCE);
+        ProjectDocument link = new ProjectDocument();
+        link.setProject(shared);
+        link.setDocument(source);
+        when(currentUserService.requireCurrentUser()).thenReturn(leader);
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+        when(projectDocumentRepository.findByDocumentId(source.getId())).thenReturn(List.of(link));
+        doThrow(new ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Write access denied to project"))
+                .when(currentUserService).requireProjectWriteAccess(leader, owning);
+        when(documentRepository.save(source)).thenReturn(source);
+
+        assertThat(service().updateDocumentMetadata(source.getId(), "New title", null).title())
+                .isEqualTo("New title");
+        verify(currentUserService).requireProjectWriteAccess(leader, shared);
+    }
+
+    @Test
+    void writeDeniedEverywhereThrowsFirstDenial() {
+        User stranger = user();
+        Project owning = project();
+        Document source = document(owning);
+        source.setDocType(DocumentType.SOURCE);
+        source.setUploadedBy(user());
+        when(currentUserService.requireCurrentUser()).thenReturn(stranger);
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+        when(projectDocumentRepository.findByDocumentId(source.getId())).thenReturn(List.of());
+        // ponytail: owning project exists, so the owner branch is out of scope.
+        doThrow(new ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Write access denied to project"))
+                .when(currentUserService).requireProjectWriteAccess(stranger, owning);
+
+        assertThatThrownBy(() -> service().updateDocumentMetadata(source.getId(), "New title", null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Write access denied");
+    }
+
+    @Test
+    void studentDeniedCollectionDocWithoutProjectLink() {
+        User student = user();
+        com.evidencepilot.model.Collection collection = collection();
+        Document source = document(null);
+        source.setDocType(DocumentType.SOURCE);
+        source.setCollection(collection);
+        when(currentUserService.requireCurrentUser()).thenReturn(student);
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+        when(projectDocumentRepository.findByDocumentId(source.getId())).thenReturn(List.of());
+        doThrow(new ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Students cannot access collections"))
+                .when(currentUserService).requireCollectionAccess(student, collection);
+
+        assertThatThrownBy(() -> service().getSourceById(source.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Students cannot access collections");
     }
 
     private DocumentServiceImpl service() {

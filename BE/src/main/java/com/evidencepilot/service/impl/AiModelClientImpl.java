@@ -91,7 +91,7 @@ public class AiModelClientImpl implements AiModelClient {
         this.restClient = restClient;
         this.generationClient = generationClient;
         this.apiKey = apiKey;
-        this.baseUrl = baseUrl == null || baseUrl.isBlank() ? "" : trimTrailingSlash(baseUrl);
+        this.baseUrl = baseUrl == null || baseUrl.isBlank() ? "" : baseUrl.trim().replaceFirst("/+$", "");
         this.objectMapper = objectMapper;
         this.maxRetries = Math.max(0, maxRetries);
         this.aiModelCallGate = aiModelCallGate;
@@ -567,14 +567,6 @@ public class AiModelClientImpl implements AiModelClient {
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
         }
-    }
-
-    private static String trimTrailingSlash(String baseUrl) {
-        String normalized = baseUrl.trim();
-        while (normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
     }
 
     private static List<Float> floatVector(Object raw, String endpoint) {

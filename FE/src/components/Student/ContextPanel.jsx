@@ -7,113 +7,6 @@ import SectionRequirementsPanel from './SectionRequirementsPanel.jsx';
 import PaperReferencesPanel from './PaperReferencesPanel.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
 
-const FUNCTIONAL_TYPES = [
-  { value: 'EMPIRICAL', labelKey: 'functionalTypeEmpirical' },
-  { value: 'THEORETICAL', labelKey: 'functionalTypeTheoretical' },
-  { value: 'METHODOLOGICAL', labelKey: 'functionalTypeMethodological' },
-  { value: 'ANALYTICAL', labelKey: 'functionalTypeAnalytical' },
-  { value: 'APPLIED', labelKey: 'functionalTypeApplied' },
-];
-
-const BREAKDOWN_LABELS = [
-  ['semantic_alignment', 'semanticAlignment'],
-  ['contextual_sufficiency', 'contextualSufficiency'],
-  ['logical_restraint', 'logicalRestraint'],
-];
-
-function parseScoreBreakdown(s) {
-  if (!s) return null;
-  try { return JSON.parse(s); } catch { return null; }
-}
-
-function FunctionalTypeDropdown({ value, onChange, className }) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [open]);
-  const selected = FUNCTIONAL_TYPES.find(t => t.value === value) || FUNCTIONAL_TYPES[0];
-  return (
-    <div ref={ref} className={`relative ${className || ''}`}>
-      <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-full text-xs border border-(--border) rounded-lg px-2 py-1.5 bg-(--surface) outline-none focus:ring-1 focus:ring-indigo-500 text-(--text-primary) flex items-center justify-between gap-1">
-        <span className="truncate">{selected.value}</span>
-        <svg className={`w-3 h-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-      </button>
-      {open && (
-        <ul className="absolute z-20 left-0 right-0 mt-1 bg-(--surface) border border-(--border) rounded-lg shadow-lg max-h-48 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {FUNCTIONAL_TYPES.map(type => (
-            <li key={type.value}>
-              <button type="button" onClick={() => { onChange(type.value); setOpen(false); }}
-                className={`w-full text-left text-xs px-2 py-1.5 hover:bg-(--surface-secondary) ${type.value === selected.value ? 'font-bold text-indigo-600' : 'text-(--text-primary)'}`}>
-                {t(type.labelKey)}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function EvidenceEvaluationCard({ match, status, breakdownOpenId, setBreakdownOpenId, children }) {
-  const { t } = useTranslation();
-  const breakdown = parseScoreBreakdown(match.scoreBreakdown);
-  const open = breakdownOpenId === match.id;
-  const statusClass = status === 'ACTIVE'
-    ? 'bg-emerald-100 text-emerald-700'
-    : status === 'REJECTED'
-      ? 'bg-rose-100 text-rose-700'
-      : status === 'INACTIVE'
-        ? 'bg-slate-100 text-slate-600'
-        : 'bg-amber-100 text-amber-700';
-  return (
-    <div className="bg-(--surface-secondary) border border-(--border) rounded p-2 text-[11px]">
-      <div className="flex justify-between items-center gap-2 mb-1">
-        <span className="truncate font-bold text-(--text-primary)">{match.sourceFilename}</span>
-        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${statusClass}`}>{status}</span>
-      </div>
-      <div className="flex gap-2 text-[9px] font-bold mb-1">
-        <span className="text-indigo-600">{match.relation || 'UNKNOWN'}</span>
-        {match.strengthScore != null && <span className="text-(--text-secondary)">{t('evidenceStrength')}: {match.strengthScore}/100 · {match.strengthBand}</span>}
-      </div>
-      <p className="text-[10px] text-(--text-secondary) line-clamp-3 italic leading-relaxed">"{match.excerpt}"</p>
-      {match.explanation && <p className="text-[10px] text-indigo-600 mt-1 leading-relaxed">{match.explanation}</p>}
-      {breakdown && (
-        <div className="mt-1.5">
-          <button onClick={() => setBreakdownOpenId(open ? null : match.id)} className="text-xs font-bold text-(--text-secondary) hover:text-(--brand) flex items-center gap-1">
-            <svg className={`w-2.5 h-2.5 transition-transform ${open ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
-            {t('evidenceStrengthBreakdown')}
-          </button>
-          {open && (
-            <div className="mt-1.5 space-y-1">
-              {BREAKDOWN_LABELS.map(([key, label]) => {
-                const item = breakdown[key];
-                if (!item || item.max == null) return null;
-                const pct = item.max > 0 ? Math.round((item.earned / item.max) * 100) : 0;
-                return (
-                  <div key={key} className="flex items-center gap-2">
-                    <span className="w-28 text-[9px] text-(--text-secondary) shrink-0">{t(label)}</span>
-                    <div className="flex-1 h-1 bg-(--border) rounded-full overflow-hidden">
-                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
-                    </div>
-                    <span className="text-[9px] font-bold text-(--text-primary) shrink-0 w-12 text-right">{item.earned}/{item.max}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-      {children}
-    </div>
-  );
-}
-
 export default function ContextPanel({
   compact, isOpen, width,
   activeTab, setActiveTab,
@@ -501,7 +394,6 @@ export default function ContextPanel({
                             {confirmationState === 'LEGACY_NO_SNAPSHOT' && <p>{t('confirmationLegacy')}</p>}
                             {confirmationState === 'LOAD_ERROR' && <div role="alert"><p>{t('confirmationLoadFailed')}</p><button type="button" onClick={() => setConfirmationRetry(value => value + 1)} className="underline">{t('retry')}</button></div>}
                             {confirmationState === 'AVAILABLE' && confirmationSnapshot && <>
-                              {confirmationSnapshot.papers.some(paper => paper.sections.some(section => ['UNCONFIRMED', 'STALE'].includes(section.handoffState))) && <p role="status" className="font-semibold text-amber-700 dark:text-amber-200">{t('testSubmissionBypass')}</p>}
                               <p>{t('confirmationSubmittedBy')}: {confirmationSnapshot.submittedByName || '—'} · {formatDateTime(confirmationSnapshot.submittedAt)}</p>
                               {confirmationSnapshot.papers.map(paper => <div key={paper.id}>
                                 <h4 className="font-bold">{paper.title || t('paper')}</h4>

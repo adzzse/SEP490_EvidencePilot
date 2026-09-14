@@ -15,7 +15,7 @@ import ContextPanel from '../../components/Student/ContextPanel.jsx';
 import FullPaperPreview from '../../components/Student/FullPaperPreview.jsx';
 import SubmissionReadinessModal from '../../components/Student/SubmissionReadinessModal.jsx';
 import { hasActiveExtraction } from '../../utils/student/extractionPolling.js';
-import useInstructorReview from '../../hooks/useInstructorReview.js';
+import useInstructorReview, { loadAllProjectSources } from '../../hooks/useInstructorReview.js';
 import InstructorFeedbackPanel, { InstructorReviewGuide } from '../../components/Instructor/InstructorFeedbackPanel.jsx';
 import useProjectFeedback from '../../hooks/useProjectFeedback.js';
 import { usePaperReferences } from '../../hooks/usePaperReferences.js';
@@ -25,24 +25,6 @@ import useUndoDelete, { UndoToast } from '../../components/ui/UndoDelete.jsx';
 const VisualSourceMap = React.lazy(() => import('../../components/features/VisualSourceMap.jsx'));
 
 const SOURCE_MATCH_BATCH_SIZE = 10;
-
-async function loadAllProjectSources(projectId) {
-  const sources = [];
-  let page = 0;
-  let last = false;
-  while (!last) {
-    const response = await api.get(`/api/projects/${projectId}/sources`, {
-      params: { page, size: 100, active: true },
-    });
-    sources.push(...(response.data?.content || []));
-    last = response.data?.last ?? true;
-    page += 1;
-  }
-  return sources;
-}
-
-// Mirrors BE SourceMatchingService.citationKey(UUID).
-const citationKeyFor = (documentId) => `ep${String(documentId).replace(/-/g, '')}`;
 
 function findingClassName(finding) {
   const evidence = finding.evidence || [];
@@ -425,10 +407,11 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       if (shouldAbort?.()) return null;
       const { data: job } = await api.get(`/api/jobs/${jobId}`);
       if (shouldAbort?.()) return null;
-      onProgress?.({
+      const progress = {
         current: Math.max(0, Number(job.progressCurrent) || 0),
         total: Math.max(0, Number(job.progressTotal) || 0),
-      });
+      };
+      onProgress?.(progress, job);
       if (job.status === 'SUCCESS' || (job.status === 'FAILED'
         && job.kind === 'SECTION_CITATION_REVIEW' && job.result?.complete === false)) return job;
       if (job.status === 'FAILED') {
@@ -443,6 +426,52 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   const updateAiReviewProgress = (next) => {
     setAiReviewProgress((current) =>
       current?.current === next.current && current?.total === next.total ? current : next);
+  };
+
+  // ponytail: refresh-while-running survival — the active jobId lives in localStorage
+  // (FE state is wiped by reload) so a remount can reattach to the still-running job.
+  const reviewJobKey = (sectionId) => `citation_review_job:${sectionId}`;
+  const storeReviewJob = (sectionId, jobId) => {
+    try { if (sectionId && jobId) localStorage.setItem(reviewJobKey(sectionId), jobId); } catch { /* ignore */ }
+  };
+  const clearReviewJob = (sectionId) => {
+    try { if (sectionId) localStorage.removeItem(reviewJobKey(sectionId)); } catch { /* ignore */ }
+  };
+  const readReviewJob = (sectionId) => {
+    try { return sectionId ? localStorage.getItem(reviewJobKey(sectionId)) : null; }
+    catch { return null; }
+  };
+
+  // Progress callback that also renders checkpoint partials live: job.result carries
+  // completed batches while PROCESSING, so findings appear as they land.
+  const trackReviewProgress = (requestId, shownFindings) => (progress, job) => {
+    updateAiReviewProgress(progress);
+    if (job && job.status !== 'SUCCESS' && job.status !== 'FAILED'
+      && Array.isArray(job.result?.findings)
+      && job.result.findings.length > (shownFindings.current || 0)
+      && aiReviewRequestRef.current === requestId) {
+      shownFindings.current = job.result.findings.length;
+      setAiReviewResult(job.result);
+      setAiReviewedContent(codeContentRef.current);
+    }
+  };
+
+  const finishReviewPoll = async (job, requestId, reviewedContent) => {
+    if (!job) {
+      if (aiReviewRequestRef.current === requestId) setLoadingAiReview(false);
+      return;
+    }
+    if (aiReviewRequestRef.current !== requestId) return;
+    clearReviewJob(selectedSectionId);
+    setAiReviewResult(job.result);
+    setAiReviewedContent(reviewedContent);
+    showToast(job.result?.complete
+      ? t('aiReviewComplete')
+      : t('aiReviewPartial', {
+        failedBatches: job.result?.limitations?.length || 0,
+      }));
+    setLoadingAiReview(false);
+    fetchAiReviewSources(job.result, requestId);
   };
 
   useEffect(() => {
@@ -677,6 +706,14 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   const closeReviewOverlay = useCallback(() => {
     setReviewOverlay(prev => (prev.open ? { open: false, findingIndex: -1, anchor: null } : prev));
   }, []);
+  // ponytail: programmatic revealRange() scrolls the editor, which would trip scroll-close
+  // handlers and instantly hide the card on Next/Prev. Suppress them briefly after each reveal.
+  const revealGuardRef = useRef(0);
+  const markProgrammaticReveal = useCallback(() => { revealGuardRef.current = Date.now(); }, []);
+  const handleReviewScrollClose = useCallback(() => {
+    if (Date.now() - revealGuardRef.current < 600) return;
+    closeReviewOverlay();
+  }, [closeReviewOverlay]);
 
   // Global highlight visibility (eye toggle) — hides review UI noise without a re-scan.
   const [isReviewVisible, setIsReviewVisible] = useState(
@@ -702,11 +739,12 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   const isAiReviewStale = Boolean(aiReviewResult && codeContent !== aiReviewedContent);
 
   const handleFindingClick = useCallback((findingIndex, coords) => {
-    if (!aiReviewResult?.findings?.[findingIndex] || !coords) return;
+    if (!aiReviewResult?.findings?.[findingIndex]) return;
+    // ponytail: null coords (unrendered line) still opens — the card centers itself.
     setReviewOverlay({
       open: true,
       findingIndex,
-      anchor: { left: coords.left, top: coords.top, bottom: coords.bottom },
+      anchor: coords ? { left: coords.left, top: coords.top, bottom: coords.bottom } : null,
     });
   }, [aiReviewResult]);
 
@@ -903,38 +941,6 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       setPapers(list);
       if (list.length > 0) { setSelectedPaper(list[list.length - 1]); loadCode(''); }
     } catch { showToast(t('uploadFailed')); }
-  };
-
-  const handleDeletePaper = async (paperId) => {
-    if (isLocked) { showToast(t('projectLocked')); return; }
-    setPapers(prev => prev.filter(p => String(p.id) !== String(paperId)));
-    if (selectedPaper && String(selectedPaper.id) === String(paperId)) setSelectedPaper(null);
-    const paper = papers.find(p => String(p.id) === String(paperId));
-    startDelete({
-      ...undoStrings,
-      entityName: paper?.title || paper?.originalFilename || paperId,
-      entityDetails: paperId,
-    }, async () => {
-      try {
-        await api.delete(`/api/papers/${paperId}`);
-        showToast(t('paperDeleted'));
-      } catch { showToast(t('deleteFailed')); }
-      try {
-        const mediaResponse = await api.get(`/api/media/projects/${project.id}`);
-        setMediaAssets(mediaResponse.data || []);
-      } catch { setLoadErrors(errs => [...errs, 'media']); }
-      const r = await api.get(`/api/projects/${project.id}/papers`);
-      const list = r.data || [];
-      setPapers(list);
-      if (selectedPaper && String(selectedPaper.id) === String(paperId)) {
-        if (list.length > 0) { setSelectedPaper(list[0]); loadCode(''); }
-        else { setSelectedPaper(null); loadCode(''); }
-      }
-    }, async () => {
-      const r = await api.get(`/api/projects/${project.id}/papers`);
-      setPapers(r.data || []);
-      if (selectedPaper && String(selectedPaper.id) === String(paperId)) setSelectedPaper(paper);
-    });
   };
 
   const handleUploadSource = async (file) => {
@@ -1141,31 +1147,44 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     setAiSourcesError('');
     try {
       const grouped = {};
+      const batchStarts = [];
       for (let start = 0; start < findings.length; start += SOURCE_MATCH_BATCH_SIZE) {
-        const { data: submit } = await api.post(
-          `/api/papers/${selectedPaper.id}/sections/${selectedSectionId}/review/source-matches`,
-          {
-            findings: findings.slice(start, start + SOURCE_MATCH_BATCH_SIZE)
-              .map((finding, batchIndex) => ({
-                findingIndex: start + batchIndex,
-                excerpt: finding.excerpt,
-                startOffset: finding.startOffset,
-                endOffset: finding.endOffset,
-              })),
-          },
-        );
-        if (aiReviewRequestRef.current !== reviewRequestId
-          || aiSourceRequestRef.current !== sourceRequestId) return;
-        const job = await pollAiJob(submit.jobId, () =>
-          aiReviewRequestRef.current !== reviewRequestId
-          || aiSourceRequestRef.current !== sourceRequestId);
-        if (!job) return;
-        if (aiReviewRequestRef.current !== reviewRequestId
-          || aiSourceRequestRef.current !== sourceRequestId) return;
-        (job.result?.findings || []).forEach(item => {
-          grouped[item.findingIndex] = item.candidates || [];
-        });
+        batchStarts.push(start);
       }
+      // ponytail: batches are independent — run two workers instead of stacking
+      // sequential submit+poll round-trips.
+      const aborted = () => aiReviewRequestRef.current !== reviewRequestId
+        || aiSourceRequestRef.current !== sourceRequestId;
+      let nextBatch = 0;
+      const workerCount = Math.min(2, batchStarts.length);
+      await Promise.all(Array.from({ length: workerCount }, async () => {
+        for (;;) {
+          if (aborted()) return;
+          const slot = nextBatch++;
+          if (slot >= batchStarts.length) return;
+          const start = batchStarts[slot];
+          const { data: submit } = await api.post(
+            `/api/papers/${selectedPaper.id}/sections/${selectedSectionId}/review/source-matches`,
+            {
+              findings: findings.slice(start, start + SOURCE_MATCH_BATCH_SIZE)
+                .map((finding, batchIndex) => ({
+                  findingIndex: start + batchIndex,
+                  excerpt: finding.excerpt,
+                  startOffset: finding.startOffset,
+                  endOffset: finding.endOffset,
+                })),
+            },
+          );
+          if (aborted()) return;
+          const job = await pollAiJob(submit.jobId, aborted);
+          if (!job) return;
+          if (aborted()) return;
+          (job.result?.findings || []).forEach(item => {
+            grouped[item.findingIndex] = item.candidates || [];
+          });
+        }
+      }));
+      if (aborted()) return;
       setAiSourceMatches(grouped);
     } catch (error) {
       if (aiReviewRequestRef.current === reviewRequestId
@@ -1188,9 +1207,11 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     aiReviewJobRef.current = 'saving';
     setLoadingAiReview(true);
     setAiReviewProgress(null);
+    setAiReviewResult(null);
     let requestId = aiReviewRequestRef.current;
+    let saved = null;
     try {
-      const saved = await handleSaveDraft();
+      saved = await handleSaveDraft();
       if (!saved) return;
 
       const reviewedContent = saved.content;
@@ -1203,30 +1224,45 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       setSectionTraces([]);
       setUpdatingTraceIds([]);
       setTraceError('');
+      // ponytail: unchanged re-clicks resolve from snapshot — skip the queue entirely.
+      try {
+        const cachedRes = await api.get(
+          `/api/papers/${saved.paperId}/sections/${sectionId}/review`);
+        if (aiReviewRequestRef.current !== requestId) return;
+        if (cachedRes.status === 200 && cachedRes.data) {
+          setAiReviewResult(cachedRes.data);
+          setAiReviewedContent(reviewedContent);
+          showToast(cachedRes.data.complete
+            ? t('aiReviewComplete')
+            : t('aiReviewPartial', {
+              failedBatches: cachedRes.data.limitations?.length || 0,
+            }));
+          setLoadingAiReview(false);
+          fetchAiReviewSources(cachedRes.data, requestId);
+          return;
+        }
+      } catch { /* 204/404 -> queue a fresh review below */ }
       const { data: submit } = await api.post(
         `/api/papers/${saved.paperId}/sections/${sectionId}/review`);
       if (aiReviewRequestRef.current !== requestId) return;
       aiReviewJobRef.current = submit.jobId;
+      storeReviewJob(sectionId, submit.jobId);
+      const shownFindings = { current: 0 };
       const job = await pollAiJob(
         submit.jobId,
         () => aiReviewRequestRef.current !== requestId,
-        updateAiReviewProgress,
+        trackReviewProgress(requestId, shownFindings),
       );
-      if (!job) return;
-      setAiReviewResult(job.result);
-      setAiReviewedContent(reviewedContent);
-      showToast(job.result?.complete
-        ? t('aiReviewComplete')
-        : t('aiReviewPartial', {
-          failedBatches: job.result?.limitations?.length || 0,
-        }));
-      setLoadingAiReview(false);
-      fetchAiReviewSources(job.result, requestId);
+      await finishReviewPoll(job, requestId, reviewedContent);
     } catch (error) {
       if (aiReviewRequestRef.current !== requestId) return;
+      const rawMessage = error.response?.data?.message || '';
       const status = error.response?.status || error.status;
+      // ponytail: prompt/model drift needs different guidance than content drift.
       const message = status === 409
-        ? t('reviewSectionChanged')
+        ? (/prompt changed/i.test(rawMessage) ? t('reviewPromptChanged')
+          : /model configuration changed/i.test(rawMessage) ? t('reviewModelChanged')
+          : t('reviewSectionChanged'))
         : status === 429
           ? t('aiProviderRateLimited')
           : status === 503
@@ -1237,6 +1273,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       setAiReviewError({ status, message });
       showToast(message);
     } finally {
+      if (saved?.sectionId) clearReviewJob(saved.sectionId);
       aiReviewJobRef.current = null;
       setLoadingAiReview(false);
       setAiReviewProgress(null);
@@ -1257,11 +1294,16 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     const findings = aiReviewResult?.findings || [];
     const findingIndex = wrapFindingIndex(requestedIndex, findings.length);
     if (findingIndex < 0) return;
+    // ponytail: open the new finding immediately (keep previous anchor as fallback) so
+    // Next/Prev never leaves a closed or stale card, even when the excerpt moved.
+    markProgrammaticReveal();
+    setReviewOverlay(prev => ({ open: true, findingIndex, anchor: prev.anchor }));
+    if (!isReviewVisible) setIsReviewVisible(true);
     const range = locateReviewFinding(findings[findingIndex]);
     if (!range) { showToast(t('reviewExcerptChanged')); return; }
-    if (!isReviewVisible) setIsReviewVisible(true);
     const revealed = editorRef.current?.revealRange(range.start, range.end, (coords) => {
       if (coords) handleFindingClick(findingIndex, coords);
+      else setReviewOverlay({ open: true, findingIndex, anchor: null });
     });
     if (!revealed) showToast(t('reviewExcerptChanged'));
   };
@@ -1315,12 +1357,45 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     setAiReviewError(null);
     setAiReviewedContent('');
     api.get(`/api/papers/${selectedPaper.id}/sections/${selectedSectionId}/review`)
-      .then(response => {
-        if (aiReviewRequestRef.current !== requestId || response.status === 204) return;
-        const review = response.data;
-        setAiReviewResult(review);
-        setAiReviewedContent(codeContentRef.current);
-        fetchAiReviewSources(review, requestId);
+      .then(async response => {
+        if (aiReviewRequestRef.current !== requestId) return;
+        if (response.status !== 204) {
+          const review = response.data;
+          setAiReviewResult(review);
+          setAiReviewedContent(codeContentRef.current);
+          fetchAiReviewSources(review, requestId);
+          return;
+        }
+        // ponytail: refresh-while-running — the job outlives FE state, reattach
+        // to it instead of showing a blank panel until the next manual Run.
+        const storedJobId = readReviewJob(selectedSectionId);
+        if (!storedJobId) return;
+        try {
+          const { data: job } = await api.get(`/api/jobs/${storedJobId}`);
+          if (aiReviewRequestRef.current !== requestId) return;
+          if (job.status !== 'PENDING' && job.status !== 'PROCESSING') {
+            clearReviewJob(selectedSectionId);
+            return;
+          }
+          aiReviewJobRef.current = job.id;
+          setLoadingAiReview(true);
+          setAiReviewProgress({
+            current: Math.max(0, Number(job.progressCurrent) || 0),
+            total: Math.max(0, Number(job.progressTotal) || 0),
+          });
+          const shownFindings = { current: 0 };
+          const polled = await pollAiJob(
+            job.id,
+            () => aiReviewRequestRef.current !== requestId,
+            trackReviewProgress(requestId, shownFindings),
+          );
+          await finishReviewPoll(polled, requestId, codeContentRef.current);
+        } catch {
+          if (aiReviewRequestRef.current !== requestId) return;
+          clearReviewJob(selectedSectionId);
+          aiReviewJobRef.current = null;
+          setLoadingAiReview(false);
+        }
       })
       .catch(() => {
         if (aiReviewRequestRef.current === requestId) {
@@ -1443,7 +1518,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   const tourSteps = useMemo(() => [
     { element: '[data-tour="file-panel"]', popover: { title: t('tour.filePanel'), description: t('tour.filePanelDesc'), side: 'right' } },
     { element: '[data-tour="editor-toolbar"]', popover: { title: t('tour.editorToolbar'), description: t('saveSectionHelp'), side: 'bottom' } },
-    { element: '[data-tour="editor-ai-review"]', popover: { title: t('tour.aiReview'), description: t('citationReviewDescription'), side: 'bottom' } },
+    { element: '[data-tour="header-ai-review"]', popover: { title: t('tour.aiReview'), description: t('citationReviewDescription'), side: 'bottom' } },
     { element: '[data-tour="context-panel"]', popover: { title: t('tour.contextPanel'), description: t('tour.contextPanelDesc'), side: 'left' } },
   ], [t]);
   useEffect(() => {
@@ -1499,7 +1574,8 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     <div role="region" aria-label={t('feedbackProjectWorkspace')} className="h-screen w-full flex flex-col bg-(--surface-secondary) overflow-hidden font-sans antialiased text-(--text-primary)">
       <WorkspaceHeader workspaceMode={workspaceMode} project={project} navigate={navigate} onShowHistory={isReview ? undefined : () => setShowHistoryModal(true)} historyDisabled={assignedSections.length === 0}
         notifications={notifications} unreadCount={unreadCount} showNotifications={showNotifications} setShowNotifications={setShowNotifications} onMarkNotificationRead={handleMarkNotificationRead} onOpenNotification={handleOpenNotification}
-        showExportMenu={showExportMenu} setShowExportMenu={setShowExportMenu} handleExportTexArchive={handleExportTexArchive} handleExportTraceabilityJson={handleExportTraceabilityJson} handleExportTraceabilityCsv={handleExportTraceabilityCsv} tourSteps={isReview ? undefined : tourSteps} tourKey="student-workspace" />
+        showExportMenu={showExportMenu} setShowExportMenu={setShowExportMenu} handleExportTexArchive={handleExportTexArchive} handleExportTraceabilityJson={handleExportTraceabilityJson} handleExportTraceabilityCsv={handleExportTraceabilityCsv} tourSteps={isReview ? undefined : tourSteps} tourKey="student-workspace"
+        onRunCitationReview={isReview ? undefined : handleRunAiReview} canRunCitationReview={!isReview && !isLocked && Boolean(selectedPaper && selectedSectionId && canEditCurrentSection)} reviewBusy={loadingAiReview} reviewProgress={aiReviewProgress} reviewError={aiReviewError?.message} />
 
       {loadErrors.length > 0 && (
         <div className="flex items-center justify-between gap-4 px-4 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900 text-[11px] text-amber-900 dark:text-amber-200">
@@ -1520,9 +1596,9 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
           </button>
         </div>
 
-        <FilePanel compact={isCompactWorkspace} isOpen={isFileTreeOpen} width={fileTreeWidth} onResizeStart={handleLeftDividerMouseDown} sections={sections} assignedSections={assignedSections} selectedSectionId={selectedSectionId} onSelectSection={handleSelectSection} selectedPaper={selectedPaper} onSelectPaper={handleSelectPaper} onViewFullPaper={() => setShowFullPaperPreview(true)} papers={papers} onUploadPaper={isLocked || pendingDelete ? undefined : handleUploadPaper} onDeletePaper={isLocked ? undefined : handleDeletePaper} sources={sources} onUploadSource={isLocked ? undefined : handleUploadSource} onDeleteSource={isReview ? undefined : handleDeleteSource} mediaAssets={mediaAssets} onUploadMedia={isLocked ? undefined : handleUploadMedia} onDeleteMedia={isReview ? undefined : handleDeleteMedia} onInsertMedia={canEditCurrentSection ? handleInsertMedia : undefined} showToast={showToast} isLocked={isLocked} onSaveDraft={isReview ? undefined : handleSaveDraft} saveStatus={saveStatus} />
+        <FilePanel compact={isCompactWorkspace} isOpen={isFileTreeOpen} width={fileTreeWidth} onResizeStart={handleLeftDividerMouseDown} sections={sections} assignedSections={assignedSections} selectedSectionId={selectedSectionId} onSelectSection={handleSelectSection} selectedPaper={selectedPaper} onSelectPaper={handleSelectPaper} onViewFullPaper={() => setShowFullPaperPreview(true)} papers={papers} onUploadPaper={isLocked || pendingDelete ? undefined : handleUploadPaper} sources={sources} onUploadSource={isLocked ? undefined : handleUploadSource} onDeleteSource={isReview ? undefined : handleDeleteSource} mediaAssets={mediaAssets} onUploadMedia={isLocked ? undefined : handleUploadMedia} onDeleteMedia={isReview ? undefined : handleDeleteMedia} onInsertMedia={canEditCurrentSection ? handleInsertMedia : undefined} showToast={showToast} isLocked={isLocked} onSaveDraft={isReview ? undefined : handleSaveDraft} saveStatus={saveStatus} />
 
-        <EditorPanel onViewFullPaper={() => setShowFullPaperPreview(true)} review={isReview ? review : null} compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={isReview ? undefined : handleSaveDraft} insertLatexTag={isReview ? undefined : insertLatexTag} insertSymbol={isReview ? undefined : insertSymbol} handleFindReplace={isReview ? undefined : handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} isLocked={isLocked} findings={editorFindings} onFindingClick={handleFindingClick} onOpenSourceMap={openSourceMap} onRunCitationReview={handleRunAiReview} onOpenCitationReview={handleOpenCitationReview} reviewBusy={loadingAiReview} reviewProgress={aiReviewProgress} reviewFindingsCount={(aiReviewResult?.findings || []).length} reviewError={aiReviewError?.message} onEditorUserScroll={closeReviewOverlay} isReviewVisible={isReviewVisible} onToggleReviewVisible={toggleReviewVisible} citationIndex={citationIndex}
+        <EditorPanel onViewFullPaper={() => setShowFullPaperPreview(true)} review={isReview ? review : null} compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={isReview ? undefined : handleSaveDraft} insertLatexTag={isReview ? undefined : insertLatexTag} insertSymbol={isReview ? undefined : insertSymbol} handleFindReplace={isReview ? undefined : handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} isLocked={isLocked} findings={editorFindings} onFindingClick={handleFindingClick} onOpenSourceMap={openSourceMap} onRunCitationReview={handleRunAiReview} onOpenCitationReview={handleOpenCitationReview} reviewBusy={loadingAiReview} reviewProgress={aiReviewProgress} reviewFindingsCount={(aiReviewResult?.findings || []).length} reviewError={aiReviewError?.message} onEditorUserScroll={handleReviewScrollClose} isReviewVisible={isReviewVisible} onToggleReviewVisible={toggleReviewVisible} citationIndex={citationIndex}
           feedback={isReview ? undefined : feedback} feedbackOpen={feedbackOpen} setFeedbackOpen={setFeedbackOpen} activeFeedbackId={activeFeedbackId} onSelectFeedback={isReview ? item => { review.selectFeedback(item); setActiveTab('Review'); setIsDrawerOpen(true); if (isCompactWorkspace) setIsFileTreeOpen(false); } : handleSelectFeedback}
           feedbackRequestId={feedbackRequestId} setFeedbackRequestId={setFeedbackRequestId} feedbackScope={feedbackScope} setFeedbackScope={setFeedbackScope} paperReferences={paperReferences} />
 

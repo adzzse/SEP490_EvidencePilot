@@ -502,6 +502,48 @@ public class DocumentServiceImpl implements DocumentService {
 
         projectCollectionService.pinSource(project, doc, collection, currentUser);
 
+        return shareResult(doc, project);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> shareLibrarySourceToProject(UUID sourceId, UUID projectId) {
+        var currentUser = currentUserService.requireCurrentUser();
+
+        Document doc = findDocument(sourceId);
+        if (doc.getDocType() != DocumentType.SOURCE || !doc.isActive()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Source not found or inactive");
+        }
+        requireDocumentAccess(currentUser, doc);
+        ProcessingStatus status = doc.getProcessingStatus();
+        if (status != ProcessingStatus.READY && status != ProcessingStatus.COMPLETED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Source is not ready to share (current status: " + status + "); only READY or COMPLETED sources can be shared");
+        }
+
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException(projectId, "Project"));
+        currentUserService.requireProjectWriteAccess(currentUser, project);
+
+        // Preserve collection link when the library source belongs to a collection so the
+        // Collection tab keeps showing it checked via projectIds; standalone docs pin with null link.
+        Collection sourceCollection = null;
+        if (doc.getCollection() != null && doc.getCollection().isActive()) {
+            sourceCollection = doc.getCollection();
+        } else {
+            sourceCollection = collectionDocumentRepository.findByDocumentId(doc.getId()).stream()
+                    .map(CollectionDocument::getCollection)
+                    .filter(Collection::isActive)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        projectCollectionService.pinSource(project, doc, sourceCollection, currentUser);
+
+        return shareResult(doc, project);
+    }
+
+    private Map<String, Object> shareResult(Document doc, Project project) {
         String score = "MEDIUM";
         String explanation = "Document shared to project \"" + project.getTitle() + "\"";
         List<String> matchedTerms = new ArrayList<>();
@@ -788,36 +830,88 @@ public class DocumentServiceImpl implements DocumentService {
                 .orElseThrow(() -> new ResourceNotFoundException(id, "Document"));
     }
 
+    // ponytail: try every project avenue before denying — a doc owned by project P1
+    // but shared to project P2 must open for P2 members (the list endpoints already
+    // assume that grant). Only membership (403) denials fall through; project-state
+    // errors (read-only/locked) are authoritative. First denial is rethrown so
+    // strangers see the same message as before.
     private void requireDocumentAccess(User currentUser, Document doc) {
+        List<Project> candidates = new ArrayList<>();
         if (doc.getProject() != null) {
-            currentUserService.requireProjectAccess(currentUser, doc.getProject());
-            return;
+            candidates.add(doc.getProject());
         }
-        List<ProjectDocument> projectLinks = projectDocumentRepository.findByDocumentId(doc.getId());
-        if (!projectLinks.isEmpty()) {
-            for (ProjectDocument pd : projectLinks) {
-                try {
-                    currentUserService.requireProjectAccess(currentUser, pd.getProject());
-                    return;
-                } catch (ResponseStatusException e) {
-                    continue;
+        for (ProjectDocument pd : projectDocumentRepository.findByDocumentId(doc.getId())) {
+            if (pd.getProject() != null && !candidates.contains(pd.getProject())) {
+                candidates.add(pd.getProject());
+            }
+        }
+        ResponseStatusException denial = null;
+        for (Project project : candidates) {
+            try {
+                currentUserService.requireProjectAccess(currentUser, project);
+                return;
+            } catch (ResponseStatusException e) {
+                if (e.getStatusCode().value() != 403) {
+                    throw e;
+                }
+                if (denial == null) {
+                    denial = e;
                 }
             }
+        }
+        if (!candidates.isEmpty()) {
+            throw denial;
         }
         if (doc.getCollection() != null) {
             currentUserService.requireCollectionAccess(currentUser, doc.getCollection());
             return;
         }
-        currentUserService.requireUserIdOrAdmin(currentUser, doc.getUploadedBy().getId());
+        if (doc.getUploadedBy() != null) {
+            currentUserService.requireUserIdOrAdmin(currentUser, doc.getUploadedBy().getId());
+            return;
+        }
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Project access denied");
     }
 
+    // ponytail: same trap as read — a P2 leader must be able to act on a doc
+    // owned by P1 but shared to P2. Collection/owner branches keep their rules.
     private void requireDocumentWriteAccess(User currentUser, Document doc) {
+        List<Project> candidates = new ArrayList<>();
         if (doc.getProject() != null) {
-            currentUserService.requireProjectWriteAccess(currentUser, doc.getProject());
-        } else if (doc.getCollection() != null) {
-            currentUserService.requireCollectionAccess(currentUser, doc.getCollection());
-        } else {
-            currentUserService.requireUserIdOrAdmin(currentUser, doc.getUploadedBy().getId());
+            candidates.add(doc.getProject());
+        }
+        for (ProjectDocument link : projectDocumentRepository.findByDocumentId(doc.getId())) {
+            if (link.getProject() != null && !candidates.contains(link.getProject())) {
+                candidates.add(link.getProject());
+            }
+        }
+        ResponseStatusException denial = null;
+        boolean granted = false;
+        for (Project project : candidates) {
+            try {
+                currentUserService.requireProjectWriteAccess(currentUser, project);
+                granted = true;
+                break;
+            } catch (ResponseStatusException e) {
+                if (e.getStatusCode().value() != 403) {
+                    throw e;
+                }
+                if (denial == null) {
+                    denial = e;
+                }
+            }
+        }
+        if (!granted) {
+            if (!candidates.isEmpty()) {
+                throw denial;
+            }
+            if (doc.getCollection() != null) {
+                currentUserService.requireCollectionAccess(currentUser, doc.getCollection());
+            } else if (doc.getUploadedBy() != null) {
+                currentUserService.requireUserIdOrAdmin(currentUser, doc.getUploadedBy().getId());
+            } else {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Project access denied");
+            }
         }
         for (ProjectDocument link : projectDocumentRepository.findByDocumentId(doc.getId())) {
             ProjectStatus status = link.getProject().getStatus();

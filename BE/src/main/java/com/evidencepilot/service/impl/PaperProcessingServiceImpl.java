@@ -716,10 +716,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         }
     }
 
-    private static int wordCount(String content) {
-        return words(content).length;
-    }
-
     private void recordContentEdit(Project project, PaperSection section, User editor,
             String beforeContent, String afterContent) {
         if (project == null || Objects.equals(beforeContent, afterContent)) return;

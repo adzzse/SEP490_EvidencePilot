@@ -383,6 +383,9 @@ class OpenAlexIngestionServiceImplTest {
     void tcTrc0201_getCitationGraphIncludesFailedDocumentsAndBothEdgeTypes() {
         Collection collection = collection();
         Document successful = citationDocument(collection, ProcessingStatus.UPLOADED);
+        successful.setTitle("Complete paper title");
+        successful.setPublicationYear(2024);
+        successful.setCitedByCount(58);
         Document failed = citationDocument(collection, ProcessingStatus.FAILED);
         allowCitationGraph(collection);
         when(documentRepository.findByCollectionId(collection.getId()))
@@ -404,6 +407,14 @@ class OpenAlexIngestionServiceImplTest {
                 .filteredOn(node -> node.inCollection())
                 .extracting(node -> node.id())
                 .containsExactlyInAnyOrder(successful.getId().toString(), failed.getId().toString());
+        assertThat(result.nodes())
+                .filteredOn(node -> node.id().equals(successful.getId().toString()))
+                .singleElement().satisfies(node -> {
+                    assertThat(node.title()).isEqualTo("Complete paper title");
+                    assertThat(node.doi()).isEqualTo(successful.getDoi());
+                    assertThat(node.publicationYear()).isEqualTo(2024);
+                    assertThat(node.citedByCount()).isEqualTo(58);
+                });
         assertThat(result.edges())
                 .extracting(edge -> edge.type())
                 .containsExactlyInAnyOrder(EdgeType.REFERENCES.name(), EdgeType.CITED_BY.name());

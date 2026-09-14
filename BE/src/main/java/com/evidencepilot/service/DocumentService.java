@@ -56,6 +56,7 @@ public interface DocumentService {
 
     DocumentResponse attachFileToDocument(UUID documentId, MultipartFile file);
     Map<String, Object> shareToProject(UUID collectionId, UUID sourceId, UUID projectId);
+    Map<String, Object> shareLibrarySourceToProject(UUID sourceId, UUID projectId);
     void removeSharedDocument(UUID projectId, UUID sourceId);
     List<DocumentChunkResponse> getDocumentChunks(UUID documentId);
     DocumentTextResponse getDocumentText(UUID documentId);

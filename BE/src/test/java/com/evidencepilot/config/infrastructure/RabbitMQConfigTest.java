@@ -73,14 +73,67 @@ class RabbitMQConfigTest {
     }
 
     @Test
-    void exportAndEvaluationListenersStayOnSharedDefaults() {
-        var factories = Arrays.stream(new Class<?>[] {ExportListener.class, AiEvaluationListener.class})
-                .flatMap(type -> Arrays.stream(type.getDeclaredMethods()))
+    void exportListenerStaysOnSharedDefaults() {
+        var factories = Arrays.stream(ExportListener.class.getDeclaredMethods())
                 .filter(method -> method.isAnnotationPresent(RabbitListener.class))
                 .map(method -> method.getAnnotation(RabbitListener.class).containerFactory())
                 .toList();
 
         assertThat(factories).isNotEmpty();
         assertThat(factories).allMatch(String::isBlank);
+    }
+
+    @Test
+    void evaluationListenerUsesDedicatedFactory() throws Exception {
+        RabbitListener handle = AiEvaluationListener.class
+                .getMethod("handle", java.util.Map.class)
+                .getAnnotation(RabbitListener.class);
+        RabbitListener deadLetter = AiEvaluationListener.class
+                .getMethod("handleDeadLetter", java.util.Map.class)
+                .getAnnotation(RabbitListener.class);
+
+        assertThat(handle.queues()).containsExactly(RabbitMQConfig.AI_EVALUATION_QUEUE);
+        assertThat(handle.containerFactory()).isEqualTo("aiEvaluationListenerContainerFactory");
+        assertThat(deadLetter.queues()).containsExactly(RabbitMQConfig.AI_EVALUATION_DLQ);
+        assertThat(deadLetter.containerFactory()).isBlank();
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void evaluationFactoryCapsElasticConcurrency() {
+        var properties = new RabbitProperties();
+        properties.getListener().getSimple().setPrefetch(2);
+        properties.getListener().getSimple().getRetry().setEnabled(true);
+        var provider = (org.springframework.beans.factory.ObjectProvider) mock(
+                org.springframework.beans.factory.ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(
+                mock(org.springframework.amqp.rabbit.connection.ConnectionFactory.class));
+        var propertiesProvider = (org.springframework.beans.factory.ObjectProvider) mock(
+                org.springframework.beans.factory.ObjectProvider.class);
+        when(propertiesProvider.getIfAvailable(any())).thenReturn(properties);
+        var factory = new RabbitMQConfig().aiEvaluationListenerContainerFactory(
+                provider,
+                new Jackson2JsonMessageConverter(),
+                propertiesProvider,
+                2);
+
+        assertThat(ReflectionTestUtils.getField(factory, "concurrentConsumers")).isEqualTo(1);
+        assertThat(ReflectionTestUtils.getField(factory, "maxConcurrentConsumers")).isEqualTo(2);
+        Object[] adviceChain = (Object[]) ReflectionTestUtils.getField(factory, "adviceChain");
+        assertThat(adviceChain).hasSize(1);
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void evaluationFactoryAbsentWithoutBroker() {
+        var provider = (org.springframework.beans.factory.ObjectProvider) mock(
+                org.springframework.beans.factory.ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(null);
+
+        assertThat(new RabbitMQConfig().aiEvaluationListenerContainerFactory(
+                provider,
+                new Jackson2JsonMessageConverter(),
+                mock(org.springframework.beans.factory.ObjectProvider.class),
+                2)).isNull();
     }
 }

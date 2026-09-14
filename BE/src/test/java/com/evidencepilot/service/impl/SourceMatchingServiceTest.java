@@ -17,7 +17,6 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -95,10 +94,9 @@ class SourceMatchingServiceTest {
                                 allowedChunk.getId().toString(), new BigDecimal("0.95")),
                         new QdrantSearchResult(
                                 foreignChunk.getId().toString(), new BigDecimal("0.94"))));
-        when(documentChunkRepository.findByIdWithDocument(allowedChunk.getId()))
-                .thenReturn(Optional.of(allowedChunk));
-        when(documentChunkRepository.findByIdWithDocument(foreignChunk.getId()))
-                .thenReturn(Optional.of(foreignChunk));
+        when(documentChunkRepository.findAllById(
+                List.of(allowedChunk.getId(), foreignChunk.getId())))
+                .thenReturn(List.of(allowedChunk, foreignChunk));
 
         List<List<SourceMatchingService.SourceMatch>> result =
                 service().search(paperId, excerpts, 20);

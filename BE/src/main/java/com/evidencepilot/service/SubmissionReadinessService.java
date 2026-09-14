@@ -127,12 +127,6 @@ public class SubmissionReadinessService {
 
     public Assessment requireReadyForSubmit(
             Project project, User currentUser, String expectedSubmissionFingerprint) {
-        return requireReadyForSubmit(project, currentUser, expectedSubmissionFingerprint, false);
-    }
-
-    public Assessment requireReadyForSubmit(
-            Project project, User currentUser, String expectedSubmissionFingerprint,
-            boolean bypassSectionConfirmation) {
         Assessment assessment = assess(project, currentUser);
         if (!assessment.response().canSubmit()) {
             throw new ResponseStatusException(
@@ -145,9 +139,7 @@ public class SubmissionReadinessService {
                     "REVISION_BASELINE_UNAVAILABLE", "The returned submission snapshot is unavailable.");
             default -> { }
         }
-        // ponytail: CF-TEST-BYPASS — remove this Leader-only confirmation bypass before final acceptance.
         boolean ready = assessment.response().checks().stream()
-                .filter(check -> !bypassSectionConfirmation || !"SECTION_CONFIRMED".equals(check.code()))
                 .allMatch(check -> "SATISFIED".equals(check.status()));
         if (!ready) {
             throw new SubmissionReadinessException(

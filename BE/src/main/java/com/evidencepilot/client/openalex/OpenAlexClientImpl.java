@@ -42,7 +42,7 @@ public class OpenAlexClientImpl implements OpenAlexClient {
 
     OpenAlexClientImpl(RestClient restClient, String baseUrl, String apiKey, HttpClient httpClient, ObjectMapper objectMapper) {
         this.restClient = restClient;
-        this.baseUrl = trimTrailingSlash(baseUrl);
+        this.baseUrl = baseUrl == null || baseUrl.isBlank() ? "" : baseUrl.trim().replaceFirst("/+$", "");
         this.apiKey = apiKey;
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
@@ -221,12 +221,4 @@ public class OpenAlexClientImpl implements OpenAlexClient {
         }
     }
 
-    private static String trimTrailingSlash(String url) {
-        if (url == null || url.isBlank()) return "";
-        String normalized = url.trim();
-        while (normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
-    }
 }
