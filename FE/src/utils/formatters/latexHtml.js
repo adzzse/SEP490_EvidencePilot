@@ -1,4 +1,5 @@
 import katex from 'katex';
+import { blockOverlapsRanges } from '../instructor/wordDiff.js';
 
 function escHtml(s) {
   if (!s) return '';
@@ -150,6 +151,58 @@ function renderTable(blockSrc, mediaUrlMap, citationNumbers) {
 
 function attrs(b) {
   return ` data-src-start="${b.start}" data-src-end="${b.end}"`;
+}
+
+function visibleSource(text) {
+  return escHtml(String(text || '')
+    .replace(/\\(?:textbf|textit|hl|(?:sub){0,2}section)\*?\s*\{/g, '')
+    .replace(/[{}]/g, '')
+    .replace(/\\(?:label|cite|includegraphics)(?:\[[^\]]*\])?\{[^}]*\}/g, '')
+    .replace(/\\[a-z]+\b/g, ''));
+}
+
+/** Keep source-offset changes on the rendered words, including \textbf{...}. */
+export function applyChangeHighlights(html, changeRanges, source = '') {
+  if (!html || !(changeRanges || []).length || !source) return html || '';
+  return String(html).replace(
+    /(<(h[2-4]|p|div)[^>]*data-src-start="(\d+)"[^>]*data-src-end="(\d+)"[^>]*>)([\s\S]*?)(<\/\2>)/gi,
+    (whole, open, tag, startText, endText, body, close) => {
+      const start = Number(startText), end = Number(endText);
+      if (!blockOverlapsRanges(start, end, changeRanges)) return whole;
+      const pieces = body.split(/(<[^>]+>)/g);
+      const textParts = [];
+      let plain = '';
+      pieces.forEach((piece, index) => {
+        if (piece.startsWith('<')) return;
+        textParts.push({ index, start: plain.length, end: plain.length + piece.length, marks: [] });
+        plain += piece;
+      });
+      let fallback = false;
+      for (const range of changeRanges) {
+        if (!blockOverlapsRanges(start, end, [range])) continue;
+        const needle = visibleSource(source.slice(Math.max(start, range.sourceStart), Math.min(end, range.sourceEnd))).trim();
+        if (!needle) continue;
+        const expected = visibleSource(source.slice(start, Math.max(start, range.sourceStart))).length;
+        let candidate = plain.indexOf(needle), closest = -1;
+        for (; candidate >= 0; candidate = plain.indexOf(needle, candidate + 1)) {
+          if (closest < 0 || Math.abs(candidate - expected) < Math.abs(closest - expected)) closest = candidate;
+        }
+        if (closest < 0) { fallback = true; continue; } // KaTeX/table markup has no character-level source map.
+        for (const part of textParts) {
+          const from = Math.max(part.start, closest), to = Math.min(part.end, closest + needle.length);
+          if (from < to) part.marks.push([from - part.start, to - part.start]);
+        }
+      }
+      for (const part of textParts) {
+        for (const [from, to] of part.marks.sort((a, b) => b[0] - a[0])) {
+          const piece = pieces[part.index];
+          pieces[part.index] = `${piece.slice(0, from)}<span class="preview-change-added">${piece.slice(from, to)}</span>${piece.slice(to)}`;
+        }
+      }
+      if (fallback && !textParts.some(p => p.marks.length)) open = open.replace(/class="/, 'class="preview-change-added ');
+      return `${open}${pieces.join('')}${close}`;
+    },
+  );
 }
 
 /**

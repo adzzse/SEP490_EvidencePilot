@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import LatexEditor from '../features/LatexEditor';
 import FeedbackPanel from './FeedbackPanel.jsx';
 import PreviewPane from '../features/PreviewPane';
+import InstructorFeedbackPanel from '../Instructor/InstructorFeedbackPanel.jsx';
 import { buildCitationNumbers, buildReferenceEntries } from '../../utils/paperReferences.js';
 import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
 import { useTranslation } from 'react-i18next';
@@ -57,6 +58,40 @@ export default function EditorPanel({
   const [availableWidth, setAvailableWidth] = useState(0);
   const [keepPreview, setKeepPreview] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  // ponytail: single-panel sync scroll — toggling modes maps the proportional
+  // position (fraction scrolled) between LaTeX source and rendered preview,
+  // whose heights differ, instead of syncing two visible panes.
+  const scrollFractionRef = useRef({ editor: 0, preview: 0 });
+  const pendingRestoreRef = useRef(null);
+  const switchReviewMode = useCallback((toPreview) => {
+    if (toPreview === showPreview) return;
+    if (showPreview) {
+      const el = previewPaneRef.current;
+      if (el && el.scrollHeight > el.clientHeight) scrollFractionRef.current.preview = el.scrollTop / (el.scrollHeight - el.clientHeight);
+    } else {
+      const info = editorRef.current?.getScrollInfo?.();
+      if (info && info.height > info.clientHeight) scrollFractionRef.current.editor = info.top / (info.height - info.clientHeight);
+    }
+    pendingRestoreRef.current = toPreview;
+    setShowPreview(toPreview);
+  }, [showPreview, editorRef]);
+  useEffect(() => {
+    if (pendingRestoreRef.current == null) return;
+    const toPreview = pendingRestoreRef.current;
+    pendingRestoreRef.current = null;
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (toPreview) {
+          const el = previewPaneRef.current;
+          if (el) el.scrollTop = scrollFractionRef.current.editor * (el.scrollHeight - el.clientHeight);
+        } else {
+          const info = editorRef.current?.getScrollInfo?.();
+          if (info) editorRef.current?.scrollTo?.(scrollFractionRef.current.preview * (info.height - info.clientHeight));
+        }
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [showPreview, editorRef]);
   const [positions, setPositions] = useState([]);
   const [overlapIds, setOverlapIds] = useState([]);
   const measureFrameRef = useRef(null);
@@ -64,7 +99,7 @@ export default function EditorPanel({
   const canShowThree = availableWidth >= 1240;
   const threePanes = feedbackOpen && keepPreview && canShowThree && !narrow;
   const previewVisible = (narrow ? showPreview : true) && (!feedbackOpen || threePanes);
-  useEffect(() => { setShowPreview(false); }, [selectedSectionId, review?.activeFeedbackId]);
+  useEffect(() => { scrollFractionRef.current = { editor: 0, preview: 0 }; pendingRestoreRef.current = null; setShowPreview(false); }, [selectedSectionId, review?.activeFeedbackId]);
   useEffect(() => { if (feedbackOpen) setShowPreview(false); }, [feedbackOpen]);
   const sectionFeedback = useMemo(() => (review?.feedbackItems || feedback?.items || []).filter(item => String(item.sectionId) === String(selectedSectionId)), [review?.feedbackItems, feedback?.items, selectedSectionId]);
   const measureFeedback = useCallback(() => {
@@ -153,17 +188,13 @@ export default function EditorPanel({
 
   return (
     <div ref={containerRef} id="editor-preview-container" role={review ? 'region' : undefined} aria-label={review ? review.viewMode === 'working' ? t('instructor.review.workingCopy') : t('feedbackSubmittedPaper') : undefined} className="flex-1 min-w-0 flex flex-col overflow-hidden bg-(--surface-tertiary)/50 p-2 gap-2">
-      {review && <div className="shrink-0 space-y-2 text-xs">
-        <div className="inline-flex flex-wrap rounded-lg border border-(--border) bg-(--surface) p-0.5">
-          {[['submitted', t('instructor.review.submittedVersion')], ['working', t('instructor.review.workingCopy')]].map(([mode, label]) => <button key={mode} type="button" aria-pressed={review.viewMode === mode} onClick={() => review.setViewMode(mode)} className={`rounded-md px-3 py-1.5 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${review.viewMode === mode ? 'bg-(--brand-soft) text-(--brand-foreground)' : 'text-(--text-secondary) hover:bg-(--surface-secondary)'}`}>{label}</button>)}
-        </div>
-        <p className="text-[11px] text-(--text-secondary)">{review.viewMode === 'working' ? t('instructor.review.workingCopyLabel') : t('instructor.review.submittedVersionLabel')}</p>
-        {review.viewMode === 'submitted' && review.snapshotState === 'LOADING' && <p role="status">{t('loading')}</p>}
-        {review.viewMode === 'submitted' && review.snapshotState === 'LEGACY_NO_SNAPSHOT' && <p role="alert">{t('instructor.review.legacySnapshotNotice')}</p>}
-        {review.viewMode === 'submitted' && review.snapshotState === 'LOAD_ERROR' && <p role="alert">{t('instructor.review.snapshotLoadError')} <button type="button" onClick={() => review.setSnapshotRetry(value => value + 1)}>{t('retry')}</button></p>}
+      {review && review.viewMode === 'submitted' && (review.snapshotState === 'LOADING' || review.snapshotState === 'LEGACY_NO_SNAPSHOT' || review.snapshotState === 'LOAD_ERROR') && <div className="shrink-0 text-xs">
+        {review.snapshotState === 'LOADING' && <p role="status">{t('loading')}</p>}
+        {review.snapshotState === 'LEGACY_NO_SNAPSHOT' && <p role="alert">{t('instructor.review.legacySnapshotNotice')}</p>}
+        {review.snapshotState === 'LOAD_ERROR' && <p role="alert">{t('instructor.review.snapshotLoadError')} <button type="button" onClick={() => review.setSnapshotRetry(value => value + 1)}>{t('retry')}</button></p>}
       </div>}
       <div className={`flex-1 min-h-0 min-w-0 flex gap-2 ${narrow ? 'flex-col' : ''}`}>
-      <div style={{ flex: narrow ? '1 1 0' : threePanes ? '1 1 480px' : `${editorWidth} 1 0` }} className={`bg-(--surface) rounded-lg shadow-sm border border-(--border) ${narrow && previewVisible ? 'hidden' : 'flex'} flex-col overflow-hidden min-w-0 min-h-0`}>
+      <div style={{ flex: narrow ? '1 1 0' : threePanes ? '1 1 480px' : `${editorWidth} 1 0` }} className={`bg-(--surface) rounded-lg shadow-sm border border-(--border) ${(narrow && previewVisible) || (review && showPreview) ? 'hidden' : 'flex'} flex-col overflow-hidden min-w-0 min-h-0`}>
         <div data-tour="editor-toolbar" className="h-10 border-b border-(--border-light) flex items-center justify-between px-3 bg-(--surface) shadow-sm shrink-0 z-10">
           <div className="flex items-center gap-2 truncate">
             <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded tracking-wide font-mono">{t('student.workspace.latexLabel')}</span>
@@ -171,6 +202,18 @@ export default function EditorPanel({
             {currentSection && <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1 py-0.5 rounded shrink-0">v{currentSection.version || 1}</span>}
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
+            {review && (
+              <>
+                <button type="button" onClick={() => review.setDiffEnabled(!review.diffEnabled)} aria-pressed={review.diffEnabled} title={t('instructor.review.showChanges')}
+                  className={`shrink-0 rounded-md border border-(--border) px-2.5 py-1 text-[11px] font-bold focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors ${review.diffEnabled ? 'bg-(--brand-soft) text-(--brand-foreground)' : 'bg-(--surface-tertiary) text-(--text-primary) hover:bg-(--border)'}`}>
+                  {t('instructor.review.showChanges')}
+                </button>
+                <button type="button" onClick={() => switchReviewMode(!showPreview)} aria-pressed={showPreview}
+                className="shrink-0 rounded-md border border-(--border) bg-(--surface-tertiary) px-2.5 py-1 text-[11px] font-bold text-(--text-primary) hover:bg-(--border) focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors">
+                {showPreview ? t('student.workspace.latexLabel') : t('preview')}
+                </button>
+              </>
+            )}
             {reviewError && (
               <span className="hidden md:inline max-w-[180px] truncate text-[10px] font-semibold text-rose-600" title={reviewError}>{reviewError}</span>
             )}
@@ -209,14 +252,14 @@ export default function EditorPanel({
                 </button>
               </>
             )}
-            <div className="flex rounded-lg border border-(--border) bg-(--surface-tertiary) p-0.5 shrink-0 text-[11px]" aria-label={t('studentFeedback.view')}>
+            {!review && <div className="flex rounded-lg border border-(--border) bg-(--surface-tertiary) p-0.5 shrink-0 text-[11px]" aria-label={t('studentFeedback.view')}>
               {narrow && <button type="button" aria-pressed={!showPreview} onClick={() => setShowPreview(false)} className={`rounded-md px-2 py-1 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${!showPreview ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-secondary)'}`}>{t('student.workspace.latexLabel')}</button>}
               <button type="button" aria-pressed={previewVisible} onClick={() => { setFeedbackOpen?.(false); setShowPreview(true); }} className={`rounded-md px-2 py-1 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${previewVisible ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-secondary)'}`}>{t('preview')}</button>
               {!review && <button type="button" data-tour="editor-feedback" aria-expanded={feedbackOpen} aria-controls="student-feedback-panel" onClick={() => setFeedbackOpen?.(!feedbackOpen)}
                 className={`rounded-md px-2 py-1 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${feedbackOpen ? 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300' : 'text-(--text-secondary)'}`}>
                 {t('studentFeedback.title')}{feedback?.items.length ? ` (${feedback.items.length})` : ''}
               </button>}
-            </div>
+            </div>}
             {feedbackOpen && canShowThree && !narrow && <label className="hidden xl:flex items-center gap-1.5 text-[11px] text-(--text-secondary) shrink-0"><input type="checkbox" checked={keepPreview} onChange={event => setKeepPreview(event.target.checked)} />{t('studentFeedback.keepPreview')}</label>}
             {!review && <span className="inline-flex" title={saveTitle}>
               <button onClick={handleSaveDraft} disabled={saveStatus === 'saving' || !isOwnSection || isLocked} className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-50 ${saveStatus === 'saving' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30' : saveStatus === 'saved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30' : saveStatus === 'error' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30' : 'bg-(--surface-tertiary) text-(--text-secondary) hover:bg-(--border)'}`}>
@@ -323,10 +366,10 @@ export default function EditorPanel({
         <div className="flex-1 min-h-0 overflow-hidden">
           <LatexEditor key={review ? `${review.viewMode}-${review.activeRequestId}-${selectedSectionId}` : selectedSectionId || 'no-section'} ref={editorRef} content={displayContent} savedContent={currentSection?.contentTex || ''} savedVersion={currentSection?.version}
             feedbackItems={sectionFeedback} activeFeedbackId={review?.activeFeedbackId || activeFeedbackId} feedbackVisible={Boolean(review) || feedbackOpen} onFeedbackClick={handleFeedbackClick} onFeedbackChange={measureFeedback}
-            onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} mediaAssets={mediaAssets} />
+            onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} mediaAssets={mediaAssets} changeRanges={review?.changeRanges || []} />
         </div>
       </div>
-      <div onMouseDown={onEditorResizeStart} className={`${narrow || threePanes ? 'hidden' : 'flex'} w-1.5 hover:bg-indigo-500 cursor-col-resize self-stretch transition-all shrink-0 z-10 relative group items-center justify-center border-l border-r border-(--border)`} title={t('dragToResize')}>
+      <div onMouseDown={onEditorResizeStart} className={`${review || narrow || threePanes ? 'hidden' : 'flex'} w-1.5 hover:bg-indigo-500 cursor-col-resize self-stretch transition-all shrink-0 z-10 relative group items-center justify-center border-l border-r border-(--border)`} title={t('dragToResize')}>
         <div className="h-6 w-0.5 bg-(--border) group-hover:bg-indigo-500 rounded"></div>
       </div>
       {feedback && <div id="student-feedback-panel" hidden={!feedbackOpen} style={{ flex: narrow ? '0 0 44%' : threePanes ? '0 0 320px' : `${100 - editorWidth} 1 0` }}
@@ -334,21 +377,27 @@ export default function EditorPanel({
         <FeedbackPanel feedback={feedback} sectionId={selectedSectionId} activeId={activeFeedbackId} onSelect={onSelectFeedback} onClose={closeFeedback} visible={feedbackOpen}
           positions={positions} narrow={narrow} requestId={feedbackRequestId} setRequestId={setFeedbackRequestId} scope={feedbackScope} setScope={setFeedbackScope} overlapIds={overlapIds} />
       </div>}
-      <div style={{ flex: threePanes ? '1 1 400px' : `${100 - editorWidth} 1 0` }} className={`${previewVisible ? 'flex' : 'hidden'} min-w-0 min-h-0 bg-(--surface) rounded-xl shadow-sm border border-(--border) flex-col overflow-hidden`}>
+      <div style={{ flex: review ? '1 1 0' : threePanes ? '1 1 400px' : `${100 - editorWidth} 1 0` }} className={`${(!review && previewVisible) || (review && showPreview) ? 'flex' : 'hidden'} min-w-0 min-h-0 bg-(--surface) rounded-xl shadow-sm border border-(--border) flex-col overflow-hidden`}>
         <div className="h-11 border-b border-(--border-light) flex items-center justify-between px-4 bg-(--surface)">
           <div className="flex items-center gap-2 text-sm font-bold text-(--text-primary)">
             <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
             {t('preview')}
           </div>
           <div className="flex items-center gap-1">
-            {selectedPaper && onViewFullPaper && (
+            {review && showPreview && (
+              <button type="button" onClick={() => switchReviewMode(false)}
+                className="rounded-md border border-(--border) bg-(--surface-tertiary) px-2.5 py-1 text-[11px] font-bold text-(--text-primary) hover:bg-(--border) focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors">
+                {t('student.workspace.latexLabel')}
+              </button>
+            )}
+            {!review && selectedPaper && onViewFullPaper && (
               <button type="button" onClick={onViewFullPaper} className="w-7 h-7 flex items-center justify-center rounded transition-colors hover:bg-(--surface-secondary) text-(--text-secondary) hover:text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)" title={t('viewFullPaper')} aria-label={t('viewFullPaper')}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
               </button>
             )}
-            <button type="button" onClick={onOpenSourceMap} className="w-7 h-7 flex items-center justify-center rounded transition-colors hover:bg-(--surface-secondary) text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)" title={t('sourceMap.title')} aria-label={t('sourceMap.title')} aria-haspopup="dialog">
+            {!review && <button type="button" onClick={onOpenSourceMap} className="w-7 h-7 flex items-center justify-center rounded transition-colors hover:bg-(--surface-secondary) text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)" title={t('sourceMap.title')} aria-label={t('sourceMap.title')} aria-haspopup="dialog">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m7 7 10 10M7 17 17 7M7 7h10v10H7z" /><circle cx="7" cy="7" r="2" /><circle cx="17" cy="7" r="2" /><circle cx="7" cy="17" r="2" /><circle cx="17" cy="17" r="2" /></svg>
-            </button>
+            </button>}
             <button onClick={() => setPreviewZoom(p => Math.min(200, p + 10))} className="text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary) px-1.5 py-0.5 rounded transition-colors">+</button>
             <span className="text-xs font-mono text-(--text-primary) min-w-[36px] text-center">{previewZoom}%</span>
             <button onClick={() => setPreviewZoom(p => Math.max(50, p - 10))} className="text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary) px-1.5 py-0.5 rounded transition-colors">−</button>
@@ -365,9 +414,15 @@ export default function EditorPanel({
             generatedReferences={generatedReferences}
             citationNumbers={citationNumbers}
             referencesTitle={currentSection?.sectionTitle || t('references')}
+            changeRanges={review?.changeRanges || []}
           />
         </div>
       </div>
+      {review && (
+        <div className="w-[340px] xl:w-[380px] max-w-full shrink-0 min-h-0 overflow-y-auto overflow-x-hidden rounded-xl border border-(--border) bg-(--surface) shadow-sm p-2">
+          <InstructorFeedbackPanel review={review} selectedSection={currentSection} onSelectFeedback={onSelectFeedback} />
+        </div>
+      )}
       </div>
     </div>
   );

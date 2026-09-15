@@ -15,10 +15,12 @@ import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
+import com.evidencepilot.repository.CitationReviewRoundRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
+import com.evidencepilot.repository.SectionStandardEvaluationRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,6 +47,8 @@ class SubmissionReadinessServiceTest {
     @Mock private PaperSectionRepository paperSectionRepository;
     @Mock private FeedbackRequestRepository feedbackRequestRepository;
     @Mock private SectionStandardService sectionStandardService;
+    @Mock private SectionStandardEvaluationRepository evaluationRepository;
+    @Mock private CitationReviewRoundRepository roundRepository;
     @Mock private CurrentUserServiceImpl currentUserService;
 
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
@@ -55,6 +59,7 @@ class SubmissionReadinessServiceTest {
         service = new SubmissionReadinessService(
                 projectRepository, documentRepository, paperSectionRepository,
                 feedbackRequestRepository, sectionStandardService,
+                evaluationRepository, roundRepository,
                 currentUserService, objectMapper);
     }
 
@@ -340,6 +345,12 @@ class SubmissionReadinessServiceTest {
                 .isEqualTo("Saved section text");
         assertThat(json.get("papers").get(0).get("sections").get(0).get("contentVersion").asInt())
                 .isEqualTo(3);
+        // ponytail: schema v2 binds the section to its evidence/standard context
+        assertThat(json.get("schemaVersion").asInt()).isEqualTo(2);
+        var section = json.get("papers").get(0).get("sections").get(0);
+        assertThat(section.get("contentFingerprint").asText()).matches("[0-9a-f]{64}");
+        assertThat(section.get("citationReviewRoundIds").isArray()).isTrue();
+        assertThat(section.has("standardEvaluation")).isTrue();
     }
 
     @Test
@@ -359,7 +370,10 @@ class SubmissionReadinessServiceTest {
                 evaluations, currentUserService, objectMapper, transactions, prompts,
                 generationConfig);
         service = new SubmissionReadinessService(projectRepository, documentRepository, paperSectionRepository,
-                feedbackRequestRepository, standards, currentUserService, objectMapper);
+                feedbackRequestRepository, standards,
+                org.mockito.Mockito.mock(SectionStandardEvaluationRepository.class),
+                org.mockito.Mockito.mock(CitationReviewRoundRepository.class),
+                currentUserService, objectMapper);
         var original = new com.evidencepilot.model.PromptTemplate();
         original.setId(UUID.randomUUID());
         original.setTemplateKey("CHECK_STANDARD");

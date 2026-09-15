@@ -5,10 +5,11 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { useMediaUrlMap } from '../../hooks/useMediaUrls.js';
-import { renderLatexToHtml } from '../../utils/formatters/latexHtml.js';
+import { renderLatexToHtml, applyChangeHighlights } from '../../utils/formatters/latexHtml.js';
 import {
   isLatexDialect,
   rehypeAnchors,
+  rehypeChangeRanges,
   remarkAssetToggle,
   remarkLatexInline,
   resolveImageSrc,
@@ -30,6 +31,8 @@ export default function PreviewPane({
   onScroll,
   scrollRef,
   zoom = 100,
+  // ponytail: shared changeRanges from useInstructorReview — same model as the LaTeX editor.
+  changeRanges = [],
 }) {
   const { t } = useTranslation();
   // ponytail: shared hook — concurrent mounts reuse one in-flight /api/media/urls.
@@ -40,12 +43,18 @@ export default function PreviewPane({
   const deferredLatex = useDeferredValue(latex);
   const useLegacy = isLatexDialect(deferredLatex);
   const html = useMemo(
-    () => (useLegacy && (!deferredLatex && generatedReferences.length > 0
+    () => applyChangeHighlights((useLegacy && (!deferredLatex && generatedReferences.length > 0
       ? ''
-      : renderLatexToHtml(deferredLatex, mediaUrlMap, citationNumbers))),
-    [citationNumbers, generatedReferences.length, deferredLatex, mediaUrlMap, useLegacy],
+      : renderLatexToHtml(deferredLatex, mediaUrlMap, citationNumbers))), changeRanges, deferredLatex),
+    [changeRanges, citationNumbers, generatedReferences.length, deferredLatex, mediaUrlMap, useLegacy],
   );
   const markdown = useMemo(() => (!useLegacy ? String(deferredLatex || '') : ''), [deferredLatex, useLegacy]);
+  const rehypePlugins = useMemo(
+    // Pass changeRanges as plugin options. Calling rehypeChangeRanges here
+    // would hand unified a transformer as an attacher and run it without a tree.
+    () => [rehypeKatex, rehypeAnchors, [rehypeChangeRanges, changeRanges]],
+    [changeRanges],
+  );
   const remarkPlugins = useMemo(
     () => [
       remarkGfm,
@@ -90,7 +99,7 @@ export default function PreviewPane({
             <div className="max-w-prose mx-auto break-words preview-content">
               <ReactMarkdown
                 remarkPlugins={remarkPlugins}
-                rehypePlugins={[rehypeKatex, rehypeAnchors]}
+                rehypePlugins={rehypePlugins}
                 components={components}
               >
                 {markdown}

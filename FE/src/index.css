@@ -232,3 +232,5 @@ body {
 .preview-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.75rem; }
 .preview-content th, .preview-content td { border: 1px solid #d1d5db; padding: 0.25rem 0.5rem; text-align: left; }
 .preview-content img, .preview-content svg { max-width: 100%; height: auto; object-fit: contain; }
+/* ponytail: shared show-changes tint — LaTeX editor (.cm-change-added) and Preview stay in sync. */
+.preview-change-added { background-color: #dcfce7; border-radius: 0.25rem; }

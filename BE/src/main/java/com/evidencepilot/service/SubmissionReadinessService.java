@@ -17,10 +17,12 @@ import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
+import com.evidencepilot.repository.CitationReviewRoundRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
+import com.evidencepilot.repository.SectionStandardEvaluationRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,6 +60,8 @@ public class SubmissionReadinessService {
     private final PaperSectionRepository paperSectionRepository;
     private final FeedbackRequestRepository feedbackRequestRepository;
     private final SectionStandardService sectionStandardService;
+    private final SectionStandardEvaluationRepository evaluationRepository;
+    private final CitationReviewRoundRepository roundRepository;
     private final CurrentUserServiceImpl currentUserService;
     private final ObjectMapper objectMapper;
 
@@ -325,7 +329,7 @@ public class SubmissionReadinessService {
         try {
             String json = returned.getSubmissionSnapshotJson();
             JsonNode root = json == null ? null : objectMapper.readTree(json);
-            if (root == null || root.path("schemaVersion").asInt() != 1
+            if (root == null || (root.path("schemaVersion").asInt() != 1 && root.path("schemaVersion").asInt() != 2)
                     || !project.getId().toString().equals(root.path("projectId").asText())
                     || !root.path("papers").isArray() || root.path("papers").isEmpty()) {
                 return new ReviewReadinessResponse.Revision(returned.getId(), "UNVERIFIABLE");
@@ -369,7 +373,7 @@ public class SubmissionReadinessService {
             Assessment assessment, Project project, User submittedBy,
             User instructor, LocalDateTime submittedAt) {
         Map<String, Object> root = new LinkedHashMap<>();
-        root.put("schemaVersion", 1);
+        root.put("schemaVersion", 2);
         root.put("projectId", project.getId());
         root.put("submittedAt", submittedAt);
         root.put("submissionFingerprint", assessment.response().submissionFingerprint());
@@ -403,6 +407,10 @@ public class SubmissionReadinessService {
                 sectionSnapshot.put("confirmedByName", displayName(section.getHandoffConfirmedBy()));
                 sectionSnapshot.put("confirmedAt", section.getHandoffConfirmedAt());
                 sectionSnapshot.put("confirmedContentVersion", section.getHandoffContentVersion());
+                // ponytail: v2 binds the submitted section to its evidence/standard context (best-effort, never blocks submit)
+                sectionSnapshot.put("contentFingerprint", contentFingerprint(section.getContentTex()));
+                sectionSnapshot.put("standardEvaluation", standardEvaluationSnapshot(section.getId()));
+                sectionSnapshot.put("citationReviewRoundIds", citationReviewRoundIds(section.getId(), submittedAt));
                 sections.add(sectionSnapshot);
             }
             paperSnapshot.put("sections", sections);
@@ -410,6 +418,52 @@ public class SubmissionReadinessService {
         }
         root.put("papers", papers);
         return serialize(root);
+    }
+
+    private Map<String, Object> standardEvaluationSnapshot(UUID sectionId) {
+        try {
+            return evaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(sectionId)
+                    .map(evaluation -> {
+                        Map<String, Object> embedded = new LinkedHashMap<>();
+                        embedded.put("id", evaluation.getId());
+                        embedded.put("status", evaluation.getStatus());
+                        embedded.put("requirements", evaluation.getRequirements());
+                        embedded.put("result", parseResultJson(evaluation.getResultJson()));
+                        embedded.put("errorCode", evaluation.getErrorMessage());
+                        embedded.put("inputFingerprint", evaluation.getInputFingerprint());
+                        embedded.put("updatedAt", evaluation.getUpdatedAt());
+                        return embedded;
+                    })
+                    .orElse(null);
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private List<String> citationReviewRoundIds(UUID sectionId, LocalDateTime submittedAt) {
+        try {
+            return roundRepository.findBySectionIdOrderByCreatedAtDesc(sectionId).stream()
+                    .filter(round -> round.getCreatedAt() == null || submittedAt == null
+                            || !round.getCreatedAt().isAfter(submittedAt))
+                    .map(round -> round.getId().toString())
+                    .toList();
+        } catch (RuntimeException exception) {
+            return List.of();
+        }
+    }
+
+    private JsonNode parseResultJson(String resultJson) {
+        if (resultJson == null || resultJson.isBlank()) return null;
+        try {
+            return objectMapper.readTree(resultJson);
+        } catch (JsonProcessingException exception) {
+            return null;
+        }
+    }
+
+    private static String contentFingerprint(String contentTex) {
+        String normalized = FeedbackAnchorService.normalize(contentTex == null ? "" : contentTex);
+        return sha256(normalized);
     }
 
     private PaperSection requireSection(UUID documentId, UUID sectionId) {

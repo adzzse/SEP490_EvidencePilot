@@ -1,4 +1,5 @@
 import { SKIP, visit } from 'unist-util-visit';
+import { blockOverlapsRanges } from '../instructor/wordDiff.js';
 
 // ponytail: content from the AST ingestor is markdown (headings, | tables |,
 // $$ math); legacy student/LaTeX docs stay on renderLatexToHtml.
@@ -222,6 +223,56 @@ export function remarkAssetToggle({ source = '', mediaUrlMap = {} } = {}) {
       parent.children.splice(index, 1, wrapper);
       return [SKIP, index + 1];
     });
+  };
+}
+
+export function rehypeChangeRanges(changeRanges = []) {
+  return tree => {
+    if (!(changeRanges || []).length) return;
+    const mark = node => {
+      node.properties = node.properties || {};
+      const current = node.properties.className;
+      node.properties.className = [...(Array.isArray(current) ? current : current ? [current] : []), 'preview-change-added'];
+    };
+    const transform = node => {
+      const start = node.position?.start?.offset;
+      const end = node.position?.end?.offset;
+      if (node.type === 'text' && Number.isInteger(start) && end - start === node.value.length) {
+        const cuts = [start, end];
+        for (const range of changeRanges) {
+          if (range.sourceStart < end && range.sourceEnd > start) {
+            cuts.push(Math.max(start, range.sourceStart), Math.min(end, range.sourceEnd));
+          }
+        }
+        cuts.sort((a, b) => a - b);
+        const parts = [];
+        for (let i = 1; i < cuts.length; i += 1) {
+          const from = cuts[i - 1], to = cuts[i];
+          if (to <= from) continue;
+          const text = node.value.slice(from - start, to - start);
+          const leaf = { type: 'text', value: text };
+          parts.push(blockOverlapsRanges(from, to, changeRanges)
+            ? { type: 'element', tagName: 'span', properties: { className: ['preview-change-added'] }, children: [leaf] }
+            : leaf);
+        }
+        return { nodes: parts, highlighted: parts.some(part => part.type === 'element') };
+      }
+      if (!Array.isArray(node.children)) return { nodes: [node], highlighted: false };
+      let highlighted = false;
+      node.children = node.children.flatMap(child => {
+        const result = transform(child);
+        highlighted ||= result.highlighted;
+        return result.nodes;
+      });
+      // Commands such as \textbf and KaTeX can render text with no direct
+      // child offsets. Their positioned inline element is the closest anchor.
+      if (!highlighted && node.type === 'element' && blockOverlapsRanges(start, end, changeRanges)) {
+        mark(node);
+        highlighted = true;
+      }
+      return { nodes: [node], highlighted };
+    };
+    tree.children = (tree.children || []).flatMap(node => transform(node).nodes);
   };
 }
 

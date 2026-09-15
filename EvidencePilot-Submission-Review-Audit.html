@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evidence Pilot — Submission Review Audit / Kiểm định duyệt nộp bài</title>
+<style>
+*{box-sizing:border-box}body{font-family:Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f6f8fb;color:#1a2332;line-height:1.6}
+header{position:sticky;top:0;background:#0f2a4a;color:#fff;padding:14px 24px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;z-index:10}
+header h1{font-size:17px;margin:0 12px 0 0}.btn{border:1px solid #fff;background:transparent;color:#fff;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:14px}.btn.active,.btn:hover{background:#fff;color:#0f2a4a}
+main{max-width:1040px;margin:0 auto;padding:24px}section{background:#fff;border-radius:10px;padding:20px 24px;margin:16px 0;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+h2{color:#0f2a4a;border-bottom:2px solid #e2e8f0;padding-bottom:6px}h3{color:#1d4e89}code{background:#eef2f7;padding:1px 6px;border-radius:4px;font-size:13px}pre{background:#0f2a4a;color:#d7e6f7;padding:14px;border-radius:8px;overflow-x:auto;font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid #cbd5e1;padding:6px 8px;text-align:left;vertical-align:top}th{background:#e8eff8}
+.badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:10px;background:#dcfce7;color:#166534;font-weight:600}.badge.warn{background:#fef9c3;color:#854d0e}.badge.crit{background:#fee2e2;color:#991b1b}.badge.info{background:#dbeafe;color:#1e40af}
+.vi{display:none}body.show-vi .vi{display:block}body.show-vi .en{display:none}body.show-both .en,body.show-both .vi{display:block}body.show-both .vi{border-top:1px dashed #cbd5e1;margin-top:12px;padding-top:12px}
+nav.toc{background:#fff;border-radius:10px;padding:16px 24px;font-size:14px}nav.toc a{color:#1d4e89;text-decoration:none}footer{text-align:center;color:#64748b;font-size:13px;padding:24px}
+</style>
+</head>
+<body class="show-both">
+<header>
+<h1>Evidence Pilot — Submission Review Audit / Kiểm định duyệt nộp bài</h1>
+<button class="btn" onclick="setLang('en')">English</button>
+<button class="btn" onclick="setLang('vi')">Tiếng Việt</button>
+<button class="btn active" onclick="setLang('both')">EN + VI</button>
+</header>
+<main>
+<nav class="toc"><strong>Contents / Mục lục</strong><ol>
+<li><a href="#s1">Verdict / Kết luận</a></li>
+<li><a href="#s2">Submission workflow / Luồng nộp bài</a></li>
+<li><a href="#s3">Review aggregate / Đối tượng duyệt</a></li>
+<li><a href="#s4">Version &amp; snapshot / Phiên bản &amp; ảnh chụp</a></li>
+<li><a href="#s5">Citation / Evidence / Trích dẫn &amp; bằng chứng</a></li>
+<li><a href="#s6">Standard Check / Kiểm tra chuẩn</a></li>
+<li><a href="#s7">Feedback / Nhận xét</a></li>
+<li><a href="#s8">Instructor UI / Giao diện giảng viên</a></li>
+<li><a href="#s9">Section progress / Tiến độ từng mục</a></li>
+<li><a href="#s10">Review decision / Quyết định duyệt</a></li>
+<li><a href="#s11">Round integrity / Toàn vẹn vòng duyệt</a></li>
+<li><a href="#s12">Scenarios / Kịch bản</a></li>
+<li><a href="#s13">Principles / Nguyên tắc</a></li>
+<li><a href="#s14">Building blocks / Khối tái sử dụng</a></li>
+<li><a href="#s15">Gap matrix / Ma trận khoảng trống</a></li>
+<li><a href="#s16">Recommendations / Khuyến nghị P0–P3</a></li>
+<li><a href="#s17">Diagrams / Sơ đồ</a></li>
+<li><a href="#s18">Q1–Q12 answers / Trả lời Q1–Q12</a></li>
+<li><a href="#s19">Files / Tệp liên quan</a></li>
+</ol></nav>
+
+<section id="s1"><h2>1. Executive Verdict / Kết luận điều hành</h2>
+<div class="en"><p><span class="badge">PARTIAL</span> The submission→review spine exists and is coherent, but the Instructor cannot answer <i>"Is this submitted section academically acceptable, and what exactly should change?"</i> from one place. Snapshot + rounds + anchored feedback + trace lifecycle are <b>CONFIRMED in backend; fragmented in UI</b>.</p>
+<p>Critical gaps: snapshot freezes <b>sections only</b>; <b>no acknowledgement entity</b> (handoff is the substitute); <b>standards invisible + never gate submit/approve</b>; <b>no section-level review state</b>; <b>replies table unwired</b>; extra instructor AI check would <b>contaminate student history</b>.</p></div>
+<div class="vi"><p><span class="badge">MỘT PHẦN</span> Khung nộp→duyệt tồn tại và mạch lạc, nhưng giảng viên chưa thể trả lời <i>"Mục nộp có đạt chuẩn học thuật không, cần sửa gì?"</i> tại một nơi. Snapshot + vòng duyệt + nhận xét gắn neo + vòng đời trace đã <b>CONFIRMED ở backend nhưng phân mảnh ở UI</b>.</p>
+<p>Khoảng trống chính: snapshot chỉ lưu mục viết; <b>không có thực thể xác nhận (acknowledgement)</b>; <b>chuẩn vô hình + không chặn nộp/duyệt</b>; <b>không có trạng thái duyệt từng mục</b>; <b>bảng replies chưa dùng</b>; giảng viên chạy AI thêm sẽ <b>làm bẩn lịch sử của sinh viên</b>.</p></div>
+</section>
+
+<section id="s2"><h2>2. Current Submission Workflow / Luồng nộp bài hiện tại</h2>
+<div class="en"><pre>ASSIGNED → edit PaperSection (version+1 every save, handoff cleared)
+→ handoff confirm → [Standard Check: optional, ungated] → [Citation Review async: Round+Traces]
+→ student decide + edit + recheck
+→ LEADER POST /api/projects/:id/reviews {expectedSubmissionFingerprint}
+→ requireReadyForSubmit (LEADER-only, 9 checks, no PENDING, resubmit must be CHANGED)
+→ INSERT FeedbackRequest(PENDING + section-only snapshot) + SUBMITTED_FOR_REVIEW + checkpoint
+→ Instructor review mode → drafts + staged DONE → RETURNED | REVIEWED(APPROVED) | REJECTED(API-only)</pre>
+<p>Evidence: <code>FeedbackController.java:55-71,92-167</code>; <code>FeedbackServiceImpl.java:98-341</code>; <code>SubmissionReadinessService.java:128-412</code>; <code>PaperProcessingServiceImpl.java:666-697</code>.</p></div>
+<div class="vi"><pre>ASSIGNED → sửa mục (version+1 mỗi lần lưu, xóa handoff)
+→ xác nhận handoff → [Standard Check: tùy chọn, không chặn] → [Citation Review async]
+→ sinh viên xử lý + sửa + AI chấm lại
+→ LEADER POST /api/projects/:id/reviews
+→ kiểm tra sẵn sàng (chỉ LEADER, 9 điều kiện, nộp lại phải CHANGED)
+→ tạo FeedbackRequest(PENDING + snapshot chỉ gồm mục viết) + SUBMITTED_FOR_REVIEW
+→ giảng viên duyệt → RETURNED | REVIEWED(APPROVED) | REJECTED(chỉ API)</pre></div>
+</section>
+
+<section id="s3"><h2>3. Current Review Aggregate / Đối tượng duyệt</h2>
+<div class="en"><p><b>No single clean aggregate.</b> Working aggregate = <b><code>FeedbackRequest</code> (latest) + <code>Project</code></b>. Request = "this submission under review" (one row/round, latest-wins). Project.status = operational lock. Checkpoint = word-count support snapshot. <code>ReviewSnapshot</code> = AI critique cache (unrelated). Job = transport; Round = AI history; Trace = finding state.</p></div>
+<div class="vi"><p><b>Không có một aggregate duy nhất.</b> Thực tế = <b><code>FeedbackRequest</code> (mới nhất) + <code>Project</code></b>. Request là "bài nộp đang duyệt" (mỗi vòng một dòng). Project.status là khóa vận hành. Checkpoint chỉ đếm từ. ReviewSnapshot là cache AI, không liên quan.</p></div>
+</section>
+
+<section id="s4"><h2>4. Version &amp; Submission Snapshot Audit / Phiên bản &amp; ảnh chụp</h2>
+<div class="en">
+<h3>4.1 Versioning</h3><p><code>version</code> = every save <span class="badge">CONFIRMED</span>; <code>optVersion</code> = optimistic lock <span class="badge">CONFIRMED</span>; <code>previousContentTex</code> = single-slot undo <span class="badge warn">PARTIAL</span>; handoff fields = confirm of version+fingerprint by assignee <span class="badge">CONFIRMED</span>.</p>
+<h3>4.2 Snapshot</h3><p>Only <code>submissionSnapshotJson</code> written: papers + sections (contentTex, contentVersion, assignee, handoff). <b>No citations/traces/standard verdicts.</b> <code>standardSnapshotJson/sectionValidation</code> columns exist but unwritten <span class="badge warn">PRESENT BUT UNUSED</span>. Status: <span class="badge warn">PARTIAL</span>.</p>
+<h3>4.3–4.5 Rounds / history / diff</h3><p>Rounds: one request/submit, latest-wins, resubmit-must-change <span class="badge">CONFIRMED</span>. Previous: retrievable via request switcher + snapshot endpoint + checkpoint baseline, scattered <span class="badge warn">PARTIAL</span>. Diff: word deltas + naive block diff, no true submitted-vs-submitted diff <span class="badge warn">PARTIAL</span>.</p>
+<pre>VERSION AUDIT — Baseline: PARTIAL | Submitted: PARTIAL | Previous: PARTIAL
+| Rounds: CONFIRMED | Diff: PARTIAL | Main limit: sections-only snapshot, live-read review</pre>
+<p>Evidence: <code>PaperSection.java:50-83</code>; <code>FeedbackRequest.java:50,56,59</code>; <code>FeedbackServiceImpl:84-177,414-541</code>; <code>CheckpointController:36-64</code>; <code>CheckpointServiceImpl:87-150</code>.</p></div>
+<div class="vi">
+<h3>4.1 Phiên bản</h3><p><code>version</code> tăng mỗi lần lưu; <code>optVersion</code> khóa lạc quan; <code>previousContentTex</code> chỉ lưu một bản; handoff xác nhận version+fingerprint.</p>
+<h3>4.2 Snapshot</h3><p>Chỉ lưu mục viết (contentTex, version, người làm, handoff). <b>Không lưu trích dẫn/trace/kết quả chuẩn.</b> <span class="badge warn">MỘT PHẦN</span>.</p>
+<h3>4.3–4.5 Vòng / lịch sử / diff</h3><p>Vòng duyệt: mỗi lần nộp một dòng, chỉ vòng mới nhất có hiệu lực <span class="badge">CONFIRMED</span>. Bản nộp cũ lấy được nhưng phân tán. Diff chỉ ở mức đếm từ, chưa có so sánh thực sự.</p></div>
+</section>
+
+<section id="s5"><h2>5. Citation / Evidence Review Audit / Trích dẫn &amp; bằng chứng</h2>
+<div class="en">
+<h3>5.1 Lifecycle — CONFIRMED</h3><p><code>POST .../review/source-matches</code> → job → <code>ai.evaluation.queue</code> → Qdrant topK 20→3 + generate → Round + Traces → student <code>decide</code> → edit stamps STALE → <code>recheck</code> → instructor <code>review</code>.</p>
+<h3>5.2–5.3 State model</h3><p>Round: id/project/section/version/requestedBy/fingerprints/generation_meta. Trace: before (finding_index, excerpt+offsets, rationale, confidence, source/quote/relation); after (7 student_actions, after_passage ≤1200ch, fingerprint/version); verdicts (outcome RESOLVED|PARTIALLY_RESOLVED|UNRESOLVED|STALE; judgment EFFECTIVE|PARTIAL|INEFFECTIVE + recheck). No <code>before_passage</code> column (before = excerpt + fingerprints).</p>
+<pre>finding → NULL(unaddressed) → decide: DISMISS_WITH_REASON→UNRESOLVED | edit→UNRESOLVED/STALE
+→ instructor EFFECTIVE→RESOLVED | PARTIAL→PARTIALLY_RESOLVED | INEFFECTIVE→UNRESOLVED
+ignored ≈ NULL/STALE (no code concept) | resolved ONLY via instructor</pre>
+<p>"18 findings, 3 used": all 18 persist; 3 have action+after_passage; 15 remain NULL/UNRESOLVED/STALE — distinguishable.</p>
+<h3>5.4–5.6 Visibility / judgment / extra check</h3><p>Full trace history on backend + <code>EvidenceTraceReview.jsx</code> page, but <b>absent from the section review panel</b> <span class="badge warn">PARTIAL</span>. Judgment locks traces <span class="badge">CONFIRMED</span>. Instructor rerun: UI absent, API 409 while submitted, would merge into student traces — <span class="badge crit">NOT SUPPORTED cleanly</span>.</p>
+<p>Evidence: <code>PaperController:469-515</code>; <code>AiEvaluationServiceImpl:81-109</code>; <code>EvidenceTraceService:64-441</code>; <code>EvidenceTraceReview.jsx</code>.</p></div>
+<div class="vi">
+<h3>5.1 Vòng đời — CONFIRMED</h3><p>Sinh viên xin review → job async → tìm Qdrant + AI → Round + Traces → sinh viên quyết định → sửa → AI chấm lại → giảng viên chốt.</p>
+<h3>5.2–5.3 Trạng thái</h3><p>Trace lưu: phát hiện (excerpt, rationale, nguồn), hành động SV (7 loại), đoạn sau sửa, outcome, verdict chấm lại, judgment của giảng viên. Bỏ qua ≈ NULL/STALE; dismissed = DISMISS_WITH_REASON; resolved chỉ do giảng viên EFFECTIVE.</p>
+<h3>5.4–5.6 Hiển thị</h3><p>Lịch sử đầy đủ ở backend + trang EvidenceTraceReview riêng, nhưng <b>vắng mặt trong panel duyệt theo mục</b>. Giảng viên chạy AI thêm sẽ trộn vào lịch sử SV — <span class="badge crit">KHÔNG hỗ trợ sạch</span>.</p></div>
+</section>
+
+<section id="s6"><h2>6. Standard Check Audit / Kiểm tra chuẩn</h2>
+<div class="en">
+<h3>6.1 Config — PARTIAL</h3><p>Per-section requirements (instructor/admin, 409 if assigned). Prompt from <code>prompt_templates</code> + catalog singleton. <code>targetStandard</code> is an unused stub; <code>ReviewGuide</code> feeds suggestions, not CHECK_STANDARD.</p>
+<h3>6.2–6.3 Eval + staleness</h3><p>Eval row: fingerprints (input/prompt/generation), requirements, status, result_json, raw_output. Edit→STALE <span class="badge">CONFIRMED</span> — but <b>staleness gates nothing</b>: submit checks 9 items with no standard item; approve ignores standards. PASS→edit→submit allowed.</p>
+<h3>6.4 Acknowledgement — MISSING</h3><p>Zero <code>acknowledg*</code> hits. Handoff-confirm is the proxy (content version/fingerprint/confirmer) but carries <b>no evaluation id</b>.</p>
+<h3>6.5–6.6 Visibility / versioning</h3><p>Report exists in backend; review UI shows only a guide checklist <span class="badge warn">BACKEND ONLY</span>. Old evals fingerprint-identifiable; mid-review edits blocked (409), so history is safe by blocking, not versioning <span class="badge warn">PARTIAL</span>.</p>
+<p>Evidence: <code>SectionStandardService:85-370</code>; <code>SectionStandardController</code>; <code>PaperProcessingServiceImpl:690</code>; <code>SubmissionReadinessService:284-302</code>.</p></div>
+<div class="vi">
+<h3>6.1 Cấu hình — MỘT PHẦN</h3><p>Yêu cầu theo từng mục (giảng viên/admin). Prompt từ DB. targetStandard không dùng.</p>
+<h3>6.2–6.3 Chấm + hết hạn</h3><p>Sửa sau khi PASS → STALE <span class="badge">CONFIRMED</span> — nhưng <b>không chặn nộp hay duyệt</b>. Sửa rồi nộp luôn vẫn được.</p>
+<h3>6.4 Xác nhận — MISSING</h3><p>Không có thực thể acknowledgement; handoff chỉ thay thế một phần (không gắn evaluation id).</p>
+<h3>6.5–6.6 Hiển thị / phiên bản chuẩn</h3><p>Báo cáo có ở backend nhưng <b>vắng mặt ở UI duyệt</b>. Lịch sử chuẩn chỉ truy vết được qua fingerprint.</p></div>
+</section>
+
+<section id="s7"><h2>7. Instructor Feedback Audit / Nhận xét giảng viên</h2>
+<div class="en">
+<h3>7.1–7.2 Model + anchors — CONFIRMED</h3><p>Fields: request/section/instructor FKs, <code>sectionVersion</code> = <b>submitted version from snapshot</b>, <code>anchorJson</code> (offsets utf16 + sha256 fingerprint + exact + 64ch prefix/suffix), <code>content</code>, <code>publishedAt</code> (draft until RETURNED), OPEN/DONE + two-phase pendingState. Authoritative text = snapshot contentTex; recover: fingerprint→ATTACHED, else exact+context→ATTACHED else DETACHED; remap via TextChange (guards 10k ops/5MB). Never silently misattached.</p>
+<h3>7.3–7.5 Granularity / threads / survival</h3><p>Word/paragraph/section-level: ✅ model+UI+persisted. Citation/trace-direct and project-level: ❌. Threads: per-comment DONE ✅; true replies table exists but <b>no entity/service/controller</b> <span class="badge warn">PRESENT BUT UNUSED</span>. Survival across edits: ATTACHED/MODIFIED/DETACHED + stale badge <span class="badge">CONFIRMED</span>.</p>
+<p>Evidence: <code>InstructorFeedback.java</code>; <code>FeedbackAnchor.java:3-8</code>; <code>FeedbackAnchorService:34-264</code>; migrations V26/V27; <code>feedbackAnchors.js</code>.</p></div>
+<div class="vi">
+<h3>7.1–7.2 Mô hình + neo — CONFIRMED</h3><p>Nhận xét gắn vào <b>bản đã nộp</b> (offset + fingerprint + văn bản chính xác + ngữ cảnh), bản nháp đến khi RETURNED, trạng thái OPEN/DONE. Neo tự remap khi SV sửa, suy giảm rõ ràng (DETACHED), không bao giờ gắn nhầm âm thầm.</p>
+<h3>7.3–7.5 Mức / luồng / tồn tại</h3><p>Từ/mục/đoạn: ✅. Gắn trực tiếp vào citation và cấp project: ❌. Trả lời theo luồng: bảng có nhưng <b>chưa nối dây</b>. Tồn tại sau sửa: <span class="badge">CONFIRMED</span>.</p></div>
+</section>
+
+<section id="s8"><h2>8. Instructor UI Audit / Giao diện giảng viên</h2>
+<div class="en"><pre>App.jsx /instructor/requests/:projectId → WorkspaceLayout workspaceMode="review"
+├ WorkspaceHeader (history+AI hidden) ├ FilePanel (read-only)
+├ EditorPanel (readOnly LaTeX + preview + highlights)
+└ ContextPanel [Source|Requirements|Review] → Review: request switcher,
+   submitted|working, manual|ai|history, OPEN/DONE filter, showChanges,
+   MarkDone/Reopen, RETURNED/APPROVED modal (REJECTED API-only)</pre>
+<p>Available: submitted text (live+stale), raw snapshot endpoint, word-diff + baseline, prior rounds/comments, handoff chips, AI-suggest inject. Missing: in-panel evidence history, standard report, ack record, section progress, true diff, summary, threads. Three-pane: sections ✅, submitted paper ⚠️ (live-read), context ⚠️ (standards/evidence missing).</p>
+<p>Evidence: <code>App.jsx:88-93</code>; <code>WorkspaceLayout.jsx:97-136,1575-1612</code>; <code>useInstructorReview.js</code>; <code>InstructorFeedbackPanel.jsx:32-283</code>.</p></div>
+<div class="vi"><pre>Route giảng viên → WorkspaceLayout chế độ review
+├ tiêu đề (ẩn lịch sử+AI) ├ cây file (chỉ đọc)
+├ soạn thảo LaTeX chỉ đọc + xem trước
+└ panel Review: chuyển vòng, xem đã nộp/bản nháp, bình luận, lịch sử, diff thô,
+   duyệt/trả bài (từ chối chỉ có ở API)</pre>
+<p>Có: văn bản nộp, snapshot thô, diff thô, vòng trước, handoff. Thiếu: lịch sử evidence trong panel, báo cáo chuẩn, xác nhận, tiến độ mục, diff thực sự.</p></div>
+</section>
+
+<section id="s9"><h2>9. Section Review Progress / Tiến độ từng mục</h2>
+<div class="en"><p><span class="badge crit">MISSING.</span> No per-section NOT_REVIEWED/REVIEWED/NEEDS_REVISION/ACCEPTED state in models, DTOs, or FE state. Only per-comment OPEN/DONE + local unpersisted checklist + request/project status.</p></div>
+<div class="vi"><p><span class="badge crit">THIẾU.</span> Không có trạng thái duyệt từng mục trong model, DTO hay FE. Chỉ có OPEN/DONE từng bình luận + checklist cục bộ.</p></div>
+</section>
+
+<section id="s10"><h2>10. Project Review Decision / Quyết định duyệt</h2>
+<div class="en"><table><tr><th>Action</th><th>Endpoint</th><th>Result</th></tr>
+<tr><td>Return (UI ✅)</td><td><code>PATCH /feedback-requests/:id/status?status=RETURNED</code></td><td>publish drafts → req RETURNED + project RETURNED (editable)</td></tr>
+<tr><td>Approve (UI ✅)</td><td><code>?status=REVIEWED</code></td><td>gates: no drafts, snapshot==live, all DONE → req REVIEWED + project APPROVED (readonly)</td></tr>
+<tr><td>Reject (UI ❌)</td><td><code>?status=REJECTED</code></td><td>req REJECTED + project IN_PROGRESS</td></tr></table>
+<p>Approval ignores standards/evidence findings. RETURNED reopens editing; resubmit must be CHANGED.</p></div>
+<div class="vi"><table><tr><th>Hành động</th><th>Kết quả</th></tr>
+<tr><td>Trả sửa (có nút)</td><td>Xuất bản nháp → RETURNED, được sửa tiếp</td></tr>
+<tr><td>Duyệt (có nút)</td><td>Điều kiện: hết nháp, snapshot khớp, hết DONE → APPROVED (khóa)</td></tr>
+<tr><td>Từ chối (chỉ API)</td><td>REJECTED + về IN_PROGRESS</td></tr></table>
+<p>Duyệt bỏ qua chuẩn và findings. Trả sửa mở khóa; nộp lại phải thay đổi.</p></div>
+</section>
+
+<section id="s11"><h2>11. Review Round Historical Integrity / Toàn vẹn lịch sử vòng</h2>
+<div class="en"><p>Per round preserved: sections ✅, traces ✅ append-only, comments ✅ request-scoped, decision ✅. Standards ⚠️ (persist w/ fingerprints, not round-linked). Ack ⚠️ (handoff frozen, no ack row). Overwritten: <code>previousContentTex</code>, live contentTex, local checklist/drafts, pendingState.</p></div>
+<div class="vi"><p>Mỗi vòng giữ: mục viết ✅, trace ✅, bình luận ✅, quyết định ✅. Chuẩn ⚠️ (lưu nhưng không gắn vòng). Xác nhận ⚠️ (chỉ handoff). Bị ghi đè: previousContentTex, nội dung live, checklist cục bộ.</p></div>
+</section>
+
+<section id="s12"><h2>12. Functional Scenario Results / Kết quả kịch bản</h2>
+<div class="en"><ol>
+<li>Edit after PASS → submit: <b>ALLOWED</b>; STALE; gate ignores; invisible in panel. GAP.</li>
+<li>Dismiss finding → submit: <b>ALLOWED</b>; DISMISS_WITH_REASON + UNRESOLVED; evidence page only. PARTIAL.</li>
+<li>Accept + edit + recheck: full chain coherent via trace row. CONFIRMED (off-panel).</li>
+<li>Return → resubmit → compare: prior kept; word-delta diff only. PARTIAL.</li>
+<li>Standard changed mid-review: blocked (409); old evals fingerprint-readable. PARTIAL.</li>
+<li>Anchor after rewrite: ATTACHED/MODIFIED/DETACHED + stale. CONFIRMED.</li>
+<li>Instructor runs review: no UI; 409 while submitted; merges into student traces. NOT SUPPORTED.</li>
+</ol></div>
+<div class="vi"><ol>
+<li>Sửa sau PASS rồi nộp: <b>ĐƯỢC</b>; STALE nhưng không chặn, panel không thấy.</li>
+<li>Bỏ qua finding rồi nộp: <b>ĐƯỢC</b>; chỉ thấy ở trang evidence.</li>
+<li>Chấp nhận + sửa + chấm lại: chuỗi đầy đủ. CONFIRMED.</li>
+<li>Trả → nộp lại → so sánh: chỉ diff thô. MỘT PHẦN.</li>
+<li>Đổi chuẩn giữa vòng: bị chặn 409; bản cũ đọc được qua fingerprint.</li>
+<li>Neo sau khi sửa: giữ hoặc DETACHED + cờ stale. CONFIRMED.</li>
+<li>GV chạy AI: không có UI, bị chặn khi đã nộp, trộn lịch sử. KHÔNG hỗ trợ.</li>
+</ol></div>
+</section>
+
+<section id="s13"><h2>13. Principles Verification / Đối chiếu nguyên tắc</h2>
+<div class="en"><ol>
+<li>Submitted paper primary — <span class="badge warn">PARTIAL</span></li>
+<li>Review immutable version — <span class="badge warn">PARTIAL</span></li>
+<li>Compare submissions — <span class="badge warn">PARTIAL</span></li>
+<li>AI advisory; roles separate — <span class="badge">SUPPORTED</span></li>
+<li>See history vs rerun — <span class="badge warn">PARTIAL</span></li>
+<li>Extra check w/o corruption — <span class="badge crit">NOT SUPPORTED</span></li>
+<li>Standards visible — <span class="badge crit">NOT SUPPORTED (UI)</span></li>
+<li>Ack identifies content/eval — <span class="badge crit">NOT SUPPORTED</span></li>
+<li>Historical standards identifiable — <span class="badge warn">PARTIAL</span></li>
+<li>Anchored to submitted content — <span class="badge">SUPPORTED</span></li>
+<li>Comment not edit — <span class="badge">SUPPORTED</span></li>
+<li>Section progress — <span class="badge crit">NOT SUPPORTED</span></li>
+<li>Decision aggregates context — <span class="badge warn">PARTIAL</span></li>
+</ol></div>
+<div class="vi"><ol>
+<li>Bản nộp là đối tượng chính — <span class="badge warn">MỘT PHẦN</span></li>
+<li>Duyệt bản bất biến — <span class="badge warn">MỘT PHẦN</span></li>
+<li>So sánh các bản — <span class="badge warn">MỘT PHẦN</span></li>
+<li>AI tư vấn, vai trò tách bạch — <span class="badge">ĐẠT</span></li>
+<li>Xem lịch sử thay vì chạy lại — <span class="badge warn">MỘT PHẦN</span></li>
+<li>Kiểm tra thêm không bẩn — <span class="badge crit">KHÔNG</span></li>
+<li>Chuẩn hiển thị — <span class="badge crit">KHÔNG (UI)</span></li>
+<li>Xác nhận gắn nội dung/đánh giá — <span class="badge crit">KHÔNG</span></li>
+<li>Chuẩn cũ truy vết được — <span class="badge warn">MỘT PHẦN</span></li>
+<li>Neo vào bản nộp — <span class="badge">ĐẠT</span></li>
+<li>Bình luận, không sửa trực tiếp — <span class="badge">ĐẠT</span></li>
+<li>Tiến độ từng mục — <span class="badge crit">KHÔNG</span></li>
+<li>Quyết định tổng hợp — <span class="badge warn">MỘT PHẦN</span></li>
+</ol></div>
+</section>
+
+<section id="s14"><h2>14. Reusable Building Blocks / Khối tái sử dụng</h2>
+<div class="en"><table><tr><th>Capability</th><th>Mechanism</th><th>Reuse</th><th>Limit</th></tr>
+<tr><td>Snapshot</td><td><code>submissionSnapshotJson</code></td><td>High</td><td>sections-only; add trace/eval refs</td></tr>
+<tr><td>Baseline</td><td>Checkpoint + baseline endpoint</td><td>Medium</td><td>word-count oriented</td></tr>
+<tr><td>Round</td><td><code>FeedbackRequest</code> latest-wins</td><td>High</td><td>keep</td></tr>
+<tr><td>Inline feedback</td><td><code>anchorJson</code> + remap</td><td>High</td><td>add trace FK optionally</td></tr>
+<tr><td>Findings</td><td>Traces + rounds</td><td>High</td><td>surface in panel</td></tr>
+<tr><td>Standards</td><td>Evals + fingerprints</td><td>High</td><td>build viewer + gates</td></tr>
+<tr><td>Ack</td><td>handoff confirm</td><td>Medium</td><td>add ack row w/ eval id</td></tr>
+<tr><td>Decision</td><td>req+project status + gates</td><td>High</td><td>add Reject button</td></tr></table></div>
+<div class="vi"><table><tr><th>Năng lực</th><th>Cơ chế</th><th>Tái dùng</th><th>Giới hạn</th></tr>
+<tr><td>Snapshot</td><td><code>submissionSnapshotJson</code></td><td>Cao</td><td>chỉ mục viết</td></tr>
+<tr><td>Vòng duyệt</td><td><code>FeedbackRequest</code></td><td>Cao</td><td>giữ nguyên</td></tr>
+<tr><td>Nhận xét</td><td><code>anchorJson</code></td><td>Cao</td><td>thêm FK trace nếu cần</td></tr>
+<tr><td>Findings</td><td>Trace + round</td><td>Cao</td><td>nhúng vào panel</td></tr>
+<tr><td>Chuẩn</td><td>Eval + fingerprint</td><td>Cao</td><td>làm viewer + chặn</td></tr>
+<tr><td>Xác nhận</td><td>handoff</td><td>Trung bình</td><td>thêm dòng ack</td></tr></table></div>
+</section>
+
+<section id="s15"><h2>15. Functional Gap Matrix / Ma trận khoảng trống</h2>
+<div class="en"><table><tr><th>Capability</th><th>State</th><th>BE</th><th>FE</th><th>Persist</th><th>History</th><th>Severity</th></tr>
+<tr><td>Immutable submitted version</td><td>PARTIAL</td><td>✅</td><td>⚠️</td><td>✅ sec</td><td>⚠️</td><td><span class="badge crit">HIGH</span></td></tr>
+<tr><td>Previous submission</td><td>PARTIAL</td><td>✅</td><td>⚠️</td><td>✅</td><td>✅</td><td>MEDIUM</td></tr>
+<tr><td>Submission diff</td><td>PARTIAL</td><td>⚠️</td><td>⚠️</td><td>⚠️</td><td>⚠️</td><td><span class="badge crit">HIGH</span></td></tr>
+<tr><td>Finding history / student decision</td><td>PARTIAL</td><td>✅</td><td>⚠️</td><td>✅</td><td>✅</td><td><span class="badge crit">HIGH</span></td></tr>
+<tr><td>Evidence judgment</td><td>CONFIRMED</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>NONE</td></tr>
+<tr><td>Extra AI check</td><td>MISSING</td><td>⚠️</td><td>❌</td><td>❌</td><td>❌</td><td>MEDIUM</td></tr>
+<tr><td>Standard report</td><td>BACKEND ONLY</td><td>✅</td><td>❌</td><td>✅</td><td>✅ fp</td><td><span class="badge crit">HIGH</span></td></tr>
+<tr><td>Standard history</td><td>PARTIAL</td><td>⚠️</td><td>❌</td><td>⚠️</td><td>⚠️</td><td>MEDIUM</td></tr>
+<tr><td>Acknowledgement</td><td>MISSING</td><td>❌</td><td>⚠️</td><td>⚠️</td><td>❌</td><td><span class="badge crit">HIGH</span></td></tr>
+<tr><td>Inline comments</td><td>CONFIRMED</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>NONE</td></tr>
+<tr><td>Threads</td><td>PRESENT BUT UNUSED</td><td>❌</td><td>❌</td><td>✅ tbl</td><td>—</td><td>MEDIUM</td></tr>
+<tr><td>Section status</td><td>MISSING</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>MEDIUM</td></tr>
+<tr><td>Round history / final decision</td><td>CONFIRMED</td><td>✅</td><td>✅/⚠️</td><td>✅</td><td>✅</td><td>NONE/LOW</td></tr></table></div>
+<div class="vi"><p>Nghiêm trọng (HIGH/BLOCKER): bản nộp bất biến, diff, lịch sử findings, báo cáo chuẩn, xác nhận. Trung bình: bản cũ, kiểm tra AI thêm, lịch sử chuẩn, luồng replies, trạng thái mục. Xem bảng tiếng Anh để chi tiết BE/FE/lưu trữ.</p></div>
+</section>
+
+<section id="s16"><h2>16. P0 / P1 / P2 / P3 Recommendations / Khuyến nghị</h2>
+<div class="en">
+<p><b>P0 — correct semantics:</b> snapshot-default rendering (FE only); standard-report + stale badge (FE only); explicit ack row w/ version + eval id + fingerprint (BE+DB+API+FE); explicit approve-gate policy (BE only).</p>
+<p><b>P1 — effective review:</b> evidence tab in section panel (FE only); submitted-vs-submitted diff (FE + small BE); citation-level feedback FK (DB+API+FE); instructor-check namespace (BE+DB); Reject button (FE only).</p>
+<p><b>P2 — UX:</b> overview/evidence/standards/comments tabs, section checklist (mostly FE).</p>
+<p><b>P3 — nice-to-have:</b> wire <code>feedback_replies</code> (BE+FE), project summary comment, export-approval linkage. No code written.</p></div>
+<div class="vi">
+<p><b>P0 — đúng ngữ nghĩa:</b> mặc định hiển thị bản snapshot (chỉ FE); hiện báo cáo chuẩn + cờ stale (chỉ FE); dòng xác nhận rõ ràng kèm version + eval id (BE+DB+API+FE); chính sách chặn khi duyệt (BE).</p>
+<p><b>P1 — duyệt hiệu quả:</b> tab evidence trong panel (FE); diff bản nộp (FE + BE nhỏ); FK feedback→trace; namespace kiểm tra riêng cho GV; nút Reject (FE).</p>
+<p><b>P2 — UX:</b> các tab tổng quan/evidence/chuẩn/bình luận, checklist tiến độ.</p>
+<p><b>P3 — thêm:</b> nối bảng replies, bình luận cấp project, liên kết phê duyệt–xuất file.</p></div>
+</section>
+
+<section id="s17"><h2>17. Workflow Diagrams / Sơ đồ luồng</h2>
+<div class="en"><p><b>Current (from evidence):</b></p><pre>ASSIGNED → edit(version+1) → handoff confirm → [Standard: optional]
+→ [Citation async: Round+Traces] → decide+recheck → LEADER submit
+→ Request PENDING + section snapshot + checkpoint → SUBMITTED locked
+→ review mode (live+stale) → drafts + DONE → RETURNED | REVIEWED/APPROVED | REJECTED(API)</pre>
+<p><b>Proposed minimal (reuse-first):</b></p><pre>edit → confirm → StandardCheck → CitationReview → decide+recheck → Submission
+→ Snapshot(sections + trace ids + eval ids) → InstructorReview
+→ Evidence tab + Standards tab + AnchoredFeedback → Returned | Approved | Rejected</pre></div>
+<div class="vi"><p><b>Hiện tại:</b> sửa → confirm → chuẩn (tùy) → AI async → nộp (snapshot mục viết) → duyệt live+stale → trả/duyệt/từ chối.</p>
+<p><b>Đề xuất tối thiểu:</b> thêm trace/eval id vào snapshot, hiển thị snapshot mặc định, nhúng tab evidence/standards, dòng xác nhận, chính sách duyệt rõ ràng — không remodel domain.</p></div>
+</section>
+
+<section id="s18"><h2>18. Direct Answers Q1–Q12 / Trả lời trực tiếp</h2>
+<div class="en"><ol>
+<li><b>PARTIAL.</b> Frozen text exists + writes gated, panel renders live + stale.</li>
+<li><b>PARTIAL.</b> Prior rounds + baselines + word deltas; no true diff.</li>
+<li><b>PARTIAL.</b> One trace row models the chain; off-panel.</li>
+<li><b>PARTIAL.</b> 18 persist with states; determinable via evidence page, not inline.</li>
+<li><b>PARTIAL.</b> Eval row exists; UI shows checklist only.</li>
+<li><b>NO.</b> No ack entity; handoff covers content only.</li>
+<li><b>PARTIAL.</b> Fingerprints recoverable; no versions; safe via 409.</li>
+<li><b>YES.</b> Snapshot-anchored offsets + fingerprint + context, persisted.</li>
+<li><b>YES.</b> ATTACHED/MODIFIED/DETACHED + stale; never misattached.</li>
+<li><b>NO.</b> Only per-comment DONE + local checklist.</li>
+<li><b>NO.</b> Fragmented across panel/History/diff/evidence page/missing standards.</li>
+<li><b>YES.</b> All panes map to existing mechanisms; small extensions only.</li>
+</ol></div>
+<div class="vi"><ol>
+<li><b>MỘT PHẦN.</b> Có bản đóng băng nhưng panel hiện bản live.</li>
+<li><b>MỘT PHẦN.</b> Có vòng cũ + diff thô, thiếu diff thực.</li>
+<li><b>MỘT PHẦN.</b> Một dòng trace đủ chuỗi, nhưng nằm ngoài panel.</li>
+<li><b>MỘT PHẦN.</b> 18 findings phân biệt được qua trang evidence.</li>
+<li><b>MỘT PHẦN.</b> Có eval, UI chỉ checklist.</li>
+<li><b>KHÔNG.</b> Không có acknowledgement gắn evaluation.</li>
+<li><b>MỘT PHẦN.</b> Truy vết qua fingerprint, chặn bằng 409.</li>
+<li><b>CÓ.</b> Neo bền vững, đã lưu.</li>
+<li><b>CÓ.</b> Suy giảm rõ ràng, không gắn nhầm.</li>
+<li><b>KHÔNG.</b> Không có tiến độ từng mục.</li>
+<li><b>KHÔNG.</b> Thông tin phân mảnh nhiều màn hình.</li>
+<li><b>CÓ.</b> Ba panel đều ánh xạ được, chỉ cần mở rộng nhỏ.</li>
+</ol></div>
+</section>
+
+<section id="s19"><h2>19. Relevant Files / Tệp liên quan</h2>
+<div class="en"><ul>
+<li>Submit: <code>controller/FeedbackController.java:55-167</code>; <code>service/impl/FeedbackServiceImpl.java:84-541</code>; <code>service/SubmissionReadinessService.java:73-412</code></li>
+<li>Versioning: <code>model/PaperSection.java:50-83</code>; <code>PaperProcessingServiceImpl.java:666-697,958-962</code>; <code>controller/PaperController.java:112-181,469-515</code></li>
+<li>Checkpoints: <code>controller/CheckpointController.java:36-64</code>; <code>CheckpointServiceImpl.java:47-150</code></li>
+<li>Traces: <code>model/EvidenceRevisionTrace.java</code>; <code>model/CitationReviewRound.java</code>; <code>EvidenceTraceService.java</code>; <code>SectionCitationReviewService.java</code>; <code>FE/.../EvidenceTraceReview.jsx</code></li>
+<li>Standards: <code>model/SectionStandardEvaluation.java</code>; <code>SectionStandardService.java</code>; <code>SectionStandardController.java</code></li>
+<li>Feedback: <code>model/InstructorFeedback.java</code>; <code>FeedbackAnchor.java</code>; <code>FeedbackAnchorService.java</code>; migrations V26/V27; <code>feedbackAnchors.js</code></li>
+<li>UI: <code>App.jsx:88-93</code>; <code>WorkspaceLayout.jsx</code>; <code>ReviewRequests.jsx</code>; <code>InstructorFeedbackPanel.jsx</code>; <code>useInstructorReview.js</code></li>
+<li>Tests: <code>SubmissionReadinessServiceTest</code>; <code>FeedbackRevisionMySqlTest</code>; <code>FeedbackPublicationMySqlTest</code>; <code>EvidenceTraceServiceTest</code>; <code>AiEvaluationServiceImplTest</code>; <code>PaperProcessingServiceImplTest</code></li>
+</ul></div>
+<div class="vi"><ul>
+<li>Nộp/duyệt: FeedbackController, FeedbackServiceImpl, SubmissionReadinessService</li>
+<li>Phiên bản: PaperSection, PaperProcessingServiceImpl, PaperController</li>
+<li>Checkpoint/diff: CheckpointController, CheckpointServiceImpl</li>
+<li>Trace: EvidenceRevisionTrace, CitationReviewRound, EvidenceTraceService, trang EvidenceTraceReview</li>
+<li>Chuẩn: SectionStandardEvaluation, SectionStandardService</li>
+<li>Nhận xét: InstructorFeedback, FeedbackAnchor(Service), migration V26/V27</li>
+<li>UI: App.jsx, WorkspaceLayout, ReviewRequests, InstructorFeedbackPanel, useInstructorReview</li>
+</ul></div>
+</section>
+</main>
+<footer>Evidence Pilot — Submission Review Audit (EN+VI) · READ-ONLY · Code is source of truth · CONFIRMED / PARTIAL / PRESENT BUT UNUSED / BACKEND ONLY / MISSING</footer>
+<script>
+function setLang(m){document.body.className=m==='en'?'':m==='vi'?'show-vi':'show-both';document.querySelectorAll('.btn').forEach(b=>b.classList.remove('active'));event.target.classList.add('active');}
+</script>
+</body>
+</html>

@@ -10,13 +10,14 @@ import api from '../../services/api.js';
 import { useNotification } from '../../context/NotificationContext';
 import WorkspaceHeader from '../../components/Student/WorkspaceHeader.jsx';
 import FilePanel from '../../components/Student/FilePanel.jsx';
+import SourceLibraryContent from '../../components/Student/SourceLibraryContent.jsx';
 import EditorPanel from '../../components/Student/EditorPanel.jsx';
 import ContextPanel from '../../components/Student/ContextPanel.jsx';
 import FullPaperPreview from '../../components/Student/FullPaperPreview.jsx';
 import SubmissionReadinessModal from '../../components/Student/SubmissionReadinessModal.jsx';
 import { hasActiveExtraction } from '../../utils/student/extractionPolling.js';
 import useInstructorReview, { loadAllProjectSources } from '../../hooks/useInstructorReview.js';
-import InstructorFeedbackPanel, { InstructorReviewGuide } from '../../components/Instructor/InstructorFeedbackPanel.jsx';
+import { InstructorReviewGuide } from '../../components/Instructor/InstructorFeedbackPanel.jsx';
 import useProjectFeedback from '../../hooks/useProjectFeedback.js';
 import { usePaperReferences } from '../../hooks/usePaperReferences.js';
 import { normalizeSource } from '../../utils/student/feedbackAnchors.js';
@@ -110,8 +111,8 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     selectedSectionId: '',
     selectedSection: null,
     content: '',
-    selectPaper: () => {},
-    selectSection: () => {},
+    selectPaper: () => { },
+    selectSection: () => { },
     editorRef: null,
     readOnly: false,
   };
@@ -208,6 +209,10 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   const [isCompactWorkspace, setIsCompactWorkspace] = useState(compactAtLoad);
   const [isDrawerOpen, setIsDrawerOpen] = useState(!compactAtLoad);
   const [isFileTreeOpen, setIsFileTreeOpen] = useState(!compactAtLoad);
+  const setStudentFeedbackOpen = open => {
+    setFeedbackOpen(open);
+    if (open) setIsDrawerOpen(false);
+  };
   const [textSize, setTextSize] = useState(14);
 
   const [selectedPaperDetail, setSelectedPaperDetail] = useState(null);
@@ -326,7 +331,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     if (feedbackId) { showToast(t('studentFeedback.reviewUnavailable')); return false; }
     setFeedbackRequestId(requestId || null);
     setFeedbackScope('project');
-    setFeedbackOpen(true);
+    setStudentFeedbackOpen(true);
     return true;
   };
 
@@ -400,7 +405,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     setActiveFeedbackId(item.id);
     setFeedbackRequestId(null);
     setFeedbackScope('section');
-    setFeedbackOpen(true);
+    setStudentFeedbackOpen(true);
     if (String(item.sectionId) === String(selectedSectionId)) {
       const position = editorRef.current?.getFeedbackPositions?.().find(entry => entry.id === item.id);
       if (position?.from != null) {
@@ -1186,7 +1191,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       let nextBatch = 0;
       const workerCount = Math.min(2, batchStarts.length);
       await Promise.all(Array.from({ length: workerCount }, async () => {
-        for (;;) {
+        for (; ;) {
           if (aborted()) return;
           const slot = nextBatch++;
           if (slot >= batchStarts.length) return;
@@ -1290,7 +1295,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       const message = status === 409
         ? (/prompt changed/i.test(rawMessage) ? t('reviewPromptChanged')
           : /model configuration changed/i.test(rawMessage) ? t('reviewModelChanged')
-          : t('reviewSectionChanged'))
+            : t('reviewSectionChanged'))
         : status === 429
           ? t('aiProviderRateLimited')
           : status === 503
@@ -1601,6 +1606,8 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   return (
     <div role="region" aria-label={t('feedbackProjectWorkspace')} className="h-screen w-full flex flex-col bg-(--surface-secondary) overflow-hidden font-sans antialiased text-(--text-primary)">
       <WorkspaceHeader workspaceMode={workspaceMode} project={project} navigate={navigate} onShowHistory={isReview ? undefined : () => setShowHistoryModal(true)} historyDisabled={assignedSections.length === 0}
+        reviewRound={isReview ? review.workflow : null}
+        reviewGuide={isReview ? <InstructorReviewGuide review={review.workflow} selectedSection={currentSection} /> : null}
         notifications={notifications} unreadCount={unreadCount} showNotifications={showNotifications} setShowNotifications={setShowNotifications} onMarkNotificationRead={handleMarkNotificationRead} onOpenNotification={handleOpenNotification}
         showExportMenu={showExportMenu} setShowExportMenu={setShowExportMenu} handleExportTexArchive={handleExportTexArchive} handleExportTraceabilityJson={handleExportTraceabilityJson} handleExportTraceabilityCsv={handleExportTraceabilityCsv} tourSteps={isReview ? undefined : tourSteps} tourKey="student-workspace"
         onRunCitationReview={isReview ? undefined : handleRunAiReview} canRunCitationReview={!isReview && !isLocked && Boolean(selectedPaper && selectedSectionId && canEditCurrentSection)} reviewBusy={loadingAiReview} reviewProgress={aiReviewProgress} reviewError={aiReviewError?.message} />
@@ -1618,26 +1625,26 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
             <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-r-md transition-colors ${isFileTreeOpen ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]' : 'bg-transparent'}`}></div>
             <svg className={`w-[22px] h-[22px] transition-colors ${isFileTreeOpen ? 'text-white' : 'text-indigo-300 group-hover:text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
           </button>
-          <button onClick={toggleContextPanel} className="w-full flex justify-center cursor-pointer mb-6 group relative" title={t('toggleContextPanel')} aria-pressed={isDrawerOpen}>
+          {!isReview && <button onClick={toggleContextPanel} className="w-full flex justify-center cursor-pointer mb-6 group relative" title={t('toggleContextPanel')} aria-pressed={isDrawerOpen}>
             <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-r-md transition-colors ${isDrawerOpen ? 'bg-indigo-400' : 'bg-transparent'}`}></div>
             <svg className={`w-[22px] h-[22px] transition-colors ${isDrawerOpen ? 'text-white' : 'text-indigo-300 group-hover:text-white'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          </button>
+          </button>}
         </div>
 
-        <FilePanel compact={isCompactWorkspace} isOpen={isFileTreeOpen} width={fileTreeWidth} onResizeStart={handleLeftDividerMouseDown} sections={sections} assignedSections={assignedSections} selectedSectionId={selectedSectionId} onSelectSection={handleSelectSection} selectedPaper={selectedPaper} onSelectPaper={handleSelectPaper} onViewFullPaper={() => setShowFullPaperPreview(true)} papers={papers} onUploadPaper={isLocked || pendingDelete ? undefined : handleUploadPaper} sources={sources} onUploadSource={isLocked ? undefined : handleUploadSource} onDeleteSource={isReview ? undefined : handleDeleteSource} mediaAssets={mediaAssets} onUploadMedia={isLocked ? undefined : handleUploadMedia} onDeleteMedia={isReview ? undefined : handleDeleteMedia} onInsertMedia={canEditCurrentSection ? handleInsertMedia : undefined} showToast={showToast} isLocked={isLocked} onSaveDraft={isReview ? undefined : handleSaveDraft} saveStatus={saveStatus} />
+        <FilePanel compact={isCompactWorkspace} isOpen={isFileTreeOpen} width={fileTreeWidth} onResizeStart={handleLeftDividerMouseDown} sections={sections} assignedSections={assignedSections} selectedSectionId={selectedSectionId} onSelectSection={handleSelectSection} selectedPaper={selectedPaper} onSelectPaper={handleSelectPaper} onViewFullPaper={() => setShowFullPaperPreview(true)} papers={papers} onUploadPaper={isLocked || pendingDelete ? undefined : handleUploadPaper} sources={sources} onUploadSource={isLocked ? undefined : handleUploadSource} onDeleteSource={isReview ? undefined : handleDeleteSource} mediaAssets={mediaAssets} onUploadMedia={isLocked ? undefined : handleUploadMedia} onDeleteMedia={isReview ? undefined : handleDeleteMedia} onInsertMedia={canEditCurrentSection ? handleInsertMedia : undefined} showToast={showToast} isLocked={isLocked} onSaveDraft={isReview ? undefined : handleSaveDraft} saveStatus={saveStatus} reviewMode={isReview} onCollapse={isReview ? () => setIsFileTreeOpen(false) : undefined} sourcesContent={isReview ? (
+          <SourceLibraryContent sources={sources} project={project} isLocked={isLocked} setViewerFile={setViewerFile} fetchSources={fetchSources} onOpenSourceMap={openSourceMap} paperReferences={paperReferences} referencesLoading={paperRefs.loading} referencesError={paperRefs.error} referenceSourceIds={referenceSourceIds} canMutateReferences={canMutateReferences} onAddReference={handleAddReference} onRemoveReference={handleRemoveReference} onReferencesChanged={paperRefs.reload} showToast={showToast} readOnly compact />
+        ) : null} />
 
         <EditorPanel onViewFullPaper={() => setShowFullPaperPreview(true)} review={isReview ? review.workflow : null} compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={isReview ? undefined : handleSaveDraft} insertLatexTag={isReview ? undefined : insertLatexTag} insertSymbol={isReview ? undefined : insertSymbol} handleFindReplace={isReview ? undefined : handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} isLocked={isLocked} findings={editorFindings} onFindingClick={handleFindingClick} onOpenSourceMap={openSourceMap} onRunCitationReview={handleRunAiReview} onOpenCitationReview={handleOpenCitationReview} reviewBusy={loadingAiReview} reviewProgress={aiReviewProgress} reviewFindingsCount={(aiReviewResult?.findings || []).length} reviewError={aiReviewError?.message} onEditorUserScroll={handleReviewScrollClose} isReviewVisible={isReviewVisible} onToggleReviewVisible={toggleReviewVisible} citationIndex={citationIndex}
-          feedback={isReview ? undefined : feedback} feedbackOpen={feedbackOpen} setFeedbackOpen={setFeedbackOpen} activeFeedbackId={activeFeedbackId} onSelectFeedback={isReview ? item => { review.workflow.selectFeedback(item); setActiveTab('Review'); setIsDrawerOpen(true); if (isCompactWorkspace) setIsFileTreeOpen(false); } : handleSelectFeedback}
+          feedback={isReview ? undefined : feedback} feedbackOpen={feedbackOpen} setFeedbackOpen={setStudentFeedbackOpen} activeFeedbackId={activeFeedbackId} onSelectFeedback={isReview ? item => { review.workflow.selectFeedback(item); setActiveTab('Review'); setIsDrawerOpen(true); if (isCompactWorkspace) setIsFileTreeOpen(false); } : handleSelectFeedback}
           feedbackRequestId={feedbackRequestId} setFeedbackRequestId={setFeedbackRequestId} feedbackScope={feedbackScope} setFeedbackScope={setFeedbackScope} paperReferences={paperReferences} />
 
-        <ContextPanel compact={isCompactWorkspace} isOpen={isDrawerOpen} width={rightDrawerWidth} activeTab={activeTab} setActiveTab={setActiveTab} showToast={showToast}
-          reviewContent={isReview ? <InstructorFeedbackPanel review={review.workflow} selectedSection={currentSection} onSelectFeedback={review.workflow.selectFeedback} /> : undefined}
-          requirementsContent={isReview ? <InstructorReviewGuide review={review.workflow} selectedSection={currentSection} /> : undefined}
+        {!isReview && <ContextPanel compact={isCompactWorkspace} isOpen={isDrawerOpen} width={rightDrawerWidth} activeTab={activeTab} setActiveTab={setActiveTab} showToast={showToast}
           sources={sources} paperReferences={paperReferences} referencesLoading={paperRefs.loading} referencesError={paperRefs.error} referenceSourceIds={referenceSourceIds} canMutateReferences={canMutateReferences} onAddReference={handleAddReference} onRemoveReference={handleRemoveReference} onReferencesChanged={paperRefs.reload} isUploading={isUploading} setIsUploading={setIsUploading} project={project} setViewerFile={setViewerFile} fetchSources={fetchSources} onOpenSourceMap={openSourceMap} isLocked={isLocked}
           selectedPaper={selectedPaper} selectedSection={currentSection} isAssignedSection={Boolean(currentSection && String(currentSection.assignedUserId) === String(user?.id))}
           isSectionDirty={dirtySectionsRef.current.has(selectedSectionId)} onHandoffChanged={handleHandoffChanged} pollAiJob={pollAiJob}
           feedbacks={feedback.requests} feedbackLoading={feedback.loading} feedbackError={feedback.error} onRetryFeedback={feedback.refresh} onViewFeedback={openFeedback}
-          setShowSubmitReviewModal={isReview ? undefined : setShowSubmitReviewModal} userProjectRole={project?.currentUserRole} />
+          setShowSubmitReviewModal={setShowSubmitReviewModal} userProjectRole={project?.currentUserRole} />}
       </div>
 
       {/* Restore Previous Save Modal */}

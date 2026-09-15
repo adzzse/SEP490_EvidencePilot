@@ -4,10 +4,13 @@ import { useTranslation } from 'react-i18next';
 import { useMediaUrls } from '../../hooks/useMediaUrls.js';
 import DeleteConfirm from '../ui/DeleteConfirm.jsx';
 
-export default function FilePanel({ compact, isOpen, width, onResizeStart, sections, assignedSections, selectedSectionId, onSelectSection, selectedPaper, onSelectPaper, onViewFullPaper, papers, onUploadPaper, sources, onUploadSource, onDeleteSource, mediaAssets, onUploadMedia, onDeleteMedia, onInsertMedia, showToast, isLocked, onSaveDraft, saveStatus }) {
+export default function FilePanel({ compact, isOpen, width, onResizeStart, sections, assignedSections, selectedSectionId, onSelectSection, selectedPaper, onSelectPaper, onViewFullPaper, papers, onUploadPaper, sources, onUploadSource, onDeleteSource, mediaAssets, onUploadMedia, onDeleteMedia, onInsertMedia, showToast, isLocked, onSaveDraft, saveStatus, reviewMode = false, sourcesContent = null, onCollapse }) {
   const { t } = useTranslation();
   const [mediaSearchQuery, setMediaSearchQuery] = useState('');
   const [hoveredMedia, setHoveredMedia] = useState(null);
+  // ponytail: review left column groups; Paper open by default, selection lives in the parent so it survives collapse
+  const [openGroups, setOpenGroups] = useState({ paper: true, sources: false, media: false });
+  const toggleGroup = key => setOpenGroups(previous => ({ ...previous, [key]: !previous[key] }));
 
   // Signed URLs are not part of the list response — shared hook dedupes
   // concurrent mounts into one /api/media/urls POST.
@@ -26,7 +29,7 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
 
   return (
     <>
-      <aside data-tour="file-panel" style={{ width: compact ? 'min(20rem, calc(100vw - 3.5rem))' : width }} className={`bg-(--surface-secondary) border-r border-(--border) flex flex-col shrink-0 z-30 backdrop-blur-sm ${compact ? 'absolute inset-y-0 left-14 shadow-xl' : 'relative'}`}>
+      <aside data-tour="file-panel" style={{ width: compact ? 'min(20rem, calc(100vw - 3.5rem))' : width }} className={`bg-(--surface-secondary) border-r border-(--border) flex flex-col shrink-0 z-30 backdrop-blur-sm overflow-y-auto hide-scrollbar min-h-0 ${compact ? 'absolute inset-y-0 left-14 shadow-xl' : 'relative'}`}>
         <div className="px-4 py-2.5 border-b border-(--border) bg-(--surface-tertiary)/40 flex items-center justify-between">
           <span className="text-xs font-bold text-(--text-primary) truncate max-w-[180px]">{selectedPaper?.originalFilename || selectedPaper?.title || t('paper')}</span>
           {selectedPaper && (
@@ -34,6 +37,11 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
               <button type="button" onClick={onViewFullPaper} className="ml-2 w-7 h-7 shrink-0 flex items-center justify-center rounded-md text-(--text-secondary) hover:text-(--brand-foreground) hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors" title={t('viewFullPaper')} aria-label={t('viewFullPaper')}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
               </button>
+              {reviewMode && onCollapse && (
+                <button type="button" onClick={onCollapse} className="w-7 h-7 shrink-0 flex items-center justify-center rounded-md text-(--text-secondary) hover:text-(--brand-foreground) hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors" title={t('collapseNavigation')} aria-label={t('collapseNavigation')}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
+                </button>
+              )}
             </div>
           )}
           {!selectedPaper && papers.length === 0 && onUploadPaper && !isLocked && <label className="w-7 h-7 flex items-center justify-center rounded-md text-(--text-secondary) hover:text-indigo-600 cursor-pointer focus-within:ring-2 focus-within:ring-(--focus)" title={t('uploadNewPaper')}>
@@ -41,11 +49,19 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
           </label>}
         </div>
-        <div className="px-3 py-2 border-b border-(--border) flex items-center justify-between">
-          <span className="text-[10px] font-bold text-(--text-secondary) tracking-wider uppercase">{t('sections')}</span>
-          {saveLabel && <span className="text-[10px] font-bold text-indigo-600">{saveLabel}</span>}
-        </div>
-        <div className="p-2 flex-1 max-h-[45%] overflow-y-auto border-b border-(--border)">
+        {reviewMode ? (
+          <button type="button" onClick={() => toggleGroup('paper')} aria-expanded={openGroups.paper} className="px-3 py-2 border-b border-(--border) flex items-center gap-2 w-full text-left hover:bg-(--surface-tertiary)/60 transition-colors cursor-pointer">
+            <svg className={`w-3.5 h-3.5 shrink-0 text-(--text-secondary) transition-transform ${openGroups.paper ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+            <span className="text-[10px] font-bold text-(--text-secondary) tracking-wider uppercase">{t('sections')}</span>
+            {saveLabel && <span className="ml-auto text-[10px] font-bold text-indigo-600">{saveLabel}</span>}
+          </button>
+        ) : (
+          <div className="px-3 py-2 border-b border-(--border) flex items-center justify-between">
+            <span className="text-[10px] font-bold text-(--text-secondary) tracking-wider uppercase">{t('sections')}</span>
+            {saveLabel && <span className="text-[10px] font-bold text-indigo-600">{saveLabel}</span>}
+          </div>
+        )}
+        {(!reviewMode || openGroups.paper) && <div className="p-2 flex-1 max-h-[45%] overflow-y-auto border-b border-(--border)">
           {sections.length === 0 ? (
             <div className="text-xs text-(--text-tertiary) italic text-center py-4">{t('noSections')}</div>
           ) : (
@@ -80,21 +96,41 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
               );
             })
           )}
-        </div>
+        </div>}
 
-        <div className="px-4 py-3 border-b border-(--border) flex justify-between items-center bg-(--surface-tertiary)/40">
-          <span className="text-[11px] font-bold text-(--text-secondary) tracking-wider uppercase">{t('mediaAssets')}</span>
+        {reviewMode && (
+          <>
+            <button type="button" onClick={() => toggleGroup('sources')} aria-expanded={openGroups.sources} className="px-3 py-2 border-b border-(--border) bg-(--surface-tertiary)/40 flex items-center gap-2 w-full text-left hover:bg-(--surface-tertiary)/60 transition-colors cursor-pointer">
+              <svg className={`w-3.5 h-3.5 shrink-0 text-(--text-secondary) transition-transform ${openGroups.sources ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+              <span className="text-[11px] font-bold text-(--text-secondary) tracking-wider uppercase">{t('sources')}</span>
+            </button>
+            {openGroups.sources && (
+              <div className="max-h-[40vh] overflow-y-auto overflow-x-hidden border-b border-(--border) bg-(--surface)">
+                {sourcesContent}
+              </div>
+            )}
+          </>
+        )}
+
+        {reviewMode ? (
+          <button type="button" onClick={() => toggleGroup('media')} aria-expanded={openGroups.media} className="px-4 py-3 border-b border-(--border) flex items-center gap-2 w-full text-left bg-(--surface-tertiary)/40 hover:bg-(--surface-tertiary)/60 transition-colors cursor-pointer">
+            <svg className={`w-3.5 h-3.5 shrink-0 text-(--text-secondary) transition-transform ${openGroups.media ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
+            <span className="text-[11px] font-bold text-(--text-secondary) tracking-wider uppercase">{t('mediaAssets')}</span>
+          </button>
+        ) : (
+          <div className="px-4 py-3 border-b border-(--border) flex justify-between items-center bg-(--surface-tertiary)/40">
+            <span className="text-[11px] font-bold text-(--text-secondary) tracking-wider uppercase">{t('mediaAssets')}</span>
           {!isLocked && (
             <label className="text-(--text-tertiary) hover:text-indigo-600 transition-colors cursor-pointer" title={t('uploadMedia')}>
               <input type="file" className="hidden" onChange={(e) => { if (e.target.files?.[0]) onUploadMedia(e.target.files[0]); }} />
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
             </label>
           )}
-        </div>
-        <div className="px-3 py-2 border-b border-(--border) bg-(--surface-tertiary)/40">
+        </div>)}
+        {(!reviewMode || openGroups.media) && <div className="px-3 py-2 border-b border-(--border) bg-(--surface-tertiary)/40">
           <input type="text" placeholder={t('searchMedia')} value={mediaSearchQuery} onChange={(e) => setMediaSearchQuery(e.target.value)} className="w-full text-xs border border-(--border) rounded-lg px-2 py-1 bg-(--surface) outline-none focus:ring-1 focus:ring-indigo-500 text-(--text-primary)" />
-        </div>
-        <div className="p-2 flex-1 overflow-y-auto">
+        </div>}
+        {(!reviewMode || openGroups.media) && <div className="p-2 flex-1 overflow-y-auto">
           {mediaAssets.length === 0 ? (
             <div className="text-xs text-(--text-tertiary) italic text-center py-4">{t('noMedia')}</div>
           ) : (
@@ -110,7 +146,7 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
               </div>
             ))
           )}
-        </div>
+        </div>}
         {!compact && onResizeStart && (
           <div onMouseDown={onResizeStart} className="absolute top-0 bottom-0 -right-[3px] w-[7px] cursor-col-resize z-10 group flex items-center justify-center" title={t('dragToResize')} aria-hidden="true">
             <div className="h-8 w-[3px] rounded bg-(--border) group-hover:bg-indigo-500 transition-colors"></div>

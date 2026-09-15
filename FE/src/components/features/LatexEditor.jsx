@@ -22,6 +22,7 @@ let reviewClickBridge = null;
 const TONE_COLORS = { discrepancy: '#ef4444', warn: '#f59e0b', neutral: '#94a3b8' };
 
 const setReviewRanges = StateEffect.define();
+const setChangeRanges = StateEffect.define();
 const setFeedbackItems = StateEffect.define();
 const setFeedbackActive = StateEffect.define();
 const hydrateSource = Annotation.define();
@@ -65,6 +66,25 @@ const reviewRanges = StateField.define({
             widget: new InfoIconWidget(findingIndex, to, tone),
           }, { side: 1 }).range(to),
         ]), true);
+      }
+    }
+    return next;
+  },
+  provide: field => EditorView.decorations.from(field),
+});
+
+// ponytail: instructor "show changes" ranges — same changeRanges model the
+// Preview consumes. Light-green mark only; no layout shift, no text change.
+const changeRangesField = StateField.define({
+  create: () => Decoration.none,
+  update: (decorations, transaction) => {
+    let next = decorations.map(transaction.changes);
+    for (const effect of transaction.effects) {
+      if (effect.is(setChangeRanges)) {
+        next = Decoration.set(effect.value.flatMap(({ from, to }) => {
+          if (from == null || to == null || from < 0 || to <= from || to > transaction.newDoc.length) return [];
+          return [Decoration.mark({ class: 'cm-change-added' }).range(from, to)];
+        }), true);
       }
     }
     return next;
@@ -233,7 +253,7 @@ function buildCiteMask(view, citationIndexRef) {
 
 const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = content, savedVersion,
   feedbackItems, activeFeedbackId, feedbackVisible = false, onFeedbackClick, onFeedbackChange,
-  onChange, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onLayoutChange, onUserScroll, citationIndex = {}, mediaAssets = [] }, ref) {
+  onChange, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onLayoutChange, onUserScroll, citationIndex = {}, mediaAssets = [], changeRanges = [] }, ref) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
   const trackerRef = useRef(null);
@@ -498,6 +518,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
         EditorState.readOnly.of(readOnly),
         EditorView.lineWrapping,
         reviewRanges,
+        changeRangesField,
         feedbackRanges,
         blockMarks,
         EditorView.domEventHandlers({
@@ -566,6 +587,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
           '.cm-md-table': { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.16)' : 'rgba(99, 102, 241, 0.07)', boxShadow: 'inset 2px 0 0 #6366f1' },
           '.cm-md-math': { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.16)' : 'rgba(245, 158, 11, 0.07)', boxShadow: 'inset 2px 0 0 #f59e0b' },
           '.cm-feedback-range': { backgroundColor: 'rgba(20, 184, 166, 0.16)', boxShadow: 'inset 0 -2px #0d9488', cursor: 'pointer' },
+          '.cm-change-added': { backgroundColor: '#dcfce7', borderRadius: '2px' },
           '.cm-feedback-active': { backgroundColor: 'rgba(20, 184, 166, 0.3)', outline: '1px solid #0d9488' },
           '.cm-finding-widget': {
             display: 'inline-flex',
@@ -682,6 +704,21 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
       viewRef.current.dispatch({ effects: setReviewRanges.of(ranges) });
     }
   }, [findings]);
+
+  // ponytail: show-changes highlights follow the shared changeRanges prop
+  // (clamped to the doc; CM maps them through hydration edits).
+  useEffect(() => {
+    const v = viewRef.current;
+    if (!v) return;
+    const valid = (changeRanges || [])
+      .map(({ sourceStart, sourceEnd }) => ({
+        from: Math.max(0, Math.min(sourceStart, v.state.doc.length)),
+        to: Math.max(0, Math.min(sourceEnd, v.state.doc.length)),
+      }))
+      .filter(({ from, to }) => Number.isInteger(from) && Number.isInteger(to) && to > from)
+      .sort((left, right) => left.from - right.from);
+    v.dispatch({ effects: setChangeRanges.of(valid) });
+  }, [changeRanges, content]);
 
   const showPeekCard = assetPeek && (peekOpen || assetPeek.pinned);
 

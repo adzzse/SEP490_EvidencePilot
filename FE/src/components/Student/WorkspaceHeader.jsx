@@ -6,14 +6,21 @@ import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
 import TourLauncher from '../ui/TourLauncher.jsx';
 import ProfileModal from '../ui/ProfileModal.jsx';
+import StatusBadge from '../ui/StatusBadge.jsx';
+import { formatDateTime } from '../../utils/formatters/date.js';
 
-export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, onRunCitationReview, canRunCitationReview = false, reviewBusy = false, reviewProgress = null, reviewError = null }) {
+export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, onRunCitationReview, canRunCitationReview = false, reviewBusy = false, reviewProgress = null, reviewError = null, reviewRound = null, reviewGuide = null }) {
   const { user } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
   const { t } = useTranslation();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  // ponytail: review-only header menus share the hook-owned round state (no duplicate source)
+  const [showRoundMenu, setShowRoundMenu] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const isReview = workspaceMode === 'review';
+  const activeRound = reviewRound?.orderedRequests?.find(r => String(r.id) === String(reviewRound.activeRequestId)) || reviewRound?.orderedRequests?.[0] || null;
   const canExport = project?.status === 'APPROVED' || project?.status === 'ARCHIVED';
   const iconButton = 'p-2 hover:bg-(--surface-secondary) rounded-lg text-(--text-secondary) transition-colors disabled:opacity-30';
 
@@ -39,8 +46,29 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
         <div data-tour="header-logo" className="w-7 h-7 bg-(--brand) text-(--on-brand) rounded-lg text-xs flex items-center justify-center font-bold shadow-sm shrink-0">EP</div>
       </div>
 
-      <div className="min-w-0 flex-1 flex justify-center px-2">
+      <div className="min-w-0 flex-1 flex justify-center items-center gap-1.5 px-2">
         <span data-tour="header-project-name" className="text-xs sm:text-sm font-bold text-(--text-primary) truncate max-w-full sm:max-w-[260px] lg:max-w-[360px]">{project?.title || t('project')}</span>
+        {isReview && reviewRound?.orderedRequests?.length > 0 && (
+          <div className="relative shrink-0">
+            <button type="button" onClick={() => { setShowRoundMenu(!showRoundMenu); setShowGuide(false); setShowMoreMenu(false); }} aria-expanded={showRoundMenu} aria-label={t('instructor.review.reviewRound')}
+              className="flex items-center gap-1 rounded-lg border border-(--border) bg-(--surface-secondary) px-2 py-1 text-[11px] font-bold text-(--text-secondary) hover:text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)">
+              <span>{activeRound ? formatDateTime(activeRound.requestedAt, language) : ''}</span>
+              <svg className={`w-3 h-3 transition-transform ${showRoundMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {showRoundMenu && (
+              <div className="absolute left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] max-h-80 overflow-y-auto py-1">
+                {reviewRound.orderedRequests.map(req => (
+                  <button key={req.id} type="button" onClick={() => { reviewRound.setActiveRequestId(req.id); setShowRoundMenu(false); }}
+                    aria-pressed={String(req.id) === String(reviewRound.activeRequestId)}
+                    className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-(--surface-secondary) ${String(req.id) === String(reviewRound.activeRequestId) ? 'font-bold text-(--brand-foreground)' : 'text-(--text-secondary)'}`}>
+                    <span className="truncate">{String(req.id) === String(reviewRound.activeRequestId) ? '✓ ' : ''}{formatDateTime(req.requestedAt, language)}</span>
+                    <StatusBadge status={req.status} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
@@ -74,6 +102,22 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
           <button data-tour="header-dark-mode" onClick={toggleTheme} className={iconButton} title={theme === 'light' ? t('darkMode') : t('lightMode')} aria-label={theme === 'light' ? t('darkMode') : t('lightMode')}>
             {theme === 'light' ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>}
           </button>
+          {isReview && reviewGuide && (
+            <div className="relative">
+              <button type="button" onClick={() => { setShowGuide(!showGuide); setShowRoundMenu(false); setShowMoreMenu(false); }} className={iconButton} title={t('instructor.review.reviewGuide')} aria-label={t('instructor.review.reviewGuide')} aria-expanded={showGuide}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              </button>
+              {showGuide && (
+                <div className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] max-h-96 overflow-y-auto p-1">
+                  <div className="sticky top-0 bg-(--surface) px-3 py-2 flex justify-between items-center">
+                    <span className="text-xs font-bold text-(--text-primary)">{t('instructor.review.reviewGuide')}</span>
+                    <button type="button" onClick={() => setShowGuide(false)} className={iconButton} aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                  </div>
+                  {reviewGuide}
+                </div>
+              )}
+            </div>
+          )}
           {tourSteps && <TourLauncher steps={tourSteps} tourKey={tourKey || 'student-workspace'} className={`${iconButton} w-8 h-8 flex items-center justify-center`} />}
           <div className="flex bg-(--surface-secondary) p-0.5 rounded-lg border border-(--border) text-[10px] font-bold">
             <button onClick={() => language !== 'en' && toggleLanguage()} className={`px-2 py-1 rounded-md transition ${language === 'en' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>EN</button>

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api.js';
 import useUndoDelete from '../components/ui/UndoDelete.jsx';
 import { normalizeSource, resolveAnchor, sourceFingerprint } from '../utils/student/feedbackAnchors.js';
+import { wordDiff } from '../utils/instructor/wordDiff.js';
 
 export async function loadAllProjectSources(projectId) {
   const sources = [];
@@ -75,6 +76,9 @@ export default function useInstructorReview({ projectId, enabled }) {
   const [snapshotRetry, setSnapshotRetry] = useState(0);
   const suggestionRequestRef = useRef(0);
   const [feedbackFocusToken, setFeedbackFocusToken] = useState(0);
+  // ponytail: project evidence traces shared by Evidence tab + overview (single fetch, client-side scoping)
+  const [evidenceTraces, setEvidenceTraces] = useState([]);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -177,7 +181,9 @@ export default function useInstructorReview({ projectId, enabled }) {
       .then(response => {
         if (cancelled) return;
         const candidate = response.data?.snapshot;
-        const available = response.data?.state === 'AVAILABLE' && candidate?.schemaVersion === 1
+        // ponytail: accept snapshot schema v1 (sections only) and v2 (+evidence/standard refs)
+        const schemaOk = candidate?.schemaVersion === 1 || candidate?.schemaVersion === 2;
+        const available = response.data?.state === 'AVAILABLE' && schemaOk
           && String(candidate.projectId) === String(projectId) && Array.isArray(candidate.papers)
           && candidate.papers.every(paper => paper.id && (typeof paper.title === 'string' || paper.title === null) && Array.isArray(paper.sections)
             && paper.sections.every(section => section.id && typeof section.title === 'string'
@@ -228,12 +234,14 @@ export default function useInstructorReview({ projectId, enabled }) {
     }
     let cancelled = false;
     api.get(`/api/papers/${selectedPaperId}/sections`)
-      .then(r => { if (!cancelled) {
-        const liveSections = r.data || [];
-        setSections(liveSections);
-        setSelectedSectionId(previous => liveSections.some(section => String(section.id) === String(previous))
-          ? previous : liveSections[0]?.id || null);
-      } })
+      .then(r => {
+        if (!cancelled) {
+          const liveSections = r.data || [];
+          setSections(liveSections);
+          setSelectedSectionId(previous => liveSections.some(section => String(section.id) === String(previous))
+            ? previous : liveSections[0]?.id || null);
+        }
+      })
       .catch(() => { if (!cancelled) setSections([]); });
     return () => { cancelled = true; };
   }, [selectedPaperId, snapshotState, submissionSnapshot, viewMode]);
@@ -269,15 +277,17 @@ export default function useInstructorReview({ projectId, enabled }) {
     return contained || guides.find(g => normalizeKey(g.sectionType) === 'default') || null;
   }, [guides, selectedSection]);
 
-  // ponytail: simplified diff — equal? no ops, else mark whole block as changed. Full semantic diff was YAGNI for checkpoint view.
-  const diffOps = useMemo(() => {
+  // ponytail: word-level submitted-vs-baseline diff (was whole-block mark).
+  // Normalized first so change offsets line up with displayContent (what the
+  // LaTeX editor and Preview both render); all three views share diffResult.
+  const diffResult = useMemo(() => {
     if (!diffEnabled || !baseline || !selectedSection) return null;
     if (String(baselineSectionId) !== String(selectedSection.id)) return null;
-    const a = baseline.contentTex || '';
-    const b = selectedSection.contentTex || '';
-    if (a === b) return [[0, b]];
-    return [[-1, a], [1, b]];
+    return wordDiff(normalizeSource(baseline.contentTex || ''), normalizeSource(selectedSection.contentTex || ''));
   }, [diffEnabled, baseline, baselineSectionId, selectedSection]);
+  const diffOps = diffResult?.ops || null;
+  const diffTruncated = !!diffResult?.truncated;
+  const changeRanges = diffResult?.ranges || [];
 
   const loadFeedback = useCallback(async () => {
     if (!enabled) return;
@@ -337,12 +347,14 @@ export default function useInstructorReview({ projectId, enabled }) {
       return;
     }
     try {
-      updateFeedbackDraft({ anchor: {
-        from: range.from,
-        to: range.to,
-        contentVersion: selectedSection.version,
-        fingerprint: await sourceFingerprint(source),
-      }, lineReference: '' });
+      updateFeedbackDraft({
+        anchor: {
+          from: range.from,
+          to: range.to,
+          contentVersion: selectedSection.version,
+          fingerprint: await sourceFingerprint(source),
+        }, lineReference: ''
+      });
     } catch {
       setErrorMessage(t('instructor.review.selectSourceRange'));
     }
@@ -442,7 +454,7 @@ export default function useInstructorReview({ projectId, enabled }) {
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: res.data.status } : r));
       await loadFeedback();
       setPendingTransition(null);
-      setSuccessMessage(targetStatus === 'REVIEWED' ? t('instructor.review.reviewApproved') : t('instructor.review.reviewReturned'));
+      setSuccessMessage(targetStatus === 'REVIEWED' ? t('instructor.review.reviewApproved') : targetStatus === 'REJECTED' ? t('instructor.review.reviewRejected') : t('instructor.review.reviewReturned'));
       if (targetStatus === 'REVIEWED') {
         setTimeout(() => navigate('/instructor/requests'), 1000);
       }
@@ -455,7 +467,7 @@ export default function useInstructorReview({ projectId, enabled }) {
     let polls = 0;
     const MAX_POLLS = 1200;
     const startedAt = Date.now();
-    for (;;) {
+    for (; ;) {
       if (shouldAbort?.()) return null;
       const { data: job } = await api.get(`/api/jobs/${jobId}`);
       if (job.status === 'SUCCESS') return job;
@@ -511,9 +523,41 @@ export default function useInstructorReview({ projectId, enabled }) {
     const existing = feedbackDraft.trim();
     const incoming = (content || '').trim();
     if (!incoming) return;
-    updateFeedbackDraft({ content: existing ? `${existing}\n\n${incoming}` : incoming,
-      ...(lineRef ? { lineReference: lineRef } : {}) });
+    updateFeedbackDraft({
+      content: existing ? `${existing}\n\n${incoming}` : incoming,
+      ...(lineRef ? { lineReference: lineRef } : {})
+    });
   };
+
+  const reloadEvidence = useCallback(async () => {
+    if (!enabled || !projectId) return;
+    setEvidenceLoading(true);
+    try {
+      const { data } = await api.get(`/api/projects/${projectId}/evidence-traces`);
+      setEvidenceTraces(Array.isArray(data) ? data : []);
+    } catch {
+      setEvidenceTraces([]);
+    } finally {
+      setEvidenceLoading(false);
+    }
+  }, [enabled, projectId]);
+
+  useEffect(() => { reloadEvidence(); }, [reloadEvidence]);
+
+  const submitTraceJudgment = async (traceId, judgment, instructorFeedback) => {
+    if (!enabled || !projectId || !traceId || !judgment) return;
+    setErrorMessage('');
+    try {
+      await api.patch(`/api/projects/${projectId}/evidence-traces/${traceId}/review`,
+        { judgment, instructorFeedback: instructorFeedback?.trim() || null });
+      await reloadEvidence();
+    } catch (err) {
+      setErrorMessage(err?.response?.data?.message || t('instructor.review.updateStatusFailed'));
+    }
+  };
+
+  // ponytail: historical rounds are read-only; only the latest PENDING/RETURNED request accepts input
+  const isHistoricalRound = !!activeRequest && !!latestRequest && String(activeRequest.id) !== String(latestRequest.id);
 
   const selectedPaper = papers.find(paper => String(paper.id) === String(selectedPaperId)) || null;
   const workspace = {
@@ -539,16 +583,20 @@ export default function useInstructorReview({ projectId, enabled }) {
     selectedPaperId,
     selectedSectionId,
     sections,
+    papers,
     orderedRequests,
     activeRequest,
     activeRequestId,
     setActiveRequestId,
+    isHistoricalRound,
     feedbackItems,
     errorMessage,
     successMessage,
     diffEnabled,
     setDiffEnabled,
     diffOps,
+    diffTruncated,
+    changeRanges,
     feedbackDraft,
     feedbackLineRef,
     selectedAnchor,
@@ -586,6 +634,10 @@ export default function useInstructorReview({ projectId, enabled }) {
     pendingDelete,
     undoDelete,
     dismissDelete,
+    evidenceTraces,
+    evidenceLoading,
+    reloadEvidence,
+    submitTraceJudgment,
   };
 
   return { workspace, workflow };
