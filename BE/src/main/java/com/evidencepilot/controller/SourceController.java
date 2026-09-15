@@ -8,8 +8,8 @@ import com.evidencepilot.model.ProjectDocument;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.repository.ProjectDocumentRepository;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.DocumentService;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.repository.ProjectRepository;
@@ -46,9 +46,9 @@ import java.util.stream.Stream;
 @Tag(name = "Sources", description = "Endpoints for managing source documents")
 public class SourceController {
 
-    private final DocumentService documentService;
+    private final DocumentServiceImpl documentService;
     private final ProjectDocumentRepository projectDocumentRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final ProjectRepository projectRepository;
 
     @Operation(summary = "List the current user's source library",

@@ -6,7 +6,7 @@ import com.evidencepilot.dto.response.DocumentTextResponse;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.service.DocumentObjectStorage;
-import com.evidencepilot.service.DocumentService;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -42,7 +42,7 @@ import java.util.UUID;
 @Tag(name = "Documents", description = "Document metadata, chunks, and text retrieval")
 public class DocumentController {
 
-    private final DocumentService documentService;
+    private final DocumentServiceImpl documentService;
     private final DocumentObjectStorage documentObjectStorage;
 
     @Operation(summary = "Get document by ID",

@@ -9,7 +9,6 @@ import com.evidencepilot.model.Document;
 import com.evidencepilot.model.enums.EdgeType;
 import com.evidencepilot.repository.DocumentReferenceRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +25,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ProjectSourceMapService {
     private final ProjectRepository projectRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final SourceMatchingService sourceMatchingService;
     private final DocumentReferenceRepository referenceRepository;
 

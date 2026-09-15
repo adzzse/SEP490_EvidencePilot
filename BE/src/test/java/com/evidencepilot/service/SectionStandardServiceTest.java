@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
@@ -47,7 +48,7 @@ class SectionStandardServiceTest {
     @Mock
     private SectionStandardEvaluationRepository evaluationRepository;
     @Mock
-    private CurrentUserService currentUserService;
+    private CurrentUserServiceImpl currentUserService;
     @Mock
     private PromptTemplateService prompts;
     @Mock

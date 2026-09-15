@@ -2,7 +2,6 @@ package com.evidencepilot.service.impl;
 
 import com.evidencepilot.service.QdrantClient;
 import com.evidencepilot.dto.ExtractionResultPayload;
-import com.evidencepilot.service.QdrantService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -16,11 +15,10 @@ import static java.util.Map.entry;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class QdrantServiceImpl implements QdrantService {
+public class QdrantServiceImpl {
 
     private final QdrantClient qdrantClient;
 
-    @Override
     public void upsertVectors(ExtractionResultPayload payload) {
         if (payload.chunks().isEmpty()) {
             return;
@@ -50,7 +48,6 @@ public class QdrantServiceImpl implements QdrantService {
         log.info("Upserted {} vectors to Qdrant for document {}", upserted, payload.documentId());
     }
 
-    @Override
     public void deleteVectors(UUID documentId) {
         qdrantClient.deleteByDocumentId(documentId.toString());
     }

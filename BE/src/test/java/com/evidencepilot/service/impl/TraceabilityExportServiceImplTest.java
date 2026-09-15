@@ -18,7 +18,6 @@ import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CurrentUserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -57,7 +56,7 @@ class TraceabilityExportServiceImplTest {
     @Mock
     private EvidenceRevisionTraceRepository evidenceRevisionTraceRepository;
     @Mock
-    private CurrentUserService currentUserService;
+    private CurrentUserServiceImpl currentUserService;
 
     private TraceabilityExportServiceImpl service;
     private User currentUser;

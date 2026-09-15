@@ -19,7 +19,6 @@ import com.evidencepilot.repository.EvidenceRevisionTraceRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiModelClient;
-import com.evidencepilot.service.CurrentUserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,7 +55,7 @@ class EvidenceTraceServiceTest {
     private final SectionCitationReviewService reviewService =
             mock(SectionCitationReviewService.class);
     private final AiModelClient aiModelClient = mock(AiModelClient.class);
-    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+    private final CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     private EvidenceTraceService service;

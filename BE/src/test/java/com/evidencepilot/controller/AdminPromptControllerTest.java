@@ -10,7 +10,7 @@ import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.PromptTemplateService;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.AiGenerationConfigService;
-import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.SectionStandardService;
 import com.evidencepilot.service.impl.SectionCitationReviewService;
 import org.junit.jupiter.api.AfterEach;
@@ -45,11 +45,11 @@ class AdminPromptControllerTest {
         @Bean PromptTemplateService prompts() { return mock(PromptTemplateService.class); }
         @Bean AiModelClient aiModelClient() { return mock(AiModelClient.class); }
         @Bean AiGenerationConfigService generationConfigService() { return mock(AiGenerationConfigService.class); }
-        @Bean CurrentUserService currentUserService() { return mock(CurrentUserService.class); }
+        @Bean CurrentUserServiceImpl currentUserService() { return mock(CurrentUserServiceImpl.class); }
         @Bean SectionStandardService sectionStandardService() { return mock(SectionStandardService.class); }
         @Bean SectionCitationReviewService sectionCitationReviewService() { return mock(SectionCitationReviewService.class); }
         @Bean AdminPromptController controller(PromptTemplateService service, AiModelClient aiModelClient,
-                AiGenerationConfigService generationConfigService, CurrentUserService currentUserService,
+                AiGenerationConfigService generationConfigService, CurrentUserServiceImpl currentUserService,
                 SectionStandardService sectionStandardService, SectionCitationReviewService sectionCitationReviewService) {
             return new AdminPromptController(service, aiModelClient, generationConfigService,
                     sectionStandardService, sectionCitationReviewService);

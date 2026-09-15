@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.dto.request.ProjectCreateRequest;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
@@ -41,7 +42,7 @@ class ProjectServiceImplFlowTest {
     private UserRepository userRepository;
 
     @Mock
-    private CurrentUserService currentUserService;
+    private CurrentUserServiceImpl currentUserService;
 
     @Mock
     private SystemNotificationService systemNotificationService;

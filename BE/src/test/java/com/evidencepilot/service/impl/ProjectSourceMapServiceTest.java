@@ -9,7 +9,6 @@ import com.evidencepilot.model.enums.EdgeType;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.repository.DocumentReferenceRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CurrentUserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -26,7 +25,7 @@ import static org.mockito.Mockito.*;
 
 class ProjectSourceMapServiceTest {
     private final ProjectRepository projects = mock(ProjectRepository.class);
-    private final CurrentUserService users = mock(CurrentUserService.class);
+    private final CurrentUserServiceImpl users = mock(CurrentUserServiceImpl.class);
     private final SourceMatchingService sources = mock(SourceMatchingService.class);
     private final DocumentReferenceRepository references = mock(DocumentReferenceRepository.class);
     private final ProjectSourceMapService service = new ProjectSourceMapService(projects, users, sources, references);

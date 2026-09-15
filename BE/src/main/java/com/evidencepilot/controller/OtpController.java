@@ -4,8 +4,8 @@ import com.evidencepilot.dto.request.EmailOtpRequest;
 import com.evidencepilot.dto.request.EmailOtpVerifyRequest;
 import com.evidencepilot.dto.response.EmailOtpRequestResponse;
 import com.evidencepilot.dto.response.EmailOtpVerifyResponse;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.EmailOtpService;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
+import com.evidencepilot.service.impl.EmailOtpServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -24,8 +24,8 @@ import java.util.UUID;
 @Tag(name = "Email OTP", description = "6-digit verification codes for email address changes")
 public class OtpController {
 
-    private final EmailOtpService emailOtpService;
-    private final CurrentUserService currentUserService;
+    private final EmailOtpServiceImpl emailOtpService;
+    private final CurrentUserServiceImpl currentUserService;
 
     @Operation(summary = "Request a 6-digit OTP for email change")
     @PostMapping("/request")

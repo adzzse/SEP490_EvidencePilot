@@ -4,7 +4,7 @@ import com.evidencepilot.dto.request.SectionStandardEvaluateRequest;
 import com.evidencepilot.dto.response.SectionStandardEvaluationResponse;
 import com.evidencepilot.dto.response.JobSubmitResponse;
 import com.evidencepilot.service.AiEvaluationService;
-import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.SectionStandardService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +20,7 @@ public class SectionStandardController {
 
     private final SectionStandardService sectionStandardService;
     private final AiEvaluationService aiEvaluationService;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
 
     @PostMapping("/jobs")
     public ResponseEntity<JobSubmitResponse> submitEvaluation(

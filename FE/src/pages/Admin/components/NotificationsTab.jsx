@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useToast } from '../../../components/ui/Toast.jsx';
 function NotificationsSection({ api }) {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [form, setForm] = useState({ message: '', role: '' });
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState(null);
   const [broadcastHistory, setBroadcastHistory] = useState([]);
   const [bhLoading, setBhLoading] = useState(true);
   const [urgency, setUrgency] = useState('Standard');
-  const [toast, setToast] = useState(null);
   const [activeHistoryDetail, setActiveHistoryDetail] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -29,15 +30,10 @@ function NotificationsSection({ api }) {
     return () => ac.abort();
   }, [fetchHistory]);
 
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   const doSend = async (e) => {
     e.preventDefault();
     if (!form.message) {
-      showToast(t('admin.notifMsgRequired'), 'error');
+      toast.error(t('admin.notifMsgRequired'));
       return;
     }
     setSending(true);
@@ -46,12 +42,12 @@ function NotificationsSection({ api }) {
       const payload = { message: form.message, urgent: urgency === 'Urgent' };
       if (form.role) payload.role = form.role;
       const r = await api.post('/api/admin/notifications/broadcast', payload);
-      showToast(t('admin.broadcastSent'), 'success');
+      toast.success(t('admin.broadcastSent'));
       setForm({ message: '', role: '' });
       setUrgency('Standard');
       fetchHistory();
     } catch (err) {
-      showToast(err.message || t('admin.broadcastFailed'), 'error');
+      toast.error(err.message || t('admin.broadcastFailed'));
     } finally {
       setSending(false);
     }
@@ -177,9 +173,9 @@ function NotificationsSection({ api }) {
               type="button"
               onClick={() => {
                 if (form.message) {
-                  showToast(t('admin.draftSaved'), 'success');
+                  toast.success(t('admin.draftSaved'));
                 } else {
-                  showToast(t('admin.typeMsgFirst'), 'error');
+                  toast.error(t('admin.typeMsgFirst'));
                 }
               }}
               className="px-4 py-2 border border-gray-255 hover:bg-(--surface-secondary) rounded-xl text-xs font-bold text-(--text-primary) transition cursor-pointer"
@@ -324,24 +320,6 @@ function NotificationsSection({ api }) {
         </div>
       )}
 
-      {/* Custom Toast Notification Popup */}
-      {toast && (
-        <div className="fixed top-4 right-4 z-55 flex items-center gap-2.5 px-4.5 py-3 rounded-2xl shadow-xl border animate-slide-in-right bg-(--surface) border-(--border-light)">
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${toast.type === 'error' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
-            }`}>
-            {toast.type === 'error' ? (
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-          </div>
-          <span className="text-xs font-bold text-(--text-primary)">{toast.message}</span>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.evidencepilot.dto.request.AdminUserCreateRequest;
 import com.evidencepilot.dto.request.AdminUserImportRequest;
@@ -28,14 +29,14 @@ class AdminServicePersistenceIntegrationTest {
 
     @jakarta.annotation.Resource AdminService service;
     @jakarta.annotation.Resource UserRepository users;
-    @MockBean CurrentUserService currentUsers;
+    @MockBean CurrentUserServiceImpl currentUsers;
     @MockBean PasswordResetService passwordResets;
     @MockBean UserInvitationService invitations;
     @MockBean HealthService health;
     @MockBean AuditService audit;
     @MockBean SystemNotificationService notifications;
     @MockBean PasswordEncoder passwords;
-    @MockBean com.evidencepilot.service.UserAvatarService avatars;
+    @MockBean com.evidencepilot.service.impl.UserAvatarServiceImpl avatars;
 
     @BeforeEach
     void passwordHash() {

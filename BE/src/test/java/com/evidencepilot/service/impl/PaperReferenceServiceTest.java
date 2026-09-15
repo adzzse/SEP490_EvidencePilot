@@ -19,7 +19,6 @@ import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.UserRepository;
-import com.evidencepilot.service.CurrentUserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
@@ -44,7 +43,7 @@ class PaperReferenceServiceTest {
     private final ProjectMemberRepository projectMemberRepository = mock(ProjectMemberRepository.class);
     private final SourceMatchingService sourceMatchingService = mock(SourceMatchingService.class);
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+    private final CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
 
     private PaperReferenceService service;
     private Project project;

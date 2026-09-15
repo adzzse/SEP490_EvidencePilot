@@ -37,6 +37,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 @Slf4j
 @Component
@@ -431,11 +432,11 @@ public class AiModelClientImpl implements AiModelClient {
                 .toList();
     }
 
-    private <T> T call(String endpoint, AiCall<T> call) {
+    private <T> T call(String endpoint, Supplier<T> call) {
         return call(endpoint, maxRetries, call);
     }
 
-    private <T> T call(String endpoint, int retryLimit, AiCall<T> call) {
+    private <T> T call(String endpoint, int retryLimit, Supplier<T> call) {
         if (baseUrl.isBlank()) {
             throw new AiApiException(endpoint, 503, "AI_MODEL_BASE_URL is not configured", null);
         }
@@ -448,7 +449,7 @@ public class AiModelClientImpl implements AiModelClient {
             try {
                 T result = aiModelCallGate.execute(endpoint, () -> {
                     attempted.set(true);
-                    return call.execute();
+                    return call.get();
                 });
                 aiModelCallGate.recordFinalOutcome(endpoint, false);
                 log.info("ai_call endpoint={} outcome=success status=200 attempts={} duration_ms={}",
@@ -574,10 +575,5 @@ public class AiModelClientImpl implements AiModelClient {
             return fallback;
         }
         return String.valueOf(value);
-    }
-
-    @FunctionalInterface
-    private interface AiCall<T> {
-        T execute();
     }
 }

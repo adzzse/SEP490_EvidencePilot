@@ -20,7 +20,6 @@ import com.evidencepilot.repository.CollectionDocumentRepository;
 import com.evidencepilot.repository.DocumentReferenceRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.DocumentObjectStorage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,7 +64,7 @@ class OpenAlexIngestionServiceImplTest {
     @Mock
     private CollectionDocumentRepository collectionDocumentRepository;
     @Mock
-    private CurrentUserService currentUserService;
+    private CurrentUserServiceImpl currentUserService;
     @Mock
     private DocumentObjectStorage documentObjectStorage;
     @Mock

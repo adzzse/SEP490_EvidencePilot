@@ -24,8 +24,6 @@ import com.evidencepilot.repository.SectionStandardEvaluationRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.AuditService;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.PaperProcessingService;
 import com.evidencepilot.service.FeedbackAnchorService;
 import com.evidencepilot.dto.request.SectionContentUpdateRequest.TextChange;
 import com.evidencepilot.service.PaperStandardService;
@@ -59,7 +57,7 @@ import java.util.regex.Pattern;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class PaperProcessingServiceImpl implements PaperProcessingService {
+public class PaperProcessingServiceImpl {
 
     private static final Pattern LATEX_SECTION = Pattern.compile(
             "(?m)^\\\\section\\*?\\{([^{}\\r\\n]+)}");
@@ -69,7 +67,7 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
     private final BlockTreeIngestor blockTreeIngestor;
     private final InstructorFeedbackRepository instructorFeedbackRepository;
     private final DocumentRepository documentRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final PaperStandardService paperStandardService;
     private final UserRepository userRepository;
     private final ProjectRepository projectRepository;
@@ -81,7 +79,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
     private final FeedbackAnchorService feedbackAnchorService;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-    @Override
     public List<PaperSectionResponse> getPaperSections(UUID documentId) {
         requireDocumentAccess(documentId);
         return paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId).stream()
@@ -90,13 +87,11 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                 .toList();
     }
 
-    @Override
     @Transactional
     public List<PaperSectionResponse> detectAndPersistSections(UUID documentId) {
         return detectAndPersistSections(documentId, List.of());
     }
 
-    @Override
     @Transactional
     public List<PaperSectionResponse> detectAndPersistSections(
             UUID documentId,
@@ -183,7 +178,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         return sections;
     }
 
-    @Override
     public List<PaperSectionResponse> getPaperSectionsByUser(UUID documentId, UUID userId) {
         requireDocumentAccess(documentId);
         return paperSectionRepository
@@ -194,14 +188,12 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                 .toList();
     }
 
-    @Override
     public PaperSectionResponse getSectionHistory(UUID documentId, UUID sectionId) {
         requireDocumentAccess(documentId);
         PaperSection section = requireSectionInDocument(sectionId, documentId);
         return PaperSectionResponse.from(section);
     }
 
-    @Override
     @Transactional(readOnly = true)
     public PaperMetadataResponse getPaperMetadata(UUID documentId) {
         Document document = requireDocumentAccess(documentId);
@@ -265,7 +257,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         return values;
     }
 
-    @Override
     public PaperValidationResponse validateSections(UUID documentId) {
         Document document = requireDocumentAccess(documentId);
         Project project = document.getProject();
@@ -312,7 +303,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         return new PaperValidationResponse(valid, missing, extra, outOfOrder, standard);
     }
 
-    @Override
     @Transactional(readOnly = true)
     public PaperStandardSuggestionResponse suggestStandard(UUID documentId) {
         Document document = requireDocumentAccess(documentId);
@@ -325,7 +315,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                 document.getOriginalFilename(), extractedText);
     }
 
-    @Override
     @Transactional
     public PaperSectionResponse updateSection(UUID documentId, UUID sectionId,
             String title, Integer order, UUID mergeIntoId, String content,
@@ -333,7 +322,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         return updateSection(documentId, sectionId, title, order, mergeIntoId, content, expectedRevision, null);
     }
 
-    @Override
     @Transactional
     public PaperSectionResponse updateSection(UUID documentId, UUID sectionId,
             String title, Integer order, UUID mergeIntoId, String content,
@@ -405,7 +393,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         return PaperSectionResponse.from(saved);
     }
 
-    @Override
     @Transactional
     public PaperSectionResponse assignSection(UUID documentId, UUID sectionId, UUID assignedUserId) {
         Document document = requireInstructorDocumentWriteAccess(documentId);
@@ -447,7 +434,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         return response;
     }
 
-    @Override
     @Transactional
     public PaperSectionResponse rollbackSection(
             UUID documentId, UUID sectionId, Long expectedRevision) {
@@ -465,7 +451,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                 persistContentRevision(section, section.getPreviousContentTex(), currentUser));
     }
 
-    @Override
     @Transactional
     public void deleteSection(UUID documentId, UUID sectionId) {
         Document document = requireInstructorDocumentWriteAccess(documentId);
@@ -487,7 +472,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         paperSectionRepository.save(section);
     }
 
-    @Override
     @Transactional
     public PaperSectionResponse createSection(UUID documentId, String title, UUID parentSectionId) {
         Document document = requireInstructorDocumentWriteAccess(documentId);
@@ -514,7 +498,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         return PaperSectionResponse.from(paperSectionRepository.save(section));
     }
 
-    @Override
     @Transactional
     public List<PaperSectionResponse> createSectionsFromStandard(UUID documentId, String standard) {
         Document document = requireInstructorDocumentWriteAccess(documentId);
@@ -560,7 +543,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                 .toList();
     }
 
-    @Override
     @Transactional
     public List<PaperSectionResponse> resetSectionsForStandard(UUID projectId, String standard) {
         // 1. Validate the standard value early — fail fast before any DB writes.
@@ -849,7 +831,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
         projectRepository.saveAndFlush(project);
     }
 
-    @Override
     @Transactional
     public List<PaperSectionResponse> batchUpdateSections(UUID documentId, List<com.evidencepilot.dto.request.SectionBatchItem> items) {
         if (items == null || items.isEmpty()) {
@@ -1013,7 +994,6 @@ public class PaperProcessingServiceImpl implements PaperProcessingService {
                 .toList();
     }
 
-    @Override
     public Path exportTexArchive(UUID projectId) {
         User currentUser = currentUserService.requireCurrentUser();
         Project project = projectRepository.findById(projectId)

@@ -19,12 +19,12 @@ import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CitationValidationService;
+import com.evidencepilot.service.impl.CitationValidationServiceImpl;
 import com.evidencepilot.service.AiEvaluationService;
-import com.evidencepilot.service.CheckpointService;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.DocumentService;
-import com.evidencepilot.service.PaperProcessingService;
+import com.evidencepilot.service.impl.CheckpointServiceImpl;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
+import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
 import com.evidencepilot.service.SubmissionReadinessService;
 import com.evidencepilot.service.impl.SectionCitationReviewService;
 import com.evidencepilot.service.impl.EvidenceTraceService;
@@ -51,16 +51,16 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 
 class PaperControllerTest {
 
-    private final DocumentService documentService = mock(DocumentService.class);
-    private final PaperProcessingService paperService = mock(PaperProcessingService.class);
-    private final CitationValidationService citationValidationService = mock(CitationValidationService.class);
+    private final DocumentServiceImpl documentService = mock(DocumentServiceImpl.class);
+    private final PaperProcessingServiceImpl paperService = mock(PaperProcessingServiceImpl.class);
+    private final CitationValidationServiceImpl citationValidationService = mock(CitationValidationServiceImpl.class);
     private final ProjectRepository projectRepository = mock(ProjectRepository.class);
     private final DocumentRepository documentRepository = mock(DocumentRepository.class);
     private final PaperSectionRepository paperSectionRepository = mock(PaperSectionRepository.class);
     private final InstructorFeedbackRepository instructorFeedbackRepository = mock(InstructorFeedbackRepository.class);
     private final FeedbackRequestRepository feedbackRequestRepository = mock(FeedbackRequestRepository.class);
-    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
-    private final CheckpointService checkpointService = mock(CheckpointService.class);
+    private final CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
+    private final CheckpointServiceImpl checkpointService = mock(CheckpointServiceImpl.class);
     private final AiEvaluationService aiEvaluationService = mock(AiEvaluationService.class);
     private final SectionCitationReviewService sectionCitationReviewService = mock(SectionCitationReviewService.class);
     private final EvidenceTraceService evidenceTraceService = mock(EvidenceTraceService.class);

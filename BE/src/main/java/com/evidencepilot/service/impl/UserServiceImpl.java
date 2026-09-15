@@ -6,8 +6,6 @@ import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.UserRepository;
-import com.evidencepilot.service.EmailOtpService;
-import com.evidencepilot.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,19 +17,17 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class UserServiceImpl implements UserService {
+public class UserServiceImpl {
 
     private final UserRepository userRepository;
-    private final EmailOtpService emailOtpService;
+    private final EmailOtpServiceImpl emailOtpService;
 
-    @Override
     public UserResponse findUserById(UUID id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(id, "User"));
         return UserResponse.from(user);
     }
 
-    @Override
     public UserResponse updateUserProfile(UUID userId, UserProfileUpdateRequest request, String emailClaimToken) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException(userId, "User"));
@@ -59,14 +55,12 @@ public class UserServiceImpl implements UserService {
         return UserResponse.from(userRepository.save(user));
     }
 
-    @Override
     public List<UserResponse> findUsersByRole(UserRole role) {
         return userRepository.findByRole(role).stream()
                 .map(UserResponse::from)
                 .toList();
     }
 
-    @Override
     public List<UserResponse> searchUsersByRole(UserRole role, String q) {
         return userRepository.searchByRole(role, q).stream()
                 .map(UserResponse::from)

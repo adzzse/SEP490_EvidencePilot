@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CheckpointServiceImpl;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.exception.SubmissionReadinessException;
@@ -74,7 +75,7 @@ class FeedbackRevisionMySqlTest {
     @MockBean private PromptTemplateService prompts;
     @MockBean private AiGenerationConfigService generationConfig;
     @MockBean private SystemNotificationService notifications;
-    @MockBean private CheckpointService checkpoints;
+    @MockBean private CheckpointServiceImpl checkpoints;
 
     @AfterEach
     void clearActor() { SecurityContextHolder.clearContext(); }

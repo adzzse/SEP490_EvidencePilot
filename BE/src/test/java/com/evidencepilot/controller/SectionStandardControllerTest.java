@@ -6,7 +6,7 @@ import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.service.AiEvaluationService;
-import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.SectionStandardService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -24,7 +24,7 @@ class SectionStandardControllerTest {
     void queuesAuthorizedSavedInputWithoutWaitingForGenerationAndRejectsForbiddenRequests() throws Exception {
         var standards = mock(SectionStandardService.class);
         var jobs = mock(AiEvaluationService.class);
-        var users = mock(CurrentUserService.class);
+        var users = mock(CurrentUserServiceImpl.class);
         var mvc = MockMvcBuilders.standaloneSetup(new SectionStandardController(standards, jobs, users)).build();
         User actor = new User();
         actor.setId(UUID.randomUUID());

@@ -7,11 +7,11 @@ import com.evidencepilot.dto.response.ActivityFeedResponse;
 import com.evidencepilot.dto.response.EmailChangeResponse;
 import com.evidencepilot.dto.response.UserResponse;
 import com.evidencepilot.model.enums.UserRole;
-import com.evidencepilot.service.ActivityFeedService;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.EmailVerificationService;
-import com.evidencepilot.service.UserAvatarService;
-import com.evidencepilot.service.UserService;
+import com.evidencepilot.service.impl.ActivityFeedServiceImpl;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
+import com.evidencepilot.service.impl.EmailVerificationServiceImpl;
+import com.evidencepilot.service.impl.UserAvatarServiceImpl;
+import com.evidencepilot.service.impl.UserServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -48,11 +48,11 @@ public class UserController {
 
     static final String EMAIL_OTP_CLAIM_HEADER = "X-Email-Otp-Claim";
 
-    private final UserService userService;
-    private final CurrentUserService currentUserService;
-    private final EmailVerificationService emailVerificationService;
-    private final ActivityFeedService activityFeedService;
-    private final UserAvatarService userAvatarService;
+    private final UserServiceImpl userService;
+    private final CurrentUserServiceImpl currentUserService;
+    private final EmailVerificationServiceImpl emailVerificationService;
+    private final ActivityFeedServiceImpl activityFeedService;
+    private final UserAvatarServiceImpl userAvatarService;
 
     @Operation(summary = "Get user by ID", description = "Returns a user's profile by UUID. Requires authentication.")
     @ApiResponses({

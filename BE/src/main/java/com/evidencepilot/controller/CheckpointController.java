@@ -4,8 +4,8 @@ import com.evidencepilot.dto.response.CheckpointDiffResponse;
 import com.evidencepilot.dto.response.CheckpointSectionBaselineResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CheckpointService;
-import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.impl.CheckpointServiceImpl;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -26,9 +26,9 @@ import java.util.UUID;
 @Tag(name = "Checkpoints", description = "Project checkpoints and diff between review milestones")
 public class CheckpointController {
 
-    private final CheckpointService checkpointService;
+    private final CheckpointServiceImpl checkpointService;
     private final ProjectRepository projectRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
 
     @Operation(summary = "Get diff between the two latest project checkpoints",
             description = "Compares the two most recent checkpoints using per-section word count "

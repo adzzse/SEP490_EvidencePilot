@@ -1,7 +1,7 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.model.ExportJob;
-import com.evidencepilot.service.ExportService;
+import com.evidencepilot.service.impl.ExportServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +21,7 @@ import java.util.UUID;
 @Tag(name = "Exports", description = "Async project export (TEX archive)")
 public class ExportController {
 
-    private final ExportService exportService;
+    private final ExportServiceImpl exportService;
 
     @PostMapping
     @Operation(summary = "Start async export", description = "Creates an export job and returns a jobId (202).")

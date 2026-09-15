@@ -16,7 +16,6 @@ import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
-import com.evidencepilot.service.ActivityFeedService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -29,7 +28,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class ActivityFeedServiceImpl implements ActivityFeedService {
+public class ActivityFeedServiceImpl {
 
     private final UserRepository userRepository;
     private final AuditLogRepository auditLogRepository;
@@ -39,7 +38,6 @@ public class ActivityFeedServiceImpl implements ActivityFeedService {
     private final DocumentRepository documentRepository;
     private final CollectionRepository collectionRepository;
 
-    @Override
     @Transactional(readOnly = true)
     public ActivityFeedResponse getMyActivity(UUID userId, int limit) {
         int safeLimit = Math.max(1, Math.min(limit, 100));

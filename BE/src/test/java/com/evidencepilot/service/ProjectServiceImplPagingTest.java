@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.ProjectStatus;
@@ -43,7 +44,7 @@ class ProjectServiceImplPagingTest {
     private UserRepository userRepository;
 
     @Mock
-    private CurrentUserService currentUserService;
+    private CurrentUserServiceImpl currentUserService;
 
     @Mock
     private SystemNotificationService systemNotificationService;

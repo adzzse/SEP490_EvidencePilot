@@ -35,13 +35,13 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ExportServiceImpl implements ExportService {
+public class ExportServiceImpl {
 
     private static final String EXPORT_MINIO_PREFIX = "exports/";
 
     private final ExportJobRepository exportJobRepository;
     private final ProjectRepository projectRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final SystemNotificationService systemNotificationService;
     private final DocumentObjectStorage documentObjectStorage;
     private final UserRepository userRepository;
@@ -54,7 +54,6 @@ public class ExportServiceImpl implements ExportService {
     @Autowired(required = false)
     private EvidenceRevisionTraceRepository evidenceRevisionTraceRepository;
 
-    @Override
     @Transactional
     public ExportJob createExportJob(UUID projectId, String format) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -83,7 +82,6 @@ public class ExportServiceImpl implements ExportService {
         return job;
     }
 
-    @Override
     @Transactional
     public ExportJob retryExport(UUID jobId) {
         ExportJob job = getJob(jobId);
@@ -104,7 +102,6 @@ public class ExportServiceImpl implements ExportService {
         return job;
     }
 
-    @Override
     public ExportJob getJob(UUID jobId) {
         User currentUser = currentUserService.requireCurrentUser();
         ExportJob job = exportJobRepository.findById(jobId)
@@ -115,7 +112,6 @@ public class ExportServiceImpl implements ExportService {
         return exposeDownloadEndpoint(job);
     }
 
-    @Override
     public Resource downloadExport(UUID jobId) {
         ExportJob job = getJob(jobId);
         if (job.getStatus() != ExportStatus.READY) {
@@ -125,7 +121,6 @@ public class ExportServiceImpl implements ExportService {
         return new InputStreamResource(documentObjectStorage.getStream(EXPORT_MINIO_PREFIX + jobId + suffix));
     }
 
-    @Override
     public List<ExportJob> getUserExports(UUID projectId) {
         User currentUser = currentUserService.requireCurrentUser();
         List<ExportJob> jobs = exportJobRepository.findByProjectIdAndUserIdOrderByCreatedAtDesc(

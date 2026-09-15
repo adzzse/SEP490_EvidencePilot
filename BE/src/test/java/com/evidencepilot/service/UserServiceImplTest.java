@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.EmailOtpServiceImpl;
 import com.evidencepilot.dto.request.UserProfileUpdateRequest;
 import com.evidencepilot.model.User;
 import com.evidencepilot.repository.UserRepository;
@@ -17,7 +18,7 @@ import static org.mockito.Mockito.*;
 class UserServiceImplTest {
 
     private final UserRepository users = mock(UserRepository.class);
-    private final EmailOtpService emailOtp = mock(EmailOtpService.class);
+    private final EmailOtpServiceImpl emailOtp = mock(EmailOtpServiceImpl.class);
     private final UserServiceImpl service = new UserServiceImpl(users, emailOtp);
 
     @Test

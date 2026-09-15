@@ -1,7 +1,7 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.response.ProgressReportResponse;
-import com.evidencepilot.service.ProgressReportService;
+import com.evidencepilot.service.impl.ProgressReportServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,7 +22,7 @@ import java.util.UUID;
 @Tag(name = "Progress Report", description = "Project progress report and traceability matrix")
 public class ProgressReportController {
 
-    private final ProgressReportService progressReportService;
+    private final ProgressReportServiceImpl progressReportService;
 
     @Operation(summary = "Get project progress report",
             description = "Returns project readiness, current section assignment, and recorded edit evidence. "

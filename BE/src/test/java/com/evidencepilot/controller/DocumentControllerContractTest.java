@@ -1,7 +1,7 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.service.DocumentObjectStorage;
-import com.evidencepilot.service.DocumentService;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
@@ -17,7 +17,7 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 
 class DocumentControllerContractTest {
 
-    private final DocumentService service = mock(DocumentService.class);
+    private final DocumentServiceImpl service = mock(DocumentServiceImpl.class);
     private final DocumentObjectStorage storage = mock(DocumentObjectStorage.class);
     private MockMvc mockMvc;
 

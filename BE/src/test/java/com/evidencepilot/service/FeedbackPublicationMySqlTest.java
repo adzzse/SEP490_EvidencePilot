@@ -1,5 +1,7 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CheckpointServiceImpl;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
@@ -60,9 +62,9 @@ class FeedbackPublicationMySqlTest {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private FeedbackServiceImpl service;
     @SpyBean private FeedbackAnchorService anchors;
-    @MockBean private CurrentUserService currentUserService;
+    @MockBean private CurrentUserServiceImpl currentUserService;
     @MockBean private SystemNotificationService notifications;
-    @MockBean private CheckpointService checkpoints;
+    @MockBean private CheckpointServiceImpl checkpoints;
     @MockBean private ProjectCollectionService collections;
     @MockBean private SubmissionReadinessService readiness;
 

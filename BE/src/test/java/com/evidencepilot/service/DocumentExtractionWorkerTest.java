@@ -1,5 +1,7 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.QdrantServiceImpl;
+import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.evidencepilot.dto.ExtractionResultPayload;
 import com.evidencepilot.dto.SparseVector;
@@ -68,13 +70,13 @@ class DocumentExtractionWorkerTest {
     @Mock
     private SparseVectorGenerator sparseVectorGenerator;
     @Mock
-    private QdrantService qdrantService;
+    private QdrantServiceImpl qdrantService;
     @Mock
     private DocumentPersistenceService persistence;
     @Mock
     private MediaAssetService mediaAssetService;
     @Mock
-    private PaperProcessingService paperProcessingService;
+    private PaperProcessingServiceImpl paperProcessingService;
 
     @BeforeEach
     void allowQueuedClaim() {

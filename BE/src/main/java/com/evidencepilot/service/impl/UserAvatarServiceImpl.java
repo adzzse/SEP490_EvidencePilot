@@ -12,7 +12,6 @@ import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.User;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.DocumentObjectStorage;
-import com.evidencepilot.service.UserAvatarService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,14 +19,13 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class UserAvatarServiceImpl implements UserAvatarService {
+public class UserAvatarServiceImpl {
 
     private static final long MAX_BYTES = 5L * 1024 * 1024;
 
     private final UserRepository userRepository;
     private final DocumentObjectStorage objectStorage;
 
-    @Override
     @Transactional
     public String uploadAvatar(UUID userId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -59,7 +57,6 @@ public class UserAvatarServiceImpl implements UserAvatarService {
         return resolveAvatarUrl(user);
     }
 
-    @Override
     public String resolveAvatarUrl(User user) {
         if (user == null || user.getAvatarKey() == null || user.getAvatarKey().isBlank()) {
             return null;

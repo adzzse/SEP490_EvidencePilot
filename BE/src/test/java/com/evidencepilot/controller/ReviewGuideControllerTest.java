@@ -1,7 +1,7 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.response.ReviewGuideResponse;
-import com.evidencepilot.service.ReviewGuideService;
+import com.evidencepilot.service.impl.ReviewGuideServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -19,7 +19,7 @@ class ReviewGuideControllerTest {
 
     @Test
     void getActiveGuides_returnsHydratedGuide() throws Exception {
-        ReviewGuideService service = mock(ReviewGuideService.class);
+        ReviewGuideServiceImpl service = mock(ReviewGuideServiceImpl.class);
         when(service.getActiveGuides()).thenReturn(List.of(
                 new ReviewGuideResponse("Methods", "A strong methods section is reproducible.",
                         List.of("Is the study design stated?", "Are procedures reproducible?"))));
@@ -37,7 +37,7 @@ class ReviewGuideControllerTest {
 
     @Test
     void getActiveGuides_returnsEmptyListWhenNone() throws Exception {
-        ReviewGuideService service = mock(ReviewGuideService.class);
+        ReviewGuideServiceImpl service = mock(ReviewGuideServiceImpl.class);
         when(service.getActiveGuides()).thenReturn(List.of());
         MockMvc mockMvc = standaloneSetup(new ReviewGuideController(service)).build();
 

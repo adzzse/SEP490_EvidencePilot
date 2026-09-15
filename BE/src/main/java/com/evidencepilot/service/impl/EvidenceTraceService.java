@@ -22,7 +22,6 @@ import com.evidencepilot.repository.EvidenceRevisionTraceRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiModelClient;
-import com.evidencepilot.service.CurrentUserService;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -58,7 +57,7 @@ public class EvidenceTraceService {
     private final DocumentChunkRepository documentChunkRepository;
     private final SectionCitationReviewService sectionCitationReviewService;
     private final AiModelClient aiModelClient;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final ObjectMapper objectMapper;
 
     @Transactional

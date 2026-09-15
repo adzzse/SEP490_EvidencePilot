@@ -3,7 +3,7 @@ package com.evidencepilot.controller;
 import com.evidencepilot.dto.request.DoiBatchIngestionRequest;
 import com.evidencepilot.dto.response.DocumentResponse;
 import com.evidencepilot.exception.DuplicateProjectDoiException;
-import com.evidencepilot.service.OpenAlexIngestionService;
+import com.evidencepilot.service.impl.OpenAlexIngestionServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -20,7 +20,7 @@ import static org.mockito.Mockito.when;
 
 class OpenAlexControllerBatchTest {
 
-    private final OpenAlexIngestionService ingestionService = mock(OpenAlexIngestionService.class);
+    private final OpenAlexIngestionServiceImpl ingestionService = mock(OpenAlexIngestionServiceImpl.class);
     private final OpenAlexController controller = new OpenAlexController(ingestionService);
 
     @Test

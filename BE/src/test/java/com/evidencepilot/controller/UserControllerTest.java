@@ -3,9 +3,9 @@ package com.evidencepilot.controller;
 import com.evidencepilot.dto.request.UserProfileUpdateRequest;
 import com.evidencepilot.dto.response.UserResponse;
 import com.evidencepilot.model.User;
-import com.evidencepilot.service.ActivityFeedService;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.UserService;
+import com.evidencepilot.service.impl.ActivityFeedServiceImpl;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
+import com.evidencepilot.service.impl.UserServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -25,11 +25,11 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 
 class UserControllerTest {
 
-    private final UserService userService = mock(UserService.class);
-    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
-    private final com.evidencepilot.service.EmailVerificationService emailVerificationService = mock(com.evidencepilot.service.EmailVerificationService.class);
-    private final ActivityFeedService activityFeedService = mock(ActivityFeedService.class);
-    private final com.evidencepilot.service.UserAvatarService userAvatarService = mock(com.evidencepilot.service.UserAvatarService.class);
+    private final UserServiceImpl userService = mock(UserServiceImpl.class);
+    private final CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
+    private final com.evidencepilot.service.impl.EmailVerificationServiceImpl emailVerificationService = mock(com.evidencepilot.service.impl.EmailVerificationServiceImpl.class);
+    private final ActivityFeedServiceImpl activityFeedService = mock(ActivityFeedServiceImpl.class);
+    private final com.evidencepilot.service.impl.UserAvatarServiceImpl userAvatarService = mock(com.evidencepilot.service.impl.UserAvatarServiceImpl.class);
     private MockMvc mockMvc;
 
     @BeforeEach

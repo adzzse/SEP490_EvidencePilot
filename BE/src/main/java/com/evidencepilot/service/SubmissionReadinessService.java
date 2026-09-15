@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.dto.response.ReviewReadinessResponse;
 import com.evidencepilot.dto.response.SectionHandoffResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
@@ -57,7 +58,7 @@ public class SubmissionReadinessService {
     private final PaperSectionRepository paperSectionRepository;
     private final FeedbackRequestRepository feedbackRequestRepository;
     private final SectionStandardService sectionStandardService;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)

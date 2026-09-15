@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import useUndoDelete, { UndoToast } from '../../../components/ui/UndoDelete.jsx';
 import DeleteConfirm from '../../../components/ui/DeleteConfirm.jsx';
+import { useToast } from '../../../components/ui/Toast.jsx';
 import { useTranslation } from 'react-i18next';
 function SettingsSection({ api }) {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [cats, setCats] = useState([]);
   const [catsLoading, setCatsLoading] = useState(true);
   const [showCatForm, setShowCatForm] = useState(false);
@@ -11,7 +13,6 @@ function SettingsSection({ api }) {
   const [catErr, setCatErr] = useState('');
   const [config, setConfig] = useState(null);
   const [configLoading, setConfigLoading] = useState(true);
-  const [toast, setToast] = useState(null);
   const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete({ onUndo: () => fetchCats(new AbortController().signal) });
 
   const fetchCats = useCallback(async (signal) => {
@@ -43,38 +44,33 @@ function SettingsSection({ api }) {
     return () => ac.abort();
   }, [fetchCats, fetchConfig]);
 
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   const doCatSave = async (e) => {
     e.preventDefault();
     setCatErr('');
     try {
       if (catForm.id) {
         await api.put(`/api/admin/collection-categories/${catForm.id}`, { name: catForm.name, description: catForm.description });
-        showToast(t('admin.categoryUpdated'), 'success');
+        toast.success(t('admin.categoryUpdated'));
       } else {
         await api.post('/api/admin/collection-categories', { name: catForm.name, description: catForm.description });
-        showToast(t('admin.categoryCreated'), 'success');
+        toast.success(t('admin.categoryCreated'));
       }
       setShowCatForm(false);
       setCatForm({ id: null, name: '', description: '' });
       fetchCats(new AbortController().signal);
     } catch (err) {
       setCatErr(err.response?.data?.message || err.message);
-      showToast(t('admin.categorySaveFailed'), 'error');
+      toast.error(t('admin.categorySaveFailed'));
     }
   };
 
   const doCatDelete = async (id) => {
     try {
       await api.delete(`/api/admin/collection-categories/${id}`);
-      showToast(t('admin.categoryDeletedOk'), 'success');
+      toast.success(t('admin.categoryDeletedOk'));
       fetchCats(new AbortController().signal);
     } catch (e) {
-      showToast(t('admin.categoryDeleteFailed'), 'error');
+      toast.error(t('admin.categoryDeleteFailed'));
     }
   };
 
@@ -104,7 +100,7 @@ function SettingsSection({ api }) {
     link.download = 'evidencepilot_system.env';
     link.click();
     URL.revokeObjectURL(url);
-    showToast(t('admin.envExported'), 'success');
+    toast.success(t('admin.envExported'));
   };
 
   const getConfigSecurity = (key) => {
@@ -288,25 +284,6 @@ function SettingsSection({ api }) {
               </div>
             </form>
           </div>
-        </div>
-      )}
-
-      {/* Custom Toast Notification Popup */}
-      {toast && (
-        <div className="fixed top-4 right-4 z-55 flex items-center gap-2.5 px-4.5 py-3 rounded-2xl shadow-xl border animate-slide-in-right bg-(--surface) border-(--border-light)">
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${toast.type === 'error' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'
-            }`}>
-            {toast.type === 'error' ? (
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-          </div>
-          <span className="text-xs font-bold text-(--text-primary)">{toast.message}</span>
         </div>
       )}
 

@@ -4,8 +4,8 @@ import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CheckpointService;
-import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.impl.CheckpointServiceImpl;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.TraceTelemetryService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,10 +27,10 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ProjectInsightControllerTest {
 
-    @Mock private CheckpointService checkpointService;
+    @Mock private CheckpointServiceImpl checkpointService;
     @Mock private TraceTelemetryService traceTelemetryService;
     @Mock private ProjectRepository projectRepository;
-    @Mock private CurrentUserService currentUserService;
+    @Mock private CurrentUserServiceImpl currentUserService;
 
     @Test
     void checkpointMissingProjectStopsBeforeReadingDiff() {

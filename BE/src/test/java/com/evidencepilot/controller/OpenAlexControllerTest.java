@@ -7,7 +7,7 @@ import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.UserRepository;
-import com.evidencepilot.service.OpenAlexIngestionService;
+import com.evidencepilot.service.impl.OpenAlexIngestionServiceImpl;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,7 +48,7 @@ class OpenAlexControllerTest {
     private JwtSessionRegistry sessionRegistry;
 
     @MockBean
-    private OpenAlexIngestionService ingestionService;
+    private OpenAlexIngestionServiceImpl ingestionService;
 
     @MockBean
     private RabbitTemplate rabbitTemplate;

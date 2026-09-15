@@ -6,9 +6,6 @@ import com.evidencepilot.model.*;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.PaperStandard;
 import com.evidencepilot.repository.*;
-import com.evidencepilot.service.CitationValidationService;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.PaperProcessingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -19,7 +16,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class CitationValidationServiceImpl implements CitationValidationService {
+public class CitationValidationServiceImpl {
 
     private static final Pattern CITE_PATTERN = Pattern.compile("\\\\cite(?:\\[([^\\]]*)\\])?\\{([^}]+)\\}");
     private static final Pattern BIBITEM_PATTERN = Pattern.compile("\\\\bibitem(?:\\[([^\\]]*)\\])?\\{([^}]+)\\}");
@@ -28,11 +25,10 @@ public class CitationValidationServiceImpl implements CitationValidationService 
     private final DocumentRepository documentRepository;
     private final DocumentReferenceRepository documentReferenceRepository;
     private final PaperSectionRepository paperSectionRepository;
-    private final PaperProcessingService paperProcessingService;
-    private final CurrentUserService currentUserService;
+    private final PaperProcessingServiceImpl paperProcessingService;
+    private final CurrentUserServiceImpl currentUserService;
     private final SourceMatchingService sourceMatchingService;
 
-    @Override
     public CitationValidationResponse validateCitations(UUID documentId) {
         User currentUser = currentUserService.requireCurrentUser();
         Document document = documentRepository.findById(documentId)

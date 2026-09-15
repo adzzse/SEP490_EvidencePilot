@@ -2,7 +2,7 @@ package com.evidencepilot.controller;
 
 import com.evidencepilot.service.AiGenerationConfigService;
 import com.evidencepilot.service.AiModelClient;
-import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -27,7 +27,7 @@ import java.util.List;
 public class AdminAiConfigController {
     private final AiGenerationConfigService configService;
     private final AiModelClient aiModelClient;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
 
     public record UpdateRequest(@Min(0) long expectedRevision, @NotBlank String catalogFingerprint,
             @NotEmpty @Size(max = 3) List<@NotBlank @Size(max = 255) String> modelIds) {}

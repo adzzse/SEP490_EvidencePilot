@@ -9,7 +9,6 @@ import com.evidencepilot.model.User;
 import com.evidencepilot.repository.EmailOtpClaimRepository;
 import com.evidencepilot.repository.EmailOtpTokenRepository;
 import com.evidencepilot.repository.UserRepository;
-import com.evidencepilot.service.EmailOtpService;
 import com.evidencepilot.service.HtmlMailService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,7 +32,7 @@ import java.util.regex.Pattern;
 
 @Slf4j
 @Service
-public class EmailOtpServiceImpl implements EmailOtpService {
+public class EmailOtpServiceImpl {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     private static final int MAX_ATTEMPTS = 3;
@@ -64,7 +63,6 @@ public class EmailOtpServiceImpl implements EmailOtpService {
         this.claimTtl = Duration.ofMinutes(claimTtlMinutes);
     }
 
-    @Override
     @Transactional
     public EmailOtpRequestResponse requestOtp(UUID userId, String email) {
         if (email == null || email.isBlank()) {
@@ -117,7 +115,6 @@ public class EmailOtpServiceImpl implements EmailOtpService {
         );
     }
 
-    @Override
     @Transactional
     public EmailOtpVerifyResponse verifyOtp(UUID userId, String email, String code) {
         String normalized = email.trim().toLowerCase(Locale.ROOT);
@@ -162,7 +159,6 @@ public class EmailOtpServiceImpl implements EmailOtpService {
         );
     }
 
-    @Override
     @Transactional
     public boolean consumeClaim(UUID userId, String newEmail, String rawClaimToken) {
         if (rawClaimToken == null || rawClaimToken.isBlank() || newEmail == null) {

@@ -4,7 +4,7 @@ import com.evidencepilot.dto.response.JobResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.service.AiEvaluationService;
-import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,7 +24,7 @@ public class JobController {
 
     private final AiEvaluationService aiEvaluationService;
     private final ProjectRepository projectRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
 
     @Operation(summary = "Get AI evaluation job status",
             description = "Returns the status and result of an async AI evaluation job. "

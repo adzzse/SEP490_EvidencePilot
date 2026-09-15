@@ -6,8 +6,6 @@ import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.CollectionCategory;
 import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.service.AuditService;
-import com.evidencepilot.service.CollectionCategoryService;
-import com.evidencepilot.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -22,20 +20,18 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class CollectionCategoryServiceImpl implements CollectionCategoryService {
+public class CollectionCategoryServiceImpl {
 
     private final CollectionCategoryRepository collectionCategoryRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final AuditService auditService;
 
-    @Override
     public List<CollectionCategoryResponse> getActiveCategories() {
         return collectionCategoryRepository.findByActiveTrueOrderByNameAsc().stream()
                 .map(CollectionCategoryResponse::from)
                 .toList();
     }
 
-    @Override
     public List<CollectionCategoryResponse> getCategories(Boolean active) {
         var categories = active == null
                 ? collectionCategoryRepository.findAll()
@@ -45,7 +41,6 @@ public class CollectionCategoryServiceImpl implements CollectionCategoryService 
                 .toList();
     }
 
-    @Override
     @Transactional
     public CollectionCategoryResponse create(CollectionCategoryRequest request) {
         String name = request.name().trim();
@@ -64,7 +59,6 @@ public class CollectionCategoryServiceImpl implements CollectionCategoryService 
         return CollectionCategoryResponse.from(category);
     }
 
-    @Override
     @Transactional
     public CollectionCategoryResponse update(UUID id, CollectionCategoryRequest request, Boolean active) {
         CollectionCategory category = collectionCategoryRepository.findById(id)
@@ -86,7 +80,6 @@ public class CollectionCategoryServiceImpl implements CollectionCategoryService 
         return CollectionCategoryResponse.from(category);
     }
 
-    @Override
     @Transactional
     public void delete(UUID id) {
         CollectionCategory category = collectionCategoryRepository.findById(id)

@@ -1,5 +1,7 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.UserAvatarServiceImpl;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.dto.request.AdminBroadcastRequest;
 import com.evidencepilot.dto.request.AdminUserCreateRequest;
 import com.evidencepilot.dto.request.AdminUserImportRequest;
@@ -75,14 +77,14 @@ public class AdminService {
     private final DocumentRepository documents;
     private final PaperSectionRepository paperSections;
     private final AuditLogRepository auditLogs;
-    private final CurrentUserService currentUsers;
+    private final CurrentUserServiceImpl currentUsers;
     private final PasswordResetService passwordResets;
     private final AuditService audit;
     private final SystemNotificationService notifications;
     private final ObjectMapper objectMapper;
     private final PasswordEncoder passwords;
     private final UserInvitationService invitations;
-    private final UserAvatarService avatars;
+    private final UserAvatarServiceImpl avatars;
     private final ApplicationEventPublisher events;
 
     @Transactional(readOnly = true)

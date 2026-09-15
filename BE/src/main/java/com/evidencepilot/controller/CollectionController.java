@@ -5,9 +5,9 @@ import com.evidencepilot.dto.response.CitationGraphResponse;
 import com.evidencepilot.dto.response.CollectionResponse;
 import com.evidencepilot.dto.response.DocumentResponse;
 import com.evidencepilot.dto.response.PagedResponse;
-import com.evidencepilot.service.CollectionService;
-import com.evidencepilot.service.DocumentService;
-import com.evidencepilot.service.OpenAlexIngestionService;
+import com.evidencepilot.service.impl.CollectionServiceImpl;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
+import com.evidencepilot.service.impl.OpenAlexIngestionServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -36,9 +36,9 @@ import java.util.UUID;
 @Tag(name = "Collections", description = "Instructor collection (evidence library) management")
 public class CollectionController {
 
-    private final CollectionService collectionService;
-    private final DocumentService documentService;
-    private final OpenAlexIngestionService openAlexIngestionService;
+    private final CollectionServiceImpl collectionService;
+    private final DocumentServiceImpl documentService;
+    private final OpenAlexIngestionServiceImpl openAlexIngestionService;
 
     @Operation(summary = "Create a collection",
             description = "Creates a new evidence collection owned by the current instructor user.")

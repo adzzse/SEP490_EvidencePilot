@@ -17,7 +17,6 @@ import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.ProjectCollectionRepository;
 import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -47,7 +46,7 @@ public class ProjectCollectionService {
     private final CollectionRepository collectionRepository;
     private final DocumentRepository documentRepository;
     private final CollectionDocumentRepository collectionDocumentRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
 
     /**
      * Seed-only collection creation: no auth checks, the seed job runs as

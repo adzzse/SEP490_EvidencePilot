@@ -9,7 +9,6 @@ import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.UserRepository;
-import com.evidencepilot.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,12 +20,11 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class CurrentUserServiceImpl implements CurrentUserService {
+public class CurrentUserServiceImpl {
 
     private final UserRepository userRepository;
     private final FeedbackRequestRepository feedbackRequestRepository;
 
-    @Override
     public User requireCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || auth.getPrincipal() == null) {
@@ -44,22 +42,18 @@ public class CurrentUserServiceImpl implements CurrentUserService {
                         "User not found: " + email));
     }
 
-    @Override
     public boolean isAdmin(User user) {
         return user.getRole() == UserRole.ADMIN;
     }
 
-    @Override
     public boolean isInstructor(User user) {
         return user.getRole() == UserRole.INSTRUCTOR;
     }
 
-    @Override
     public boolean ownsUserIdOrAdmin(User currentUser, UUID userId) {
         return isAdmin(currentUser) || currentUser.getId().equals(userId);
     }
 
-    @Override
     public void requireRole(User currentUser, UserRole role) {
         if (currentUser.getRole() != role && currentUser.getRole() != UserRole.ADMIN) {
             throw new ResponseStatusException(
@@ -68,7 +62,6 @@ public class CurrentUserServiceImpl implements CurrentUserService {
         }
     }
 
-    @Override
     public void requireUserIdOrAdmin(User currentUser, UUID userId) {
         if (!ownsUserIdOrAdmin(currentUser, userId)) {
             throw new ResponseStatusException(
@@ -77,7 +70,6 @@ public class CurrentUserServiceImpl implements CurrentUserService {
         }
     }
 
-    @Override
     public void requireProjectAccess(User currentUser, Project project) {
         if (isAdmin(currentUser))
             return;
@@ -100,7 +92,6 @@ public class CurrentUserServiceImpl implements CurrentUserService {
         }
     }
 
-    @Override
     public void requireProjectWriteAccess(User currentUser, Project project) {
         if (project.getStatus().isReadOnly()) {
             throw new ResponseStatusException(
@@ -122,7 +113,6 @@ public class CurrentUserServiceImpl implements CurrentUserService {
         }
     }
 
-    @Override
     public void requireProjectManageAccess(User currentUser, Project project) {
         if (isAdmin(currentUser))
             return;
@@ -138,7 +128,6 @@ public class CurrentUserServiceImpl implements CurrentUserService {
      * they must work while the project is locked (SUBMITTED_FOR_REVIEW), matching
      * the read access the GET list endpoint already grants for the review phase.
      */
-    @Override
     public void requireEvidenceTraceReviewAccess(User currentUser, Project project) {
         if (isAdmin(currentUser))
             return;
@@ -178,7 +167,6 @@ public class CurrentUserServiceImpl implements CurrentUserService {
                         && roles.contains(pm.getRole()));
     }
 
-    @Override
     public void requireCollectionAccess(User currentUser, com.evidencepilot.model.Collection collection) {
         if (isAdmin(currentUser))
             return;
@@ -195,7 +183,6 @@ public class CurrentUserServiceImpl implements CurrentUserService {
                 "Students cannot access collections");
     }
 
-    @Override
     public void requireSectionAssignment(User currentUser, PaperSection section) {
         if (currentUser.getRole() != UserRole.STUDENT
                 || section.getAssignedUser() == null
@@ -206,7 +193,6 @@ public class CurrentUserServiceImpl implements CurrentUserService {
         }
     }
 
-    @Override
     public void requireSectionContentWriteAccess(User currentUser, PaperSection section) {
         requireProjectWriteAccess(currentUser, section.getDocument().getProject());
         if (!section.isActive()) {

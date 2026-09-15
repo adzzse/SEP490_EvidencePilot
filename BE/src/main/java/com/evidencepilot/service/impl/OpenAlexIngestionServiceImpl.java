@@ -22,9 +22,7 @@ import com.evidencepilot.repository.CollectionDocumentRepository;
 import com.evidencepilot.repository.DocumentReferenceRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.DocumentObjectStorage;
-import com.evidencepilot.service.OpenAlexIngestionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -46,7 +44,7 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
+public class OpenAlexIngestionServiceImpl {
 
     private static final byte[] PDF_SIGNATURE = {'%', 'P', 'D', 'F', '-'};
     private static final int PDF_HEADER_SCAN_LIMIT = 1024;
@@ -57,14 +55,13 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
     private final ProjectRepository projectRepository;
     private final CollectionRepository collectionRepository;
     private final CollectionDocumentRepository collectionDocumentRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final DocumentObjectStorage documentObjectStorage;
     private final DocumentPersistenceService documentPersistenceService;
     private final DocumentReferenceRepository documentReferenceRepository;
     private final ObjectMapper objectMapper;
     private final ProjectCollectionService projectCollectionService;
 
-    @Override
     public OpenAlexPreview lookupByDoi(String doi) {
         String normalizedDoi = DoiUtils.normalize(doi);
         if (normalizedDoi == null) {
@@ -83,7 +80,6 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
         );
     }
 
-    @Override
     @Transactional
     public DocumentResponse ingestByDoi(UUID projectId, UUID collectionId, String doi) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -218,7 +214,6 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
         return false;
     }
 
-    @Override
     @Transactional
     public void persistCitationGraph(Document document, OpenAlexWorkResponse work) {
         if (document == null || work == null) return;
@@ -353,7 +348,6 @@ public class OpenAlexIngestionServiceImpl implements OpenAlexIngestionService {
         if (!pending.isEmpty()) documentReferenceRepository.saveAll(pending);
     }
 
-    @Override
     @Transactional(readOnly = true)
     public CitationGraphResponse getCitationGraph(UUID collectionId, boolean includeFailed) {
         User currentUser = currentUserService.requireCurrentUser();

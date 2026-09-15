@@ -1,5 +1,7 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.QdrantServiceImpl;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentText;
 import com.evidencepilot.model.CollectionDocument;
@@ -79,7 +81,7 @@ class DocumentServiceImplAccessTest {
     private PaperSectionRepository paperSectionRepository;
 
     @Mock
-    private CurrentUserService currentUserService;
+    private CurrentUserServiceImpl currentUserService;
 
     @Mock
     private ProjectCollectionService projectCollectionService;
@@ -95,7 +97,7 @@ class DocumentServiceImplAccessTest {
     private MediaAssetService mediaAssetService;
 
     @Mock
-    private QdrantService qdrantService;
+    private QdrantServiceImpl qdrantService;
 
     @Mock
     private com.evidencepilot.client.openalex.OpenAlexClient openAlexClient;

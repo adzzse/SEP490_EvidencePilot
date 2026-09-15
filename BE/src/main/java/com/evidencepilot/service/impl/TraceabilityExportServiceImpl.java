@@ -17,8 +17,6 @@ import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.TraceabilityExportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -32,7 +30,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class TraceabilityExportServiceImpl implements TraceabilityExportService {
+public class TraceabilityExportServiceImpl {
 
     private static final String MISSING = "MISSING";
 
@@ -43,9 +41,8 @@ public class TraceabilityExportServiceImpl implements TraceabilityExportService 
     private final ProjectDocumentRepository projectDocumentRepository;
     private final PaperSectionRepository paperSectionRepository;
     private final EvidenceRevisionTraceRepository evidenceRevisionTraceRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
 
-    @Override
     public TraceabilityExportResponse exportTraceability(UUID projectId) {
         User currentUser = currentUserService.requireCurrentUser();
         Project project = projectRepository.findById(projectId)
@@ -139,7 +136,6 @@ public class TraceabilityExportServiceImpl implements TraceabilityExportService 
                 trace.getJudgment() == null ? null : trace.getJudgment().name());
     }
 
-    @Override
     public byte[] exportTraceabilityCsv(UUID projectId) {
         TraceabilityExportResponse data = exportTraceability(projectId);
         StringBuilder csv = new StringBuilder();

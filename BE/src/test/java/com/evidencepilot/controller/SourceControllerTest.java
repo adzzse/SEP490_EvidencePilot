@@ -3,8 +3,8 @@ package com.evidencepilot.controller;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.DocumentService;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -21,9 +21,9 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 
 class SourceControllerTest {
 
-    private final DocumentService service = mock(DocumentService.class);
+    private final DocumentServiceImpl service = mock(DocumentServiceImpl.class);
     private final ProjectDocumentRepository projectDocumentRepository = mock(ProjectDocumentRepository.class);
-    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+    private final CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
     private final ProjectRepository projectRepository = mock(ProjectRepository.class);
     private MockMvc mockMvc;
 

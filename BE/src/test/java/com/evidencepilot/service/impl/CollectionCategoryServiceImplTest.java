@@ -5,7 +5,6 @@ import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.CollectionCategory;
 import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.service.AuditService;
-import com.evidencepilot.service.CurrentUserService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -28,7 +27,7 @@ import static org.mockito.Mockito.when;
 class CollectionCategoryServiceImplTest {
 
     @Mock private CollectionCategoryRepository repository;
-    @Mock private CurrentUserService currentUserService;
+    @Mock private CurrentUserServiceImpl currentUserService;
     @Mock private AuditService auditService;
 
     @Test

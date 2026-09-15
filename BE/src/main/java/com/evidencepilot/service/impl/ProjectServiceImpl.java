@@ -17,9 +17,7 @@ import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
-import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.AuditService;
-import com.evidencepilot.service.ProjectService;
 import com.evidencepilot.service.SystemNotificationService;
 import com.evidencepilot.dto.request.PagingRequest;
 import jakarta.persistence.criteria.Predicate;
@@ -40,7 +38,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class ProjectServiceImpl implements ProjectService {
+public class ProjectServiceImpl {
 
     private static final Set<String> PROJECT_SORT_FIELDS = Set.of(
             "title", "status", "createdAt", "updatedAt");
@@ -48,12 +46,11 @@ public class ProjectServiceImpl implements ProjectService {
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
     private final UserRepository userRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final SystemNotificationService systemNotificationService;
     private final AuditService auditService;
     private final ApplicationEventPublisher events;
 
-    @Override
     public List<ProjectResponse> getAllProjects() {
         User currentUser = currentUserService.requireCurrentUser();
         return projectMemberRepository.findByUserId(currentUser.getId()).stream()
@@ -63,7 +60,6 @@ public class ProjectServiceImpl implements ProjectService {
                 .toList();
     }
 
-    @Override
     public PagedResponse<ProjectResponse> getAllProjects(
             int page,
             int size,
@@ -102,7 +98,6 @@ public class ProjectServiceImpl implements ProjectService {
         return PagedResponse.from(new org.springframework.data.domain.PageImpl<>(responses, pageable, results.getTotalElements()));
     }
 
-    @Override
     public ProjectResponse getProjectById(UUID id) {
         User currentUser = currentUserService.requireCurrentUser();
         Project project = findActiveProject(id);
@@ -110,7 +105,6 @@ public class ProjectServiceImpl implements ProjectService {
         return ProjectResponse.from(project, currentUser.getId());
     }
 
-    @Override
     @Transactional
     public ProjectResponse createProject(ProjectCreateRequest request) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -146,7 +140,6 @@ public class ProjectServiceImpl implements ProjectService {
         return ProjectResponse.from(saved);
     }
 
-    @Override
     @Transactional
     public ProjectResponse updateProject(UUID id, ProjectUpdateRequest request) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -171,7 +164,6 @@ public class ProjectServiceImpl implements ProjectService {
         return ProjectResponse.from(saved);
     }
 
-    @Override
     @Transactional
     public ProjectResponse completeProject(UUID id) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -199,7 +191,6 @@ public class ProjectServiceImpl implements ProjectService {
         return ProjectResponse.from(saved);
     }
 
-    @Override
     @Transactional
     public ProjectResponse archiveProject(UUID id) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -218,7 +209,6 @@ public class ProjectServiceImpl implements ProjectService {
         return ProjectResponse.from(saved);
     }
 
-    @Override
     @Transactional
     public ProjectResponse unarchiveProject(UUID id) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -237,7 +227,6 @@ public class ProjectServiceImpl implements ProjectService {
         return ProjectResponse.from(saved);
     }
 
-    @Override
     @Transactional
     public void deleteProject(UUID id) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -250,7 +239,6 @@ public class ProjectServiceImpl implements ProjectService {
         events.publishEvent(new EntityChangedEvent("PROJECT", project.getId(), "STATUS_CHANGED", null));
     }
 
-    @Override
     public List<ProjectMember> getProjectMembers(UUID projectId) {
         User currentUser = currentUserService.requireCurrentUser();
         Project project = findActiveProject(projectId);
@@ -258,14 +246,12 @@ public class ProjectServiceImpl implements ProjectService {
         return projectMemberRepository.findByProjectId(projectId);
     }
 
-    @Override
     public List<ProjectMemberResponse> getProjectMemberResponses(UUID projectId) {
         return getProjectMembers(projectId).stream()
                 .map(ProjectMemberResponse::from)
                 .toList();
     }
 
-    @Override
     @Transactional
     public void addMember(UUID projectId, UUID userId, ProjectRole role) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -302,7 +288,6 @@ public class ProjectServiceImpl implements ProjectService {
                 currentUser.getEmail() + " added you to project \"" + project.getTitle() + "\".");
     }
 
-    @Override
     @Transactional
     public void updateMemberRole(UUID projectId, UUID userId, ProjectRole role) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -339,7 +324,6 @@ public class ProjectServiceImpl implements ProjectService {
                         + "\" to " + role + ".");
     }
 
-    @Override
     @Transactional
     public void removeMember(UUID projectId, UUID userId) {
         User currentUser = currentUserService.requireCurrentUser();

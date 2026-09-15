@@ -3,7 +3,7 @@ package com.evidencepilot.controller;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.dto.response.TraceTelemetryResponse;
-import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.TraceTelemetryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,7 +22,7 @@ import java.util.UUID;
 public class TraceTelemetryController {
 
     private final TraceTelemetryService traceTelemetryService;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final ProjectRepository projectRepository;
 
     @Operation(summary = "Per-round HITL telemetry for a project")

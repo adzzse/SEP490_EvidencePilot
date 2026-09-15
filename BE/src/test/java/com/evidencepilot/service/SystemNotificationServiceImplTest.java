@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.dto.response.SystemNotificationResponse;
 import com.evidencepilot.model.SystemNotification;
 import com.evidencepilot.model.User;
@@ -31,7 +32,7 @@ class SystemNotificationServiceImplTest {
     private SystemNotificationRepository systemNotificationRepository;
 
     @Mock
-    private CurrentUserService currentUserService;
+    private CurrentUserServiceImpl currentUserService;
 
     @Mock
     private SimpMessagingTemplate messagingTemplate;

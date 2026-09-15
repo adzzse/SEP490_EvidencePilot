@@ -4,7 +4,6 @@ import com.evidencepilot.dto.response.EmailChangeResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.User;
 import com.evidencepilot.repository.UserRepository;
-import com.evidencepilot.service.EmailVerificationService;
 import com.evidencepilot.service.HtmlMailService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,7 +28,7 @@ import java.util.regex.Pattern;
 
 @Slf4j
 @Service
-public class EmailVerificationServiceImpl implements EmailVerificationService {
+public class EmailVerificationServiceImpl {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
@@ -64,7 +63,6 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         this.requestCooldown = requestCooldown;
     }
 
-    @Override
     @Transactional
     public EmailChangeResponse requestEmailChange(UUID userId, String newEmail) {
         if (newEmail == null || newEmail.isBlank()) {
@@ -127,7 +125,6 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         );
     }
 
-    @Override
     @Transactional
     public void confirmEmailChange(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
@@ -163,7 +160,6 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         userRepository.save(user);
     }
 
-    @Override
     @Transactional
     public void cancelEmailChange(UUID userId) {
         User user = userRepository.findById(userId)

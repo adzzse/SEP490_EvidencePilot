@@ -17,8 +17,6 @@ import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.ProgressReportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -40,7 +38,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class ProgressReportServiceImpl implements ProgressReportService {
+public class ProgressReportServiceImpl {
 
     private final ProjectRepository projectRepository;
     private final DocumentRepository documentRepository;
@@ -48,9 +46,8 @@ public class ProgressReportServiceImpl implements ProgressReportService {
     private final InstructorFeedbackRepository instructorFeedbackRepository;
     private final ProjectMemberRepository projectMemberRepository;
     private final AuditLogRepository auditLogRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
 
-    @Override
     @Transactional(readOnly = true)
     public ProgressReportResponse getProgressReport(
             UUID projectId, String memberFilter, LocalDate from, LocalDate to) {

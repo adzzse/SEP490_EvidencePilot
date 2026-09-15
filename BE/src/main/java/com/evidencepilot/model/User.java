@@ -43,7 +43,7 @@ public class User {
 
     /**
      * MinIO object key only (e.g. avatars/{userId}.jpg) — never a URL.
-     * The full URL is constructed at read time (see UserAvatarService).
+     * The full URL is constructed by the avatar service at read time.
      */
     @Column(name = "avatar_key", length = 512)
     private String avatarKey;

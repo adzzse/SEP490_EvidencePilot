@@ -1,5 +1,8 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
+import com.evidencepilot.service.impl.OpenAlexIngestionServiceImpl;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
 import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.CollectionDocument;
 import com.evidencepilot.model.Document;
@@ -74,11 +77,11 @@ class AdminSeedExportServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
-                mock(DocumentService.class),
+                mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
-                mock(PaperProcessingService.class),
+                mock(PaperProcessingServiceImpl.class),
                 mock(com.evidencepilot.client.openalex.OpenAlexClient.class),
-                mock(OpenAlexIngestionService.class),
+                mock(OpenAlexIngestionServiceImpl.class),
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 mock(com.evidencepilot.service.impl.ProjectCollectionService.class),

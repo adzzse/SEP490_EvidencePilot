@@ -4,9 +4,9 @@ import com.evidencepilot.dto.request.ProjectCreateRequest;
 import com.evidencepilot.dto.request.ProjectUpdateRequest;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
-import com.evidencepilot.service.DocumentService;
-import com.evidencepilot.service.PaperProcessingService;
-import com.evidencepilot.service.ProjectService;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
+import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
+import com.evidencepilot.service.impl.ProjectServiceImpl;
 import com.evidencepilot.service.impl.ProjectCollectionService;
 import com.evidencepilot.service.impl.ProjectSourceMapService;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,11 +37,11 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 
 class ProjectControllerTest {
 
-    private final ProjectService projectService = mock(ProjectService.class);
+    private final ProjectServiceImpl projectService = mock(ProjectServiceImpl.class);
     private final ProjectSourceMapService projectSourceMapService = mock(ProjectSourceMapService.class);
-    private final DocumentService documentService = mock(DocumentService.class);
+    private final DocumentServiceImpl documentService = mock(DocumentServiceImpl.class);
     private final ProjectCollectionService projectCollectionService = mock(ProjectCollectionService.class);
-    private final PaperProcessingService paperProcessingService = mock(PaperProcessingService.class);
+    private final PaperProcessingServiceImpl paperProcessingService = mock(PaperProcessingServiceImpl.class);
     private ProjectController controller;
     private MockMvc mockMvc;
 

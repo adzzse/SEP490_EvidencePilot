@@ -12,9 +12,9 @@ import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
-import com.evidencepilot.service.DocumentService;
-import com.evidencepilot.service.PaperProcessingService;
-import com.evidencepilot.service.ProjectService;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
+import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
+import com.evidencepilot.service.impl.ProjectServiceImpl;
 import com.evidencepilot.service.impl.ProjectCollectionService;
 import com.evidencepilot.service.impl.ProjectSourceMapService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -54,10 +54,10 @@ import java.util.UUID;
 public class ProjectController {
     private final ProjectSourceMapService projectSourceMapService;
 
-    private final ProjectService projectService;
-    private final DocumentService documentService;
+    private final ProjectServiceImpl projectService;
+    private final DocumentServiceImpl documentService;
     private final ProjectCollectionService projectCollectionService;
-    private final PaperProcessingService paperProcessingService;
+    private final PaperProcessingServiceImpl paperProcessingService;
 
     @Operation(summary = "List all projects",
             description = "Returns all active projects accessible to the current user. "

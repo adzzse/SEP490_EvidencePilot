@@ -9,7 +9,7 @@ import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiGenerationConfigService;
 import com.evidencepilot.service.AiModelClient;
-import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,9 +52,9 @@ class AdminAiConfigControllerTest {
     @Configuration static class Config {
         @Bean AiGenerationConfigService configService() { return mock(AiGenerationConfigService.class); }
         @Bean AiModelClient aiModelClient() { return mock(AiModelClient.class); }
-        @Bean CurrentUserService currentUserService() { return mock(CurrentUserService.class); }
+        @Bean CurrentUserServiceImpl currentUserService() { return mock(CurrentUserServiceImpl.class); }
         @Bean AdminAiConfigController controller(AiGenerationConfigService configService,
-                AiModelClient aiModelClient, CurrentUserService currentUserService) {
+                AiModelClient aiModelClient, CurrentUserServiceImpl currentUserService) {
             return new AdminAiConfigController(configService, aiModelClient, currentUserService);
         }
     }

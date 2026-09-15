@@ -13,7 +13,6 @@ import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectCheckpointRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CheckpointService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -33,7 +32,7 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class CheckpointServiceImpl implements CheckpointService {
+public class CheckpointServiceImpl {
 
     private final ProjectCheckpointRepository checkpointRepository;
     private final ProjectRepository projectRepository;
@@ -42,7 +41,6 @@ public class CheckpointServiceImpl implements CheckpointService {
     private final InstructorFeedbackRepository instructorFeedbackRepository;
     private final ObjectMapper objectMapper;
 
-    @Override
     @Transactional
     public void capture(UUID projectId, String trigger) {
         try {
@@ -83,7 +81,6 @@ public class CheckpointServiceImpl implements CheckpointService {
         }
     }
 
-    @Override
     public CheckpointDiffResponse getDiff(UUID projectId) {
         List<ProjectCheckpoint> checkpoints = checkpointRepository
                 .findByProjectIdOrderByCreatedAtDesc(projectId);
@@ -126,7 +123,6 @@ public class CheckpointServiceImpl implements CheckpointService {
                 wordDeltas);
     }
 
-    @Override
     public CheckpointSectionBaselineResponse getLatestSectionBaseline(
             UUID projectId, UUID sectionId, LocalDateTime before) {
         List<ProjectCheckpoint> checkpoints = checkpointRepository

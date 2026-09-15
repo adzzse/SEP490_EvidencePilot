@@ -2,7 +2,7 @@ package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.request.CollectionCategoryRequest;
 import com.evidencepilot.dto.response.CollectionCategoryResponse;
-import com.evidencepilot.service.CollectionCategoryService;
+import com.evidencepilot.service.impl.CollectionCategoryServiceImpl;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +26,7 @@ import java.util.UUID;
 @Tag(name = "Collection Categories", description = "Collection category configuration")
 public class CollectionCategoryController {
 
-    private final CollectionCategoryService collectionCategoryService;
+    private final CollectionCategoryServiceImpl collectionCategoryService;
 
     @GetMapping("/api/collection-categories")
     public List<CollectionCategoryResponse> activeCategories() {

@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.model.PromptTemplate;
 import com.evidencepilot.repository.PromptTemplateRepository;
 import org.junit.jupiter.api.Test;
@@ -51,7 +52,7 @@ class PromptTemplateMySqlTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired AiGenerationConfigService generationConfig;
     @SpyBean PromptTemplateRepository repository;
-    @MockBean CurrentUserService users;
+    @MockBean CurrentUserServiceImpl users;
     @MockBean AuditService auditService;
 
     @org.junit.jupiter.api.BeforeEach

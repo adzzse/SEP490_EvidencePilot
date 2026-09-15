@@ -13,8 +13,6 @@ import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.repository.DocumentReferenceRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.PaperProcessingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -31,8 +29,8 @@ class CitationValidationServiceImplTest {
     private final DocumentRepository documentRepository = mock(DocumentRepository.class);
     private final DocumentReferenceRepository documentReferenceRepository = mock(DocumentReferenceRepository.class);
     private final PaperSectionRepository paperSectionRepository = mock(PaperSectionRepository.class);
-    private final PaperProcessingService paperProcessingService = mock(PaperProcessingService.class);
-    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+    private final PaperProcessingServiceImpl paperProcessingService = mock(PaperProcessingServiceImpl.class);
+    private final CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
     private final SourceMatchingService sourceMatchingService = mock(SourceMatchingService.class);
 
     private CitationValidationServiceImpl service;

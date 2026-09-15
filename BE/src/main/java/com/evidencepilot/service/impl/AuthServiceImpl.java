@@ -9,7 +9,6 @@ import com.evidencepilot.dto.response.UserResponse;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.repository.UserRepository;
-import com.evidencepilot.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,14 +20,13 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class AuthServiceImpl implements AuthService {
+public class AuthServiceImpl {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final JwtSessionRegistry sessionRegistry;
 
-    @Override
     @Transactional
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
@@ -56,7 +54,6 @@ public class AuthServiceImpl implements AuthService {
         return new AuthResponse(token, UserResponse.from(user), passwordChangeNotice);
     }
 
-    @Override
     public AuthResponse refresh(String token) {
         if (token == null || !jwtUtils.validateToken(token)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid or expired token");
@@ -75,7 +72,6 @@ public class AuthServiceImpl implements AuthService {
         return new AuthResponse(newToken, UserResponse.from(user), false);
     }
 
-    @Override
     @Transactional
     public void updatePassword(UUID userId, UpdatePasswordRequest request) {
         User user = userRepository.findById(userId)

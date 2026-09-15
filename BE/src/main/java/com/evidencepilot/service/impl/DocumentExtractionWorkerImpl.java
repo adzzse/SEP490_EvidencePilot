@@ -14,8 +14,6 @@ import com.evidencepilot.service.DocumentExtractionWorker;
 import com.evidencepilot.service.DocumentObjectStorage;
 import com.evidencepilot.service.ExtractionBundle;
 import com.evidencepilot.service.MediaAssetService;
-import com.evidencepilot.service.PaperProcessingService;
-import com.evidencepilot.service.QdrantService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,11 +45,11 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
     private final DocumentObjectStorage documentObjectStorage;
     private final AiModelClient aiModelClient;
     private final SparseVectorGenerator sparseVectorGenerator;
-    private final QdrantService qdrantService;
+    private final QdrantServiceImpl qdrantService;
     private final DocumentPersistenceService documentPersistenceService;
     private final ObjectMapper objectMapper;
     private final MediaAssetService mediaAssetService;
-    private final PaperProcessingService paperProcessingService;
+    private final PaperProcessingServiceImpl paperProcessingService;
 
     @Override
     public void process(UUID documentId) {

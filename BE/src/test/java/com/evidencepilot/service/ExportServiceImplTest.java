@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.config.infrastructure.RabbitMQConfig;
 import com.evidencepilot.dto.ExportRequest;
 import com.evidencepilot.model.ExportJob;
@@ -51,7 +52,7 @@ class ExportServiceImplTest {
 
     private final ExportJobRepository exportJobs = mock(ExportJobRepository.class);
     private final ProjectRepository projects = mock(ProjectRepository.class);
-    private final CurrentUserService currentUsers = mock(CurrentUserService.class);
+    private final CurrentUserServiceImpl currentUsers = mock(CurrentUserServiceImpl.class);
     private final SystemNotificationService notifications = mock(SystemNotificationService.class);
     private final DocumentObjectStorage storage = mock(DocumentObjectStorage.class);
     private final UserRepository users = mock(UserRepository.class);

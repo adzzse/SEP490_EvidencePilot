@@ -1,5 +1,9 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.FeedbackServiceImpl;
+import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
+import com.evidencepilot.service.impl.CheckpointServiceImpl;
+import com.evidencepilot.service.impl.ProjectServiceImpl;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.FeedbackAnchorRequest;
@@ -51,13 +55,13 @@ import static org.mockito.Mockito.doAnswer;
 class ProjectStatusConcurrencyIntegrationTest {
 
     @Autowired
-    private FeedbackService feedbackService;
+    private FeedbackServiceImpl feedbackService;
 
     @Autowired
-    private ProjectService projectService;
+    private ProjectServiceImpl projectService;
 
     @Autowired
-    private PaperProcessingService paperProcessingService;
+    private PaperProcessingServiceImpl paperProcessingService;
 
     @Autowired
     private SubmissionReadinessService submissionReadinessService;
@@ -93,7 +97,7 @@ class ProjectStatusConcurrencyIntegrationTest {
     private AuditService audit;
 
     @MockBean
-    private CheckpointService checkpoints;
+    private CheckpointServiceImpl checkpoints;
 
     @MockBean(name = "minioClient")
     private MinioClient minioClient;

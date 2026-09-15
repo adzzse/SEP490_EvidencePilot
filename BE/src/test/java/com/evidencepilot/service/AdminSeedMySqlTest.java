@@ -1,5 +1,7 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.OpenAlexIngestionServiceImpl;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
@@ -75,7 +77,7 @@ class AdminSeedMySqlTest {
     @SpyBean PaperSectionRepository sections;
     @SpyBean com.evidencepilot.repository.DocumentTextRepository texts;
     @MockBean AdminService admin;
-    @MockBean DocumentService documents;
+    @MockBean DocumentServiceImpl documents;
     @MockBean MediaAssetService media;
     @MockBean AiModelClient model;
     @MockBean SystemNotificationService notifications;
@@ -84,7 +86,7 @@ class AdminSeedMySqlTest {
     @MockBean AuditService audit;
     @MockBean FeedbackAnchorService anchors;
     @MockBean com.evidencepilot.client.openalex.OpenAlexClient openAlex;
-    @MockBean OpenAlexIngestionService ingestion;
+    @MockBean OpenAlexIngestionServiceImpl ingestion;
     @MockBean DocumentObjectStorage storage;
     @MockBean com.evidencepilot.service.impl.DocumentPersistenceService persistence;
     @MockBean com.evidencepilot.service.impl.ProjectCollectionService collections;

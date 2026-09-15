@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal, StatusBadge } from '../index';
 import DeleteConfirm from '../ui/DeleteConfirm.jsx';
@@ -9,7 +9,8 @@ const ACTION_LABELS = { REVIEWED: 'instructor.review.approve', RETURNED: 'instru
 
 export function InstructorReviewGuide({ review, selectedSection }) {
   const { t } = useTranslation();
-  const { activeGuide, checkedItems, setCheckedItems, selectedSectionId } = review;
+  const { activeGuide, selectedSectionId } = review;
+  const [checkedItems, setCheckedItems] = useState({});
   return <section className="space-y-4 rounded-xl border border-(--border) bg-(--surface) p-4 text-xs shadow-sm">
     <h3 className="font-bold text-(--text-primary)">{t('instructor.review.reviewGuide')}</h3>
     {!selectedSection || !activeGuide ? <p className="text-(--text-tertiary) italic">{t('instructor.review.selectSectionGuide')}</p> : <>
@@ -31,8 +32,16 @@ export function InstructorReviewGuide({ review, selectedSection }) {
 
 export default function InstructorFeedbackPanel({ review, selectedSection, onSelectFeedback }) {
   const { t, i18n } = useTranslation();
-  const { selectedSectionId, orderedRequests, activeRequest, activeRequestId, setActiveRequestId, feedbackItems, errorMessage, successMessage, diffEnabled, setDiffEnabled, diffOps, feedbackDraft, selectedAnchor, editingFeedbackId, updateFeedbackDraft, savingFeedback, feedbackFilter, setFeedbackFilter, activeFeedbackId, transitioningRequestId, pendingTransition, setPendingTransition, suggestions, suggestionLoading, suggestionError, suggestionRan, panelTab, setPanelTab, activeGuide, requestLocked, canReturn, canCreateRoot, handleSubmitFeedback, captureSourceSelection, handleEditFeedback, handleCancelEdit, handleDeleteFeedback, prepareState, handleTransitionStatus, handleGenerateSuggestions, injectIntoFeedback, pendingDelete, undoDelete, dismissDelete } = review;
+  const { selectedSectionId, orderedRequests, activeRequest, activeRequestId, setActiveRequestId, feedbackItems, errorMessage, successMessage, diffEnabled, setDiffEnabled, diffOps, feedbackDraft, selectedAnchor, editingFeedbackId, updateFeedbackDraft, savingFeedback, activeFeedbackId, transitioningRequestId, pendingTransition, setPendingTransition, suggestions, suggestionLoading, suggestionError, suggestionRan, activeGuide, requestLocked, canReturn, canCreateRoot, handleSubmitFeedback, captureSourceSelection, handleEditFeedback, handleCancelEdit, handleDeleteFeedback, prepareState, handleTransitionStatus, handleGenerateSuggestions, injectIntoFeedback, pendingDelete, undoDelete, dismissDelete } = review;
   const [sectionOnly, setSectionOnly] = useState(false);
+  const [feedbackFilter, setFeedbackFilter] = useState('OPEN');
+  const [panelTab, setPanelTab] = useState('manual');
+  useEffect(() => {
+    if (review.feedbackFocusToken > 0) {
+      setFeedbackFilter('ALL');
+      setPanelTab('manual');
+    }
+  }, [review.feedbackFocusToken]);
   const draftCount = feedbackItems.filter(item => String(item.requestId) === String(activeRequestId) && !item.publishedAt).length;
   const sectionFeedback = feedbackItems.filter(item => (!sectionOnly || String(item.sectionId) === String(selectedSectionId))
     && (!item.paperId || String(item.paperId) === String(review.selectedPaperId))

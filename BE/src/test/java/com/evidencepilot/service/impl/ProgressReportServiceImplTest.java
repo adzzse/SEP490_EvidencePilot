@@ -14,7 +14,6 @@ import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CurrentUserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,7 +43,7 @@ class ProgressReportServiceImplTest {
     @Mock private InstructorFeedbackRepository instructorFeedbackRepository;
     @Mock private ProjectMemberRepository projectMemberRepository;
     @Mock private AuditLogRepository auditLogRepository;
-    @Mock private CurrentUserService currentUserService;
+    @Mock private CurrentUserServiceImpl currentUserService;
 
     private ProgressReportServiceImpl service;
 

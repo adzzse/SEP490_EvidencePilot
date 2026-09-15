@@ -12,8 +12,6 @@ import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.repository.CollectionRepository;
 import com.evidencepilot.service.AuditService;
-import com.evidencepilot.service.CollectionService;
-import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.dto.request.PagingRequest;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,19 +30,18 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class CollectionServiceImpl implements CollectionService {
+public class CollectionServiceImpl {
 
     private static final Set<String> COLLECTION_SORT_FIELDS = Set.of("title", "createdAt");
 
     private final CollectionRepository collectionRepository;
     private final CollectionCategoryRepository collectionCategoryRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final ProjectCollectionService projectCollectionService;
     private final com.evidencepilot.repository.DocumentRepository documentRepository;
     private final com.evidencepilot.repository.CollectionDocumentRepository collectionDocumentRepository;
     private final AuditService auditService;
 
-    @Override
     @Transactional
     public CollectionResponse createCollection(CollectionRequest request) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -64,7 +61,6 @@ public class CollectionServiceImpl implements CollectionService {
         return toResponse(saved);
     }
 
-    @Override
     public CollectionResponse getCollectionById(UUID id) {
         User currentUser = currentUserService.requireCurrentUser();
         Collection collection = collectionRepository.findById(id)
@@ -73,7 +69,6 @@ public class CollectionServiceImpl implements CollectionService {
         return toResponse(collection);
     }
 
-    @Override
     @Transactional
     public CollectionResponse updateCollection(UUID id, CollectionRequest request) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -89,7 +84,6 @@ public class CollectionServiceImpl implements CollectionService {
         return toResponse(saved);
     }
 
-    @Override
     public PagedResponse<CollectionResponse> getMyCollections(int page, int size, String sort, String q, UUID categoryId) {
         User currentUser = currentUserService.requireCurrentUser();
         var pageable = PagingRequest.pageable(
@@ -99,7 +93,6 @@ public class CollectionServiceImpl implements CollectionService {
         return PagedResponse.from(results.map(this::toResponse));
     }
 
-    @Override
     @Transactional
     public void deleteCollection(UUID id) {
         User currentUser = currentUserService.requireCurrentUser();

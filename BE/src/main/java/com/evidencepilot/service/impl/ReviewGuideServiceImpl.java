@@ -3,8 +3,6 @@ package com.evidencepilot.service.impl;
 import com.evidencepilot.dto.response.ReviewGuideResponse;
 import com.evidencepilot.model.ReviewGuide;
 import com.evidencepilot.repository.ReviewGuideRepository;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.ReviewGuideService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -14,13 +12,12 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class ReviewGuideServiceImpl implements ReviewGuideService {
+public class ReviewGuideServiceImpl {
 
     private final ReviewGuideRepository reviewGuideRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final ObjectMapper objectMapper;
 
-    @Override
     public List<ReviewGuideResponse> getActiveGuides() {
         currentUserService.requireCurrentUser();
         return reviewGuideRepository.findAllByActiveTrueOrderBySectionTypeAsc().stream()

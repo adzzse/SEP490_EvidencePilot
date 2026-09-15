@@ -29,11 +29,8 @@ import com.evidencepilot.repository.ProjectRepository;
 
 import com.evidencepilot.client.openalex.OpenAlexClient;
 import com.evidencepilot.dto.openalex.OpenAlexWorkResponse;
-import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.DocumentObjectStorage;
-import com.evidencepilot.service.DocumentService;
 import com.evidencepilot.service.MediaAssetService;
-import com.evidencepilot.service.QdrantService;
 import com.evidencepilot.dto.request.PagingRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.criteria.Predicate;
@@ -61,7 +58,7 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class DocumentServiceImpl implements DocumentService {
+public class DocumentServiceImpl {
 
     private static final Set<String> DOCUMENT_SORT_FIELDS = Set.of(
             "title", "originalFilename", "docType", "processingStatus", "createdAt", "fileSizeBytes");
@@ -77,16 +74,15 @@ public class DocumentServiceImpl implements DocumentService {
     private final CollectionDocumentRepository collectionDocumentRepository;
     private final ProjectDocumentRepository projectDocumentRepository;
     private final PaperSectionRepository paperSectionRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final DocumentPersistenceService documentPersistenceService;
     private final DocumentObjectStorage documentObjectStorage;
     private final MediaAssetService mediaAssetService;
-    private final QdrantService qdrantService;
+    private final QdrantServiceImpl qdrantService;
     private final OpenAlexClient openAlexClient;
     private final ObjectMapper objectMapper;
     private final ProjectCollectionService projectCollectionService;
 
-    @Override
     public DocumentResponse getDocumentById(UUID id) {
         var currentUser = currentUserService.requireCurrentUser();
         Document doc = findDocument(id);
@@ -94,7 +90,6 @@ public class DocumentServiceImpl implements DocumentService {
         return DocumentResponse.from(doc);
     }
 
-    @Override
     public DocumentResponse getSourceById(UUID id) {
         var currentUser = currentUserService.requireCurrentUser();
         Document doc = findDocument(id);
@@ -105,7 +100,6 @@ public class DocumentServiceImpl implements DocumentService {
         return DocumentResponse.from(doc);
     }
 
-    @Override
     public List<DocumentResponse> getAllPapersForCurrentUser() {
         User currentUser = currentUserService.requireCurrentUser();
         if (currentUserService.isAdmin(currentUser)) {
@@ -122,7 +116,6 @@ public class DocumentServiceImpl implements DocumentService {
                 .toList();
     }
 
-    @Override
     public List<DocumentResponse> getDocumentsByProject(UUID projectId) {
         requireProjectAccess(projectId);
         return documentRepository.findByProjectId(projectId).stream()
@@ -130,7 +123,6 @@ public class DocumentServiceImpl implements DocumentService {
                 .toList();
     }
 
-    @Override
     public PagedResponse<DocumentResponse> getDocumentsByProject(
             UUID projectId,
             int page,
@@ -149,7 +141,6 @@ public class DocumentServiceImpl implements DocumentService {
         return PagedResponse.from(results.map(DocumentResponse::from));
     }
 
-    @Override
     @Transactional(readOnly = true)
     public PagedResponse<DocumentResponse> getSourcesByCollection(
             UUID collectionId, int page, int size, String sort, String q) {
@@ -172,7 +163,6 @@ public class DocumentServiceImpl implements DocumentService {
         return PagedResponse.from(pageContent);
     }
 
-    @Override
     @Transactional(readOnly = true)
     public PagedResponse<DocumentResponse> getAvailableLibrarySources(
             UUID collectionId, int page, int size, String sort, String q) {
@@ -187,7 +177,6 @@ public class DocumentServiceImpl implements DocumentService {
         return PagedResponse.from(results.map(DocumentResponse::from));
     }
 
-    @Override
     @Transactional(readOnly = true)
     public PagedResponse<SourceLibraryItemResponse> getSourceLibrary(
             int page, int size, String sort, String q, ProcessingStatus processingStatus) {
@@ -211,7 +200,6 @@ public class DocumentServiceImpl implements DocumentService {
         return PagedResponse.from(results.map(this::toSourceLibraryItem));
     }
 
-    @Override
     @Transactional
     public DocumentResponse addSourceToCollection(UUID collectionId, UUID sourceId) {
         var currentUser = currentUserService.requireCurrentUser();
@@ -226,7 +214,6 @@ public class DocumentServiceImpl implements DocumentService {
         return DocumentResponse.from(projectCollectionService.addSource(doc, collection, currentUser));
     }
 
-    @Override
     @Transactional
     public List<DocumentResponse> addSourcesToCollectionBatch(UUID collectionId, List<UUID> sourceIds) {
         if (sourceIds == null || sourceIds.isEmpty()) {
@@ -243,7 +230,6 @@ public class DocumentServiceImpl implements DocumentService {
         return added;
     }
 
-    @Override
     @Transactional
     public void removeSourceFromCollection(UUID collectionId, UUID sourceId) {
         var currentUser = currentUserService.requireCurrentUser();
@@ -254,7 +240,6 @@ public class DocumentServiceImpl implements DocumentService {
         projectCollectionService.removeSource(document, collection);
     }
 
-    @Override
     @Transactional
     public SourceLibraryItemResponse updateSource(UUID id, String title) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -264,7 +249,6 @@ public class DocumentServiceImpl implements DocumentService {
         return toSourceLibraryItem(documentRepository.save(source));
     }
 
-    @Override
     @Transactional
     public void deleteSource(UUID id) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -275,7 +259,6 @@ public class DocumentServiceImpl implements DocumentService {
         documentRepository.save(source);
     }
 
-    @Override
     @Transactional
     public DocumentResponse updateDocumentMetadata(UUID id, String title, String originalFilename) {
         var currentUser = currentUserService.requireCurrentUser();
@@ -286,7 +269,6 @@ public class DocumentServiceImpl implements DocumentService {
         return DocumentResponse.from(documentRepository.save(doc));
     }
 
-    @Override
     @Transactional(readOnly = true)
     public List<DocumentResponse> getSourcesByCollection(UUID collectionId) {
         var currentUser = currentUserService.requireCurrentUser();
@@ -304,7 +286,6 @@ public class DocumentServiceImpl implements DocumentService {
         return documents.values().stream().map(DocumentResponse::from).toList();
     }
 
-    @Override
     public PagedResponse<DocumentResponse> getSourcesByProject(
             UUID projectId,
             int page,
@@ -352,12 +333,10 @@ public class DocumentServiceImpl implements DocumentService {
                 to >= total);
     }
 
-    @Override
     public DocumentResponse uploadDocument(UUID projectId, MultipartFile file, DocumentType docType) {
         return uploadDocument(projectId, null, file, docType);
     }
 
-    @Override
     public DocumentResponse uploadDocument(UUID projectId, UUID collectionId, MultipartFile file, DocumentType docType) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is empty");
@@ -420,7 +399,6 @@ public class DocumentServiceImpl implements DocumentService {
         return DocumentResponse.from(document);
     }
 
-    @Override
     public com.evidencepilot.dto.response.BatchUploadResponse uploadDocumentsBatch(
             UUID projectId, UUID collectionId, MultipartFile[] files, DocumentType docType) {
         if (files == null || files.length == 0) {
@@ -472,7 +450,6 @@ public class DocumentServiceImpl implements DocumentService {
         return "STORAGE_UNAVAILABLE".equals(code);
     }
 
-    @Override
     @Transactional
     public Map<String, Object> shareToProject(UUID collectionId, UUID sourceId, UUID projectId) {
         var currentUser = currentUserService.requireCurrentUser();
@@ -505,7 +482,6 @@ public class DocumentServiceImpl implements DocumentService {
         return shareResult(doc, project);
     }
 
-    @Override
     @Transactional
     public Map<String, Object> shareLibrarySourceToProject(UUID sourceId, UUID projectId) {
         var currentUser = currentUserService.requireCurrentUser();
@@ -576,7 +552,6 @@ public class DocumentServiceImpl implements DocumentService {
                         : List.of());
     }
 
-    @Override
     @Transactional
     public void removeSharedDocument(UUID projectId, UUID sourceId) {
         var currentUser = currentUserService.requireCurrentUser();
@@ -635,7 +610,6 @@ public class DocumentServiceImpl implements DocumentService {
         documentRepository.save(direct);
     }
 
-    @Override
     public Document getDocumentForDownload(UUID id, String token) {
         Document doc = findDocument(id);
         if (!doc.isActive()) {
@@ -647,7 +621,6 @@ public class DocumentServiceImpl implements DocumentService {
         return doc;
     }
 
-    @Override
     public List<DocumentChunkResponse> getDocumentChunks(UUID documentId) {
         var currentUser = currentUserService.requireCurrentUser();
         Document doc = findDocument(documentId);
@@ -657,7 +630,6 @@ public class DocumentServiceImpl implements DocumentService {
                 .toList();
     }
 
-    @Override
     public DocumentTextResponse getDocumentText(UUID documentId) {
         var currentUser = currentUserService.requireCurrentUser();
         Document doc = findDocument(documentId);
@@ -669,7 +641,6 @@ public class DocumentServiceImpl implements DocumentService {
         return DocumentTextResponse.from(text);
     }
 
-    @Override
     @Transactional
     public DocumentTextResponse saveDraft(UUID documentId, String extractedText) {
         if (extractedText != null && extractedText.length() > MAX_EXTRACTED_TEXT_LENGTH) {
@@ -691,7 +662,6 @@ public class DocumentServiceImpl implements DocumentService {
         return DocumentTextResponse.from(text);
     }
 
-    @Override
     public DocumentResponse reExtract(UUID documentId) {
         var currentUser = currentUserService.requireCurrentUser();
         Document doc = findDocument(documentId);
@@ -716,7 +686,6 @@ public class DocumentServiceImpl implements DocumentService {
                         documentId, doc.getFileUrl(), doc.getFileHashSha256()));
     }
 
-    @Override
     @Transactional
     public DocumentResponse attachFileToDocument(UUID documentId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -758,7 +727,6 @@ public class DocumentServiceImpl implements DocumentService {
         return DocumentResponse.from(doc);
     }
 
-    @Override
     @Transactional
     public void deleteDocument(UUID id) {
         var currentUser = currentUserService.requireCurrentUser();
@@ -1178,7 +1146,6 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
-    @Override
     @Transactional(readOnly = true)
     public Map<String, Object> getDiagnostics(UUID id) {
         Document doc = documentRepository.findById(id)

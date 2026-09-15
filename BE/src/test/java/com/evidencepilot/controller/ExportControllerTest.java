@@ -2,7 +2,7 @@ package com.evidencepilot.controller;
 
 import com.evidencepilot.model.ExportJob;
 import com.evidencepilot.model.enums.ExportStatus;
-import com.evidencepilot.service.ExportService;
+import com.evidencepilot.service.impl.ExportServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
@@ -26,7 +26,7 @@ class ExportControllerTest {
 
     @Test
     void downloadStreamsOriginalArchiveWithAttachmentFilename() throws Exception {
-        ExportService service = mock(ExportService.class);
+        ExportServiceImpl service = mock(ExportServiceImpl.class);
         MockMvc mockMvc = standaloneSetup(new ExportController(
                 service)).build();
         UUID jobId = UUID.randomUUID();
@@ -45,7 +45,7 @@ class ExportControllerTest {
 
     @Test
     void retryFailedExportReturnsAcceptedJob() throws Exception {
-        ExportService service = mock(ExportService.class);
+        ExportServiceImpl service = mock(ExportServiceImpl.class);
         MockMvc mockMvc = standaloneSetup(new ExportController(service)).build();
         UUID jobId = UUID.randomUUID();
         ExportJob job = new ExportJob();

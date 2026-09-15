@@ -9,7 +9,7 @@ import com.evidencepilot.dto.response.DocumentResponse;
 import com.evidencepilot.dto.response.OpenAlexPreview;
 import com.evidencepilot.exception.DuplicateProjectDoiException;
 import com.evidencepilot.exception.ResourceNotFoundException;
-import com.evidencepilot.service.OpenAlexIngestionService;
+import com.evidencepilot.service.impl.OpenAlexIngestionServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,7 +38,7 @@ import java.util.Map;
      description = "Lookup and ingest documents via DOI through the OpenAlex API")
 public class OpenAlexController {
 
-    private final OpenAlexIngestionService ingestionService;
+    private final OpenAlexIngestionServiceImpl ingestionService;
 
     @Operation(summary = "Lookup a DOI",
                description = "Fetches metadata from OpenAlex for the given DOI. "

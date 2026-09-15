@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.dto.response.SectionStandardEvaluationResponse;
 import com.evidencepilot.dto.response.PromptTrialResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
@@ -46,7 +47,7 @@ public class SectionStandardService {
     private final AiModelClient aiModelClient;
     private final PaperSectionRepository paperSectionRepository;
     private final SectionStandardEvaluationRepository evaluationRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final ObjectMapper objectMapper;
     private final PlatformTransactionManager transactionManager;
     private final PromptTemplateService promptTemplateService;

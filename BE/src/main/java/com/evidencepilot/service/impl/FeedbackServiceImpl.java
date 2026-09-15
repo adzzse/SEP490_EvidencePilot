@@ -22,10 +22,7 @@ import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
-import com.evidencepilot.service.CheckpointService;
-import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.FeedbackAnchorService;
-import com.evidencepilot.service.FeedbackService;
 import com.evidencepilot.service.SubmissionReadinessService;
 import com.evidencepilot.service.SystemNotificationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -50,21 +47,20 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class FeedbackServiceImpl implements FeedbackService {
+public class FeedbackServiceImpl {
 
     private final FeedbackRequestRepository feedbackRequestRepository;
     private final InstructorFeedbackRepository instructorFeedbackRepository;
     private final PaperSectionRepository paperSectionRepository;
     private final ProjectRepository projectRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final SystemNotificationService systemNotificationService;
-    private final CheckpointService checkpointService;
+    private final CheckpointServiceImpl checkpointService;
     private final ProjectCollectionService projectCollectionService;
     private final SubmissionReadinessService submissionReadinessService;
     private final ObjectMapper objectMapper;
     private final FeedbackAnchorService feedbackAnchorService;
 
-    @Override
     @Transactional(readOnly = true)
     public List<FeedbackRequestResponseDto> findAllForCurrentUser() {
         User currentUser = currentUserService.requireCurrentUser();
@@ -79,7 +75,6 @@ public class FeedbackServiceImpl implements FeedbackService {
         return requests.stream().map(FeedbackRequestResponseDto::fromEntity).toList();
     }
 
-    @Override
     @Transactional(readOnly = true)
     public ReviewSubmissionSnapshotResponse getSubmissionSnapshot(UUID feedbackRequestId) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -95,7 +90,6 @@ public class FeedbackServiceImpl implements FeedbackService {
         }
     }
 
-    @Override
     @Transactional
     public FeedbackRequestResponseDto submitForReview(UUID projectId, SubmitReviewRequest request) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -134,7 +128,6 @@ public class FeedbackServiceImpl implements FeedbackService {
     }
 
     /** Root feedback is a server-side draft until the review request is returned. */
-    @Override
     @Transactional
     public InstructorFeedbackResponseDto comment(UUID feedbackRequestId, InstructorFeedbackRequest request) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -165,7 +158,6 @@ public class FeedbackServiceImpl implements FeedbackService {
         return response(saved, currentUser);
     }
 
-    @Override
     @Transactional(readOnly = true)
     public List<InstructorFeedbackResponseDto> getFeedbackItems(UUID feedbackRequestId) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -176,7 +168,6 @@ public class FeedbackServiceImpl implements FeedbackService {
         return roots.stream().map(root -> response(root, currentUser)).toList();
     }
 
-    @Override
     @Transactional
     public InstructorFeedbackResponseDto updateFeedbackItem(UUID feedbackItemId, InstructorFeedbackRequest request) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -196,7 +187,6 @@ public class FeedbackServiceImpl implements FeedbackService {
         return response(feedback, currentUser);
     }
 
-    @Override
     @Transactional
     public void deleteFeedbackItem(UUID feedbackItemId) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -205,7 +195,6 @@ public class FeedbackServiceImpl implements FeedbackService {
         instructorFeedbackRepository.delete(feedback);
     }
 
-    @Override
     @Transactional
     public InstructorFeedbackResponseDto prepareFeedbackState(UUID feedbackItemId, FeedbackStateRequest request) {
         User currentUser = currentUserService.requireCurrentUser();
@@ -227,7 +216,6 @@ public class FeedbackServiceImpl implements FeedbackService {
         return response(feedback, currentUser);
     }
 
-    @Override
     @Transactional
     public FeedbackRequestResponseDto updateStatus(UUID feedbackRequestId, String status) {
         FeedbackStatus next = parseStatus(status);

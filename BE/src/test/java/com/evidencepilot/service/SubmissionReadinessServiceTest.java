@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.exception.SubmissionReadinessException;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.FeedbackRequest;
@@ -44,7 +45,7 @@ class SubmissionReadinessServiceTest {
     @Mock private PaperSectionRepository paperSectionRepository;
     @Mock private FeedbackRequestRepository feedbackRequestRepository;
     @Mock private SectionStandardService sectionStandardService;
-    @Mock private CurrentUserService currentUserService;
+    @Mock private CurrentUserServiceImpl currentUserService;
 
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private SubmissionReadinessService service;

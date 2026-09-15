@@ -1,9 +1,7 @@
 # EvidencePilot System Architecture
 
-This document describes the current runtime architecture of EvidencePilot. It
-tracks implemented boundaries in the application repository and the separate
-[Python model service](https://github.com/adzzse/EvidencePilot_models). The running
-OpenAPI document remains the source of truth for individual HTTP contracts.
+This document describes the current runtime architecture of EvidencePilot. It tracks implemented boundaries in the application repository and the separate
+[Python model service](https://github.com/adzzse/EvidencePilot_models). The running OpenAPI document remains the source of truth for individual HTTP contracts.
 
 ## 1. System context
 
@@ -96,10 +94,7 @@ flowchart LR
     SERVICES --> WS
 ```
 
-Controllers delegate access decisions and business behavior to shared services.
-`CurrentUserService` is the main resource/role authorization boundary. JPA
-repositories are used behind those checks; client-side route guards are not an
-authorization substitute.
+Controllers delegate access decisions and business behavior to shared services. The current-user service is the main resource/role authorization boundary. JPA repositories are used behind those checks; client-side route guards are not an authorization substitute.
 
 The three durable queues are:
 
@@ -118,9 +113,7 @@ The three durable queues are:
 | Qdrant | Search vectors and chunk payload references. | Original text ownership, user access, or workflow status. |
 | RabbitMQ | Pending background work delivery. | Final job result or long-term audit history. |
 
-The backend validates access against MySQL before serving MinIO content or
-using Qdrant results. A Qdrant hit is converted back to a MySQL document chunk
-before it becomes an evidence candidate.
+The backend validates access against MySQL before serving MinIO content or using Qdrant results. A Qdrant hit is converted back to a MySQL document chunk before it becomes an evidence candidate.
 
 ## 5. Core runtime flows
 
@@ -164,8 +157,7 @@ Main status path:
 PENDING_UPLOAD -> UPLOADED -> QUEUED -> PROCESSING -> RAW_EXTRACTED -> READY
 ```
 
-Failures are recorded as `FAILED`. Re-extraction can reuse the processed MinIO
-checkpoint instead of rerunning extraction when the checkpoint is valid.
+Failures are recorded as `FAILED`. Re-extraction can reuse the processed MinIO checkpoint instead of rerunning extraction when the checkpoint is valid.
 
 ### 5.2 Claim-to-evidence evaluation
 
@@ -196,32 +188,24 @@ sequenceDiagram
     User->>API: Instructor verifies or rejects mapping
 ```
 
-Search candidates are not persisted. Persistence begins after the selected
-candidate has been evaluated. Human acceptance and instructor review remain
-separate decisions.
+Search candidates are not persisted. Persistence begins after the selected candidate has been evaluated. Human acceptance and instructor review remain separate decisions.
 
 ### 5.3 Review and feedback
 
 1. An Instructor creates a project, assigns Students, and manages paper structure.
 2. Assigned Students edit sections and create claims/evidence decisions.
 3. Submitting for review creates a feedback request and project checkpoint.
-4. The Instructor reviews sections, evidence, and progress, then returns,
-   reviews, or rejects the request.
-5. Returned feedback can be answered by the assigned Student; completed review
-   moves the project into its next lifecycle state.
+4. The Instructor reviews sections, evidence, and progress, then returns, reviews, or rejects the request.
+5. Returned feedback can be answered by the assigned Student; completed review moves the project into its next lifecycle state.
 
-Project lifecycle values currently include `CREATED`, `ASSIGNED`, `IN_PROGRESS`,
-`SUBMITTED_FOR_REVIEW`, `RETURNED`, `APPROVED`, and `ARCHIVED`.
+Project lifecycle values currently include `CREATED`, `ASSIGNED`, `IN_PROGRESS`, `SUBMITTED_FOR_REVIEW`, `RETURNED`, `APPROVED`, and `ARCHIVED`.
 
 ### 5.4 Traceability and export
 
-- Traceability JSON and CSV aggregate claims, sources, suggestions, mappings,
-  references, feedback, evidence revision traces, and gap flags.
+- Traceability JSON and CSV aggregate claims, sources, suggestions, mappings, references, feedback, evidence revision traces, and gap flags.
 - Project graph and progress endpoints derive coverage views from persisted data.
-- Async export jobs are queued through `export.queue`, built by the Java worker,
-  stored in MinIO, and downloaded through the authenticated API.
-- The current async worker builds TeX/media archives. Traceability data is
-  available through its dedicated JSON and CSV endpoints.
+- Async export jobs are queued through `export.queue`, built by the Java worker, stored in MinIO, and downloaded through the authenticated API.
+- The current async worker builds TeX/media archives. Traceability data is available through its dedicated JSON and CSV endpoints.
 
 ### 5.5 Evidence revision trace
 
@@ -256,20 +240,13 @@ sequenceDiagram
     API->>DB: Set judgment + feedback; resolve trace
 ```
 
-- One `citation_review_rounds` row per review run; one `evidence_revision_traces`
-  row per finding (identity anchored on the trace row, not the finding index).
-- Decision PATCH recomputes the section content fingerprint; a mismatch returns
-  `409 SECTION_CONTENT_CHANGED` so the student re-runs review instead of acting
-  on stale findings.
-- Re-running review matches findings verbatim to existing traces and rechecks
-  edited (stale) passages through the existing `ai.evaluation.queue` — no new
-  queue or endpoint.
+- One `citation_review_rounds` row per review run; one `evidence_revision_traces` row per finding (identity anchored on the trace row, not the finding index).
+- Decision PATCH recomputes the section content fingerprint; a mismatch returns `409 SECTION_CONTENT_CHANGED` so the student re-runs review instead of acting on stale findings.
+- Re-running review matches findings verbatim to existing traces and rechecks edited (stale) passages through the existing `ai.evaluation.queue` — no new queue or endpoint.
 
 ### 5.6 Notifications
 
-Application events persist a `system_notifications` row before notifying the
-connected user through `/ws`. The frontend also reads the notification inbox
-and unread count through REST, so reconnecting does not lose persisted events.
+Application events persist a `system_notifications` row before notifying the connected user through `/ws`. The frontend also reads the notification inbox and unread count through REST, so reconnecting does not lose persisted events.
 
 ## 6. Security and trust boundaries
 
@@ -282,9 +259,7 @@ and unread count through REST, so reconnecting does not lose persisted events.
 | Backend to object/vector stores | Credentials remain server-side; clients do not receive direct database access. |
 | Remote generation provider | Only enabled by explicit provider/key configuration; submitted context leaves the local host. |
 
-Roles are `STUDENT`, `INSTRUCTOR`, and `ADMIN`. Project membership and section
-assignment further restrict resource access. The backend remains authoritative
-even when the frontend hides an action by role.
+Roles are `STUDENT`, `INSTRUCTOR`, and `ADMIN`. Project membership and section assignment further restrict resource access. The backend remains authoritative even when the frontend hides an action by role.
 
 ## 7. Deployment topology
 
@@ -298,9 +273,7 @@ even when the frontend hides an action by role.
 - MinIO and bucket initialization
 - RabbitMQ with management UI
 
-The React frontend runs separately through Vite. The model service runs outside
-Compose on the Windows host. With Docker Desktop, the backend reaches it through
-`host.docker.internal`.
+The React frontend runs separately through Vite. The model service runs outside Compose on the Windows host. With Docker Desktop, the backend reaches it through `host.docker.internal`.
 
 ### Remote application with local AI host
 
@@ -319,8 +292,7 @@ Required URL relationship:
 - `APP_BASE_URL` is a backend URL reachable from the model host.
 - `EXTRACTION_ALLOWED_HOSTS` allows the hostname in `APP_BASE_URL`.
 
-The repository currently contains a backend Dockerfile and local Compose stack.
-Platform deployment settings and secrets are managed outside source control.
+The repository currently contains a backend Dockerfile and local Compose stack. Platform deployment settings and secrets are managed outside source control.
 
 ## 8. Configuration groups
 

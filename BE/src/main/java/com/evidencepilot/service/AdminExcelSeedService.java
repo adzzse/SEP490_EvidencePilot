@@ -1,5 +1,7 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
 import com.evidencepilot.client.openalex.DoiUtils;
 import com.evidencepilot.client.openalex.OpenAlexClient;
 import com.evidencepilot.dto.openalex.OpenAlexWorkResponse;
@@ -26,7 +28,7 @@ import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.impl.DocumentPersistenceService;
 import com.evidencepilot.service.impl.ProjectCollectionService;
-import com.evidencepilot.service.OpenAlexIngestionService;
+import com.evidencepilot.service.impl.OpenAlexIngestionServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
@@ -84,7 +86,7 @@ import java.util.zip.ZipInputStream;
  * Excel + folder-per-paper ZIP seed. Streaming-light: caps enforced
  * (6 sheets, 200 rows/sheet with members at 500, 10MB xlsx). ZIP bundles are uncapped and
  * spooled entry-by-entry to temp files (never heap) with per-job cleanup.
- * Reuses AdminService user validation, DocumentService extraction pipeline,
+ * Reuses AdminService user validation, DocumentServiceImpl extraction pipeline,
  * MediaAssetService for images. Async jobs with in-memory progress (pollable).
  */
 @Slf4j
@@ -127,11 +129,11 @@ public class AdminExcelSeedService {
     private final DocumentTextRepository documentTextRepository;
     private final DocumentChunkRepository documentChunkRepository;
     private final PaperSectionRepository paperSectionRepository;
-    private final DocumentService documentService;
+    private final DocumentServiceImpl documentService;
     private final MediaAssetService mediaAssetService;
-    private final PaperProcessingService paperProcessingService;
+    private final PaperProcessingServiceImpl paperProcessingService;
     private final OpenAlexClient openAlexClient;
-    private final OpenAlexIngestionService openAlexIngestionService;
+    private final OpenAlexIngestionServiceImpl openAlexIngestionService;
     private final DocumentObjectStorage documentObjectStorage;
     private final DocumentPersistenceService documentPersistenceService;
     private final ProjectCollectionService projectCollectionService;

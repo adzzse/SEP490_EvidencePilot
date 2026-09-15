@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.dto.request.AdminBroadcastRequest;
 import com.evidencepilot.dto.request.AdminUserCreateRequest;
 import com.evidencepilot.dto.request.AdminUserImportRequest;
@@ -58,11 +59,11 @@ class AdminServiceTest {
     @Mock DocumentRepository documents;
     @Mock PaperSectionRepository paperSections;
     @Mock AuditLogRepository auditLogs;
-    @Mock CurrentUserService currentUsers;
+    @Mock CurrentUserServiceImpl currentUsers;
     @Mock PasswordResetService passwordResets;
     @Mock AuditService audit;
     @Mock UserInvitationService invitations;
-    @Mock com.evidencepilot.service.UserAvatarService avatars;
+    @Mock com.evidencepilot.service.impl.UserAvatarServiceImpl avatars;
     @Mock SystemNotificationService notifications;
     @Mock PasswordEncoder passwords;
     @Mock ApplicationEventPublisher events;

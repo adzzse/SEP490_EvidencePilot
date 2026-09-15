@@ -1,7 +1,7 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.response.TraceabilityExportResponse;
-import com.evidencepilot.service.TraceabilityExportService;
+import com.evidencepilot.service.impl.TraceabilityExportServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -24,7 +24,7 @@ import java.util.UUID;
 @Tag(name = "Traceability", description = "Project-level traceability export")
 public class TraceabilityExportController {
 
-    private final TraceabilityExportService traceabilityExportService;
+    private final TraceabilityExportServiceImpl traceabilityExportService;
 
     @Operation(summary = "Export project traceability",
             description = "Generates a project traceability export containing sections, sources, "

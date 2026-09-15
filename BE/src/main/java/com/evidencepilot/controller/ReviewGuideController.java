@@ -1,7 +1,7 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.response.ReviewGuideResponse;
-import com.evidencepilot.service.ReviewGuideService;
+import com.evidencepilot.service.impl.ReviewGuideServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +17,7 @@ import java.util.List;
 @Tag(name = "Review Guides", description = "Read-only per-section-type review guidance")
 public class ReviewGuideController {
 
-    private final ReviewGuideService reviewGuideService;
+    private final ReviewGuideServiceImpl reviewGuideService;
 
     @Operation(summary = "List active review guides",
             description = "Returns the global review-guide library (guidance + checklist) keyed by section type.")

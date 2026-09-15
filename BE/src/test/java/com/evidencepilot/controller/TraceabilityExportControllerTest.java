@@ -1,6 +1,6 @@
 package com.evidencepilot.controller;
 
-import com.evidencepilot.service.TraceabilityExportService;
+import com.evidencepilot.service.impl.TraceabilityExportServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -21,7 +21,7 @@ class TraceabilityExportControllerTest {
 
     @Test
     void export_delegatesProjectId() throws Exception {
-        TraceabilityExportService service = mock(TraceabilityExportService.class);
+        TraceabilityExportServiceImpl service = mock(TraceabilityExportServiceImpl.class);
         MockMvc mockMvc = standaloneSetup(new TraceabilityExportController(service)).build();
         UUID projectId = UUID.randomUUID();
 
@@ -33,7 +33,7 @@ class TraceabilityExportControllerTest {
 
     @Test
     void exportCsvReturnsDownloadHeadersAndServiceBytes() throws Exception {
-        TraceabilityExportService service = mock(TraceabilityExportService.class);
+        TraceabilityExportServiceImpl service = mock(TraceabilityExportServiceImpl.class);
         MockMvc mockMvc = standaloneSetup(new TraceabilityExportController(service)).build();
         UUID projectId = UUID.randomUUID();
         byte[] csv = "\uFEFFheader\nvalue\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);

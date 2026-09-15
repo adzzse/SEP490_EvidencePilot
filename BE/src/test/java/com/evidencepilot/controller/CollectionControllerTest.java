@@ -1,9 +1,9 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.request.CollectionRequest;
-import com.evidencepilot.service.CollectionService;
-import com.evidencepilot.service.DocumentService;
-import com.evidencepilot.service.OpenAlexIngestionService;
+import com.evidencepilot.service.impl.CollectionServiceImpl;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
+import com.evidencepilot.service.impl.OpenAlexIngestionServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -19,9 +19,9 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 
 class CollectionControllerTest {
 
-    private final CollectionService collectionService = mock(CollectionService.class);
-    private final DocumentService documentService = mock(DocumentService.class);
-    private final OpenAlexIngestionService openAlexIngestionService = mock(OpenAlexIngestionService.class);
+    private final CollectionServiceImpl collectionService = mock(CollectionServiceImpl.class);
+    private final DocumentServiceImpl documentService = mock(DocumentServiceImpl.class);
+    private final OpenAlexIngestionServiceImpl openAlexIngestionService = mock(OpenAlexIngestionServiceImpl.class);
     private MockMvc mockMvc;
 
     @BeforeEach

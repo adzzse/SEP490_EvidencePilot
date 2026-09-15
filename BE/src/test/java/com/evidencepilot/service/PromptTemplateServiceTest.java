@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.model.PromptTemplate;
 import com.evidencepilot.model.User;
 import com.evidencepilot.repository.PromptTemplateRepository;
@@ -29,7 +30,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class PromptTemplateServiceTest {
     @Mock PromptTemplateRepository repository;
-    @Mock CurrentUserService users;
+    @Mock CurrentUserServiceImpl users;
     @Mock PlatformTransactionManager transactions;
     @Mock AiGenerationConfigRepository generationConfigRepository;
     @Mock AiGenerationConfigService generationConfigService;

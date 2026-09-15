@@ -6,8 +6,8 @@ import com.evidencepilot.dto.request.PasswordResetRequest;
 import com.evidencepilot.dto.request.SetPasswordRequest;
 import com.evidencepilot.dto.request.UpdatePasswordRequest;
 import com.evidencepilot.dto.response.AuthResponse;
-import com.evidencepilot.service.AuthService;
-import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.impl.AuthServiceImpl;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.PasswordResetService;
 import com.evidencepilot.service.UserInvitationService;
 import lombok.extern.slf4j.Slf4j;
@@ -35,8 +35,8 @@ import java.util.Map;
 @Tag(name = "Authentication", description = "Login and password management")
 public class AuthController {
 
-    private final AuthService authService;
-    private final CurrentUserService currentUserService;
+    private final AuthServiceImpl authService;
+    private final CurrentUserServiceImpl currentUserService;
     private final PasswordResetService passwordResetService;
     private final UserInvitationService userInvitationService;
 

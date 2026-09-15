@@ -1,5 +1,7 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CheckpointServiceImpl;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.dto.request.FeedbackStateRequest;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
@@ -52,9 +54,9 @@ class FeedbackServiceImplTest {
     @Mock private InstructorFeedbackRepository instructorFeedbackRepository;
     @Mock private PaperSectionRepository paperSectionRepository;
     @Mock private ProjectRepository projectRepository;
-    @Mock private CurrentUserService currentUserService;
+    @Mock private CurrentUserServiceImpl currentUserService;
     @Mock private SystemNotificationService systemNotificationService;
-    @Mock private CheckpointService checkpointService;
+    @Mock private CheckpointServiceImpl checkpointService;
     @Mock private ProjectCollectionService projectCollectionService;
     @Mock private SubmissionReadinessService submissionReadinessService;
 

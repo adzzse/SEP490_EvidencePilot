@@ -4,7 +4,6 @@ import com.evidencepilot.dto.response.SystemNotificationResponse;
 import com.evidencepilot.model.SystemNotification;
 import com.evidencepilot.model.User;
 import com.evidencepilot.repository.SystemNotificationRepository;
-import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.SystemNotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -25,7 +24,7 @@ public class SystemNotificationServiceImpl implements SystemNotificationService 
     private static final String USER_NOTIFICATION_DESTINATION = "/queue/notifications";
 
     private final SystemNotificationRepository systemNotificationRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final SimpMessagingTemplate messagingTemplate;
 
     @Override

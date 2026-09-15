@@ -3,7 +3,6 @@ package com.evidencepilot.service.impl;
 import com.evidencepilot.dto.response.ReviewGuideResponse;
 import com.evidencepilot.model.ReviewGuide;
 import com.evidencepilot.repository.ReviewGuideRepository;
-import com.evidencepilot.service.CurrentUserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +18,7 @@ class ReviewGuideServiceImplTest {
     @Test
     void getActiveGuides_requiresCurrentUserAndReturnsActiveGuides() {
         ReviewGuideRepository repo = mock(ReviewGuideRepository.class);
-        CurrentUserService currentUserService = mock(CurrentUserService.class);
+        CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
         ReviewGuideServiceImpl service = new ReviewGuideServiceImpl(repo, currentUserService, new ObjectMapper());
 
         ReviewGuide methods = guide("Methods", "A strong methods section is reproducible.",
@@ -39,7 +38,7 @@ class ReviewGuideServiceImplTest {
     @Test
     void getActiveGuides_returnsEmptyChecklistForMissingOrMalformedJson() {
         ReviewGuideRepository repo = mock(ReviewGuideRepository.class);
-        CurrentUserService currentUserService = mock(CurrentUserService.class);
+        CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
         ReviewGuideServiceImpl service = new ReviewGuideServiceImpl(repo, currentUserService, new ObjectMapper());
 
         ReviewGuide noJson = guide("Abstract", "A strong abstract is self-contained.", null);

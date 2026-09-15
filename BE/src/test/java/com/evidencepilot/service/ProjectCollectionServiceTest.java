@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.CollectionDocument;
 import com.evidencepilot.model.Document;
@@ -51,7 +52,7 @@ class ProjectCollectionServiceTest {
     @Mock
     private CollectionDocumentRepository collectionDocumentRepository;
     @Mock
-    private CurrentUserService currentUserService;
+    private CurrentUserServiceImpl currentUserService;
 
     @Test
     void linkMaterializesEveryCurrentSourceAndIsIdempotent() {

@@ -17,7 +17,6 @@ import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.UserRepository;
-import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.CitationBibliography;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -40,7 +39,7 @@ public class PaperReferenceService {
     private final ProjectMemberRepository projectMemberRepository;
     private final SourceMatchingService sourceMatchingService;
     private final UserRepository userRepository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
 
     @Transactional(readOnly = true)
     public List<PaperReferenceResponse> list(UUID paperId, UUID requesterId) {

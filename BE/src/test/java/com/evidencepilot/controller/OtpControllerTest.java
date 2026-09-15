@@ -3,8 +3,8 @@ package com.evidencepilot.controller;
 import com.evidencepilot.dto.response.EmailOtpRequestResponse;
 import com.evidencepilot.dto.response.EmailOtpVerifyResponse;
 import com.evidencepilot.model.User;
-import com.evidencepilot.service.CurrentUserService;
-import com.evidencepilot.service.EmailOtpService;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
+import com.evidencepilot.service.impl.EmailOtpServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -22,8 +22,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class OtpControllerTest {
 
-    private final EmailOtpService emailOtpService = mock(EmailOtpService.class);
-    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+    private final EmailOtpServiceImpl emailOtpService = mock(EmailOtpServiceImpl.class);
+    private final CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
     private final MockMvc mockMvc = MockMvcBuilders
             .standaloneSetup(new OtpController(emailOtpService, currentUserService))
             .build();

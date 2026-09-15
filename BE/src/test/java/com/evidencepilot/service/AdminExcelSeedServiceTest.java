@@ -1,5 +1,8 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
+import com.evidencepilot.service.impl.OpenAlexIngestionServiceImpl;
+import com.evidencepilot.service.impl.DocumentServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -37,11 +40,11 @@ class AdminExcelSeedServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
-                mock(DocumentService.class),
+                mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
-                mock(PaperProcessingService.class),
+                mock(PaperProcessingServiceImpl.class),
                 mock(com.evidencepilot.client.openalex.OpenAlexClient.class),
-                mock(OpenAlexIngestionService.class),
+                mock(OpenAlexIngestionServiceImpl.class),
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 mock(com.evidencepilot.service.impl.ProjectCollectionService.class),
@@ -247,16 +250,16 @@ class AdminExcelSeedServiceTest {
         var projects = mock(com.evidencepilot.repository.ProjectRepository.class);
         var members = mock(com.evidencepilot.repository.ProjectMemberRepository.class);
         var documents = mock(com.evidencepilot.repository.DocumentRepository.class);
-        var papers = mock(PaperProcessingService.class);
+        var papers = mock(PaperProcessingServiceImpl.class);
         var tx = mock(org.springframework.transaction.PlatformTransactionManager.class);
         var service = new AdminExcelSeedService(
                 mock(AdminService.class), users, projects, members, documents,
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
-                mock(DocumentService.class), mock(MediaAssetService.class), papers,
+                mock(DocumentServiceImpl.class), mock(MediaAssetService.class), papers,
                 mock(com.evidencepilot.client.openalex.OpenAlexClient.class),
-                mock(OpenAlexIngestionService.class),
+                mock(OpenAlexIngestionServiceImpl.class),
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 mock(com.evidencepilot.service.impl.ProjectCollectionService.class),
@@ -335,11 +338,11 @@ class AdminExcelSeedServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
-                mock(DocumentService.class),
+                mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
-                mock(PaperProcessingService.class),
+                mock(PaperProcessingServiceImpl.class),
                 mock(com.evidencepilot.client.openalex.OpenAlexClient.class),
-                mock(OpenAlexIngestionService.class),
+                mock(OpenAlexIngestionServiceImpl.class),
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 mock(com.evidencepilot.service.impl.ProjectCollectionService.class),
@@ -653,7 +656,7 @@ class AdminExcelSeedServiceTest {
             com.evidencepilot.repository.ProjectMemberRepository members,
             com.evidencepilot.repository.DocumentRepository documents,
             com.evidencepilot.client.openalex.OpenAlexClient openAlex,
-            OpenAlexIngestionService ingestion,
+            OpenAlexIngestionServiceImpl ingestion,
             DocumentObjectStorage storage,
             com.evidencepilot.service.impl.DocumentPersistenceService persistence,
             com.evidencepilot.service.impl.ProjectCollectionService collections) {
@@ -664,7 +667,7 @@ class AdminExcelSeedServiceTest {
         var members = mock(com.evidencepilot.repository.ProjectMemberRepository.class);
         var documents = mock(com.evidencepilot.repository.DocumentRepository.class);
         var openAlex = mock(com.evidencepilot.client.openalex.OpenAlexClient.class);
-        var ingestion = mock(OpenAlexIngestionService.class);
+        var ingestion = mock(OpenAlexIngestionServiceImpl.class);
         var storage = mock(DocumentObjectStorage.class);
         var persistence = mock(com.evidencepilot.service.impl.DocumentPersistenceService.class);
         var collections = mock(com.evidencepilot.service.impl.ProjectCollectionService.class);
@@ -675,9 +678,9 @@ class AdminExcelSeedServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
-                mock(DocumentService.class),
+                mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
-                mock(PaperProcessingService.class),
+                mock(PaperProcessingServiceImpl.class),
                 openAlex, ingestion, storage, persistence, collections,
                 mock(com.fasterxml.jackson.databind.ObjectMapper.class), mock(org.springframework.transaction.PlatformTransactionManager.class));
         return new DoiMocks(service, projects, members, documents, openAlex, ingestion, storage, persistence, collections);
@@ -971,11 +974,11 @@ class AdminExcelSeedServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
-                mock(DocumentService.class),
+                mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
-                mock(PaperProcessingService.class),
+                mock(PaperProcessingServiceImpl.class),
                 mock(com.evidencepilot.client.openalex.OpenAlexClient.class),
-                mock(OpenAlexIngestionService.class),
+                mock(OpenAlexIngestionServiceImpl.class),
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 collections,
@@ -1014,11 +1017,11 @@ class AdminExcelSeedServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
-                mock(DocumentService.class),
+                mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
-                mock(PaperProcessingService.class),
+                mock(PaperProcessingServiceImpl.class),
                 mock(com.evidencepilot.client.openalex.OpenAlexClient.class),
-                mock(OpenAlexIngestionService.class),
+                mock(OpenAlexIngestionServiceImpl.class),
                 mock(DocumentObjectStorage.class),
                 mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
                 collections,

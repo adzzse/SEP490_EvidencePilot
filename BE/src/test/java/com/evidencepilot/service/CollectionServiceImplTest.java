@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.dto.request.CollectionRequest;
 import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.User;
@@ -31,7 +32,7 @@ class CollectionServiceImplTest {
     private CollectionCategoryRepository collectionCategoryRepository;
 
     @Mock
-    private CurrentUserService currentUserService;
+    private CurrentUserServiceImpl currentUserService;
 
     @Mock
     private ProjectCollectionService projectCollectionService;

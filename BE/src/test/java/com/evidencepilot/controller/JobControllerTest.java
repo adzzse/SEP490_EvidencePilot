@@ -5,7 +5,7 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.service.AiEvaluationService;
-import com.evidencepilot.service.CurrentUserService;
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
@@ -25,7 +25,7 @@ class JobControllerTest {
 
     private final AiEvaluationService aiEvaluationService = mock(AiEvaluationService.class);
     private final ProjectRepository projectRepository = mock(ProjectRepository.class);
-    private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+    private final CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
 
     private MockMvc mockMvc() {
         return standaloneSetup(new JobController(aiEvaluationService, projectRepository, currentUserService)).build();

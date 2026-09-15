@@ -1,7 +1,7 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.request.CollectionCategoryRequest;
-import com.evidencepilot.service.CollectionCategoryService;
+import com.evidencepilot.service.impl.CollectionCategoryServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 
 class CollectionCategoryControllerTest {
 
-    private final CollectionCategoryService service = mock(CollectionCategoryService.class);
+    private final CollectionCategoryServiceImpl service = mock(CollectionCategoryServiceImpl.class);
     private MockMvc mockMvc;
 
     @BeforeEach

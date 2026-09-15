@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.dto.response.ProjectMediaResponse;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.Project;
@@ -35,7 +36,7 @@ public class MediaAssetService {
     private final ProjectMediaRepository projectMediaRepository;
     private final ProjectRepository projectRepository;
     private final DocumentObjectStorage objectStorage;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
 
     @Transactional
     public ProjectMediaResponse upload(MultipartFile file, UUID projectId) {

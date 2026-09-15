@@ -17,7 +17,6 @@ import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.SectionStandardEvaluationRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AuditService;
-import com.evidencepilot.service.CurrentUserService;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.PaperStandardService;
 import com.evidencepilot.service.FeedbackAnchorService;
@@ -57,7 +56,7 @@ class PaperProcessingServiceImplTest {
     @Mock
     private ProjectRepository projectRepository;
     @Mock
-    private CurrentUserService currentUserService;
+    private CurrentUserServiceImpl currentUserService;
     @Mock
     private AuditService auditService;
     @Mock

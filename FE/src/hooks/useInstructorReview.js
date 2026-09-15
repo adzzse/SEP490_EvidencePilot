@@ -60,14 +60,12 @@ export default function useInstructorReview({ projectId, enabled }) {
   }));
   const clearFeedbackDraft = () => setFeedbackDrafts(previous => ({ ...previous, [draftKey]: {} }));
   const [savingFeedback, setSavingFeedback] = useState(false);
-  const [feedbackFilter, setFeedbackFilter] = useState('OPEN');
   const [activeFeedbackId, setActiveFeedbackId] = useState(null);
   const [viewMode, setViewMode] = useState('submitted');
   const sourceEditorRef = useRef(null);
   const [transitioningRequestId, setTransitioningRequestId] = useState(null);
   const [pendingTransition, setPendingTransition] = useState(null);
   const [guides, setGuides] = useState([]);
-  const [checkedItems, setCheckedItems] = useState({});
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [suggestionError, setSuggestionError] = useState('');
@@ -76,8 +74,7 @@ export default function useInstructorReview({ projectId, enabled }) {
   const [snapshotState, setSnapshotState] = useState('LOADING');
   const [snapshotRetry, setSnapshotRetry] = useState(0);
   const suggestionRequestRef = useRef(0);
-
-  const [panelTab, setPanelTab] = useState('manual');
+  const [feedbackFocusToken, setFeedbackFocusToken] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -346,7 +343,6 @@ export default function useInstructorReview({ projectId, enabled }) {
         contentVersion: selectedSection.version,
         fingerprint: await sourceFingerprint(source),
       }, lineReference: '' });
-      setPanelTab('manual');
     } catch {
       setErrorMessage(t('instructor.review.selectSourceRange'));
     }
@@ -356,7 +352,6 @@ export default function useInstructorReview({ projectId, enabled }) {
     selectFeedback(item);
     const key = JSON.stringify([projectId, activeRequestId, item.sectionId]);
     setFeedbackDrafts(previous => ({ ...previous, [key]: { editingId: item.id, content: item.content || '', lineReference: item.lineReference || '', anchor: null } }));
-    setPanelTab('manual');
   };
 
   const handleCancelEdit = () => {
@@ -395,12 +390,13 @@ export default function useInstructorReview({ projectId, enabled }) {
     }
   };
 
-  const selectFeedback = (feedback) => {
+  const selectFeedback = (feedback, { focus = false } = {}) => {
     if (feedback.paperId && String(feedback.paperId) !== String(selectedPaperId)) {
       setSelectedPaperId(feedback.paperId);
     }
     if (feedback.sectionId) setSelectedSectionId(feedback.sectionId);
     setActiveFeedbackId(feedback.id);
+    if (focus) setFeedbackFocusToken(value => value + 1);
   };
 
   useEffect(() => {
@@ -422,9 +418,7 @@ export default function useInstructorReview({ projectId, enabled }) {
     if (!feedbackLink) return;
     const feedback = feedbackItems.find(item => String(item.id) === String(feedbackLink));
     if (!feedback) return;
-    setFeedbackFilter('ALL');
-    setPanelTab('manual');
-    selectFeedback(feedback);
+    selectFeedback(feedback, { focus: true });
     const search = new URLSearchParams(location.search);
     search.delete('review');
     search.delete('feedback');
@@ -521,5 +515,78 @@ export default function useInstructorReview({ projectId, enabled }) {
       ...(lineRef ? { lineReference: lineRef } : {}) });
   };
 
-  return { project, papers, sections, selectedPaperId, setSelectedPaperId, selectedSectionId, setSelectedSectionId, selectedSection, requests, orderedRequests, activeRequest, activeRequestId, setActiveRequestId, feedbackItems, sources, mediaAssets, loading, errorMessage, successMessage, diffEnabled, setDiffEnabled, baseline, diffOps, feedbackDraft, feedbackLineRef, selectedAnchor, editingFeedbackId, updateFeedbackDraft, savingFeedback, feedbackFilter, setFeedbackFilter, activeFeedbackId, viewMode, setViewMode, sourceEditorRef, transitioningRequestId, pendingTransition, setPendingTransition, checkedItems, setCheckedItems, suggestions, suggestionLoading, suggestionError, suggestionRan, submissionSnapshot, snapshotState, setSnapshotRetry, panelTab, setPanelTab, activeGuide, requestLocked, canReturn, canCreateRoot, handleSubmitFeedback, captureSourceSelection, handleEditFeedback, handleCancelEdit, handleDeleteFeedback, prepareState, selectFeedback, handleTransitionStatus, handleGenerateSuggestions, injectIntoFeedback, pendingDelete, undoDelete, dismissDelete };
+  const selectedPaper = papers.find(paper => String(paper.id) === String(selectedPaperId)) || null;
+  const workspace = {
+    phase: loading ? 'loading' : project ? 'ready' : errorMessage ? 'error' : 'ready',
+    error: project ? '' : errorMessage,
+    project,
+    papers,
+    sources,
+    mediaAssets,
+    sections,
+    selectedPaperId,
+    selectedPaper,
+    selectedSectionId,
+    selectedSection,
+    content: normalizeSource(selectedSection?.contentTex || ''),
+    selectPaper: setSelectedPaperId,
+    selectSection: setSelectedSectionId,
+    editorRef: sourceEditorRef,
+    readOnly: true,
+  };
+
+  const workflow = {
+    selectedPaperId,
+    selectedSectionId,
+    sections,
+    orderedRequests,
+    activeRequest,
+    activeRequestId,
+    setActiveRequestId,
+    feedbackItems,
+    errorMessage,
+    successMessage,
+    diffEnabled,
+    setDiffEnabled,
+    diffOps,
+    feedbackDraft,
+    feedbackLineRef,
+    selectedAnchor,
+    editingFeedbackId,
+    updateFeedbackDraft,
+    savingFeedback,
+    activeFeedbackId,
+    viewMode,
+    setViewMode,
+    transitioningRequestId,
+    pendingTransition,
+    setPendingTransition,
+    suggestions,
+    suggestionLoading,
+    suggestionError,
+    suggestionRan,
+    submissionSnapshot,
+    snapshotState,
+    setSnapshotRetry,
+    activeGuide,
+    requestLocked,
+    canReturn,
+    canCreateRoot,
+    feedbackFocusToken,
+    handleSubmitFeedback,
+    captureSourceSelection,
+    handleEditFeedback,
+    handleCancelEdit,
+    handleDeleteFeedback,
+    prepareState,
+    selectFeedback,
+    handleTransitionStatus,
+    handleGenerateSuggestions,
+    injectIntoFeedback,
+    pendingDelete,
+    undoDelete,
+    dismissDelete,
+  };
+
+  return { workspace, workflow };
 }

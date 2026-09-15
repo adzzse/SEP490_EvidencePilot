@@ -4,7 +4,7 @@ import com.evidencepilot.dto.request.FeedbackStateRequest;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.model.enums.FeedbackThreadState;
-import com.evidencepilot.service.FeedbackService;
+import com.evidencepilot.service.impl.FeedbackServiceImpl;
 import com.evidencepilot.service.SubmissionReadinessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,7 +21,7 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 
 class FeedbackControllerTest {
 
-    private final FeedbackService service = mock(FeedbackService.class);
+    private final FeedbackServiceImpl service = mock(FeedbackServiceImpl.class);
     private final SubmissionReadinessService submissionReadinessService = mock(SubmissionReadinessService.class);
     private MockMvc mockMvc;
 

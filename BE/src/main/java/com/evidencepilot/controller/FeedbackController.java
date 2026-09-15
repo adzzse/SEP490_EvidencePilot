@@ -7,7 +7,7 @@ import com.evidencepilot.dto.response.FeedbackRequestResponseDto;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
 import com.evidencepilot.dto.response.ReviewReadinessResponse;
 import com.evidencepilot.dto.response.ReviewSubmissionSnapshotResponse;
-import com.evidencepilot.service.FeedbackService;
+import com.evidencepilot.service.impl.FeedbackServiceImpl;
 import com.evidencepilot.service.SubmissionReadinessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -37,7 +37,7 @@ import java.util.UUID;
 @Tag(name = "Feedback", description = "Feedback request lifecycle and instructor review")
 public class FeedbackController {
 
-    private final FeedbackService feedbackService;
+    private final FeedbackServiceImpl feedbackService;
     private final SubmissionReadinessService submissionReadinessService;
 
     @Operation(summary = "List feedback requests",

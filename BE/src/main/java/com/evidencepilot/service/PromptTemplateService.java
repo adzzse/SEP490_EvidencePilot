@@ -1,5 +1,6 @@
 package com.evidencepilot.service;
 
+import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.model.PromptTemplate;
 import com.evidencepilot.repository.AiGenerationConfigRepository;
 import com.evidencepilot.model.User;
@@ -42,7 +43,7 @@ public class PromptTemplateService {
             "CHECK_STANDARD", List.of("MET", "PARTIAL", "NOT_MET", "UNVERIFIABLE", "requirement", "evidence"));
 
     private final PromptTemplateRepository repository;
-    private final CurrentUserService currentUserService;
+    private final CurrentUserServiceImpl currentUserService;
     private final PlatformTransactionManager transactionManager;
     private final AiGenerationConfigRepository generationConfigRepository;
     private final AiGenerationConfigService generationConfigService;

@@ -1270,13 +1270,13 @@ export default function ProjectDetail() {
               ) : (
                 <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
                   {feedbackRequests.map(fb => (
-                    <div key={fb.id} data-testid={`feedback-${fb.id}`} className="rounded-lg bg-[var(--surface-secondary)] px-3 py-2 text-xs">
+                    <Link key={fb.id} to={`/instructor/requests/${encodeURIComponent(id)}?review=${encodeURIComponent(fb.id)}`} data-testid={`feedback-${fb.id}`} className="block rounded-lg bg-[var(--surface-secondary)] px-3 py-2 text-xs">
                       <div className="flex justify-between items-center">
                         <StatusBadge status={fb.status} />
                         <span className="text-[var(--text-tertiary)]">{fb.requestedAt ? new Date(fb.requestedAt).toLocaleDateString(i18n.language) : ''}</span>
                       </div>
                       <p className="mt-1 text-[var(--text-secondary)]">{t('instructor.projectDetail.studentLabel', { student: fb.studentName || fb.studentId })}</p>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               )}
