@@ -3,19 +3,16 @@ import { useTranslation } from 'react-i18next';
 import { Modal, StatusBadge } from '../index';
 import DeleteConfirm from '../ui/DeleteConfirm.jsx';
 import { UndoToast } from '../ui/UndoDelete.jsx';
-import { commonText, instructorText } from '../../locales';
-import { useLanguage } from '../../context/LanguageContext';
 import { formatDateTime } from '../../utils/formatters/date.js';
 
-const ACTION_LABELS = { REVIEWED: { key: 'approve' }, RETURNED: { key: 'returnForRevision' } };
+const ACTION_LABELS = { REVIEWED: 'instructor.review.approve', RETURNED: 'instructor.review.returnForRevision' };
 
 export function InstructorReviewGuide({ review, selectedSection }) {
-  const { language } = useLanguage();
-  const t = instructorText[language];
+  const { t } = useTranslation();
   const { activeGuide, checkedItems, setCheckedItems, selectedSectionId } = review;
   return <section className="space-y-4 rounded-xl border border-(--border) bg-(--surface) p-4 text-xs shadow-sm">
-    <h3 className="font-bold text-(--text-primary)">{t.reviewGuide}</h3>
-    {!selectedSection || !activeGuide ? <p className="text-(--text-tertiary) italic">{t.selectSectionGuide}</p> : <>
+    <h3 className="font-bold text-(--text-primary)">{t('instructor.review.reviewGuide')}</h3>
+    {!selectedSection || !activeGuide ? <p className="text-(--text-tertiary) italic">{t('instructor.review.selectSectionGuide')}</p> : <>
       <span className="inline-block rounded bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300">{activeGuide.sectionType}</span>
       <p className="text-(--text-secondary) leading-relaxed">{activeGuide.guidance}</p>
       <ul className="space-y-2">
@@ -33,10 +30,7 @@ export function InstructorReviewGuide({ review, selectedSection }) {
 }
 
 export default function InstructorFeedbackPanel({ review, selectedSection, onSelectFeedback }) {
-  const { t: translate } = useTranslation();
-  const { language } = useLanguage();
-  const t = instructorText[language];
-  const ct = commonText[language];
+  const { t, i18n } = useTranslation();
   const { selectedSectionId, orderedRequests, activeRequest, activeRequestId, setActiveRequestId, feedbackItems, errorMessage, successMessage, diffEnabled, setDiffEnabled, diffOps, feedbackDraft, selectedAnchor, editingFeedbackId, updateFeedbackDraft, savingFeedback, feedbackFilter, setFeedbackFilter, activeFeedbackId, transitioningRequestId, pendingTransition, setPendingTransition, suggestions, suggestionLoading, suggestionError, suggestionRan, panelTab, setPanelTab, activeGuide, requestLocked, canReturn, canCreateRoot, handleSubmitFeedback, captureSourceSelection, handleEditFeedback, handleCancelEdit, handleDeleteFeedback, prepareState, handleTransitionStatus, handleGenerateSuggestions, injectIntoFeedback, pendingDelete, undoDelete, dismissDelete } = review;
   const [sectionOnly, setSectionOnly] = useState(false);
   const draftCount = feedbackItems.filter(item => String(item.requestId) === String(activeRequestId) && !item.publishedAt).length;
@@ -55,50 +49,50 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
   return <div className="space-y-3 text-xs">
     <div className="space-y-2 rounded-xl border border-(--border) bg-(--surface) p-3 shadow-sm">
       {orderedRequests.map(req => <button type="button" key={req.id} onClick={() => setActiveRequestId(req.id)} aria-pressed={req.id === activeRequestId} className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left focus-visible:ring-2 focus-visible:ring-(--brand) ${req.id === activeRequestId ? 'border-indigo-200 bg-(--brand-soft) text-(--brand-foreground)' : 'border-(--border-light) text-(--text-secondary) hover:bg-(--surface-secondary)'}`}>
-        {formatDateTime(req.requestedAt, language)} · <StatusBadge status={req.status} />
+        {formatDateTime(req.requestedAt, i18n.language)} · <StatusBadge status={req.status} />
       </button>)}
     </div>
-    {confirmationPapers.length > 0 && <section aria-label={translate('sectionConfirmations')} className="space-y-2 rounded-xl border border-(--border) bg-(--surface) p-3">
-      <h3 className="font-bold">{translate('sectionConfirmations')}</h3>
-      {review.viewMode === 'working' ? <p>{translate('confirmationWorkingCopy')}</p>
-        : <p>{translate('confirmationSubmittedBy')}: {snapshot.submittedByName || '—'} · {formatDateTime(snapshot.submittedAt)}</p>}
+    {confirmationPapers.length > 0 && <section aria-label={t('sectionConfirmations')} className="space-y-2 rounded-xl border border-(--border) bg-(--surface) p-3">
+      <h3 className="font-bold">{t('sectionConfirmations')}</h3>
+      {review.viewMode === 'working' ? <p>{t('confirmationWorkingCopy')}</p>
+        : <p>{t('confirmationSubmittedBy')}: {snapshot.submittedByName || '—'} · {formatDateTime(snapshot.submittedAt)}</p>}
       {selectedConfirmation && <div>
         <p className="font-semibold">{selectedConfirmation.title}</p>
-        {selectedConfirmation.handoffState && <p>{translate(selectedConfirmation.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : selectedConfirmation.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}</p>}
-        <p>{translate('feedbackConfirmedBy')}: {selectedConfirmation.confirmedByName || '—'}</p>
-        <p>{translate('confirmationTime')}: {formatDateTime(selectedConfirmation.confirmedAt)}</p>
+        {selectedConfirmation.handoffState && <p>{t(selectedConfirmation.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : selectedConfirmation.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}</p>}
+        <p>{t('feedbackConfirmedBy')}: {selectedConfirmation.confirmedByName || '—'}</p>
+        <p>{t('confirmationTime')}: {formatDateTime(selectedConfirmation.confirmedAt)}</p>
       </div>}
-      <details><summary className="cursor-pointer font-semibold">{translate('confirmationOverview')}</summary>
+      <details><summary className="cursor-pointer font-semibold">{t('confirmationOverview')}</summary>
         {confirmationPapers.map(paper => <div key={paper.id} className="mt-2">
-          <h4 className="font-bold">{paper.title || t.paper}</h4>
+          <h4 className="font-bold">{paper.title || ''}</h4>
           {paper.sections.map(section => <div key={section.id} className="mt-2 border-t border-(--border) pt-2">
             <p className="font-semibold">{section.title}</p>
-            <p>{translate('feedbackAssignee')}: {section.assignedUserName || translate('feedbackUnassigned')}</p>
-            {section.handoffState && <p>{translate(section.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : section.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}</p>}
-            <p>{translate('feedbackConfirmedBy')}: {section.confirmedByName || '—'}</p>
-            <p>{translate('confirmationTime')}: {formatDateTime(section.confirmedAt)}</p>
+            <p>{t('feedbackAssignee')}: {section.assignedUserName || t('feedbackUnassigned')}</p>
+            {section.handoffState && <p>{t(section.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : section.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}</p>}
+            <p>{t('feedbackConfirmedBy')}: {section.confirmedByName || '—'}</p>
+            <p>{t('confirmationTime')}: {formatDateTime(section.confirmedAt)}</p>
           </div>)}
         </div>)}
       </details>
     </section>}
     <div className="flex flex-wrap gap-2">
       {!requestLocked && <>
-        {canReturn && <button type="button" disabled={savingFeedback || !!transitioningRequestId || !!pendingDelete} onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'RETURNED' })} className="rounded-lg bg-amber-500 px-3 py-2 font-bold text-white disabled:opacity-50">{t.returnForRevision}</button>}
-        <button type="button" disabled={savingFeedback || !!transitioningRequestId || !!pendingDelete} onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'REVIEWED' })} className="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white disabled:opacity-50">{t.approve}</button>
+        {canReturn && <button type="button" disabled={savingFeedback || !!transitioningRequestId || !!pendingDelete} onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'RETURNED' })} className="rounded-lg bg-amber-500 px-3 py-2 font-bold text-white disabled:opacity-50">{t('instructor.review.returnForRevision')}</button>}
+        <button type="button" disabled={savingFeedback || !!transitioningRequestId || !!pendingDelete} onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'REVIEWED' })} className="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white disabled:opacity-50">{t('instructor.review.approve')}</button>
       </>}
     </div>
     {errorMessage && <p role="alert" className="text-rose-700">{errorMessage}</p>}
     {successMessage && <p role="status" className="text-emerald-700">{successMessage}</p>}
-    <label className="flex gap-2"><input type="checkbox" checked={sectionOnly} onChange={event => setSectionOnly(event.target.checked)} />{t.sectionFeedback}: {selectedSection?.sectionTitle}</label>
-    {draftCount > 0 && <p>{draftCount} {t.draft}</p>}
-    <label className="flex gap-2"><input type="checkbox" checked={diffEnabled} onChange={event => setDiffEnabled(event.target.checked)} />{t.showChanges}</label>
-    {diffEnabled && (diffOps ? <pre className="max-h-64 overflow-auto whitespace-pre-wrap">{diffOps.map((op, i) => <span key={i} className={op[0] === -1 ? 'bg-rose-100 line-through' : op[0] === 1 ? 'bg-emerald-100' : ''}>{op[1]}</span>)}</pre> : <p>{t.noCheckpointBaseline}</p>)}
+    <label className="flex gap-2"><input type="checkbox" checked={sectionOnly} onChange={event => setSectionOnly(event.target.checked)} />{t('instructor.review.sectionFeedback')}: {selectedSection?.sectionTitle}</label>
+    {draftCount > 0 && <p>{draftCount} {t('instructor.review.draft')}</p>}
+    <label className="flex gap-2"><input type="checkbox" checked={diffEnabled} onChange={event => setDiffEnabled(event.target.checked)} />{t('instructor.review.showChanges')}</label>
+    {diffEnabled && (diffOps ? <pre className="max-h-64 overflow-auto whitespace-pre-wrap">{diffOps.map((op, i) => <span key={i} className={op[0] === -1 ? 'bg-rose-100 line-through' : op[0] === 1 ? 'bg-emerald-100' : ''}>{op[1]}</span>)}</pre> : <p>{t('instructor.review.noCheckpointBaseline')}</p>)}
             <div className="bg-(--surface) rounded-2xl border border-(--border) shadow-sm">
               <div className="flex border-b border-(--border-light)">
                 {[
-                  { id: 'manual', label: t.manualFeedback },
-                  { id: 'ai', label: t.aiSuggestions },
-                  { id: 'history', label: t.versionHistory },
+                  { id: 'manual', label: t('instructor.review.manualFeedback') },
+                  { id: 'ai', label: t('instructor.review.aiSuggestions') },
+                  { id: 'history', label: t('instructor.review.versionHistory') },
                 ].map(tab => (
                   <button key={tab.id} onClick={() => setPanelTab(tab.id)}
                     className={`flex-1 px-2 py-2.5 text-[10px] font-black text-center transition-colors border-b-2 ${panelTab === tab.id ? 'text-(--brand-foreground) border-(--brand)' : 'text-(--text-tertiary) border-transparent hover:text-(--text-secondary)'}`}>
@@ -111,14 +105,14 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
                 {panelTab === 'manual' && (
                   <>
                     {!selectedSectionId ? (
-                      <p className="text-xs text-(--text-tertiary) italic">{t.selectSectionFeedback}</p>
+                      <p className="text-xs text-(--text-tertiary) italic">{t('instructor.review.selectSectionFeedback')}</p>
                     ) : (
                       <>
                         <div className="mb-3 flex gap-1 rounded-lg border border-(--border) bg-(--surface-secondary) p-0.5 text-[10px] font-bold">
                           {[
-                            ['OPEN', t.openFeedback],
-                            ['DONE', t.doneFeedback],
-                            ['ALL', t.allFeedback],
+                            ['OPEN', t('instructor.review.openFeedback')],
+                            ['DONE', t('instructor.review.doneFeedback')],
+                            ['ALL', t('instructor.review.allFeedback')],
                           ].map(([value, label]) => (
                             <button key={value} type="button" onClick={() => setFeedbackFilter(value)}
                               className={`flex-1 rounded-md px-2 py-1.5 ${feedbackFilter === value ? 'bg-(--surface) text-(--brand-foreground) shadow-sm' : 'text-(--text-secondary)'}`}>
@@ -128,59 +122,59 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
                         </div>
                         <div className="space-y-3 mb-4 max-h-[46vh] overflow-y-auto pr-1 hide-scrollbar">
                           {sectionFeedback.length === 0 ? (
-                            <p className="text-xs text-(--text-tertiary) italic">{t.noSectionFeedback}</p>
+                            <p className="text-xs text-(--text-tertiary) italic">{t('instructor.review.noSectionFeedback')}</p>
                           ) : sectionFeedback.map(fb => (
                             <div key={fb.id} onClick={() => onSelectFeedback(fb)}
                               className={`cursor-pointer bg-(--surface-secondary) border rounded-xl p-3 text-xs space-y-2 transition-colors ${String(activeFeedbackId) === String(fb.id) ? 'border-(--brand) ring-1 ring-(--brand)/30' : 'border-(--border-light) hover:border-(--brand)/50'}`}>
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex min-w-0 items-center gap-1.5">
-                                  <span className="truncate text-[9px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">{t.section} {fb.sectionTitle || ''}</span>
-                                  {!fb.publishedAt && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{t.draft}</span>}
-                                  {(fb.pendingState || fb.threadState) === 'DONE' && <span className="text-[9px] font-bold bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">{t.doneFeedback}</span>}
+                                  <span className="truncate text-[9px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">{t('section')} {fb.sectionTitle || ''}</span>
+                                  {!fb.publishedAt && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{t('instructor.review.draft')}</span>}
+                                  {(fb.pendingState || fb.threadState) === 'DONE' && <span className="text-[9px] font-bold bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">{t('instructor.review.doneFeedback')}</span>}
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                  {fb.stale && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{t.sectionChanged}</span>}
+                                  {fb.stale && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{t('instructor.review.sectionChanged')}</span>}
                                   {fb.canEdit && (
                                     <>
-                                      <button onClick={() => handleEditFeedback(fb)} className="text-(--text-tertiary) hover:text-(--brand) p-1" title={ct.edit} aria-label={ct.edit}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 13H9v-2.828l6.586-6.586z" /></svg></button>
-                                      <DeleteConfirm message={t.deleteFeedbackConfirm} onConfirm={() => handleDeleteFeedback(fb.id)} triggerLabel={ct.delete} confirmLabel={ct.delete} cancelLabel={ct.cancel} className="text-(--text-tertiary) hover:text-rose-600 p-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M4 7h16" /></svg></DeleteConfirm>
+                                      <button onClick={() => handleEditFeedback(fb)} className="text-(--text-tertiary) hover:text-(--brand) p-1" title={t('instructor.review.edit')} aria-label={t('instructor.review.edit')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 13H9v-2.828l6.586-6.586z" /></svg></button>
+                                      <DeleteConfirm message={t('instructor.review.deleteFeedbackConfirm')} onConfirm={() => handleDeleteFeedback(fb.id)} triggerLabel={t('delete')} confirmLabel={t('delete')} cancelLabel={t('cancel')} className="text-(--text-tertiary) hover:text-rose-600 p-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M4 7h16" /></svg></DeleteConfirm>
                                     </>
                                   )}
                                 </div>
                               </div>
-                              {String(fb.requestId) !== String(activeRequestId) && <p className="text-xs font-semibold text-amber-700">{t.previousRoundOpen}</p>}
+                              {String(fb.requestId) !== String(activeRequestId) && <p className="text-xs font-semibold text-amber-700">{t('instructor.review.previousRoundOpen')}</p>}
                               {fb.anchor?.original?.exact && <p className="text-[10px] text-(--text-tertiary) italic line-clamp-2">“{fb.anchor.original.exact}”</p>}
                               <button type="button" onClick={() => onSelectFeedback(fb)} className="text-left whitespace-pre-wrap text-sm font-medium">{fb.content}</button>
-                              {fb.pendingState && <p className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 dark:bg-amber-950/20">{t.pendingState}: {fb.pendingState === 'DONE' ? t.doneFeedback : t.openFeedback}</p>}
+                              {fb.pendingState && <p className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 dark:bg-amber-950/20">{t('instructor.review.pendingState')}: {fb.pendingState === 'DONE' ? t('instructor.review.doneFeedback') : t('instructor.review.openFeedback')}</p>}
                               {(fb.canMarkDone || fb.canReopen) && (
                                 <div className="flex gap-2 border-t border-(--border-light) pt-2">
-                                  {fb.canMarkDone && <button type="button" onClick={event => { event.stopPropagation(); prepareState(fb, 'DONE'); }} className="flex-1 rounded-lg bg-emerald-50 px-2 py-1.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">{t.markDone}</button>}
-                                  {fb.canReopen && <button type="button" onClick={event => { event.stopPropagation(); prepareState(fb, 'OPEN'); }} className="flex-1 rounded-lg bg-amber-50 px-2 py-1.5 text-[10px] font-bold text-amber-700 hover:bg-amber-100">{t.reopenFeedback}</button>}
+                                  {fb.canMarkDone && <button type="button" onClick={event => { event.stopPropagation(); prepareState(fb, 'DONE'); }} className="flex-1 rounded-lg bg-emerald-50 px-2 py-1.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">{t('instructor.review.markDone')}</button>}
+                                  {fb.canReopen && <button type="button" onClick={event => { event.stopPropagation(); prepareState(fb, 'OPEN'); }} className="flex-1 rounded-lg bg-amber-50 px-2 py-1.5 text-[10px] font-bold text-amber-700 hover:bg-amber-100">{t('instructor.review.reopenFeedback')}</button>}
                                 </div>
                               )}
                             </div>
                           ))}
                         </div>
                         {!canCreateRoot ? (
-                          <p className="text-xs text-(--text-tertiary) italic">{requestLocked ? t.reviewClosed : t.selectSubmittedSource}</p>
+                          <p className="text-xs text-(--text-tertiary) italic">{requestLocked ? t('instructor.review.reviewClosed') : t('instructor.review.selectSubmittedSource')}</p>
                         ) : (
                           <form onSubmit={handleSubmitFeedback} className="space-y-2 border-t border-(--border-light) pt-3">
                             <div className="flex gap-2">
-                              <button type="button" onClick={captureSourceSelection} className="flex-1 rounded-lg border border-(--border) bg-(--surface-secondary) px-2 py-1.5 text-[10px] font-bold text-(--text-secondary) hover:text-(--brand-foreground)">{t.commentSelection}</button>
-                              <button type="button" onClick={() => updateFeedbackDraft({ anchor: null, lineReference: '' })} className="flex-1 rounded-lg border border-(--border) bg-(--surface-secondary) px-2 py-1.5 text-[10px] font-bold text-(--text-secondary) hover:text-(--brand-foreground)">{t.wholeSection}</button>
+                              <button type="button" onClick={captureSourceSelection} className="flex-1 rounded-lg border border-(--border) bg-(--surface-secondary) px-2 py-1.5 text-[10px] font-bold text-(--text-secondary) hover:text-(--brand-foreground)">{t('instructor.review.commentSelection')}</button>
+                              <button type="button" onClick={() => updateFeedbackDraft({ anchor: null, lineReference: '' })} className="flex-1 rounded-lg border border-(--border) bg-(--surface-secondary) px-2 py-1.5 text-[10px] font-bold text-(--text-secondary) hover:text-(--brand-foreground)">{t('instructor.review.wholeSection')}</button>
                             </div>
-                            {selectedAnchor && <p className="text-[10px] font-semibold text-(--brand)">{t.selectionReady.replace('{{from}}', selectedAnchor.from).replace('{{to}}', selectedAnchor.to)}</p>}
+                            {selectedAnchor && <p className="text-[10px] font-semibold text-(--brand)">{t('instructor.review.selectionReady', { from: selectedAnchor.from, to: selectedAnchor.to })}</p>}
                             <textarea rows="3" value={feedbackDraft} onChange={e => updateFeedbackDraft({ content: e.target.value })}
-                              placeholder={t.sectionFeedbackPlaceholder}
+                              placeholder={t('instructor.review.sectionFeedbackPlaceholder')}
                               className="w-full px-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)" />
                             <div className="flex gap-2">
                               {editingFeedbackId && (
                                 <button type="button" onClick={handleCancelEdit}
-                                  className="flex-1 py-2 bg-(--surface-secondary) text-(--text-secondary) rounded-xl hover:bg-(--surface-tertiary) transition-colors text-xs font-bold">{ct.cancel}</button>
+                                  className="flex-1 py-2 bg-(--surface-secondary) text-(--text-secondary) rounded-xl hover:bg-(--surface-tertiary) transition-colors text-xs font-bold">{t('cancel')}</button>
                               )}
                               <button type="submit" disabled={savingFeedback || !feedbackDraft.trim()}
                                 className="flex-1 py-2 bg-(--brand) text-(--on-brand) rounded-xl hover:bg-(--brand-hover) transition-colors shadow-sm disabled:opacity-50 text-xs font-bold">
-                                {savingFeedback ? ct.saving : editingFeedbackId ? t.updateFeedback : t.addFeedback}
+                                {savingFeedback ? t('saving') : editingFeedbackId ? t('instructor.review.updateFeedback') : t('instructor.review.addFeedback')}
                               </button>
                             </div>
                           </form>
@@ -195,11 +189,11 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
                     <div className="flex items-center justify-between gap-2">
                       <button onClick={handleGenerateSuggestions} disabled={!activeGuide || suggestionLoading || requestLocked || activeRequest?.status !== 'PENDING'}
                         className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50">
-                        {suggestionLoading ? t.generatingSuggestions : t.generateSuggestions}
+                        {suggestionLoading ? t('instructor.review.generatingSuggestions') : t('instructor.review.generateSuggestions')}
                       </button>
                       {activeGuide && <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">{activeGuide.sectionType}</span>}
                     </div>
-                    <p className="text-[10px] text-(--text-tertiary) italic">{t.aiGenerationNote}</p>
+                    <p className="text-[10px] text-(--text-tertiary) italic">{t('instructor.review.aiGenerationNote')}</p>
                     {suggestionError && (
                       <p className="text-[10px] font-bold text-rose-600">{suggestionError}</p>
                     )}
@@ -210,7 +204,7 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
                       </div>
                     )}
                     {suggestionRan && !suggestionLoading && suggestions.length === 0 && (
-                      <p className="text-[10px] text-(--text-secondary) italic">{t.noSuggestionIssues}</p>
+                      <p className="text-[10px] text-(--text-secondary) italic">{t('instructor.review.noSuggestionIssues')}</p>
                     )}
                     {suggestions.length > 0 && (
                       <ul className="max-h-64 space-y-2 overflow-y-auto pr-1">
@@ -222,7 +216,7 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
                             )}
                             <button type="button" onClick={() => { injectIntoFeedback(suggestion.lineReference, suggestion.actionableFix); setPanelTab('manual'); }}
                               className="text-[10px] font-black text-indigo-600 hover:underline">
-                              {t.addToManualFeedback}
+                              {t('instructor.review.addToManualFeedback')}
                             </button>
                           </li>
                         ))}
@@ -234,12 +228,12 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
                 {panelTab === 'history' && (
                   <div className="space-y-2 max-h-[30vh] overflow-y-auto pr-1 hide-scrollbar">
                     {historyFeedback.length === 0 ? (
-                      <p className="text-xs text-(--text-tertiary) italic">{t.historyEmpty}</p>
+                      <p className="text-xs text-(--text-tertiary) italic">{t('instructor.review.historyEmpty')}</p>
                     ) : historyFeedback.map(fb => (
                       <button type="button" key={fb.id} onClick={() => { setActiveRequestId(fb.requestId); review.setViewMode('submitted'); setFeedbackFilter('ALL'); setPanelTab('manual'); onSelectFeedback(fb); }} className="w-full bg-(--surface-secondary) border border-(--border-light) rounded-xl p-3 text-left text-xs space-y-1 hover:border-(--brand)/50">
                         <div className="flex items-center justify-between gap-2">
                           {fb.sectionTitle && <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">{fb.sectionTitle}</span>}
-                          {fb.createdAt && <span className="text-[9px] text-(--text-tertiary)">{formatDateTime(fb.createdAt, language)}</span>}
+                          {fb.createdAt && <span className="text-[9px] text-(--text-tertiary)">{formatDateTime(fb.createdAt, i18n.language)}</span>}
                         </div>
                         <p className="text-(--text-primary) leading-relaxed">{fb.content}</p>
                       </button>
@@ -250,18 +244,18 @@ export default function InstructorFeedbackPanel({ review, selectedSection, onSel
             </div>
 
       <Modal open={!!pendingTransition} onClose={() => { if (!transitioningRequestId) setPendingTransition(null); }}
-        title={pendingTransition?.targetStatus === 'REVIEWED' ? t[ACTION_LABELS.REVIEWED.key] : t[ACTION_LABELS.RETURNED.key]}
-        closeLabel={ct.close}>
+        title={t(ACTION_LABELS[pendingTransition?.targetStatus] || 'status.UNKNOWN')}
+        closeLabel={t('close')}>
         <div className="space-y-4 text-xs">
           <p className="text-(--text-secondary)">
-            {pendingTransition?.targetStatus === 'REVIEWED' ? t.finalizeReviewConfirm : `${t.returnForRevision} · ${draftCount} ${t.draft}`}
+            {pendingTransition?.targetStatus === 'REVIEWED' ? t('instructor.review.finalizeReviewConfirm') : `${t('instructor.review.returnForRevision')} · ${draftCount} ${t('instructor.review.draft')}`}
           </p>
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={() => setPendingTransition(null)} disabled={!!transitioningRequestId}
-              className="flex-1 py-3 bg-(--surface-secondary) hover:bg-(--surface-tertiary) text-(--text-secondary) rounded-xl transition-colors border border-(--border) disabled:opacity-50">{ct.cancel}</button>
+              className="flex-1 py-3 bg-(--surface-secondary) hover:bg-(--surface-tertiary) text-(--text-secondary) rounded-xl transition-colors border border-(--border) disabled:opacity-50">{t('cancel')}</button>
             <button type="button" onClick={() => handleTransitionStatus(pendingTransition.requestId, pendingTransition.targetStatus)}
               disabled={!!transitioningRequestId}
-              className="flex-1 py-3 bg-(--brand) text-(--on-brand) rounded-xl hover:bg-(--brand-hover) transition-colors disabled:opacity-50">{transitioningRequestId ? ct.saving : ct.confirm}</button>
+              className="flex-1 py-3 bg-(--brand) text-(--on-brand) rounded-xl hover:bg-(--brand-hover) transition-colors disabled:opacity-50">{transitioningRequestId ? t('saving') : t('confirm')}</button>
           </div>
         </div>
       </Modal>

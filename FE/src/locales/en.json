@@ -288,6 +288,10 @@
         "UNKNOWN": "Unknown"
       }
     },
+    "profileModal": {
+      "title": "My Profile",
+      "close": "Close"
+    },
     "theme": {
       "darkMode": "Dark mode",
       "lightMode": "Light mode"
@@ -343,6 +347,18 @@
       "welcome": "Welcome back, {{name}}",
       "workspaceDescription": "Work with papers, sources, Citation Review, and feedback in projects assigned by your instructor.",
       "guideTitle": "How Evidence Pilot works"
+    },
+    "workspace": {
+      "citationKeyPrompt": "Citation key:",
+      "defaultDocumentFilename": "document.tex",
+      "defaultImageAlt": "image",
+      "defaultLinkLabel": "Link",
+      "emptyPreview": "No content to preview.",
+      "labelNamePrompt": "Label name:",
+      "latexLabel": "LaTeX",
+      "linkLabelPrompt": "Link label:",
+      "linkUrlPrompt": "URL:",
+      "missingImage": "[missing image: {{alt}}]"
     }
   },
   "studentFeedback": {
@@ -419,7 +435,8 @@
     "limitations": {
       "SAVED_METADATA_ONLY": "Relationships come from saved citation metadata. A missing link does not mean the sources are unrelated.",
       "SOURCES_WITHOUT_DOI": "Some sources have no valid DOI, so their citation relationships may not be identifiable.",
-      "AMBIGUOUS_SOURCE_DOI": "Some sources share a DOI. Citation links with an ambiguous destination are not drawn."
+      "AMBIGUOUS_SOURCE_DOI": "Some sources share a DOI. Citation links with an ambiguous destination are not drawn.",
+      "UNKNOWN": "Unknown"
     },
     "processing": {
       "PENDING_UPLOAD": "Awaiting upload",
@@ -432,7 +449,8 @@
       "READY": "Ready",
       "COMPLETED": "Completed",
       "PARTIAL": "Partially processed",
-      "FAILED": "Processing failed"
+      "FAILED": "Processing failed",
+      "UNKNOWN": "Unknown"
     }
   },
   "loading": "Loading...",
@@ -709,6 +727,62 @@
   "fileUrlUnavailable": "File URL is not available.",
   "unknown": "Unknown",
   "instructor": "Instructor",
+  "instructor.review.addFeedback": "Add feedback",
+  "instructor.review.addToManualFeedback": "Add to Manual Feedback",
+  "instructor.review.aiGenerationNote": "Generation can take up to 30 minutes. Keep reviewing while you wait.",
+  "instructor.review.aiSuggestionRateLimited": "The AI provider is rate limiting requests. Please retry later.",
+  "instructor.review.aiSuggestions": "AI Suggestions",
+  "instructor.review.aiSuggestionWorkerUnavailable": "The AI worker is unavailable or timed out. Please retry later.",
+  "instructor.review.allFeedback": "All",
+  "instructor.review.approve": "Approve",
+  "instructor.review.commentSelection": "Comment selected text",
+  "instructor.review.deleteFeedbackConfirm": "Delete this feedback item?",
+  "instructor.review.deleteFeedbackFailed": "Failed to delete feedback.",
+  "instructor.review.doneFeedback": "Done",
+  "instructor.review.draft": "Draft",
+  "instructor.review.edit": "Edit",
+  "instructor.review.finalizeReviewConfirm": "Finalize the review and save all feedback?",
+  "instructor.review.generateSuggestions": "Generate AI Suggestions",
+  "instructor.review.generatingSuggestions": "Generating…",
+  "instructor.review.historyEmpty": "No past reviews or comments yet.",
+  "instructor.review.legacySnapshotNotice": "This round has no submission snapshot. Select Saved working copy to view the current saved paper.",
+  "instructor.review.loadFeedbackFailed": "Failed to load feedback items.",
+  "instructor.review.loadReviewSpaceFailed": "Failed to load the review space.",
+  "instructor.review.manualFeedback": "Manual Feedback",
+  "instructor.review.markDone": "Mark done",
+  "instructor.review.noCheckpointBaseline": "No prior checkpoint baseline for this section. A baseline is captured when the project is submitted for review.",
+  "instructor.review.noSectionFeedback": "No feedback for this section yet.",
+  "instructor.review.noSuggestionIssues": "No issues found against the current criteria.",
+  "instructor.review.openFeedback": "Open",
+  "instructor.review.paperReadOnly": "Paper — read only",
+  "instructor.review.pendingState": "Pending state",
+  "instructor.review.previousRoundOpen": "Open feedback from an earlier round",
+  "instructor.review.reopenFeedback": "Reopen",
+  "instructor.review.returnForRevision": "Return for Revision",
+  "instructor.review.reviewApproved": "Review approved.",
+  "instructor.review.reviewClosed": "This review is closed — feedback is read-only.",
+  "instructor.review.reviewGuide": "Review guide",
+  "instructor.review.reviewReturned": "Review returned for revision.",
+  "instructor.review.saveFeedbackFailed": "Failed to save feedback.",
+  "instructor.review.sectionChanged": "section changed",
+  "instructor.review.sectionFeedback": "Section feedback",
+  "instructor.review.sectionFeedbackPlaceholder": "Feedback for this section...",
+  "instructor.review.selectionReady": "Selected source range {{from}}–{{to}}",
+  "instructor.review.selectSectionFeedback": "Select a paper section to add or review feedback.",
+  "instructor.review.selectSectionGuide": "Select a paper section to see the matching review guide.",
+  "instructor.review.selectSourceRange": "Select text in the submitted source first.",
+  "instructor.review.selectSubmittedSource": "Switch to the submitted version to add a new root comment.",
+  "instructor.review.showChanges": "Show changes since last checkpoint",
+  "instructor.review.snapshotLoadError": "The submitted snapshot could not be loaded. Live paper content is hidden to avoid showing it as review evidence.",
+  "instructor.review.submittedVersion": "Submitted version",
+  "instructor.review.submittedVersionLabel": "Submitted evidence for the selected review round",
+  "instructor.review.suggestionFailed": "Could not generate AI suggestions.",
+  "instructor.review.updateFeedback": "Update feedback",
+  "instructor.review.updateStatusFailed": "Failed to update status.",
+  "instructor.review.versionHistory": "Version History",
+  "instructor.review.wholeSection": "Whole section",
+  "instructor.review.workingCopy": "Saved working copy",
+  "instructor.review.workingCopyLabel": "Current saved student work — read only",
   "status": {
     "UNKNOWN": "Unknown",
     "DRAFT": "Draft",
@@ -855,6 +929,7 @@
   "selfCheckVerdictPARTIAL": "Partially met",
   "selfCheckVerdictNOT_MET": "Not met",
   "selfCheckVerdictUNVERIFIABLE": "Cannot verify",
+  "selfCheckVerdictUNKNOWN": "Unknown",
   "reason": "Reason",
   "missingContent": "Missing",
   "suggestion": "Suggestion",
@@ -887,8 +962,10 @@
     "FIRST_SUBMISSION": "First submission",
     "CHANGED": "The paper has changed since the returned submission.",
     "UNCHANGED": "The paper has not changed since the returned submission.",
-    "UNVERIFIABLE": "The previous submission baseline is unavailable, so the revision cannot be verified."
+    "UNVERIFIABLE": "The previous submission baseline is unavailable, so the revision cannot be verified.",
+    "UNKNOWN": "Unknown"
   },
+  "feedbackRevisionRequired": "A resubmission must change the returned paper content.",
   "submissionInputChanged": "The project changed after this checklist was loaded. Review the updated conditions and submit again.",
   "submitReadinessDescription": "Submission is enabled only when every objective project condition passes. AI self-check results are not submission conditions.",
   "unsavedSectionsBlockSubmission_one": "There is {{count}} section with unsaved changes. Save it before submitting.",

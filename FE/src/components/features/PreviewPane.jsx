@@ -1,4 +1,5 @@
 import { useMemo, useDeferredValue } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -15,7 +16,8 @@ import {
 import AssetToggle from './AssetToggle.jsx';
 
 function MissingImage({ alt }) {
-  return <span className="text-red-500 text-xs">[missing image: {alt || 'image'}]</span>;
+  const { t } = useTranslation();
+  return <span className="text-red-500 text-xs">{t('student.workspace.missingImage', { alt: alt || t('student.workspace.defaultImageAlt') })}</span>;
 }
 
 export default function PreviewPane({
@@ -24,11 +26,12 @@ export default function PreviewPane({
   mediaAssets,
   citationNumbers,
   generatedReferences = [],
-  referencesTitle = 'References',
+  referencesTitle,
   onScroll,
   scrollRef,
   zoom = 100,
 }) {
+  const { t } = useTranslation();
   // ponytail: shared hook — concurrent mounts reuse one in-flight /api/media/urls.
   const mediaUrlMap = useMediaUrlMap(mediaAssets);
 
@@ -74,7 +77,7 @@ export default function PreviewPane({
     }),
     [mediaUrlMap],
   );
-  const heading = sectionTitle || (generatedReferences.length > 0 ? referencesTitle : '');
+  const heading = sectionTitle || (generatedReferences.length > 0 ? referencesTitle || t('references') : '');
 
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto bg-white p-8" onScroll={onScroll}>
@@ -96,7 +99,7 @@ export default function PreviewPane({
           )
         )}
         {(!deferredLatex && generatedReferences.length === 0 && !useLegacy && markdown.trim() === '') && (
-          <p className="max-w-prose mx-auto text-slate-400 italic">No content to preview.</p>
+          <p className="max-w-prose mx-auto text-slate-400 italic">{t('student.workspace.emptyPreview')}</p>
         )}
         {generatedReferences.length > 0 && (
           <section className="max-w-prose mx-auto text-slate-700">

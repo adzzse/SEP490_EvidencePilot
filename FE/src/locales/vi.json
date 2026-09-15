@@ -288,6 +288,10 @@
         "UNKNOWN": "Không xác định"
       }
     },
+    "profileModal": {
+      "title": "Hồ sơ cá nhân",
+      "close": "Đóng"
+    },
     "theme": {
       "darkMode": "Chế độ tối",
       "lightMode": "Chế độ sáng"
@@ -343,6 +347,18 @@
       "welcome": "Chào mừng trở lại, {{name}}",
       "workspaceDescription": "Làm việc với bài viết, nguồn, Citation Review và phản hồi trong dự án được giảng viên phân công.",
       "guideTitle": "Cách sử dụng Evidence Pilot"
+    },
+    "workspace": {
+      "citationKeyPrompt": "Citation key:",
+      "defaultDocumentFilename": "document.tex",
+      "defaultImageAlt": "hình ảnh",
+      "defaultLinkLabel": "Link",
+      "emptyPreview": "Không có nội dung để xem trước.",
+      "labelNamePrompt": "Label name:",
+      "latexLabel": "LaTeX",
+      "linkLabelPrompt": "Link label:",
+      "linkUrlPrompt": "URL:",
+      "missingImage": "[thiếu hình ảnh: {{alt}}]"
     }
   },
   "studentFeedback": {
@@ -419,7 +435,8 @@
     "limitations": {
       "SAVED_METADATA_ONLY": "Quan hệ được lấy từ metadata trích dẫn đã lưu. Việc thiếu liên kết không có nghĩa là các nguồn không liên quan.",
       "SOURCES_WITHOUT_DOI": "Một số nguồn không có DOI hợp lệ nên có thể không xác định được quan hệ trích dẫn.",
-      "AMBIGUOUS_SOURCE_DOI": "Một số nguồn dùng chung DOI. Liên kết trích dẫn có đích đến không rõ ràng sẽ không được vẽ."
+      "AMBIGUOUS_SOURCE_DOI": "Một số nguồn dùng chung DOI. Liên kết trích dẫn có đích đến không rõ ràng sẽ không được vẽ.",
+      "UNKNOWN": "Không xác định"
     },
     "processing": {
       "PENDING_UPLOAD": "Chờ tải lên",
@@ -432,7 +449,8 @@
       "READY": "Sẵn sàng",
       "COMPLETED": "Hoàn tất",
       "PARTIAL": "Xử lý một phần",
-      "FAILED": "Xử lý thất bại"
+      "FAILED": "Xử lý thất bại",
+      "UNKNOWN": "Không xác định"
     }
   },
   "loading": "Đang tải...",
@@ -709,6 +727,62 @@
   "fileUrlUnavailable": "Không có URL của tệp.",
   "unknown": "Không xác định",
   "instructor": "Giảng viên",
+  "instructor.review.addFeedback": "Thêm phản hồi",
+  "instructor.review.addToManualFeedback": "Thêm vào phản hồi thủ công",
+  "instructor.review.aiGenerationNote": "Quá trình tạo có thể mất đến 30 phút. Bạn có thể tiếp tục đánh giá trong khi chờ.",
+  "instructor.review.aiSuggestionRateLimited": "Nhà cung cấp AI đang giới hạn lượt gọi. Vui lòng thử lại sau.",
+  "instructor.review.aiSuggestions": "Gợi ý AI",
+  "instructor.review.aiSuggestionWorkerUnavailable": "Dịch vụ AI không sẵn sàng hoặc đã hết thời gian chờ. Vui lòng thử lại sau.",
+  "instructor.review.allFeedback": "Tất cả",
+  "instructor.review.approve": "Phê duyệt",
+  "instructor.review.commentSelection": "Nhận xét đoạn đã chọn",
+  "instructor.review.deleteFeedbackConfirm": "Xóa phản hồi này?",
+  "instructor.review.deleteFeedbackFailed": "Không thể xóa phản hồi.",
+  "instructor.review.doneFeedback": "Đã xong",
+  "instructor.review.draft": "Nháp",
+  "instructor.review.edit": "Sửa",
+  "instructor.review.finalizeReviewConfirm": "Hoàn tất đánh giá và lưu toàn bộ phản hồi?",
+  "instructor.review.generateSuggestions": "Tạo gợi ý bằng AI",
+  "instructor.review.generatingSuggestions": "Đang tạo…",
+  "instructor.review.historyEmpty": "Chưa có đánh giá hay bình luận nào trước đây.",
+  "instructor.review.legacySnapshotNotice": "Vòng này không có snapshot lúc nộp. Chọn Bản đang soạn đã lưu để xem bài hiện tại.",
+  "instructor.review.loadFeedbackFailed": "Không thể tải các phản hồi.",
+  "instructor.review.loadReviewSpaceFailed": "Không thể tải không gian đánh giá.",
+  "instructor.review.manualFeedback": "Phản hồi thủ công",
+  "instructor.review.markDone": "Đánh dấu xong",
+  "instructor.review.noCheckpointBaseline": "Phần này chưa có checkpoint nền. Hệ thống tạo checkpoint khi dự án được gửi đánh giá.",
+  "instructor.review.noSectionFeedback": "Phần này chưa có phản hồi.",
+  "instructor.review.noSuggestionIssues": "Không tìm thấy vấn đề nào theo các tiêu chí hiện tại.",
+  "instructor.review.openFeedback": "Đang mở",
+  "instructor.review.paperReadOnly": "Bài viết — chỉ đọc",
+  "instructor.review.pendingState": "Trạng thái chờ chốt",
+  "instructor.review.previousRoundOpen": "Góp ý còn mở từ vòng trước",
+  "instructor.review.reopenFeedback": "Mở lại",
+  "instructor.review.returnForRevision": "Trả về để chỉnh sửa",
+  "instructor.review.reviewApproved": "Đã duyệt bài đánh giá.",
+  "instructor.review.reviewClosed": "Đánh giá này đã đóng — phản hồi chỉ có thể đọc.",
+  "instructor.review.reviewGuide": "Hướng dẫn đánh giá",
+  "instructor.review.reviewReturned": "Đã trả bài để chỉnh sửa.",
+  "instructor.review.saveFeedbackFailed": "Không thể lưu phản hồi.",
+  "instructor.review.sectionChanged": "phần đã thay đổi",
+  "instructor.review.sectionFeedback": "Phản hồi theo phần",
+  "instructor.review.sectionFeedbackPlaceholder": "Phản hồi cho phần này...",
+  "instructor.review.selectionReady": "Đã chọn source từ {{from}} đến {{to}}",
+  "instructor.review.selectSectionFeedback": "Chọn một phần của bài viết để thêm hoặc xem phản hồi.",
+  "instructor.review.selectSectionGuide": "Chọn một phần của bài viết để xem hướng dẫn đánh giá tương ứng.",
+  "instructor.review.selectSourceRange": "Hãy chọn đoạn trong source đã nộp trước.",
+  "instructor.review.selectSubmittedSource": "Hãy chuyển sang Bản đã nộp để thêm nhận xét gốc.",
+  "instructor.review.showChanges": "Hiện thay đổi từ checkpoint gần nhất",
+  "instructor.review.snapshotLoadError": "Không thể tải snapshot đã nộp. Nội dung paper hiện tại được ẩn để tránh bị hiểu nhầm là bằng chứng của vòng review.",
+  "instructor.review.submittedVersion": "Bản đã nộp",
+  "instructor.review.submittedVersionLabel": "Bằng chứng đã nộp của vòng review đang chọn",
+  "instructor.review.suggestionFailed": "Không thể tạo gợi ý bằng AI.",
+  "instructor.review.updateFeedback": "Cập nhật phản hồi",
+  "instructor.review.updateStatusFailed": "Không thể cập nhật trạng thái.",
+  "instructor.review.versionHistory": "Lịch sử phiên bản",
+  "instructor.review.wholeSection": "Toàn section",
+  "instructor.review.workingCopy": "Bản làm việc đã lưu",
+  "instructor.review.workingCopyLabel": "Bản sinh viên đã lưu hiện tại — chỉ đọc",
   "status": {
     "UNKNOWN": "Không xác định",
     "DRAFT": "Bản nháp",
@@ -855,6 +929,7 @@
   "selfCheckVerdictPARTIAL": "Đáp ứng một phần",
   "selfCheckVerdictNOT_MET": "Chưa đáp ứng",
   "selfCheckVerdictUNVERIFIABLE": "Không thể xác minh",
+  "selfCheckVerdictUNKNOWN": "Không xác định",
   "reason": "Lý do",
   "missingContent": "Còn thiếu",
   "suggestion": "Gợi ý",
@@ -887,8 +962,10 @@
     "FIRST_SUBMISSION": "Lần nộp đầu tiên",
     "CHANGED": "Bài viết đã thay đổi kể từ lần nộp bị trả lại.",
     "UNCHANGED": "Bài viết chưa thay đổi kể từ lần nộp bị trả lại.",
-    "UNVERIFIABLE": "Không có dữ liệu gốc của lần nộp trước nên không thể xác minh bản chỉnh sửa."
+    "UNVERIFIABLE": "Không có dữ liệu gốc của lần nộp trước nên không thể xác minh bản chỉnh sửa.",
+    "UNKNOWN": "Không xác định"
   },
+  "feedbackRevisionRequired": "Lần nộp lại phải thay đổi nội dung bài viết đã bị trả về.",
   "submissionInputChanged": "Dự án đã thay đổi sau khi danh sách điều kiện được tải. Hãy xem lại điều kiện mới rồi nộp lại.",
   "submitReadinessDescription": "Chỉ cho phép nộp khi mọi điều kiện khách quan của dự án đều đạt. Kết quả tự kiểm tra bằng AI không phải điều kiện nộp.",
   "unsavedSectionsBlockSubmission_one": "Có {{count}} phần còn thay đổi chưa lưu. Hãy lưu trước khi nộp.",

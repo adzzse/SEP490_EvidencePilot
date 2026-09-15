@@ -92,7 +92,7 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
           )}
         </div>
         <div className="px-3 py-2 border-b border-(--border) bg-(--surface-tertiary)/40">
-          <input type="text" placeholder={t('searchMedia') || 'Search media...'} value={mediaSearchQuery} onChange={(e) => setMediaSearchQuery(e.target.value)} className="w-full text-xs border border-(--border) rounded-lg px-2 py-1 bg-(--surface) outline-none focus:ring-1 focus:ring-indigo-500 text-(--text-primary)" />
+          <input type="text" placeholder={t('searchMedia')} value={mediaSearchQuery} onChange={(e) => setMediaSearchQuery(e.target.value)} className="w-full text-xs border border-(--border) rounded-lg px-2 py-1 bg-(--surface) outline-none focus:ring-1 focus:ring-indigo-500 text-(--text-primary)" />
         </div>
         <div className="p-2 flex-1 overflow-y-auto">
           {mediaAssets.length === 0 ? (

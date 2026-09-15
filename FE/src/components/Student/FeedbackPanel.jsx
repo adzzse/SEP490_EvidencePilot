@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { placeFeedbackCards } from '../../utils/student/feedbackAnchors.js';
 
 const control = 'min-w-0 rounded-md border border-(--border) bg-(--surface) px-2 py-1.5 text-xs text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)';
+const FEEDBACK_REQUEST_STATUSES = new Set(['PENDING', 'RETURNED', 'REVIEWED']);
+const FEEDBACK_LOCATIONS = new Set(['ATTACHED', 'MODIFIED', 'DETACHED', 'SECTION', 'UNLOCATED']);
 
 export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect, onClose, visible,
   positions, narrow, requestId, setRequestId, scope, setScope, overlapIds = [] }) {
@@ -102,7 +104,7 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
       <select className={`${control} w-full mt-2`} value={requestId || ''} onChange={event => setRequestId(event.target.value || null)} aria-label={t('studentFeedback.roundFilter')}>
         <option value="">{t('studentFeedback.allRounds')}</option>
         {feedback.requests.map((request, index) => <option key={request.id} value={request.id}>
-          {t('studentFeedback.round', { number: feedback.requests.length - index })} · {t(`status.${request.status}`, { defaultValue: request.status })}
+          {t('studentFeedback.round', { number: feedback.requests.length - index })} · {t(`status.${FEEDBACK_REQUEST_STATUSES.has(request.status) ? request.status : 'UNKNOWN'}`)}
         </option>)}
       </select>
       </details>
@@ -147,7 +149,7 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
             </button>
             <p className="mt-2 text-xs text-(--text-secondary)">{t('feedbackAssignee')}: {item.assignedUserName || t('feedbackUnassigned')}</p>
             {locationStatus !== 'ATTACHED' && <p className="mt-2 text-[11px] font-medium text-(--text-secondary)">
-              {t(`studentFeedback.location.${locationStatus}`, { defaultValue: t('studentFeedback.location.UNLOCATED') })}
+              {t(`studentFeedback.location.${FEEDBACK_LOCATIONS.has(locationStatus) ? locationStatus : 'UNLOCATED'}`)}
               {locationStatus === 'UNLOCATED' && item.lineReference ? ` · ${item.lineReference}` : ''}
             </p>}
             {active && <div className="mt-3 space-y-3">

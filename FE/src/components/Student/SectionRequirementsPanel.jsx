@@ -213,7 +213,7 @@ export default function SectionRequirementsPanel({
                 <article key={`${item.requirement}-${index}`} className={`rounded-xl border p-3 ${VERDICT_STYLE[item.verdict] || VERDICT_STYLE.UNVERIFIABLE}`}>
                   <div className="mb-2 flex items-start justify-between gap-2">
                     <h4 className="text-xs font-bold leading-relaxed">{item.requirement}</h4>
-                    <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-black dark:bg-black/20">{t(`selfCheckVerdict${item.verdict}`)}</span>
+                    <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-black dark:bg-black/20">{t(`selfCheckVerdict${VERDICT_STYLE[item.verdict] ? item.verdict : 'UNKNOWN'}`)}</span>
                   </div>
                   {item.evidence && <p className="mb-1.5 border-l-2 border-current pl-2 text-[11px] italic">“{item.evidence}”</p>}
                   {item.reason && <p className="text-[11px] leading-relaxed"><strong>{t('reason')}:</strong> {item.reason}</p>}

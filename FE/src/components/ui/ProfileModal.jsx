@@ -1,16 +1,16 @@
 import Modal from './Modal.jsx';
-import { useLanguage } from '../../context/LanguageContext.jsx';
+import { useTranslation } from 'react-i18next';
 import { ProfileContent } from '../../pages/Profile.jsx';
 
 export default function ProfileModal({ open, onClose }) {
-  const { language } = useLanguage();
+  const { t } = useTranslation();
   if (!open) return null;
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={language === 'vi' ? 'Hồ sơ cá nhân' : 'My Profile'}
-      closeLabel={language === 'vi' ? 'Đóng' : 'Close'}
+      title={t('shell.profileModal.title')}
+      closeLabel={t('shell.profileModal.close')}
       wide
     >
       <ProfileContent embedded />

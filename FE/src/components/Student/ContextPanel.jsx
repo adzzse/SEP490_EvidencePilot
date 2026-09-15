@@ -6,6 +6,9 @@ import { getSourceDownloadUrl } from '../../utils/student/sourceDownload.js';
 import SectionRequirementsPanel from './SectionRequirementsPanel.jsx';
 import PaperReferencesPanel from './PaperReferencesPanel.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
+import { PROJECT_STATUSES } from '../../constants';
+
+const FEEDBACK_STATUSES = new Set(['PENDING', 'RETURNED', 'REVIEWED']);
 
 export default function ContextPanel({
   compact, isOpen, width,
@@ -353,7 +356,7 @@ export default function ContextPanel({
                   <p className="text-[10px] text-(--text-tertiary) uppercase tracking-wider font-bold flex items-center justify-between gap-2">{t('projectStatus')}
                     {userProjectRole === 'LEADER' && isLocked && <button type="button" onClick={() => setShowSubmitReviewModal(true)} className="text-[10px] font-bold normal-case tracking-normal px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors cursor-pointer" title={t('submitReviewDescription')}>{t('viewConfirmations')}</button>}
                   </p>
-                  <p className="text-sm font-bold text-(--text-primary) mt-0.5">{project?.status ? t(`status.${project.status}`, { defaultValue: project.status }) : t('unknown')}</p>
+                  <p className="text-sm font-bold text-(--text-primary) mt-0.5">{project?.status ? t(`status.${PROJECT_STATUSES.includes(project.status) ? project.status : 'UNKNOWN'}`) : t('unknown')}</p>
                 </div>
                 {userProjectRole === 'LEADER' && !isLocked && <button onClick={() => setShowSubmitReviewModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all" title={t('submitReviewDescription')}>{t('submitReview')}</button>}
               </div>
@@ -373,7 +376,7 @@ export default function ContextPanel({
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`text-[9px] px-2 py-0.5 rounded font-black border uppercase ${fb.status === 'PENDING' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 border-amber-200 dark:border-amber-800' : fb.status === 'RETURNED' ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 border-rose-200 dark:border-rose-800' : fb.status === 'REVIEWED' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/30 text-rose-700'}`}>{t(`status.${fb.status}`, { defaultValue: fb.status })}</span>
+                          <span className={`text-[9px] px-2 py-0.5 rounded font-black border uppercase ${fb.status === 'PENDING' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 border-amber-200 dark:border-amber-800' : fb.status === 'RETURNED' ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 border-rose-200 dark:border-rose-800' : fb.status === 'REVIEWED' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/30 text-rose-700'}`}>{t(`status.${FEEDBACK_STATUSES.has(fb.status) ? fb.status : 'UNKNOWN'}`)}</span>
                         </div>
                       </div>
                       <div className="p-3 text-xs leading-relaxed text-(--text-primary)">

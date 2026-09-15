@@ -147,6 +147,46 @@ const STUDENT_PROJECT_KEYS = [
   'workspaceDescription',
 ];
 
+const WORKSPACE_SOURCE_FILES = [
+  ['pages', 'Student', 'WorkspaceLayout.jsx'],
+  ['components', 'Student', 'WorkspaceHeader.jsx'],
+  ['components', 'Student', 'FilePanel.jsx'],
+  ['components', 'Student', 'EditorPanel.jsx'],
+  ['components', 'Student', 'ContextPanel.jsx'],
+  ['components', 'Student', 'FeedbackPanel.jsx'],
+  ['components', 'Student', 'PaperReferencesPanel.jsx'],
+  ['components', 'Student', 'SectionRequirementsPanel.jsx'],
+  ['components', 'Student', 'FullPaperPreview.jsx'],
+  ['components', 'Student', 'SubmissionReadinessModal.jsx'],
+  ['components', 'Instructor', 'InstructorFeedbackPanel.jsx'],
+  ['hooks', 'useInstructorReview.js'],
+  ['components', 'ui', 'ProfileModal.jsx'],
+  ['components', 'features', 'InlineCitationCard.jsx'],
+  ['components', 'features', 'FileViewerModal.jsx'],
+  ['components', 'features', 'PreviewPane.jsx'],
+  ['components', 'features', 'VisualSourceMap.jsx'],
+];
+
+const STUDENT_WORKSPACE_KEYS = [
+  'citationKeyPrompt', 'defaultDocumentFilename', 'defaultImageAlt', 'defaultLinkLabel', 'emptyPreview',
+  'labelNamePrompt', 'latexLabel', 'linkLabelPrompt', 'linkUrlPrompt', 'missingImage',
+];
+
+const INSTRUCTOR_REVIEW_KEYS = [
+  'addFeedback', 'addToManualFeedback', 'aiGenerationNote', 'aiSuggestionRateLimited',
+  'aiSuggestions', 'aiSuggestionWorkerUnavailable', 'allFeedback', 'approve', 'commentSelection',
+  'deleteFeedbackConfirm', 'deleteFeedbackFailed', 'doneFeedback', 'draft', 'edit', 'finalizeReviewConfirm',
+  'generateSuggestions', 'generatingSuggestions', 'historyEmpty', 'legacySnapshotNotice',
+  'loadFeedbackFailed', 'loadReviewSpaceFailed', 'manualFeedback', 'markDone', 'noCheckpointBaseline',
+  'noSectionFeedback', 'noSuggestionIssues', 'openFeedback', 'paperReadOnly', 'pendingState',
+  'previousRoundOpen', 'reopenFeedback', 'returnForRevision', 'reviewApproved', 'reviewClosed',
+  'reviewGuide', 'reviewReturned', 'saveFeedbackFailed', 'sectionChanged', 'sectionFeedback',
+  'sectionFeedbackPlaceholder', 'selectionReady', 'selectSectionFeedback', 'selectSectionGuide',
+  'selectSourceRange', 'selectSubmittedSource', 'showChanges', 'snapshotLoadError', 'submittedVersion',
+  'submittedVersionLabel', 'suggestionFailed', 'updateFeedback', 'updateStatusFailed', 'versionHistory',
+  'wholeSection', 'workingCopy', 'workingCopyLabel',
+].map(key => `instructor.review.${key}`).sort();
+
 const PROJECT_STATUS_DOMAIN = [
   'CREATED', 'ASSIGNED', 'IN_PROGRESS', 'SUBMITTED_FOR_REVIEW',
   'RETURNED', 'APPROVED', 'ARCHIVED',
@@ -168,16 +208,35 @@ const DYNAMIC_KEY_DOMAINS = new Map([
   ['admin.aiStatus', ['AVAILABLE', 'OUT_OF_SYNC', 'UNAVAILABLE']],
   ['admin.aiKey', ['CITATION_REVIEW', 'CHECK_STANDARD']],
   ['admin.aiCase', ['SUPPORTED', 'MISSING', 'UNTRUSTED']],
-  ['feedbackRevision.', ['FIRST_SUBMISSION', 'CHANGED', 'UNCHANGED', 'UNVERIFIABLE']],
+  ['feedbackRevision.', ['FIRST_SUBMISSION', 'CHANGED', 'UNCHANGED', 'UNVERIFIABLE', 'UNKNOWN']],
   ['home.features.', ['structuredData.title', 'structuredData.desc', 'citationReview.title', 'citationReview.desc', 'feedback.title', 'feedback.desc', 'documentExtraction.title', 'documentExtraction.desc', 'vectorSearch.title', 'vectorSearch.desc', 'realtime.title', 'realtime.desc']],
   ['home.roles.', ['student.title', 'student.desc', 'instructor.title', 'instructor.desc']],
   ['home.workflow.', ['step1.title', 'step1.desc', 'step2.title', 'step2.desc', 'step3.title', 'step3.desc', 'step4.title', 'step4.desc', 'step5.title', 'step5.desc', 'step6.title', 'step6.desc']],
-  ['selfCheckVerdict', ['MET', 'PARTIAL', 'NOT_MET', 'UNVERIFIABLE']],
+  ['selfCheckVerdict', ['MET', 'PARTIAL', 'NOT_MET', 'UNVERIFIABLE', 'UNKNOWN']],
   ['sourceMap.', ['outgoing', 'incoming', 'accessDenied', 'loadError']],
-  ['sourceMap.processing.', ['PENDING_UPLOAD', 'UPLOADED', 'METADATA_FETCHED', 'PDF_DOWNLOADED', 'QUEUED', 'PROCESSING', 'RAW_EXTRACTED', 'READY', 'COMPLETED', 'PARTIAL', 'FAILED']],
-  ['sourceMap.limitations.', ['SAVED_METADATA_ONLY', 'SOURCES_WITHOUT_DOI', 'AMBIGUOUS_SOURCE_DOI']],
+  ['sourceMap.processing.', ['PENDING_UPLOAD', 'UPLOADED', 'METADATA_FETCHED', 'PDF_DOWNLOADED', 'QUEUED', 'PROCESSING', 'RAW_EXTRACTED', 'READY', 'COMPLETED', 'PARTIAL', 'FAILED', 'UNKNOWN']],
+  ['sourceMap.limitations.', ['SAVED_METADATA_ONLY', 'SOURCES_WITHOUT_DOI', 'AMBIGUOUS_SOURCE_DOI', 'UNKNOWN']],
   ['status.', STATUS_DOMAIN],
   ['studentFeedback.location.', ['ATTACHED', 'MODIFIED', 'DETACHED', 'SECTION', 'UNLOCATED']],
+]);
+
+const WORKSPACE_EXPLICIT_STATE_KEYS = new Map([
+  ['confidence', ['confidenceHigh', 'confidenceMedium', 'confidenceLow', 'unknown']],
+  ['relation', ['relationSupports', 'relationContradicts', 'relationNotFound', 'unknown']],
+  ['handoff', ['handoffStateConfirmed', 'handoffStateStale', 'handoffStateUnconfirmed']],
+  ['reference', ['referenceAvailable', 'referenceMissingPdf', 'referenceProcessing']],
+  ['readiness', [
+    'feedbackRevisionRequired', 'reviewCheckProjectEditable', 'reviewCheckInstructorAssigned',
+    'reviewCheckPaperPresent', 'reviewCheckPaperReady', 'reviewCheckSectionsPresent',
+    'reviewCheckSectionBodyPresent', 'reviewCheckAssigneeValid', 'reviewCheckSectionConfirmed',
+    'sectionBlockerBodyMissing', 'sectionBlockerAssigneeInvalid', 'sectionBlockerHandoffMissing',
+  ]],
+  ['review', [
+    'instructor.review.submittedVersion', 'instructor.review.workingCopy',
+    'instructor.review.legacySnapshotNotice', 'instructor.review.snapshotLoadError',
+    'instructor.review.openFeedback', 'instructor.review.doneFeedback', 'instructor.review.allFeedback',
+    'instructor.review.returnForRevision', 'instructor.review.approve', 'status.UNKNOWN',
+  ]],
 ]);
 
 function sourceFiles(directory) {
@@ -255,6 +314,51 @@ test('Student Projects uses i18next copy and catalogs expose the complete screen
     assert.equal(typeof projects, 'object', `missing ${language} Student Projects catalog`);
     assert.deepEqual(Object.keys(projects).sort(), STUDENT_PROJECT_KEYS, `unexpected ${language} Student Projects catalog surface`);
     assert.equal(projects.guideSteps.length, 4, `unexpected ${language} Student Projects guide length`);
+  }
+});
+
+test('Workspace subtree owns interface copy in i18next JSON catalogs', () => {
+  for (const parts of WORKSPACE_SOURCE_FILES) {
+    const file = path.join(SOURCE_ROOT, ...parts);
+    const source = fs.readFileSync(file, 'utf8');
+    assert.doesNotMatch(source, /(?:commonText|studentText|instructorText)/, `${file} still uses a JS catalog bridge`);
+    assert.doesNotMatch(source, /app_lang/, `${file} reads the persisted language key directly`);
+  }
+
+  const profileModal = fs.readFileSync(path.join(SOURCE_ROOT, 'components', 'ui', 'ProfileModal.jsx'), 'utf8');
+  assert.match(profileModal, /useTranslation\(\)/, 'ProfileModal must use i18next');
+  assert.doesNotMatch(profileModal, /useLanguage|language\s*===/, 'ProfileModal must not select copy by language');
+
+  for (const [language, catalog] of Object.entries(locales)) {
+    assert.equal(typeof catalog.student?.workspace, 'object', `missing ${language} student.workspace catalog`);
+    assert.deepEqual(Object.keys(catalog.student.workspace).sort(), STUDENT_WORKSPACE_KEYS, `unexpected ${language} student.workspace catalog surface`);
+    assert.deepEqual(Object.keys(catalog).filter(key => key.startsWith('instructor.review.')).sort(), INSTRUCTOR_REVIEW_KEYS, `unexpected ${language} instructor.review catalog surface`);
+    assert.equal(typeof catalog.shell?.profileModal, 'object', `missing ${language} shell.profileModal catalog`);
+    assert.deepEqual(Object.keys(catalog.shell.profileModal).sort(), ['close', 'title'], `unexpected ${language} shell.profileModal catalog surface`);
+  }
+});
+
+test('Workspace dynamic copy uses explicit domains and translated unknown fallbacks', () => {
+  const source = WORKSPACE_SOURCE_FILES
+    .map(parts => fs.readFileSync(path.join(SOURCE_ROOT, ...parts), 'utf8'))
+    .join('\n');
+  assert.doesNotMatch(source, /defaultValue:\s*(?:request|project|fb|selectedSource)\./, 'Workspace exposes a raw status enum');
+  assert.doesNotMatch(source, /CHECK_KEYS\[[^\]]+\]\s*\|\|\s*check\.code/, 'readiness checks expose raw codes');
+  assert.doesNotMatch(source, /SECTION_BLOCKER_KEYS\[[^\]]+\]\s*\|\|\s*code/, 'section blockers expose raw codes');
+  assert.doesNotMatch(source, /prompt\(\s*['"]/, 'Workspace prompt copy bypasses i18next');
+  assert.doesNotMatch(source, /No content to preview|\[missing image:/, 'Workspace preview copy bypasses i18next');
+  assert.doesNotMatch(source, /t\('searchMedia'\)\s*\|\|\s*['"]Search media/, 'Workspace media search copy bypasses i18next');
+
+  for (const [language, catalog] of Object.entries(locales)) {
+    assert.equal(typeof catalog.feedbackRevision?.UNKNOWN, 'string', `missing ${language} feedback revision fallback`);
+    assert.equal(typeof catalog.selfCheckVerdictUNKNOWN, 'string', `missing ${language} self-check verdict fallback`);
+    assert.equal(typeof catalog.sourceMap?.processing?.UNKNOWN, 'string', `missing ${language} source processing fallback`);
+    assert.equal(typeof catalog.sourceMap?.limitations?.UNKNOWN, 'string', `missing ${language} source limitation fallback`);
+    for (const [domain, keys] of WORKSPACE_EXPLICIT_STATE_KEYS) {
+      for (const key of keys) {
+        assert.equal(typeof getPath(catalog, key), 'string', `missing ${language} ${domain} state translation: ${key}`);
+      }
+    }
   }
 });
 

@@ -22,6 +22,8 @@ const SECTION_BLOCKER_KEYS = {
   SECTION_CONFIRMED: 'sectionBlockerHandoffMissing',
 };
 
+const FEEDBACK_REVISION_STATES = new Set(['FIRST_SUBMISSION', 'CHANGED', 'UNCHANGED', 'UNVERIFIABLE']);
+
 export default function SubmissionReadinessModal({ open, onClose, projectId, dirtySectionIds, onSubmitted, submittedPending = false }) {
   const { t } = useTranslation();
   const [readiness, setReadiness] = useState(null);
@@ -100,7 +102,7 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
             )}
 
             {readiness.revision && readiness.revision.state !== 'FIRST_SUBMISSION' && <p role={['UNCHANGED', 'UNVERIFIABLE'].includes(readiness.revision.state) ? 'alert' : 'status'} className="text-sm">
-              {t(`feedbackRevision.${readiness.revision.state}`)}
+              {t(`feedbackRevision.${FEEDBACK_REVISION_STATES.has(readiness.revision.state) ? readiness.revision.state : 'UNKNOWN'}`)}
             </p>}
             <section className="overflow-hidden rounded-xl border border-(--border) bg-(--surface-secondary)/50">
               <button type="button" onClick={() => setOpenPanel(value => value === 'checks' ? null : 'checks')} aria-expanded={openPanel === 'checks'} className="flex w-full items-center justify-between gap-2 p-3 text-xs font-bold uppercase tracking-wide text-(--text-secondary) hover:bg-(--surface-secondary)">
@@ -112,7 +114,7 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
                   {(readiness.checks || []).map(check => (
                     <li key={check.code} className="flex items-start gap-2 text-xs text-(--text-primary)">
                       <span aria-hidden="true" className={check.status === 'SATISFIED' ? 'text-emerald-600' : 'text-rose-600'}>{check.status === 'SATISFIED' ? '✓' : '✕'}</span>
-                      <span>{t(CHECK_KEYS[check.code] || check.code, { defaultValue: check.message })}</span>
+                      <span>{CHECK_KEYS[check.code] ? t(CHECK_KEYS[check.code]) : check.message || t('unknown')}</span>
                     </li>
                   ))}
                 </ul>
@@ -146,7 +148,7 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
                               {(section.blockers || []).length > 0 && (
                                 <ul className="mt-1 list-disc space-y-0.5 pl-4 text-rose-700 dark:text-rose-300">
                                   {section.blockers.map(code => (
-                                    <li key={code}>{t(SECTION_BLOCKER_KEYS[code] || code)}</li>
+                                    <li key={code}>{t(SECTION_BLOCKER_KEYS[code] || 'unknown')}</li>
                                   ))}
                                 </ul>
                               )}

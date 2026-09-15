@@ -7,6 +7,9 @@ import api from '../../services/api.js';
 import SourceGraph from './SourceGraph.jsx';
 import FileViewerModal from './FileViewerModal.jsx';
 
+const PROCESSING_STATUSES = new Set(['PENDING_UPLOAD', 'UPLOADED', 'METADATA_FETCHED', 'PDF_DOWNLOADED', 'QUEUED', 'PROCESSING', 'RAW_EXTRACTED', 'READY', 'COMPLETED', 'PARTIAL', 'FAILED']);
+const SOURCE_MAP_LIMITATIONS = new Set(['SAVED_METADATA_ONLY', 'SOURCES_WITHOUT_DOI', 'AMBIGUOUS_SOURCE_DOI']);
+
 export default function VisualSourceMap({ projectId, onClose }) {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -119,8 +122,8 @@ export default function VisualSourceMap({ projectId, onClose }) {
                   <dl className="space-y-2 text-xs">
                     {selectedSource.authors && <div><dt className="font-semibold text-(--text-tertiary)">{t('sourceMap.authors')}</dt><dd>{sourceAuthors(selectedSource.authors)}</dd></div>}
                     {selectedSource.publicationYear && <div><dt className="font-semibold text-(--text-tertiary)">{t('sourceMap.year')}</dt><dd>{selectedSource.publicationYear}</dd></div>}
-                    {selectedSource.doi && <div><dt className="font-semibold text-(--text-tertiary)">DOI</dt><dd className="break-all">{selectedSource.doi}</dd></div>}
-                    {selectedSource.processingStatus && <div><dt className="font-semibold text-(--text-tertiary)">{t('sourceMap.status')}</dt><dd>{t(`sourceMap.processing.${selectedSource.processingStatus}`, { defaultValue: selectedSource.processingStatus })}</dd></div>}
+                    {selectedSource.doi && <div><dt className="font-semibold text-(--text-tertiary)">{t('doi')}</dt><dd className="break-all">{selectedSource.doi}</dd></div>}
+                    {selectedSource.processingStatus && <div><dt className="font-semibold text-(--text-tertiary)">{t('sourceMap.status')}</dt><dd>{t(`sourceMap.processing.${PROCESSING_STATUSES.has(selectedSource.processingStatus) ? selectedSource.processingStatus : 'UNKNOWN'}`)}</dd></div>}
                   </dl>
                   {selectedSource.fileAvailable ? <button type="button" className={buttonClass} onClick={() => {
                     viewerOpener.current = document.activeElement;
@@ -154,7 +157,7 @@ export default function VisualSourceMap({ projectId, onClose }) {
                 <span><span aria-hidden="true" className="mr-1.5">┄</span>{t('sourceMap.membership')}</span>
                 <span><span aria-hidden="true" className="mr-1.5 text-violet-500">→</span>{t('sourceMap.citation')}</span>
               </div>
-              <ul className="space-y-1">{state.data.limitations.map(code => <li key={code}>{t(`sourceMap.limitations.${code}`)}</li>)}</ul>
+              <ul className="space-y-1">{state.data.limitations.map(code => <li key={code}>{t(`sourceMap.limitations.${SOURCE_MAP_LIMITATIONS.has(code) ? code : 'UNKNOWN'}`)}</li>)}</ul>
             </footer>
           </>}
     </div>

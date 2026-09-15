@@ -144,7 +144,7 @@ export default function FullPaperPreview({ sections, paperId, paperTitle, mediaA
                       latex={sec.contentTex || ''}
                       mediaAssets={mediaAssets} citationNumbers={citationNumbers}
                       generatedReferences={referenceSection ? generatedReferences : []}
-                      referencesTitle={sec.sectionTitle || 'References'}
+                      referencesTitle={sec.sectionTitle || t('references')}
                     />
                     {(i < sections.length - 1 || (!hasReferenceSection && generatedReferences.length > 0))
                       && <hr className="my-8 border-(--border)" />}

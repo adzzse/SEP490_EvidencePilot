@@ -1,8 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import api from '../services/api.js';
-import { instructorText } from '../locales';
-import { useLanguage } from '../context/LanguageContext';
 import useUndoDelete from '../components/ui/UndoDelete.jsx';
 import { normalizeSource, resolveAnchor, sourceFingerprint } from '../utils/student/feedbackAnchors.js';
 
@@ -24,16 +23,15 @@ export async function loadAllProjectSources(projectId) {
 export default function useInstructorReview({ projectId, enabled }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { language } = useLanguage();
-  const t = instructorText[language];
+  const { t } = useTranslation();
   const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
   const undoStrings = {
-    header: t.undoHeader,
-    bodyTemplate: t.undoBodyTemplate,
-    caution: t.undoCaution,
-    undoLabel: t.undoLabel,
-    undoRemaining: t.undoRemaining,
-    dismissLabel: t.dismissLabel,
+    header: t('undoHeader'),
+    bodyTemplate: t('undoBodyTemplate'),
+    caution: t('undoCaution'),
+    undoLabel: t('undoLabel'),
+    undoRemaining: t('undoRemaining'),
+    dismissLabel: t('dismissLabel'),
   };
   const [project, setProject] = useState(null);
   const [papers, setPapers] = useState([]);
@@ -129,7 +127,7 @@ export default function useInstructorReview({ projectId, enabled }) {
         setSources(srcs);
         if ((papersRes.data || []).length > 0) setSelectedPaperId(papersRes.data[0].id);
       } catch {
-        if (!cancelled) setErrorMessage(t.loadReviewSpaceFailed);
+        if (!cancelled) setErrorMessage(t('instructor.review.loadReviewSpaceFailed'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -297,9 +295,9 @@ export default function useInstructorReview({ projectId, enabled }) {
       if (generation !== feedbackLoadRef.current) return;
       setFeedbackItems(responses.flatMap(response => response.data || []));
     } catch {
-      setErrorMessage(t.loadFeedbackFailed);
+      setErrorMessage(t('instructor.review.loadFeedbackFailed'));
     }
-  }, [orderedRequests, t.loadFeedbackFailed, enabled]);
+  }, [orderedRequests, t, enabled]);
 
   useEffect(() => { if (!enabled) return; loadFeedback(); return () => { feedbackLoadRef.current += 1; }; }, [loadFeedback, enabled]);
 
@@ -329,7 +327,7 @@ export default function useInstructorReview({ projectId, enabled }) {
       clearFeedbackDraft();
       await loadFeedback();
     } catch (err) {
-      setErrorMessage(err?.response?.data?.message || t.saveFeedbackFailed);
+      setErrorMessage(err?.response?.data?.message || t('instructor.review.saveFeedbackFailed'));
     } finally { setSavingFeedback(false); }
   };
 
@@ -338,7 +336,7 @@ export default function useInstructorReview({ projectId, enabled }) {
     const range = sourceEditorRef.current?.getSelectionRange?.();
     const source = normalizeSource(selectedSection.contentTex || '');
     if (!range || range.to <= range.from || range.to > source.length || !Number.isInteger(selectedSection.version)) {
-      setErrorMessage(t.selectSourceRange);
+      setErrorMessage(t('instructor.review.selectSourceRange'));
       return;
     }
     try {
@@ -350,7 +348,7 @@ export default function useInstructorReview({ projectId, enabled }) {
       }, lineReference: '' });
       setPanelTab('manual');
     } catch {
-      setErrorMessage(t.selectSourceRange);
+      setErrorMessage(t('instructor.review.selectSourceRange'));
     }
   };
 
@@ -378,7 +376,7 @@ export default function useInstructorReview({ projectId, enabled }) {
         await api.delete(`/api/instructor-feedback/${itemId}`);
         loadFeedback();
       } catch (err) {
-        setErrorMessage(err?.response?.data?.message || t.deleteFeedbackFailed);
+        setErrorMessage(err?.response?.data?.message || t('instructor.review.deleteFeedbackFailed'));
         loadFeedback();
       }
     }, () => { loadFeedback(); });
@@ -393,7 +391,7 @@ export default function useInstructorReview({ projectId, enabled }) {
       });
       await loadFeedback();
     } catch (err) {
-      setErrorMessage(err?.response?.data?.message || t.updateStatusFailed);
+      setErrorMessage(err?.response?.data?.message || t('instructor.review.updateStatusFailed'));
     }
   };
 
@@ -450,12 +448,12 @@ export default function useInstructorReview({ projectId, enabled }) {
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: res.data.status } : r));
       await loadFeedback();
       setPendingTransition(null);
-      setSuccessMessage(targetStatus === 'REVIEWED' ? t.reviewApproved : t.reviewReturned);
+      setSuccessMessage(targetStatus === 'REVIEWED' ? t('instructor.review.reviewApproved') : t('instructor.review.reviewReturned'));
       if (targetStatus === 'REVIEWED') {
         setTimeout(() => navigate('/instructor/requests'), 1000);
       }
     } catch (err) {
-      setErrorMessage(err?.response?.data?.message || t.updateStatusFailed);
+      setErrorMessage(err?.response?.data?.message || t('instructor.review.updateStatusFailed'));
     } finally { setTransitioningRequestId(null); }
   };
 
@@ -468,12 +466,12 @@ export default function useInstructorReview({ projectId, enabled }) {
       const { data: job } = await api.get(`/api/jobs/${jobId}`);
       if (job.status === 'SUCCESS') return job;
       if (job.status === 'FAILED') {
-        const error = new Error(job.errorMessage || t.suggestionFailed);
+        const error = new Error(job.errorMessage || t('instructor.review.suggestionFailed'));
         error.status = Number(job.errorMessage?.match(/(\d{3})/)?.[1]) || undefined;
         throw error;
       }
       if (++polls >= MAX_POLLS || Date.now() - startedAt > 30 * 60 * 1000) {
-        const error = new Error(t.aiSuggestionWorkerUnavailable);
+        const error = new Error(t('instructor.review.aiSuggestionWorkerUnavailable'));
         error.status = 503;
         throw error;
       }
@@ -505,10 +503,10 @@ export default function useInstructorReview({ projectId, enabled }) {
       if (suggestionRequestRef.current === requestId) {
         const status = err?.response?.status || err?.status;
         setSuggestionError(status === 429
-          ? t.aiSuggestionRateLimited
+          ? t('instructor.review.aiSuggestionRateLimited')
           : status === 502 || status === 503 || status === 504
-            ? t.aiSuggestionWorkerUnavailable
-            : err?.response?.data?.message || err?.message || t.suggestionFailed);
+            ? t('instructor.review.aiSuggestionWorkerUnavailable')
+            : err?.response?.data?.message || err?.message || t('instructor.review.suggestionFailed'));
       }
     } finally {
       if (suggestionRequestRef.current === requestId) setSuggestionLoading(false);
