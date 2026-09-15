@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api.js';
 import { useAuth } from '../context/AuthContext';
@@ -8,8 +7,6 @@ import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
 import { AuroraBackground } from '../components/ui/aurora-background';
 import { PasswordInput } from '../components/ui/PasswordInput.jsx';
-
-const EASE = [0.23, 1, 0.32, 1];
 
 function SunIcon({ className = 'w-4 h-4' }) {
   return (
@@ -211,12 +208,7 @@ export default function SetPassword() {
     <AuroraBackground className="min-h-screen w-full flex items-center justify-center p-4 sm:p-6">
       <div className="relative z-10 w-full max-w-6xl mx-auto px-2 sm:px-6 py-8 grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12 items-center">
         {/* Column A — Branding */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: EASE }}
-          className="lg:col-span-2 text-center lg:text-left"
-        >
+        <div className="lg:col-span-2 text-center lg:text-left animate-[setPasswordEnter_0.5s_cubic-bezier(0.23,1,0.32,1)_both] motion-reduce:animate-none">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-light text-(--text-primary) leading-tight tracking-tight mb-5">
             {t('auth.setPassword.welcomeTo')}{' '}
             <span className="font-extrabold bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-400 dark:from-indigo-400 dark:via-blue-300 dark:to-indigo-200 bg-clip-text text-transparent">
@@ -244,15 +236,10 @@ export default function SetPassword() {
               {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
             </button>
           </div>
-        </motion.div>
+        </div>
 
         {/* Column B — Onboarding Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.15, ease: EASE }}
-          className="lg:col-span-3"
-        >
+        <div className="lg:col-span-3 animate-[setPasswordEnter_0.5s_cubic-bezier(0.23,1,0.32,1)_both] [animation-delay:150ms] motion-reduce:animate-none">
           <section className="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-slate-200 dark:border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative">
             <header className="mb-6">
               <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
@@ -393,7 +380,7 @@ export default function SetPassword() {
               </form>
             )}
           </section>
-        </motion.div>
+        </div>
       </div>
 
       {toast && (

@@ -4,8 +4,7 @@ import AppHeader from '../../components/layout/AppHeader.jsx';
 import Breadcrumb from '../../components/layout/Breadcrumb.jsx';
 import Modal from '../../components/ui/Modal.jsx';
 import api from '../../services/api.js';
-import { commonText, instructorText } from '../../locales';
-import { useLanguage } from '../../context/LanguageContext';
+import { useTranslation } from 'react-i18next';
 import {
   CARD_GRID_PAGE_SIZE,
   API_ROUTES,
@@ -15,11 +14,11 @@ import { formatDate } from '../../utils/formatters/date.js';
 import StatusBadge from '../../components/ui/StatusBadge.jsx';
 import DeleteConfirm from '../../components/ui/DeleteConfirm.jsx';
 
+const PROJECT_ACTIONS = Object.freeze(['archive', 'unarchive', 'complete']);
+
 export default function ProjectManagement() {
   const navigate = useNavigate();
-  const { language } = useLanguage();
-  const ct = commonText[language];
-  const t = instructorText[language];
+  const { t, i18n } = useTranslation();
 
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -87,9 +86,9 @@ export default function ProjectManagement() {
   const statusOptions = useMemo(() => (
     PROJECT_STATUSES.map(st => ({
       value: st,
-      label: ct.statusLabels?.[st] || st.replaceAll('_', ' '),
+      label: t(`status.${st}`),
     }))
-  ), [ct.statusLabels]);
+  ), [t]);
 
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
@@ -101,7 +100,7 @@ export default function ProjectManagement() {
       setNewDescription('');
       fetchProjects();
     } catch {
-      alert(t.createProjectFailed);
+      alert(t('instructor.projectManagement.createProjectFailed'));
     } finally {
       setCreating(false);
     }
@@ -115,7 +114,7 @@ export default function ProjectManagement() {
       setEditTitle('');
       fetchProjects();
     } catch {
-      alert(t.updateProjectFailed);
+      alert(t('instructor.projectManagement.updateProjectFailed'));
     }
   };
 
@@ -126,7 +125,7 @@ export default function ProjectManagement() {
       await api.delete(API_ROUTES.PROJECTS.BY_ID(id));
       await fetchProjects();
     } catch {
-      alert(t.deleteProjectFailed);
+      alert(t('instructor.projectManagement.deleteProjectFailed'));
     } finally {
       setDeletingId(null);
     }
@@ -137,7 +136,9 @@ export default function ProjectManagement() {
       await api.patch(`/api/projects/${id}/${action}`);
       fetchProjects();
     } catch {
-      alert(t.projectActionFailed.replace('{{action}}', t[action] || action));
+      alert(t('instructor.projectManagement.projectActionFailed', {
+        action: t(`instructor.projectManagement.action.${PROJECT_ACTIONS.includes(action) ? action : 'UNKNOWN'}`),
+      }));
     }
   };
 
@@ -149,37 +150,37 @@ export default function ProjectManagement() {
       <main className="max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Breadcrumb
           items={[
-            { label: t.dashboard, path: '/instructor/dashboard' },
-            { label: t.projects }
+            { label: t('instructor.projectManagement.dashboard'), path: '/instructor/dashboard' },
+            { label: t('instructor.projectManagement.projects') }
           ]}
         />
 
         {/* Master Action Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center w-full mb-6 gap-4 border-b border-(--border) pb-6">
           <div className="min-w-0 flex-1">
-            <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t.projects}</h1>
-            <p className="text-xs text-(--text-tertiary) mt-1">{t.projectsManagementDesc || 'Manage and monitor your student project workspaces.'}</p>
+            <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t('instructor.projectManagement.projects')}</h1>
+            <p className="text-xs text-(--text-tertiary) mt-1">{t('instructor.projectManagement.projectsManagementDesc')}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
-            <label className="sr-only" htmlFor="project-search">{t.searchProjects || ct.search || 'Search projects...'}</label>
+            <label className="sr-only" htmlFor="project-search">{t('instructor.projectManagement.searchProjects')}</label>
             <input
               id="project-search"
               type="search"
-              placeholder={t.searchProjects || ct.search || 'Search projects...'}
+              placeholder={t('instructor.projectManagement.searchProjects')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full sm:w-52 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus)"
             />
 
-            <label className="sr-only" htmlFor="project-status-filter">{ct.status || 'Status'}</label>
+            <label className="sr-only" htmlFor="project-status-filter">{t('instructor.projectManagement.status')}</label>
             <select
               id="project-status-filter"
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
               className="w-full sm:w-44 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus) [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
-              <option value="">{t.allProjectStatuses || 'All statuses'}</option>
+              <option value="">{t('instructor.projectManagement.allProjectStatuses')}</option>
               {statusOptions.map(option => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
@@ -190,8 +191,8 @@ export default function ProjectManagement() {
                 type="button"
                 onClick={() => setIsGridView(true)}
                 className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isGridView ? 'bg-(--surface) text-(--brand-foreground) shadow-xs' : 'text-(--text-tertiary) hover:text-(--text-primary)'}`}
-                title="Grid View"
-                aria-label="Grid View"
+                title={t('instructor.projectManagement.gridView')}
+                aria-label={t('instructor.projectManagement.gridView')}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
               </button>
@@ -199,8 +200,8 @@ export default function ProjectManagement() {
                 type="button"
                 onClick={() => setIsGridView(false)}
                 className={`p-1.5 rounded-lg transition-colors cursor-pointer ${!isGridView ? 'bg-(--surface) text-(--brand-foreground) shadow-xs' : 'text-(--text-tertiary) hover:text-(--text-primary)'}`}
-                title="List View"
-                aria-label="List View"
+                title={t('instructor.projectManagement.listView')}
+                aria-label={t('instructor.projectManagement.listView')}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
               </button>
@@ -211,11 +212,11 @@ export default function ProjectManagement() {
               className="inline-flex items-center gap-2 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-bold text-(--text-secondary) hover:text-(--brand-foreground) hover:border-(--brand) transition-colors cursor-pointer"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
-              {ct.guide || 'Guide'}
+              {t('guide')}
             </button>
             <button onClick={() => setShowCreate(true)} className="px-4 py-2 bg-(--brand) text-(--on-brand) font-bold text-xs rounded-xl hover:bg-(--brand-hover) transition-colors flex items-center gap-1.5 shrink-0 shadow-sm cursor-pointer">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-              {t.createProject}
+              {t('instructor.projectManagement.createProject')}
             </button>
           </div>
         </div>
@@ -225,7 +226,7 @@ export default function ProjectManagement() {
             {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-36 bg-(--surface-tertiary) rounded-2xl animate-pulse" />)}
           </div>
         ) : projects.length === 0 ? (
-          <div className="text-xs text-(--text-tertiary) italic bg-(--surface) rounded-2xl border border-(--border) p-8 text-center">{ct.noData}</div>
+          <div className="text-xs text-(--text-tertiary) italic bg-(--surface) rounded-2xl border border-(--border) p-8 text-center">{t('instructor.projectManagement.commonNoData')}</div>
         ) : isGridView ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {projects.map(p => (
@@ -240,31 +241,31 @@ export default function ProjectManagement() {
                     <h3 className="font-bold text-(--text-primary) text-base hover:text-(--brand) transition-colors line-clamp-1">{p.title}</h3>
                     <StatusBadge status={p.status} />
                   </div>
-                  <p className="text-xs text-(--text-secondary) line-clamp-2 mb-4">{p.description || ct.noData}</p>
+                  <p className="text-xs text-(--text-secondary) line-clamp-2 mb-4">{p.description || t('instructor.projectManagement.commonNoData')}</p>
                 </div>
 
                 <div className="border-t border-(--border-light) pt-3">
                   <div className="flex items-center justify-between text-[11px] text-(--text-tertiary) mb-3">
                     <span className="flex items-center gap-1">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                      {p.memberCount || 0} {t.members || 'Members'}
+                      {p.memberCount || 0} {t('instructor.projectManagement.members')}
                     </span>
-                    <span>{t.created}: {formatDate(p.createdAt, language)}</span>
+                    <span>{t('instructor.projectManagement.created')}: {formatDate(p.createdAt, i18n.language)}</span>
                   </div>
 
                   <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => navigate(`/instructor/projects/${p.id}`)} className="text-xs text-(--brand) hover:bg-(--brand-soft) font-bold px-2.5 py-1 rounded-lg transition-colors">{t.detail}</button>
-                    <button onClick={() => { setEditId(p.id); setEditTitle(p.title); }} className="text-xs text-(--brand) hover:bg-(--brand-soft) font-bold px-2.5 py-1 rounded-lg transition-colors">{ct.edit}</button>
+                    <button onClick={() => navigate(`/instructor/projects/${p.id}`)} className="text-xs text-(--brand) hover:bg-(--brand-soft) font-bold px-2.5 py-1 rounded-lg transition-colors">{t('instructor.projectManagement.detail')}</button>
+                    <button onClick={() => { setEditId(p.id); setEditTitle(p.title); }} className="text-xs text-(--brand) hover:bg-(--brand-soft) font-bold px-2.5 py-1 rounded-lg transition-colors">{t('instructor.projectManagement.commonEdit')}</button>
                     <DeleteConfirm
-                      message={t.deleteProjectConfirm}
+                      message={t('instructor.projectManagement.deleteProjectConfirm')}
                       onConfirm={() => handleDelete(p.id)}
-                      triggerLabel={ct.delete}
-                      confirmLabel={ct.delete}
-                      cancelLabel={ct.cancel}
+                      triggerLabel={t('delete')}
+                      confirmLabel={t('delete')}
+                      cancelLabel={t('cancel')}
                       disabled={deletingId !== null}
                       className="text-xs text-rose-600 hover:bg-rose-50 font-bold px-2.5 py-1 rounded-lg transition-colors"
                     >
-                      {deletingId === p.id ? ct.saving : ct.delete}
+                      {deletingId === p.id ? t('saving') : t('delete')}
                     </DeleteConfirm>
                   </div>
                 </div>
@@ -279,8 +280,8 @@ export default function ProjectManagement() {
                   {editId === p.id ? (
                     <div className="flex gap-2 items-center" onClick={e => e.stopPropagation()}>
                       <input value={editTitle} onChange={e => setEditTitle(e.target.value)} className="flex-1 min-w-0 border border-(--border) bg-(--surface) text-(--text-primary) rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-(--focus)" autoFocus />
-                      <button onClick={() => handleUpdate(p.id)} className="text-xs font-bold text-emerald-600 hover:text-emerald-800">{ct.save}</button>
-                      <button onClick={() => setEditId(null)} className="text-xs text-slate-400 hover:text-slate-600">{ct.cancel}</button>
+                      <button onClick={() => handleUpdate(p.id)} className="text-xs font-bold text-emerald-600 hover:text-emerald-800">{t('save')}</button>
+                      <button onClick={() => setEditId(null)} className="text-xs text-slate-400 hover:text-slate-600">{t('cancel')}</button>
                     </div>
                   ) : (
                     <div>
@@ -288,10 +289,10 @@ export default function ProjectManagement() {
                       <div className="flex flex-wrap items-center gap-3 mt-1">
                         <p className="text-[10px] text-(--text-secondary) flex items-center gap-1">
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                          {p.memberCount || 0} {t.members || 'Members'}
+                          {p.memberCount || 0} {t('instructor.projectManagement.members')}
                         </p>
                         <p className="text-[10px] text-(--text-tertiary)">
-                          {t.lastUpdated || 'Last updated'}: {formatDate(p.updatedAt || p.createdAt, language)}
+                          {t('instructor.projectManagement.lastUpdated')}: {formatDate(p.updatedAt || p.createdAt, i18n.language)}
                         </p>
                       </div>
                     </div>
@@ -299,21 +300,21 @@ export default function ProjectManagement() {
                 </div>
                 <StatusBadge status={p.status} />
                 <div className="flex flex-wrap gap-1 sm:justify-end" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => navigate(`/instructor/projects/${p.id}`)} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t.detail}</button>
-                  <button onClick={() => { setEditId(p.id); setEditTitle(p.title); }} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{ct.edit}</button>
-                  {p.status === 'ACTIVE' && <button onClick={() => handlePatch(p.id, 'archive')} className="text-xs text-amber-600 hover:text-amber-800 font-bold px-2 py-1.5">{t.archive}</button>}
-                  {p.status === 'ARCHIVED' && <button onClick={() => handlePatch(p.id, 'unarchive')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t.unarchive}</button>}
-                  {p.status === 'ACTIVE' && <button onClick={() => handlePatch(p.id, 'complete')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t.complete}</button>}
+                  <button onClick={() => navigate(`/instructor/projects/${p.id}`)} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t('instructor.projectManagement.detail')}</button>
+                  <button onClick={() => { setEditId(p.id); setEditTitle(p.title); }} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t('instructor.projectManagement.commonEdit')}</button>
+                  {p.status === 'ACTIVE' && <button onClick={() => handlePatch(p.id, 'archive')} className="text-xs text-amber-600 hover:text-amber-800 font-bold px-2 py-1.5">{t('instructor.projectManagement.archive')}</button>}
+                  {p.status === 'ARCHIVED' && <button onClick={() => handlePatch(p.id, 'unarchive')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t('instructor.projectManagement.unarchive')}</button>}
+                  {p.status === 'ACTIVE' && <button onClick={() => handlePatch(p.id, 'complete')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t('instructor.projectManagement.complete')}</button>}
                   <DeleteConfirm
-                    message={t.deleteProjectConfirm}
+                    message={t('instructor.projectManagement.deleteProjectConfirm')}
                     onConfirm={() => handleDelete(p.id)}
-                    triggerLabel={ct.delete}
-                    confirmLabel={ct.delete}
-                    cancelLabel={ct.cancel}
+                    triggerLabel={t('delete')}
+                    confirmLabel={t('delete')}
+                    cancelLabel={t('cancel')}
                     disabled={deletingId !== null}
                     className="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1.5"
                   >
-                    {deletingId === p.id ? ct.saving : ct.delete}
+                    {deletingId === p.id ? t('saving') : t('delete')}
                   </DeleteConfirm>
                 </div>
               </div>
@@ -323,9 +324,9 @@ export default function ProjectManagement() {
 
         {totalPages > 1 && (
           <div className="flex justify-between items-center mt-6 text-xs">
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{ct.back}</button>
-            <span className="text-(--text-tertiary) font-mono font-bold">{t.page} {page + 1} {t.of} {totalPages}</span>
-            <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{ct.next}</button>
+            <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{t('back')}</button>
+            <span className="text-(--text-tertiary) font-mono font-bold">{t('instructor.projectManagement.page')} {page + 1} {t('instructor.projectManagement.of')} {totalPages}</span>
+            <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{t('instructor.projectManagement.commonNext')}</button>
           </div>
         )}
       </main>
@@ -334,29 +335,24 @@ export default function ProjectManagement() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-(--surface) border border-(--border) rounded-2xl shadow-2xl w-full max-w-md p-6 mx-4" role="dialog" aria-modal="true">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold text-(--text-primary)">{t.createProject}</h2>
-              <button onClick={() => setShowCreate(false)} className="text-(--text-tertiary) hover:text-(--text-primary) cursor-pointer" aria-label={ct.close}>
+              <h2 className="text-lg font-bold text-(--text-primary)">{t('instructor.projectManagement.createProject')}</h2>
+              <button onClick={() => setShowCreate(false)} className="text-(--text-tertiary) hover:text-(--text-primary) cursor-pointer" aria-label={t('close')}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder={t.projectTitle} autoFocus className="w-full border border-(--border) bg-(--surface-secondary) text-(--text-primary) rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-(--focus) mb-3" />
-            <textarea value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder={t.descriptionOptional} rows={3} className="w-full border border-(--border) bg-(--surface-secondary) text-(--text-primary) rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-(--focus) mb-4 resize-none" />
+            <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder={t('instructor.projectManagement.projectTitle')} autoFocus className="w-full border border-(--border) bg-(--surface-secondary) text-(--text-primary) rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-(--focus) mb-3" />
+            <textarea value={newDescription} onChange={e => setNewDescription(e.target.value)} placeholder={t('instructor.projectManagement.descriptionOptional')} rows={3} className="w-full border border-(--border) bg-(--surface-secondary) text-(--text-primary) rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-(--focus) mb-4 resize-none" />
             <div className="flex justify-end gap-3 font-bold">
-              <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-xs font-semibold text-(--text-secondary) hover:bg-(--surface-secondary) rounded-xl transition-colors cursor-pointer">{ct.cancel}</button>
-              <button onClick={handleCreate} disabled={creating || !newTitle.trim()} className="px-4 py-2 text-xs font-bold text-(--on-brand) bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-50 rounded-xl shadow-sm transition-colors cursor-pointer">{creating ? ct.saving : t.createProject}</button>
+              <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-xs font-semibold text-(--text-secondary) hover:bg-(--surface-secondary) rounded-xl transition-colors cursor-pointer">{t('cancel')}</button>
+              <button onClick={handleCreate} disabled={creating || !newTitle.trim()} className="px-4 py-2 text-xs font-bold text-(--on-brand) bg-(--brand) hover:bg-(--brand-hover) disabled:opacity-50 rounded-xl shadow-sm transition-colors cursor-pointer">{creating ? t('saving') : t('instructor.projectManagement.createProject')}</button>
             </div>
           </div>
         </div>
       )}
 
-      <Modal open={showGuide} onClose={() => setShowGuide(false)} title={language === 'vi' ? 'Hướng dẫn Quản lý Đồ án' : 'Projects Management Guide'} closeLabel={ct.close}>
+      <Modal open={showGuide} onClose={() => setShowGuide(false)} title={t('instructor.projectManagement.guideTitle')} closeLabel={t('close')}>
         <ol className="space-y-3 text-xs">
-          {[
-            language === 'vi' ? 'Tạo mới đồ án để phân chia nhóm sinh viên và thiết lập không gian nghiên cứu chuyên biệt.' : 'Create new projects to organize student teams and establish dedicated research workspaces.',
-            language === 'vi' ? 'Theo dõi số lượng thành viên, trạng thái hoạt động (ACTIVE, ARCHIVED, COMPLETED), và ngày cập nhật gần nhất.' : 'Monitor team member counts, lifecycle statuses (ACTIVE, ARCHIVED, COMPLETED), and update timestamps.',
-            language === 'vi' ? 'Truy cập chi tiết từng đồ án để kiểm duyệt tuyên bố khoa học, nguồn dẫn chứng, và gửi phản hồi cho sinh viên.' : 'Navigate into project workspaces to inspect claims, evidence graphs, and provide formative review feedback.',
-            language === 'vi' ? 'Dễ dàng chuyển đổi linh hoạt giữa giao diện lưới (Grid) và danh sách (List), tìm kiếm đồ án theo tên.' : 'Seamlessly switch between Grid and List views, or quickly locate projects using the search bar.'
-          ].map((step, i) => (
+          {t('instructor.projectManagement.guideSteps', { returnObjects: true }).map((step, i) => (
             <li key={i} className="flex items-start gap-3">
               <span className="shrink-0 w-5 h-5 rounded-full bg-(--brand) text-(--on-brand) text-[10px] font-black flex items-center justify-center">{i + 1}</span>
               <span className="text-(--text-secondary) leading-relaxed">{step}</span>

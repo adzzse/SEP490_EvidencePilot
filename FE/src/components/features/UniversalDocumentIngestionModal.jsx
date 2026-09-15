@@ -2,8 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../services/api.js';
 import Modal from '../ui/Modal.jsx';
 import UploadZone from './UploadZone.jsx';
-import { useLanguage } from '../../context/LanguageContext.jsx';
-import { instructorText, commonText } from '../../locales';
+import { useTranslation } from 'react-i18next';
 import {
   ENTITY_TYPES,
   INGESTION_TABS,
@@ -15,6 +14,7 @@ import {
   ACCEPTED_DOCUMENT_EXTENSIONS,
   STATUS_COLOR_MAP,
   DOCUMENT_PROCESSING_STATUS,
+  DOCUMENT_PROCESSING_STATUSES,
 } from '../../constants';
 
 function statusColor(s) {
@@ -31,9 +31,7 @@ export default function UniversalDocumentIngestionModal({
   title,
   existingSourceIds = [],
 }) {
-  const { language } = useLanguage();
-  const t = instructorText[language];
-  const ct = commonText[language];
+  const { t } = useTranslation();
 
   // Resolve tabs according to entityType if allowedTabs is not specified
   const effectiveTabs = useMemo(() => {
@@ -78,6 +76,7 @@ export default function UniversalDocumentIngestionModal({
   const [libraryQuery, setLibraryQuery] = useState('');
   const [selectedLibraryIds, setSelectedLibraryIds] = useState(() => new Set());
   const [librarySubmitting, setLibrarySubmitting] = useState(false);
+  const statusLabel = status => t(`status.${DOCUMENT_PROCESSING_STATUSES.includes(status) ? status : 'UNKNOWN'}`);
 
   // Helper to validate if a source document is already inserted/associated
   const isSourceAlreadyInserted = useCallback((doc) => {
@@ -144,13 +143,13 @@ export default function UniversalDocumentIngestionModal({
         setCollections(Array.isArray(list) ? list : []);
       })
       .catch(() => {
-        if (active) setCollectionError(language === 'vi' ? 'Không thể tải danh sách bộ sưu tập.' : 'Failed to load collections.');
+        if (active) setCollectionError(t('shared.ingestion.collectionListLoadFailed'));
       })
       .finally(() => {
         if (active) setCollectionsLoading(false);
       });
     return () => { active = false; };
-  }, [open, activeOption, language]);
+  }, [open, activeOption, t]);
 
   // Load sources when a collection is selected
   useEffect(() => {
@@ -179,13 +178,13 @@ export default function UniversalDocumentIngestionModal({
         setSelectedCollectionSourceIds(alreadyInsertedIds);
       })
       .catch(() => {
-        if (active) setCollectionError(language === 'vi' ? 'Không thể tải danh sách tài liệu từ bộ sưu tập này.' : 'Failed to load documents from this collection.');
+        if (active) setCollectionError(t('shared.ingestion.collectionSourcesLoadFailed'));
       })
       .finally(() => {
         if (active) setCollectionSourcesLoading(false);
       });
     return () => { active = false; };
-  }, [open, activeOption, selectedCollectionId, language, isSourceAlreadyInserted]);
+  }, [open, activeOption, selectedCollectionId, isSourceAlreadyInserted, t]);
 
   // Load Library sources when Library tab is active
   useEffect(() => {
@@ -215,14 +214,14 @@ export default function UniversalDocumentIngestionModal({
         setSelectedLibraryIds(alreadyInsertedIds);
       })
       .catch(() => {
-        if (active) setLibraryError(t.libraryLoadFailed || (language === 'vi' ? 'Không thể tải thư viện nguồn.' : 'Could not load your source library.'));
+        if (active) setLibraryError(t('shared.ingestion.libraryLoadFailed'));
       })
       .finally(() => {
         if (active) setLibraryLoading(false);
       });
 
     return () => { active = false; };
-  }, [open, activeOption, entityType, entityId, t.libraryLoadFailed, language, isSourceAlreadyInserted]);
+  }, [open, activeOption, entityType, entityId, isSourceAlreadyInserted, t]);
 
   // Handle DOI Ingestion
   const handleDoiBatchSubmit = async (e) => {
@@ -236,7 +235,7 @@ export default function UniversalDocumentIngestionModal({
       .filter(Boolean);
 
     if (dois.length === 0) {
-      setDoiError(language === 'vi' ? 'Vui lòng nhập ít nhất một DOI' : 'Please enter at least one DOI');
+      setDoiError(t('shared.ingestion.doiRequired'));
       return;
     }
 
@@ -256,7 +255,7 @@ export default function UniversalDocumentIngestionModal({
         onClose();
       }
     } catch (err) {
-      setDoiError(err.response?.data?.message || t.uploadFailed);
+      setDoiError(err.response?.data?.message || t('shared.ingestion.uploadFailed'));
     } finally {
       setDoiSubmitting(false);
     }
@@ -303,7 +302,7 @@ export default function UniversalDocumentIngestionModal({
         setPendingBatchFiles(remaining);
         if (err.response?.data?.succeeded?.length > 0 && onSuccess) await onSuccess();
       } else {
-        setUploadError(err.response?.data?.message || t.uploadFailed);
+        setUploadError(err.response?.data?.message || t('shared.ingestion.uploadFailed'));
       }
     } finally {
       setUploadingFiles(false);
@@ -338,7 +337,9 @@ export default function UniversalDocumentIngestionModal({
       .map(sid => collectionSources.find(s => String(s.id) === String(sid)))
       .filter(doc => doc && !['READY', 'COMPLETED'].includes(doc.processingStatus));
     if (notReady.length > 0) {
-      setCollectionError(`${language === 'vi' ? 'Tài liệu chưa sẵn sàng' : 'Source not ready'}: ${notReady.map(d => `${d.title || d.originalFilename || d.id} (${d.processingStatus || 'UNKNOWN'})`).join(', ')}`);
+      setCollectionError(t('shared.ingestion.sourceNotReady', {
+        sources: notReady.map(d => `${d.title || d.originalFilename || d.id} (${statusLabel(d.processingStatus)})`).join(', '),
+      }));
       setCollectionSubmitting(false);
       return;
     }
@@ -356,7 +357,7 @@ export default function UniversalDocumentIngestionModal({
         return r.reason?.response?.data?.message;
       }).find(Boolean);
       const titles = new Map(collectionSources.map(s => [String(s.id), s.title || s.originalFilename || s.id]));
-      setCollectionError(`${firstMsg || (language === 'vi' ? 'Không thể chia sẻ tài liệu vào đồ án.' : 'Failed to share documents to project.')} ${failed.map(fid => titles.get(String(fid)) || fid).join(', ')}`);
+      setCollectionError(`${firstMsg || t('shared.ingestion.shareToProjectFailed')} ${failed.map(fid => titles.get(String(fid)) || fid).join(', ')}`);
       if (failed.length < sourceIdsToShare.length && onSuccess) await onSuccess();
       return;
     }
@@ -390,7 +391,7 @@ export default function UniversalDocumentIngestionModal({
           sourceIds: sourceIdsToAdd,
         });
       } catch (err) {
-        setLibraryError(err.response?.data?.message || t.libraryAddFailed || 'Failed to add selected sources');
+        setLibraryError(err.response?.data?.message || t('shared.ingestion.libraryAddFailed'));
         setLibrarySubmitting(false);
         return;
       }
@@ -406,7 +407,9 @@ export default function UniversalDocumentIngestionModal({
       .map(sid => librarySources.find(s => String(s.id) === String(sid)))
       .filter(doc => doc && !['READY', 'COMPLETED'].includes(doc.processingStatus));
     if (notReady.length > 0) {
-      setLibraryError(`${language === 'vi' ? 'Tài liệu chưa sẵn sàng' : 'Source not ready'}: ${notReady.map(d => `${d.title || d.originalFilename || d.id} (${d.processingStatus || 'UNKNOWN'})`).join(', ')}`);
+      setLibraryError(t('shared.ingestion.sourceNotReady', {
+        sources: notReady.map(d => `${d.title || d.originalFilename || d.id} (${statusLabel(d.processingStatus)})`).join(', '),
+      }));
       setLibrarySubmitting(false);
       return;
     }
@@ -423,7 +426,7 @@ export default function UniversalDocumentIngestionModal({
         return r.reason?.response?.data?.message;
       }).find(Boolean);
       const titles = new Map(librarySources.map(s => [String(s.id), s.title || s.originalFilename || s.id]));
-      setLibraryError(`${firstMsg || t.libraryAddFailed || 'Failed to add selected sources'}: ${failed.map(fid => titles.get(String(fid)) || fid).join(', ')}`);
+      setLibraryError(`${firstMsg || t('shared.ingestion.libraryAddFailed')}: ${failed.map(fid => titles.get(String(fid)) || fid).join(', ')}`);
       if (failed.length < sourceIdsToAdd.length && onSuccess) await onSuccess();
       return;
     }
@@ -438,23 +441,23 @@ export default function UniversalDocumentIngestionModal({
   const TAB_METADATA = {
     [INGESTION_TABS.DOI]: {
       key: INGESTION_TABS.DOI,
-      label: t.inputDoi || 'Input DOI',
-      desc: t.inputDoiDescription || 'Add documents by Digital Object Identifier',
+      label: t('shared.ingestion.inputDoi'),
+      desc: t('shared.ingestion.inputDoiDescription'),
     },
     [INGESTION_TABS.UPLOAD]: {
       key: INGESTION_TABS.UPLOAD,
-      label: t.uploadDocument || 'Upload Document',
-      desc: t.uploadDocumentDescription || 'Upload files directly from your computer',
+      label: t('shared.ingestion.uploadDocument'),
+      desc: t('shared.ingestion.uploadDocumentDescription'),
     },
     [INGESTION_TABS.COLLECTION]: {
       key: INGESTION_TABS.COLLECTION,
-      label: t.chooseFromCollection || (language === 'vi' ? 'Chọn từ Bộ sưu tập' : 'Choose from Collection'),
-      desc: t.chooseFromCollectionDesc || (language === 'vi' ? 'Chia sẻ từ các bộ sưu tập' : 'Share sources from your collections'),
+      label: t('shared.ingestion.chooseFromCollection'),
+      desc: t('shared.ingestion.chooseFromCollectionDesc'),
     },
     [INGESTION_TABS.LIBRARY]: {
       key: INGESTION_TABS.LIBRARY,
-      label: t.chooseFromLibrary || 'Choose from Library',
-      desc: t.chooseFromLibraryDescription || 'Reuse already uploaded sources',
+      label: t('shared.ingestion.chooseFromLibrary'),
+      desc: t('shared.ingestion.chooseFromLibraryDescription'),
     },
   };
 
@@ -482,8 +485,8 @@ export default function UniversalDocumentIngestionModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={title || t.addDocument || (language === 'vi' ? 'Thêm tài liệu' : 'Add Document')}
-      closeLabel={ct.close || 'Close'}
+      title={title || t('shared.ingestion.addDocument')}
+      closeLabel={t('close')}
     >
       <div className="space-y-4 text-xs">
         {/* Dynamic Horizontal Segmented Tab Selector */}
@@ -496,7 +499,7 @@ export default function UniversalDocumentIngestionModal({
               : 'sm:grid-cols-2'
           }`}
           role="tablist"
-          aria-label={t.addDocument}
+          aria-label={t('shared.ingestion.addDocument')}
         >
           {effectiveTabs.map(tabKey => {
             const meta = TAB_METADATA[tabKey];
@@ -528,9 +531,7 @@ export default function UniversalDocumentIngestionModal({
         {activeOption === INGESTION_TABS.DOI && (
           <form onSubmit={handleDoiBatchSubmit} id="add-doc-panel" role="tabpanel" className="space-y-4">
             <p className="text-xs text-(--text-secondary)">
-              {language === 'vi'
-                ? 'Nhập một hoặc nhiều mã DOI (phân tách bằng dấu phẩy, chấm phẩy hoặc xuống dòng):'
-                : 'Enter one or multiple DOIs (separated by commas, semicolons, or newlines):'}
+              {t('shared.ingestion.doiInstructions')}
             </p>
             <textarea
               rows="4"
@@ -548,9 +549,7 @@ export default function UniversalDocumentIngestionModal({
             {doiBatchResult && doiBatchResult.failed?.length > 0 && (
               <div className="space-y-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
                 <p className="font-bold">
-                  {language === 'vi'
-                    ? `Đã nạp thành công ${doiBatchResult.succeeded?.length || 0} DOI. Một số DOI gặp lỗi:`
-                    : `Successfully ingested ${doiBatchResult.succeeded?.length || 0} DOIs. Some failed:`}
+                  {t('shared.ingestion.doiBatchPartial', { count: doiBatchResult.succeeded?.length || 0 })}
                 </p>
                 <ul className="list-disc pl-4 space-y-1 text-[11px]">
                   {doiBatchResult.failed.map((f, idx) => (
@@ -564,7 +563,7 @@ export default function UniversalDocumentIngestionModal({
               disabled={doiSubmitting || !doiInput.trim()}
               className="w-full py-3 bg-(--brand) text-(--on-brand) font-bold text-xs rounded-xl hover:bg-(--brand-hover) transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
             >
-              {doiSubmitting ? (ct.saving || 'Saving...') : (t.submitDoi || 'Fetch & Ingest')}
+              {doiSubmitting ? t('saving') : t('shared.ingestion.submitDoi')}
             </button>
           </form>
         )}
@@ -573,17 +572,15 @@ export default function UniversalDocumentIngestionModal({
         {activeOption === INGESTION_TABS.UPLOAD && (
           <div id="add-doc-panel" role="tabpanel" className="space-y-4">
             <p className="text-xs text-(--text-secondary)">
-              {language === 'vi'
-                ? 'Kéo thả hoặc chọn một hoặc nhiều tệp PDF / DOCX / TeX để tải lên:'
-                : 'Drag & drop or select multiple PDF / DOCX / TeX files to upload:'}
+              {t('shared.ingestion.uploadInstructions')}
             </p>
             <UploadZone
               onUpload={handleUploadFiles}
               accept={ACCEPTED_DOCUMENT_EXTENSIONS}
-              label={t.dropFiles || 'Drop document files here or click to browse'}
+              label={t('shared.ingestion.dropFiles')}
             />
             <div className="flex items-center justify-between text-xs text-(--text-tertiary) px-1">
-              <span>{language === 'vi' ? 'Hỗ trợ tải lên nhiều tệp cùng lúc' : 'Multi-file batch upload supported'}</span>
+              <span>{t('shared.ingestion.multiFileSupported')}</span>
               <label className="cursor-pointer text-(--brand) font-bold hover:underline">
                 <input
                   type="file"
@@ -596,32 +593,33 @@ export default function UniversalDocumentIngestionModal({
                     }
                   }}
                 />
-                {language === 'vi' ? 'Chọn nhiều tệp...' : 'Select multiple files...'}
+                {t('shared.ingestion.selectMultipleFiles')}
               </label>
             </div>
             {uploadingFiles && (
               <div className="p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl text-xs font-bold text-center animate-pulse">
-                {language === 'vi' ? 'Đang tải lên các tệp...' : 'Uploading files...'}
+                {t('shared.ingestion.uploadingFiles')}
               </div>
             )}
             {batchFailedDetails && batchFailedDetails.length > 0 && (
               <div className="space-y-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
                 <p className="font-bold">
-                  {language === 'vi'
-                    ? `${batchFailedDetails.length} tệp thất bại — còn lại ${pendingBatchFiles?.length || 0} tệp trong hàng đợi`
-                    : `${batchFailedDetails.length} file(s) failed — ${pendingBatchFiles?.length || 0} remaining in queue`}
+                  {t('shared.ingestion.batchFailureSummary', {
+                    failed: batchFailedDetails.length,
+                    remaining: pendingBatchFiles?.length || 0,
+                  })}
                 </p>
                 <ul className="list-disc pl-4 space-y-1 text-[11px]">
                   {batchFailedDetails.map((f) => (
-                    <li key={f.index}><span className="font-mono">{f.filename}</span> [{f.errorCode}] {f.errorMessage} {f.retryable ? '' : (language === 'vi' ? '(không thể thử lại)' : '(not retryable)')}</li>
+                    <li key={f.index}><span className="font-mono">{f.filename}</span> [{f.errorCode}] {f.errorMessage} {f.retryable ? '' : t('shared.ingestion.notRetryable')}</li>
                   ))}
                 </ul>
                 <div className="flex gap-2">
                   <button type="button" onClick={handleRetryBatch} disabled={uploadingFiles || !batchFailedDetails.some(f=>f.retryable)} className="px-3 py-1.5 bg-(--brand) text-(--on-brand) rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer">
-                    {language === 'vi' ? 'Thử lại tệp lỗi' : 'Retry Failed'}
+                    {t('shared.ingestion.retryFailedFiles')}
                   </button>
                   <button type="button" onClick={() => { setBatchFailedDetails(null); setPendingBatchFiles(null); }} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg text-xs font-bold cursor-pointer">
-                    {ct.dismiss || (language === 'vi' ? 'Bỏ qua' : 'Dismiss')}
+                    {t('shared.ingestion.commonDismiss')}
                   </button>
                 </div>
               </div>
@@ -639,13 +637,13 @@ export default function UniversalDocumentIngestionModal({
           <div id="add-doc-panel" role="tabpanel" className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-(--text-secondary) mb-1.5">
-                {language === 'vi' ? 'Chọn Bộ sưu tập nguồn:' : 'Select Curated Collection:'}
+                {t('shared.ingestion.selectCuratedCollection')}
               </label>
               {collectionsLoading ? (
                 <div className="h-10 bg-(--surface-secondary) rounded-xl animate-pulse" />
               ) : collections.length === 0 ? (
                 <p className="text-xs italic text-(--text-tertiary)">
-                  {language === 'vi' ? 'Chưa có bộ sưu tập nào.' : 'No curated collections found.'}
+                  {t('shared.ingestion.noCuratedCollections')}
                 </p>
               ) : (
                 <select
@@ -653,10 +651,10 @@ export default function UniversalDocumentIngestionModal({
                   onChange={e => setSelectedCollectionId(e.target.value)}
                   className="w-full px-3 py-2.5 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-medium text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)"
                 >
-                  <option value="">{language === 'vi' ? '-- Chọn bộ sưu tập --' : '-- Select a collection --'}</option>
+                  <option value="">{t('shared.ingestion.selectCollectionPlaceholder')}</option>
                   {collections.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.name || c.title} {c.totalSources ? `(${c.totalSources} sources)` : ''}
+                      {c.name || c.title} {c.totalSources ? t('shared.ingestion.collectionSourceCount', { count: c.totalSources }) : ''}
                     </option>
                   ))}
                 </select>
@@ -673,7 +671,7 @@ export default function UniversalDocumentIngestionModal({
                     <input
                       value={collectionSourceQuery}
                       onChange={e => setCollectionSourceQuery(e.target.value)}
-                      placeholder={language === 'vi' ? 'Tìm trong bộ sưu tập...' : 'Search collection sources...'}
+                      placeholder={t('shared.ingestion.searchCollectionSources')}
                       className="w-full rounded-xl border border-(--border) bg-(--surface-secondary) py-2 pl-8 pr-3 text-xs text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)"
                     />
                   </div>
@@ -690,8 +688,8 @@ export default function UniversalDocumentIngestionModal({
                       className="text-xs font-bold text-(--brand) hover:underline shrink-0 cursor-pointer"
                     >
                       {selectedCollectionSourceIds.size === filteredCollectionSources.length
-                        ? (language === 'vi' ? 'Bỏ chọn tất cả' : 'Deselect all')
-                        : (language === 'vi' ? 'Chọn tất cả' : 'Select all')}
+                        ? t('shared.ingestion.deselectAll')
+                        : t('shared.ingestion.selectAll')}
                     </button>
                   )}
                 </div>
@@ -703,7 +701,7 @@ export default function UniversalDocumentIngestionModal({
                   </div>
                 ) : filteredCollectionSources.length === 0 ? (
                   <p className="p-4 text-center text-xs italic text-(--text-tertiary) bg-(--surface-secondary) rounded-xl">
-                    {language === 'vi' ? 'Không có tài liệu nào trong bộ sưu tập này.' : 'No sources available in this collection.'}
+                    {t('shared.ingestion.noCollectionSources')}
                   </p>
                 ) : (
                   <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
@@ -735,21 +733,21 @@ export default function UniversalDocumentIngestionModal({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-bold text-xs text-(--text-primary) truncate">
-                                {doc.title || doc.originalFilename || t.unnamed || 'Unnamed Document'}
+                                {doc.title || doc.originalFilename || t('shared.ingestion.unnamed')}
                               </p>
                               {isAlreadyInserted && (
                                 <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                                   {entityType === ENTITY_TYPES.PROJECT
-                                    ? (language === 'vi' ? 'Đã có trong đồ án' : 'In project')
-                                    : (language === 'vi' ? 'Đã có trong bộ sưu tập' : 'In collection')}
+                                    ? t('shared.ingestion.inProject')
+                                    : t('shared.ingestion.inCollection')}
                                 </span>
                               )}
                               <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${statusColor(doc.processingStatus)}`}>
-                                {ct.statusLabels?.[doc.processingStatus] || doc.processingStatus}
+                                {statusLabel(doc.processingStatus)}
                               </span>
                             </div>
                             <p className="text-[10px] text-(--text-tertiary) truncate mt-0.5">
-                              {doc.originalFilename || doc.doi || 'Source File'}
+                              {doc.originalFilename || doc.doi || t('shared.ingestion.sourceFile')}
                             </p>
                           </div>
                         </label>
@@ -771,8 +769,8 @@ export default function UniversalDocumentIngestionModal({
                   className="w-full py-3 bg-(--brand) text-(--on-brand) font-bold text-xs rounded-xl hover:bg-(--brand-hover) transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
                 >
                   {collectionSubmitting
-                    ? (ct.saving || 'Saving...')
-                    : `${language === 'vi' ? 'Chia sẻ' : 'Share'} (${selectedCollectionSourceIds.size}) ${language === 'vi' ? 'tài liệu vào đồ án' : 'sources to project'}`}
+                    ? t('saving')
+                    : t('shared.ingestion.shareSelectedToProject', { count: selectedCollectionSourceIds.size })}
                 </button>
               </div>
             )}
@@ -790,7 +788,7 @@ export default function UniversalDocumentIngestionModal({
                 <input
                   value={libraryQuery}
                   onChange={e => setLibraryQuery(e.target.value)}
-                  placeholder={t.searchLibrarySources || (language === 'vi' ? 'Tìm tài liệu trong thư viện...' : 'Search uploaded sources...')}
+                  placeholder={t('shared.ingestion.searchLibrarySources')}
                   className="w-full rounded-xl border border-(--border) bg-(--surface-secondary) py-2 pl-8 pr-3 text-xs text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)"
                 />
               </div>
@@ -807,8 +805,8 @@ export default function UniversalDocumentIngestionModal({
                   className="text-xs font-bold text-(--brand) hover:underline shrink-0 cursor-pointer"
                 >
                   {selectedLibraryIds.size === filteredLibrarySources.length
-                    ? (language === 'vi' ? 'Bỏ chọn tất cả' : 'Deselect all')
-                    : (language === 'vi' ? 'Chọn tất cả' : 'Select all')}
+                    ? t('shared.ingestion.deselectAll')
+                    : t('shared.ingestion.selectAll')}
                 </button>
               )}
             </div>
@@ -820,7 +818,7 @@ export default function UniversalDocumentIngestionModal({
               </div>
             ) : filteredLibrarySources.length === 0 ? (
               <p className="p-4 text-center text-xs italic text-(--text-tertiary) bg-(--surface-secondary) rounded-xl">
-                {t.noLibrarySources || (language === 'vi' ? 'Thư viện nguồn của bạn đang trống.' : 'Your source library is empty.')}
+                {t('shared.ingestion.noLibrarySources')}
               </p>
             ) : (
               <div className="max-h-60 space-y-1.5 overflow-y-auto pr-1">
@@ -852,21 +850,21 @@ export default function UniversalDocumentIngestionModal({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-xs text-(--text-primary) truncate">
-                            {doc.title || doc.originalFilename || t.unnamed || 'Unnamed Document'}
+                            {doc.title || doc.originalFilename || t('shared.ingestion.unnamed')}
                           </p>
                           {isAlreadyInserted && (
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                               {entityType === ENTITY_TYPES.PROJECT
-                                ? (language === 'vi' ? 'Đã có trong đồ án' : 'In project')
-                                : (language === 'vi' ? 'Đã có trong bộ sưu tập' : 'In collection')}
+                                ? t('shared.ingestion.inProject')
+                                : t('shared.ingestion.inCollection')}
                             </span>
                           )}
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${statusColor(doc.processingStatus)}`}>
-                            {ct.statusLabels?.[doc.processingStatus] || doc.processingStatus}
+                            {statusLabel(doc.processingStatus)}
                           </span>
                         </div>
                         <p className="text-[10px] text-(--text-tertiary) truncate mt-0.5">
-                          {doc.originalFilename || doc.doi || 'Source File'}
+                          {doc.originalFilename || doc.doi || t('shared.ingestion.sourceFile')}
                         </p>
                       </div>
                     </label>
@@ -888,8 +886,8 @@ export default function UniversalDocumentIngestionModal({
               className="w-full py-3 bg-(--brand) text-(--on-brand) font-bold text-xs rounded-xl hover:bg-(--brand-hover) transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
             >
               {librarySubmitting
-                ? (ct.saving || 'Saving...')
-                : `${language === 'vi' ? 'Thêm' : 'Add'} (${selectedLibraryIds.size}) ${language === 'vi' ? 'tài liệu đã chọn' : 'selected sources'}`}
+                ? t('saving')
+                : t('shared.ingestion.addSelectedSources', { count: selectedLibraryIds.size })}
             </button>
           </div>
         )}

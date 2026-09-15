@@ -3,8 +3,7 @@ import { EmptyState, LoadingSkeleton, Modal } from '../index.js';
 import FileViewerModal from '../features/FileViewerModal';
 import useUndoDelete, { UndoToast } from '../ui/UndoDelete.jsx';
 import DeleteConfirm from '../ui/DeleteConfirm.jsx';
-import { useLanguage } from '../../context/LanguageContext';
-import { commonText, instructorText } from '../../locales';
+import { useTranslation } from 'react-i18next';
 import {
   DOCUMENT_PROCESSING_STATUSES,
   STATUS_COLOR_MAP,
@@ -47,13 +46,13 @@ function sourceErrorCode(source) {
 function recoveryInfo(source, t) {
   const errorCode = sourceErrorCode(source);
   if (source.processingStatus === 'FAILED') {
-    let description = t.sourceExtractionFailedDesc;
-    if (errorCode === 'HTTP 503') description = t.sourceExtractionUnavailable;
-    else if (/timed?\s*out|timeout/i.test(source.processingError || '')) description = t.sourceExtractionTimedOut;
+    let description = t('instructor.sourceLibrary.sourceExtractionFailedDesc');
+    if (errorCode === 'HTTP 503') description = t('instructor.sourceLibrary.sourceExtractionUnavailable');
+    else if (/timed?\s*out|timeout/i.test(source.processingError || '')) description = t('instructor.sourceLibrary.sourceExtractionTimedOut');
     return {
       action: 'retry',
       code: errorCode,
-      title: t.sourceExtractionFailed,
+      title: t('instructor.sourceLibrary.sourceExtractionFailed'),
       description,
     };
   }
@@ -63,27 +62,25 @@ function recoveryInfo(source, t) {
     return {
       action: 'upload',
       code: errorCode,
-      title: t.sourceNeedsPdf,
+      title: t('instructor.sourceLibrary.sourceNeedsPdf'),
       description: automaticDownloadBlocked
-        ? t.sourceAutomaticDownloadBlocked
-        : t.sourceManualUploadRequired,
+        ? t('instructor.sourceLibrary.sourceAutomaticDownloadBlocked')
+        : t('instructor.sourceLibrary.sourceManualUploadRequired'),
     };
   }
   return null;
 }
 
 export default function SourceLibraryPanel() {
-  const { language } = useLanguage();
-  const t = instructorText[language];
-  const ct = commonText[language];
+  const { t, i18n } = useTranslation();
   const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
   const undoStrings = {
-    header: t.undoHeader,
-    bodyTemplate: t.undoBodyTemplate,
-    caution: t.undoCaution,
-    undoLabel: t.undoLabel,
-    undoRemaining: t.undoRemaining,
-    dismissLabel: t.dismissLabel,
+    header: t('instructor.sourceLibrary.undoHeader'),
+    bodyTemplate: t('instructor.sourceLibrary.undoBodyTemplate'),
+    caution: t('instructor.sourceLibrary.undoCaution'),
+    undoLabel: t('instructor.sourceLibrary.undoLabel'),
+    undoRemaining: t('instructor.sourceLibrary.undoRemaining'),
+    dismissLabel: t('instructor.sourceLibrary.dismissLabel'),
   };
   const [sources, setSources] = useState([]);
   const [page, setPage] = useState(0);
@@ -141,14 +138,14 @@ export default function SourceLibraryPanel() {
         setTotalElements(payload.totalElements || 0);
       }
     } catch (requestError) {
-      setError(requestError.response?.data?.message || t.sourceLibraryLoadFailed);
+      setError(requestError.response?.data?.message || t('instructor.sourceLibrary.sourceLibraryLoadFailed'));
       setSources([]);
       setTotalPages(0);
       setTotalElements(0);
     } finally {
       if (!options.silent) setLoading(false);
     }
-  }, [debouncedQuery, page, processingStatus, t.sourceLibraryLoadFailed]);
+  }, [debouncedQuery, page, processingStatus, t]);
 
   useEffect(() => {
     loadSources();
@@ -157,20 +154,22 @@ export default function SourceLibraryPanel() {
   const statusOptions = useMemo(() => (
     DOCUMENT_PROCESSING_STATUSES.map(status => ({
       value: status,
-      label: ct.statusLabels?.[status] || status.replaceAll('_', ' '),
+      label: t(`status.${status}`),
     }))
-  ), [ct.statusLabels]);
+  ), [t]);
+
+  const statusLabel = status => t(`status.${DOCUMENT_PROCESSING_STATUSES.includes(status) ? status : 'UNKNOWN'}`);
 
   const usageSummary = (source) => {
     const collectionsCount = source.collections?.length || 0;
     const projectsCount = source.projects?.length || 0;
     if (collectionsCount === 0 && projectsCount === 0) {
-      return t?.sourceNotUsed || 'Not used in a collection or project';
+      return t('instructor.sourceLibrary.sourceNotUsed');
     }
-    const template = t?.sourceUsageSummary || '{{collections}} collections · {{projects}} projects';
-    return template
-      .replace('{{collections}}', String(collectionsCount))
-      .replace('{{projects}}', String(projectsCount));
+    return t('instructor.sourceLibrary.sourceUsageSummary', {
+      collections: collectionsCount,
+      projects: projectsCount,
+    });
   };
 
   const openEdit = (source) => {
@@ -191,7 +190,7 @@ export default function SourceLibraryPanel() {
     const nextTitle = editTitle.trim();
     if (!editingSource) return;
     if (!nextTitle) {
-      setEditError(t.sourceTitleRequired);
+      setEditError(t('instructor.sourceLibrary.sourceTitleRequired'));
       return;
     }
     setSaving(true);
@@ -203,7 +202,7 @@ export default function SourceLibraryPanel() {
       )));
       closeEdit();
     } catch (requestError) {
-      setEditError(requestError.response?.data?.message || t.sourceTitleUpdateFailed);
+      setEditError(requestError.response?.data?.message || t('instructor.sourceLibrary.sourceTitleUpdateFailed'));
     } finally {
       setSaving(false);
     }
@@ -227,7 +226,7 @@ export default function SourceLibraryPanel() {
       link.remove();
       window.URL.revokeObjectURL(blobUrl);
     } catch (requestError) {
-      setError(requestError.response?.data?.message || t.sourceDownloadFailed);
+      setError(requestError.response?.data?.message || t('instructor.sourceLibrary.sourceDownloadFailed'));
     } finally {
       setDownloadingId(null);
     }
@@ -246,10 +245,10 @@ export default function SourceLibraryPanel() {
           : item
       )));
       setExpandedErrorId(null);
-      setSuccessMessage(t.sourceExtractionRetried);
+      setSuccessMessage(t('instructor.sourceLibrary.sourceExtractionRetried'));
       await loadSources({ silent: true });
     } catch (requestError) {
-      setError(requestError.response?.data?.message || t.sourceRetryFailed);
+      setError(requestError.response?.data?.message || t('instructor.sourceLibrary.sourceRetryFailed'));
     } finally {
       setRecoveringSource(null);
     }
@@ -258,7 +257,7 @@ export default function SourceLibraryPanel() {
   const uploadSourcePdf = async (source, file) => {
     if (!file || recoveringSource) return;
     if (!file.name?.toLowerCase().endsWith('.pdf')) {
-      setError(t.sourcePdfOnly);
+      setError(t('instructor.sourceLibrary.sourcePdfOnly'));
       return;
     }
     setRecoveringSource({ id: source.id, action: 'upload' });
@@ -274,10 +273,10 @@ export default function SourceLibraryPanel() {
           : item
       )));
       setExpandedErrorId(null);
-      setSuccessMessage(t.sourcePdfUploaded);
+      setSuccessMessage(t('instructor.sourceLibrary.sourcePdfUploaded'));
       await loadSources({ silent: true });
     } catch (requestError) {
-      setError(requestError.response?.data?.message || t.sourcePdfUploadFailed);
+      setError(requestError.response?.data?.message || t('instructor.sourceLibrary.sourcePdfUploadFailed'));
     } finally {
       setRecoveringSource(null);
     }
@@ -288,11 +287,9 @@ export default function SourceLibraryPanel() {
       ...(source.collections || []).map(item => item.name),
       ...(source.projects || []).map(item => item.name),
     ].filter(Boolean);
-    const template = t?.deleteSourceEverywhereConfirm || 'Delete "{{name}}" everywhere? This removes it from your source library, collections, and projects.';
-    let message = template.replace('{{name}}', displayTitle(source));
+    let message = t('instructor.sourceLibrary.deleteSourceEverywhereConfirm', { name: displayTitle(source) });
     if (usageNames.length > 0) {
-      const warningTemplate = t?.deleteSourceUsageWarning || 'Currently used in: {{locations}}.';
-      message += `\n\n${warningTemplate.replace('{{locations}}', usageNames.join(', '))}`;
+      message += `\n\n${t('instructor.sourceLibrary.deleteSourceUsageWarning', { locations: usageNames.join(', ') })}`;
     }
     return message;
   };
@@ -318,7 +315,7 @@ export default function SourceLibraryPanel() {
           await loadSources();
         }
       } catch (requestError) {
-        setError(requestError.response?.data?.message || t.sourceDeleteFailed);
+        setError(requestError.response?.data?.message || t('instructor.sourceLibrary.sourceDeleteFailed'));
         await loadSources();
       } finally {
         setDeletingId(null);
@@ -327,33 +324,33 @@ export default function SourceLibraryPanel() {
   };
 
   return (
-    <section aria-label={t.sourceLibrary} className="space-y-6">
+    <section aria-label={t('instructor.sourceLibrary.sourceLibrary')} className="space-y-6">
       {/* Master Action Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center w-full mb-6 gap-4 border-b border-(--border) pb-6">
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t.sourceLibrary}</h1>
-          <p className="text-xs text-(--text-tertiary) mt-1">{t.sourceLibraryDesc || 'Manage every source you uploaded and see where it is currently used.'}</p>
+          <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t('instructor.sourceLibrary.sourceLibrary')}</h1>
+          <p className="text-xs text-(--text-tertiary) mt-1">{t('instructor.sourceLibrary.sourceLibraryDesc')}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
-          <label className="sr-only" htmlFor="source-library-search">{t.searchSourceLibrary}</label>
+          <label className="sr-only" htmlFor="source-library-search">{t('instructor.sourceLibrary.searchSourceLibrary')}</label>
           <input
             id="source-library-search"
             type="search"
             value={query}
             onChange={event => setQuery(event.target.value)}
-            placeholder={t.searchSourceLibrary}
+            placeholder={t('instructor.sourceLibrary.searchSourceLibrary')}
             className="w-full sm:w-52 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus)"
           />
 
-          <label className="sr-only" htmlFor="source-library-status">{ct.status}</label>
+          <label className="sr-only" htmlFor="source-library-status">{t('instructor.sourceLibrary.status')}</label>
           <select
             id="source-library-status"
             value={processingStatus}
             onChange={event => { setProcessingStatus(event.target.value); setPage(0); }}
             className="w-full sm:w-44 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus) [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            <option value="">{t.allSourceStatuses}</option>
+            <option value="">{t('instructor.sourceLibrary.allSourceStatuses')}</option>
             {statusOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
 
@@ -362,8 +359,8 @@ export default function SourceLibraryPanel() {
               type="button"
               onClick={() => setViewMode('grid')}
               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'grid' ? 'bg-(--surface) text-(--brand-foreground) shadow-xs' : 'text-(--text-tertiary) hover:text-(--text-primary)'}`}
-              title="Grid View"
-              aria-label="Grid View"
+              title={t('instructor.sourceLibrary.gridView')}
+              aria-label={t('instructor.sourceLibrary.gridView')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
             </button>
@@ -371,8 +368,8 @@ export default function SourceLibraryPanel() {
               type="button"
               onClick={() => setViewMode('list')}
               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'list' ? 'bg-(--surface) text-(--brand-foreground) shadow-xs' : 'text-(--text-tertiary) hover:text-(--text-primary)'}`}
-              title="List View"
-              aria-label="List View"
+              title={t('instructor.sourceLibrary.listView')}
+              aria-label={t('instructor.sourceLibrary.listView')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
@@ -383,7 +380,7 @@ export default function SourceLibraryPanel() {
             className="inline-flex items-center gap-2 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-bold text-(--text-secondary) hover:text-(--brand-foreground) hover:border-(--brand) transition-colors cursor-pointer"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
-            {ct.guide || 'Guide'}
+            {t('guide')}
           </button>
         </div>
       </div>
@@ -404,7 +401,7 @@ export default function SourceLibraryPanel() {
           {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <div key={i} className="h-36 bg-(--surface-tertiary) rounded-2xl animate-pulse" />)}
         </div>
       ) : sources.length === 0 ? (
-        <EmptyState title={t.noLibrarySourcesManaged} description={t.noLibrarySourcesManagedDesc} />
+        <EmptyState title={t('instructor.sourceLibrary.noLibrarySourcesManaged')} description={t('instructor.sourceLibrary.noLibrarySourcesManagedDesc')} />
       ) : viewMode === 'grid' ? (
         /* Grid View Layout (Mirroring Collections Page Cards) */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -426,8 +423,8 @@ export default function SourceLibraryPanel() {
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <span className={`rounded-md border px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide ${statusColor(source.processingStatus)}`}>
                       {source.processingStatus === 'METADATA_FETCHED' && source.processingError
-                        ? t.sourceNeedsPdfStatus
-                        : ct.statusLabels?.[source.processingStatus] || source.processingStatus}
+                        ? t('instructor.sourceLibrary.sourceNeedsPdfStatus')
+                      : statusLabel(source.processingStatus)}
                     </span>
                     <span className="text-[10px] text-(--text-tertiary) font-mono">{formatSize(source.fileSizeBytes)}</span>
                   </div>
@@ -435,10 +432,10 @@ export default function SourceLibraryPanel() {
                   <h3 className="font-bold text-(--text-primary) text-sm line-clamp-2 leading-snug hover:text-(--brand) transition-colors">
                     {displayTitle(source)}
                   </h3>
-                  <p className="text-[11px] text-(--text-tertiary) truncate mt-1">{formatDate(source.createdAt, language)}</p>
+              <p className="text-[11px] text-(--text-tertiary) truncate mt-1">{formatDate(source.createdAt, i18n.language)}</p>
 
                   <div className="mt-3 p-2.5 rounded-xl bg-(--surface-secondary) border border-(--border-light)">
-                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-(--text-tertiary)">{t.usedIn}</span>
+                    <span className="text-[9px] font-extrabold uppercase tracking-wider text-(--text-tertiary)">{t('instructor.sourceLibrary.usedIn')}</span>
                     <p className="text-xs font-bold text-(--text-primary) mt-0.5 truncate">{usageSummary(source)}</p>
                     {usageNames.length > 0 && (
                       <p className="text-[10px] text-(--text-tertiary) truncate mt-0.5">{usageNames.join(', ')}</p>
@@ -458,7 +455,7 @@ export default function SourceLibraryPanel() {
                       disabled={recovering}
                       className="px-2.5 py-1 text-xs font-bold text-(--brand-foreground) bg-(--brand-soft) hover:bg-(--surface-tertiary) rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      {t.previewSource}
+                      {t('instructor.sourceLibrary.previewSource')}
                     </button>
                     {downloadable && (
                       <button
@@ -467,7 +464,7 @@ export default function SourceLibraryPanel() {
                         disabled={downloadingId === source.id || recovering}
                         className="px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                       >
-                        {downloadingId === source.id ? t.downloadingSource : t.downloadSource}
+                        {downloadingId === source.id ? t('instructor.sourceLibrary.downloadingSource') : t('instructor.sourceLibrary.downloadSource')}
                       </button>
                     )}
                     <button
@@ -476,18 +473,18 @@ export default function SourceLibraryPanel() {
                       disabled={recovering}
                       className="px-2.5 py-1 text-xs font-bold text-(--text-secondary) hover:bg-(--surface-secondary) rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      {ct.edit}
+                      {t('instructor.sourceLibrary.commonEdit')}
                     </button>
                     <DeleteConfirm
                       message={getDeleteSourceMessage(source)}
                       onConfirm={() => deleteSource(source)}
-                      triggerLabel={ct.delete}
-                      confirmLabel={t.deleteEverywhere}
-                      cancelLabel={ct.cancel}
+                      triggerLabel={t('delete')}
+                      confirmLabel={t('instructor.sourceLibrary.deleteEverywhere')}
+                      cancelLabel={t('cancel')}
                       disabled={deletingId === source.id || recovering}
                       className="px-2.5 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      {deletingId === source.id ? t.deletingSource : ct.delete}
+                      {deletingId === source.id ? t('instructor.sourceLibrary.deletingSource') : t('delete')}
                     </DeleteConfirm>
                     {recovery && (
                       recovery.action === 'retry' ? (
@@ -497,7 +494,7 @@ export default function SourceLibraryPanel() {
                           disabled={recovering}
                           className="px-2.5 py-1 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
                         >
-                          {recovering && recoveringSource?.action === 'retry' ? t.retryingSource : t.retrySource}
+                          {recovering && recoveringSource?.action === 'retry' ? t('instructor.sourceLibrary.retryingSource') : t('instructor.sourceLibrary.retrySource')}
                         </button>
                       ) : (
                         <label className="px-2.5 py-1 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors cursor-pointer flex items-center gap-1">
@@ -512,7 +509,7 @@ export default function SourceLibraryPanel() {
                               uploadSourcePdf(source, file);
                             }}
                           />
-                          {recovering && recoveringSource?.action === 'upload' ? t.uploadingSourcePdf : t.uploadSourcePdf}
+                          {recovering && recoveringSource?.action === 'upload' ? t('instructor.sourceLibrary.uploadingSourcePdf') : t('instructor.sourceLibrary.uploadSourcePdf')}
                         </label>
                       )
                     )}
@@ -548,8 +545,8 @@ export default function SourceLibraryPanel() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`rounded-md border px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide ${statusColor(source.processingStatus)}`}>
                         {source.processingStatus === 'METADATA_FETCHED' && source.processingError
-                          ? t.sourceNeedsPdfStatus
-                          : ct.statusLabels?.[source.processingStatus] || source.processingStatus}
+                          ? t('instructor.sourceLibrary.sourceNeedsPdfStatus')
+                          : statusLabel(source.processingStatus)}
                       </span>
                       <span className="text-[10px] text-(--text-tertiary) font-mono">{formatSize(source.fileSizeBytes)}</span>
                       {source.originalFilename && source.title && (
@@ -562,8 +559,8 @@ export default function SourceLibraryPanel() {
                     </h2>
 
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-(--text-tertiary)">
-                      <span>{t.uploadedOn}: <strong className="text-(--text-secondary)">{formatDate(source.createdAt, language)}</strong></span>
-                      <span>{t.usedIn}: <strong className="text-(--text-secondary)">{usageSummary(source)}</strong></span>
+                  <span>{t('instructor.sourceLibrary.uploadedOn')}: <strong className="text-(--text-secondary)">{formatDate(source.createdAt, i18n.language)}</strong></span>
+                      <span>{t('instructor.sourceLibrary.usedIn')}: <strong className="text-(--text-secondary)">{usageSummary(source)}</strong></span>
                     </div>
 
                     {usageNames.length > 0 && (
@@ -583,7 +580,7 @@ export default function SourceLibraryPanel() {
                       disabled={recovering}
                       className="cursor-pointer rounded-xl bg-(--brand-soft) px-3 py-2 text-xs font-bold text-(--brand-foreground) transition-colors hover:bg-(--surface-tertiary) focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {t.previewSource}
+                      {t('instructor.sourceLibrary.previewSource')}
                     </button>
 
                     {downloadable && (
@@ -593,7 +590,7 @@ export default function SourceLibraryPanel() {
                         disabled={downloadingId === source.id || recovering}
                         className="cursor-pointer rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {downloadingId === source.id ? t.downloadingSource : t.downloadSource}
+                        {downloadingId === source.id ? t('instructor.sourceLibrary.downloadingSource') : t('instructor.sourceLibrary.downloadSource')}
                       </button>
                     )}
 
@@ -603,19 +600,19 @@ export default function SourceLibraryPanel() {
                       disabled={recovering}
                       className="cursor-pointer rounded-xl border border-(--border) bg-(--surface) px-3 py-2 text-xs font-bold text-(--text-secondary) transition-colors hover:bg-(--surface-secondary) focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {ct.edit}
+                      {t('instructor.sourceLibrary.commonEdit')}
                     </button>
 
                     <DeleteConfirm
                       message={getDeleteSourceMessage(source)}
                       onConfirm={() => deleteSource(source)}
-                      triggerLabel={t.deleteEverywhere}
-                      confirmLabel={t.deleteEverywhere}
-                      cancelLabel={ct.cancel}
+                      triggerLabel={t('instructor.sourceLibrary.deleteEverywhere')}
+                      confirmLabel={t('instructor.sourceLibrary.deleteEverywhere')}
+                      cancelLabel={t('cancel')}
                       disabled={deletingId === source.id || recovering}
                       className="cursor-pointer rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {deletingId === source.id ? t.deletingSource : t.deleteEverywhere}
+                      {deletingId === source.id ? t('instructor.sourceLibrary.deletingSource') : t('instructor.sourceLibrary.deleteEverywhere')}
                     </DeleteConfirm>
                   </div>
                 </div>
@@ -628,7 +625,7 @@ export default function SourceLibraryPanel() {
                         <p className="mt-1 text-[11px] leading-relaxed opacity-90">{recovery.description}</p>
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
                           <span className="font-bold">
-                            {t.sourceErrorCode}: <code className="rounded bg-white/70 px-1.5 py-0.5 font-mono">{recovery.code}</code>
+                            {t('instructor.sourceLibrary.sourceErrorCode')}: <code className="rounded bg-white/70 px-1.5 py-0.5 font-mono">{recovery.code}</code>
                           </span>
                           {source.processingError && (
                             <button type="button"
@@ -636,7 +633,7 @@ export default function SourceLibraryPanel() {
                               aria-controls={`source-error-${source.id}`}
                               onClick={() => setExpandedErrorId(current => current === source.id ? null : source.id)}
                               className="cursor-pointer font-bold underline underline-offset-2 focus:outline-none focus:ring-2 focus:ring-(--focus)">
-                              {expandedErrorId === source.id ? t.hideErrorDetails : t.showErrorDetails}
+                              {expandedErrorId === source.id ? t('instructor.sourceLibrary.hideErrorDetails') : t('instructor.sourceLibrary.showErrorDetails')}
                             </button>
                           )}
                         </div>
@@ -654,7 +651,7 @@ export default function SourceLibraryPanel() {
                             <svg className={`h-4 w-4 ${recovering ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h5M20 20v-5h-5M5.6 15A7 7 0 0 0 18 17M18.4 9A7 7 0 0 0 6 7" />
                             </svg>
-                            {recovering && recoveringSource?.action === 'retry' ? t.retryingSource : t.retrySource}
+                            {recovering && recoveringSource?.action === 'retry' ? t('instructor.sourceLibrary.retryingSource') : t('instructor.sourceLibrary.retrySource')}
                           </button>
                         ) : (
                           <>
@@ -671,7 +668,7 @@ export default function SourceLibraryPanel() {
                               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 16V4m0 0L8 8m4-4 4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
                               </svg>
-                              {recovering && recoveringSource?.action === 'upload' ? t.uploadingSourcePdf : t.uploadSourcePdf}
+                              {recovering && recoveringSource?.action === 'upload' ? t('instructor.sourceLibrary.uploadingSourcePdf') : t('instructor.sourceLibrary.uploadSourcePdf')}
                             </label>
                           </>
                         )}
@@ -686,29 +683,29 @@ export default function SourceLibraryPanel() {
       )}
 
       {totalPages > 1 && (
-        <nav aria-label={t.sourceLibraryPagination} className="flex items-center justify-center gap-3 pt-4">
+        <nav aria-label={t('instructor.sourceLibrary.sourceLibraryPagination')} className="flex items-center justify-center gap-3 pt-4">
           <button type="button" onClick={() => setPage(current => Math.max(0, current - 1))} disabled={page === 0 || loading}
             className="cursor-pointer rounded-lg border border-(--border) bg-(--surface) px-4 py-2 text-xs font-bold text-(--text-secondary) transition-colors hover:bg-(--surface-secondary) focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50">
-            {t.prev}
+            {t('instructor.sourceLibrary.prev')}
           </button>
           <span className="text-xs font-semibold text-(--text-tertiary)">{page + 1} / {totalPages}</span>
           <button type="button" onClick={() => setPage(current => Math.min(totalPages - 1, current + 1))} disabled={page + 1 >= totalPages || loading}
             className="cursor-pointer rounded-lg border border-(--border) bg-(--surface) px-4 py-2 text-xs font-bold text-(--text-secondary) transition-colors hover:bg-(--surface-secondary) focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50">
-            {t.next}
+            {t('instructor.sourceLibrary.next')}
           </button>
         </nav>
       )}
 
-      <Modal open={!!editingSource} onClose={closeEdit} title={t.editSourceTitle} closeLabel={ct.close}>
+      <Modal open={!!editingSource} onClose={closeEdit} title={t('instructor.sourceLibrary.editSourceTitle')} closeLabel={t('close')}>
         <form onSubmit={handleSaveTitle} className="space-y-4">
-          <p className="text-xs text-(--text-secondary)">{t.editSourceTitleDesc}</p>
+          <p className="text-xs text-(--text-secondary)">{t('instructor.sourceLibrary.editSourceTitleDesc')}</p>
           <div className="space-y-1.5">
             <label htmlFor="source-edit-title" className="text-[10px] font-black uppercase tracking-wide text-(--text-secondary)">
-              {t.sourceTitle} <span className="text-rose-500">*</span>
+              {t('instructor.sourceLibrary.sourceTitle')} <span className="text-rose-500">*</span>
             </label>
             <input id="source-edit-title" type="text" value={editTitle}
               onChange={event => setEditTitle(event.target.value)}
-              placeholder={editingSource?.originalFilename || t.sourceTitle}
+              placeholder={editingSource?.originalFilename || t('instructor.sourceLibrary.sourceTitle')}
               className="w-full rounded-xl border border-(--border) bg-(--surface-secondary) px-4 py-2.5 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus)" />
           </div>
           {editError && (
@@ -717,24 +714,19 @@ export default function SourceLibraryPanel() {
           <div className="flex items-center justify-end gap-2 border-t border-(--border-light) pt-4">
             <button type="button" onClick={closeEdit} disabled={saving}
               className="cursor-pointer rounded-xl border border-(--border) px-4 py-2 text-xs font-bold text-(--text-secondary) transition-colors hover:bg-(--surface-secondary) focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50">
-              {ct.cancel}
+              {t('cancel')}
             </button>
             <button type="submit" disabled={saving}
               className="cursor-pointer rounded-xl bg-(--brand) px-4 py-2 text-xs font-bold text-(--on-brand) shadow-sm transition-colors hover:bg-(--brand-hover) focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50">
-              {saving ? ct.saving : ct.save}
+              {saving ? t('saving') : t('save')}
             </button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={showGuide} onClose={() => setShowGuide(false)} title={language === 'vi' ? 'Hướng dẫn Thư viện Nguồn' : 'Source Library Guide'} closeLabel={ct.close}>
+      <Modal open={showGuide} onClose={() => setShowGuide(false)} title={t('instructor.sourceLibrary.guideTitle')} closeLabel={t('close')}>
         <ol className="space-y-3 text-xs">
-          {[
-            language === 'vi' ? 'Quản lý tập trung toàn bộ các tài liệu và bài báo đã được tải lên hoặc nạp qua DOI trong hệ thống.' : 'Centrally manage all uploaded papers and DOI-ingested documents across your collections.',
-            language === 'vi' ? 'Xem trạng thái xử lý chi tiết (READY, PROCESSING, FAILED, METADATA_FETCHED) và kích thước tệp.' : 'Track processing statuses (READY, PROCESSING, FAILED, METADATA_FETCHED) and file sizes.',
-            language === 'vi' ? 'Khôi phục nhanh: Sử dụng nút Thử lại hoặc Tải PDF trực tiếp inline trên thẻ khi gặp lỗi trích xuất hoặc bị chặn.' : 'Quick recovery: Retry extraction or upload missing PDFs directly from the action bar if downloads were blocked.',
-            language === 'vi' ? 'Xem nhanh nội dung PDF bằng trình xem trước tích hợp hoặc tải về máy tính bất cứ lúc nào.' : 'Preview PDF files directly with the built-in document viewer or download copies anytime.'
-          ].map((step, i) => (
+          {t('instructor.sourceLibrary.guideSteps', { returnObjects: true }).map((step, i) => (
             <li key={i} className="flex items-start gap-3">
               <span className="shrink-0 w-5 h-5 rounded-full bg-(--brand) text-(--on-brand) text-[10px] font-black flex items-center justify-center">{i + 1}</span>
               <span className="text-(--text-secondary) leading-relaxed">{step}</span>

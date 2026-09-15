@@ -6,6 +6,12 @@ import { fileURLToPath } from 'node:url';
 
 const FE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE_ROOT = path.join(FE_ROOT, 'src');
+const TEST_ROOT = path.join(FE_ROOT, 'test');
+const CURRENT_TEST_FILE = fileURLToPath(import.meta.url);
+const LEGACY_CATALOG_FILES = ['home.js', 'common.js', 'student.js', 'instructor.js', 'index.js'];
+const LEGACY_CATALOG_SYMBOLS = /\b(?:homeText|commonText|studentText|instructorText)\b/;
+const LEGACY_CATALOG_IMPORT = /(?:from\s+|import\s*(?:\(\s*)?|require\s*\(\s*)['"][^'"]*locales(?:[\\/](?:index|home|common|student|instructor)(?:\.js)?)?['"]/;
+const APP_LANG_READ = /(?:window\.)?localStorage\.getItem\s*\(\s*['"]app_lang['"]\s*\)/;
 const locales = Object.fromEntries(['en', 'vi'].map(language => [
   language,
   JSON.parse(fs.readFileSync(path.join(SOURCE_ROOT, 'locales', `${language}.json`), 'utf8')),
@@ -167,6 +173,31 @@ const WORKSPACE_SOURCE_FILES = [
   ['components', 'features', 'VisualSourceMap.jsx'],
 ];
 
+const INSTRUCTOR_PHASE2_SOURCE_FILES = [
+  ['components', 'Instructor', 'SourceLibraryPanel.jsx'],
+  ['components', 'features', 'UniversalDocumentIngestionModal.jsx'],
+  ['pages', 'Instructor', 'CollectionList.jsx'],
+  ['pages', 'Instructor', 'CollectionDetail.jsx'],
+  ['pages', 'Instructor', 'Dashboard.jsx'],
+  ['pages', 'Instructor', 'EvidenceTraceReview.jsx'],
+  ['pages', 'Instructor', 'ProjectDetail.jsx'],
+  ['pages', 'Instructor', 'ProjectManagement.jsx'],
+  ['pages', 'Instructor', 'ReviewRequests.jsx'],
+  ['pages', 'Instructor', 'SourceLibrary.jsx'],
+];
+
+const INSTRUCTOR_PHASE2_DOMAINS = [
+  'instructor.dashboard',
+  'instructor.projectManagement',
+  'instructor.projectDetail',
+  'instructor.reviewRequests',
+  'instructor.collections',
+  'instructor.collectionDetail',
+  'instructor.sourceLibrary',
+  'instructor.evidenceTrace',
+  'shared.ingestion',
+];
+
 const STUDENT_WORKSPACE_KEYS = [
   'citationKeyPrompt', 'defaultDocumentFilename', 'defaultImageAlt', 'defaultLinkLabel', 'emptyPreview',
   'labelNamePrompt', 'latexLabel', 'linkLabelPrompt', 'linkUrlPrompt', 'missingImage',
@@ -212,6 +243,15 @@ const DYNAMIC_KEY_DOMAINS = new Map([
   ['home.features.', ['structuredData.title', 'structuredData.desc', 'citationReview.title', 'citationReview.desc', 'feedback.title', 'feedback.desc', 'documentExtraction.title', 'documentExtraction.desc', 'vectorSearch.title', 'vectorSearch.desc', 'realtime.title', 'realtime.desc']],
   ['home.roles.', ['student.title', 'student.desc', 'instructor.title', 'instructor.desc']],
   ['home.workflow.', ['step1.title', 'step1.desc', 'step2.title', 'step2.desc', 'step3.title', 'step3.desc', 'step4.title', 'step4.desc', 'step5.title', 'step5.desc', 'step6.title', 'step6.desc']],
+  ['instructor.evidenceTrace.judgment.', ['EFFECTIVE', 'PARTIAL', 'INEFFECTIVE', 'UNKNOWN']],
+  ['instructor.evidenceTrace.outcome.', ['RESOLVED', 'PARTIALLY_RESOLVED', 'UNRESOLVED', 'STALE', 'UNKNOWN']],
+  ['instructor.evidenceTrace.studentActionValue.', ['ADD_CITATION', 'PARAPHRASE', 'QUALIFY', 'SYNTHESIZE', 'QUOTE', 'REMOVE', 'DISMISS_WITH_REASON', 'UNKNOWN']],
+  ['instructor.collectionDetail.tab.', ['documents', 'connectedMap', 'visualizeMap', 'UNKNOWN']],
+  ['instructor.projectDetail.action.', ['archive', 'unarchive', 'complete', 'UNKNOWN']],
+  ['instructor.projectDetail.documentType.', ['PAPER', 'SOURCE', 'UNKNOWN']],
+  ['instructor.projectDetail.projectRole.', ['MEMBER', 'LEADER', 'INSTRUCTOR', 'UNKNOWN']],
+  ['instructor.projectDetail.userRole.', ['STUDENT', 'INSTRUCTOR', 'ADMIN', 'UNKNOWN']],
+  ['instructor.projectManagement.action.', ['archive', 'unarchive', 'complete', 'UNKNOWN']],
   ['selfCheckVerdict', ['MET', 'PARTIAL', 'NOT_MET', 'UNVERIFIABLE', 'UNKNOWN']],
   ['sourceMap.', ['outgoing', 'incoming', 'accessDenied', 'loadError']],
   ['sourceMap.processing.', ['PENDING_UPLOAD', 'UPLOADED', 'METADATA_FETCHED', 'PDF_DOWNLOADED', 'QUEUED', 'PROCESSING', 'RAW_EXTRACTED', 'READY', 'COMPLETED', 'PARTIAL', 'FAILED', 'UNKNOWN']],
@@ -243,7 +283,7 @@ function sourceFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) return sourceFiles(fullPath);
-    return /\.(js|jsx)$/.test(entry.name) ? [fullPath] : [];
+    return /\.(?:[cm]?js|jsx|tsx?)$/.test(entry.name) ? [fullPath] : [];
   });
 }
 
@@ -275,6 +315,39 @@ function dynamicTranslationPrefixes() {
     return [...source.matchAll(/(?<![\w.])(?:t|translate)\(\s*`([^`]*?)\$\{/g)].map(match => match[1]);
   }));
 }
+
+test('i18next JSON catalogs are the only runtime localization source', () => {
+  const legacyFiles = LEGACY_CATALOG_FILES.filter(file => fs.existsSync(path.join(SOURCE_ROOT, 'locales', file)));
+  assert.deepEqual(legacyFiles, [], `legacy localization files still exist: ${legacyFiles.join(', ')}`);
+
+  const scannedFiles = [...sourceFiles(SOURCE_ROOT), ...sourceFiles(TEST_ROOT)]
+    .filter(file => path.resolve(file) !== path.resolve(CURRENT_TEST_FILE));
+  for (const file of scannedFiles) {
+    const source = fs.readFileSync(file, 'utf8');
+    const relativeFile = path.relative(FE_ROOT, file);
+    assert.doesNotMatch(source, LEGACY_CATALOG_SYMBOLS, `${relativeFile} references a legacy catalog symbol`);
+    assert.doesNotMatch(source, LEGACY_CATALOG_IMPORT, `${relativeFile} imports a legacy catalog file or index`);
+  }
+
+  const i18nFile = path.join(SOURCE_ROOT, 'i18n.js');
+  const i18nSource = fs.readFileSync(i18nFile, 'utf8');
+  assert.match(i18nSource, APP_LANG_READ, 'i18n.js must initialize from app_lang');
+  for (const file of sourceFiles(SOURCE_ROOT).filter(file => path.resolve(file) !== path.resolve(i18nFile))) {
+    assert.doesNotMatch(
+      fs.readFileSync(file, 'utf8'),
+      APP_LANG_READ,
+      `${path.relative(FE_ROOT, file)} reads app_lang outside i18n.js`,
+    );
+  }
+
+  const languageContext = fs.readFileSync(path.join(SOURCE_ROOT, 'context', 'LanguageContext.jsx'), 'utf8');
+  assert.match(languageContext, /useTranslation\(\)/, 'LanguageContext must derive language from i18next');
+  assert.match(languageContext, /normalizeLanguage\(i18n\.resolvedLanguage \|\| i18n\.language\)/, 'LanguageContext must normalize i18next language');
+  assert.match(languageContext, /localStorage\.setItem\(\s*['"]app_lang['"]\s*,\s*language\s*\)/, 'LanguageContext must persist app_lang');
+  assert.match(languageContext, /document\.documentElement\.lang = language/, 'LanguageContext must update the document language');
+  assert.match(languageContext, /value=\{\{ language, setLanguage: changeLanguage, toggleLanguage \}\}/, 'LanguageContext must retain its adapter API');
+  assert.doesNotMatch(languageContext, /\buseState\s*\(/, 'LanguageContext must not own independent language state');
+});
 
 test('Home catalogs preserve the complete English and Vietnamese pilot surface', () => {
   for (const [language, expectedCopy] of Object.entries(HOME_SMOKE_COPY)) {
@@ -358,6 +431,41 @@ test('Workspace dynamic copy uses explicit domains and translated unknown fallba
       for (const key of keys) {
         assert.equal(typeof getPath(catalog, key), 'string', `missing ${language} ${domain} state translation: ${key}`);
       }
+    }
+  }
+});
+
+test('remaining Instructor surfaces own interface copy in i18next JSON catalogs', () => {
+  const source = INSTRUCTOR_PHASE2_SOURCE_FILES
+    .map(parts => fs.readFileSync(path.join(SOURCE_ROOT, ...parts), 'utf8'))
+    .join('\n');
+
+  for (const parts of INSTRUCTOR_PHASE2_SOURCE_FILES) {
+    const file = path.join(SOURCE_ROOT, ...parts);
+    const source = fs.readFileSync(file, 'utf8');
+    assert.doesNotMatch(source, /(?:commonText|studentText|instructorText)/, `${file} still uses a legacy JS catalog`);
+    assert.doesNotMatch(source, /app_lang/, `${file} reads the persisted language key directly`);
+    assert.doesNotMatch(source, /language\s*===\s*['"]vi['"]/, `${file} selects interface copy by language`);
+  }
+
+  assert.doesNotMatch(source, /statusLabels|replaceAll\('_', ' '\)|\bt\[/, 'Instructor surfaces expose a raw dynamic label');
+
+  for (const [language, catalog] of Object.entries(locales)) {
+    for (const domain of INSTRUCTOR_PHASE2_DOMAINS) {
+      assert.ok(
+        Object.keys(catalog).some((key) => key.startsWith(`${domain}.`)),
+        `missing ${language} ${domain} catalog`,
+      );
+    }
+    for (const key of [
+      'instructor.sourceLibrary.guideSteps',
+      'instructor.collections.guideSteps',
+      'instructor.collectionDetail.guideSteps',
+      'instructor.dashboard.tourSteps',
+      'instructor.projectDetail.processingSteps',
+      'instructor.projectManagement.guideSteps',
+    ]) {
+      assert.equal(getPath(catalog, key).length, 4, `unexpected ${language} ${key} length`);
     }
   }
 });

@@ -1,17 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { StatusBadge, LoadingSkeleton, EmptyState, TourLauncher, AppHeader, Breadcrumb, EntityCard } from '../../components';
-import { instructorText, commonText } from '../../locales';
-import { useLanguage } from '../../context/LanguageContext';
+import { useTranslation } from 'react-i18next';
 import { formatDateTime } from '../../utils/formatters/date';
 import { CARD_GRID_PAGE_SIZE } from '../../constants';
 import api from '../../services/api.js';
 
 export default function ReviewRequests() {
   const [searchParams] = useSearchParams();
-  const { language } = useLanguage();
-  const t = instructorText[language];
-  const ct = commonText[language];
+  const { t, i18n } = useTranslation();
 
   const [requests, setRequests] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -25,7 +22,7 @@ export default function ReviewRequests() {
   const [page, setPage] = useState(0);
 
   const tourSteps = [
-    { element: '#review-table', popover: { title: t.reviewQueue, description: t.reviewQueueDesc, side: 'top', align: 'start' } },
+    { element: '#review-table', popover: { title: t('instructor.reviewRequests.reviewQueue'), description: t('instructor.reviewRequests.reviewQueueDesc'), side: 'top', align: 'start' } },
   ];
 
   const fetchReviewRequests = async () => {
@@ -38,7 +35,7 @@ export default function ReviewRequests() {
       setRequests(res.data);
       setProjects(proj?.data?.content || []);
     }
-    catch { setErrorMessage(t.loadReviewRequestsFailed); }
+    catch { setErrorMessage(t('instructor.reviewRequests.loadReviewRequestsFailed')); }
     finally { setLoading(false); }
   };
 
@@ -101,13 +98,13 @@ export default function ReviewRequests() {
       <main className="max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Breadcrumb
           items={[
-            { label: t.dashboard, path: '/instructor/dashboard' },
-            { label: t.reviewRequests }
+            { label: t('instructor.reviewRequests.dashboard'), path: '/instructor/dashboard' },
+            { label: t('instructor.reviewRequests.reviewRequests') }
           ]}
         />
         <div className="mb-6 border-b border-(--border) pb-6">
-          <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t.reviewRequests}</h1>
-          <p className="text-xs text-(--text-tertiary) mt-1">{t.pendingRequests}</p>
+          <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t('instructor.reviewRequests.reviewRequests')}</h1>
+          <p className="text-xs text-(--text-tertiary) mt-1">{t('instructor.reviewRequests.pendingRequests')}</p>
         </div>
 
         {errorMessage && (
@@ -120,23 +117,23 @@ export default function ReviewRequests() {
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t.searchProjects || ct.search}
-            aria-label={ct.search}
+            placeholder={t('instructor.reviewRequests.searchProjects')}
+            aria-label={t('search')}
             className="w-full sm:w-56 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus)"
           />
           <select
             value={projectFilter}
             onChange={(e) => setProjectFilter(e.target.value)}
-            aria-label="Filter by project"
+            aria-label={t('instructor.reviewRequests.filterByProject')}
             className="w-full sm:w-48 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus) [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            <option value="">{t.allProjects}</option>
+            <option value="">{t('instructor.reviewRequests.allProjects')}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>{p.title || `#${String(p.id).slice(0, 8)}`}</option>
             ))}
           </select>
           <label className="flex items-center gap-1 text-[10px] font-bold uppercase text-(--text-tertiary)">
-            <span>{t.fromDate}</span>
+            <span>{t('instructor.reviewRequests.fromDate')}</span>
             <input
               type="date"
               value={dateFrom}
@@ -145,7 +142,7 @@ export default function ReviewRequests() {
             />
           </label>
           <label className="flex items-center gap-1 text-[10px] font-bold uppercase text-(--text-tertiary)">
-            <span>{t.toDate}</span>
+            <span>{t('instructor.reviewRequests.toDate')}</span>
             <input
               type="date"
               value={dateTo}
@@ -159,7 +156,7 @@ export default function ReviewRequests() {
               onClick={clearFilters}
               className="text-[10px] font-bold text-(--brand) hover:underline px-2"
             >
-              {ct.clear || ct.cancel}
+              {t('instructor.reviewRequests.commonClear')}
             </button>
           )}
 
@@ -168,8 +165,8 @@ export default function ReviewRequests() {
               type="button"
               onClick={() => setViewMode('list')}
               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'list' ? 'bg-(--surface) text-(--brand-foreground) shadow-xs' : 'text-(--text-tertiary) hover:text-(--text-primary)'}`}
-              title="List View"
-              aria-label="List View"
+              title={t('instructor.reviewRequests.listView')}
+              aria-label={t('instructor.reviewRequests.listView')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
@@ -177,8 +174,8 @@ export default function ReviewRequests() {
               type="button"
               onClick={() => setViewMode('card')}
               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${viewMode === 'card' ? 'bg-(--surface) text-(--brand-foreground) shadow-xs' : 'text-(--text-tertiary) hover:text-(--text-primary)'}`}
-              title="Card View"
-              aria-label="Card View"
+              title={t('instructor.reviewRequests.cardView')}
+              aria-label={t('instructor.reviewRequests.cardView')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
             </button>
@@ -197,7 +194,7 @@ export default function ReviewRequests() {
           )
         ) : filtered.length === 0 ? (
           <div id="review-table" className="bg-(--surface) rounded-2xl border border-(--border) shadow-sm">
-            <EmptyState title={t.noRequests} />
+            <EmptyState title={t('instructor.reviewRequests.noRequests')} />
           </div>
         ) : viewMode === 'list' ? (
           <div id="review-table" className="bg-(--surface) rounded-2xl border border-(--border) shadow-sm overflow-hidden">
@@ -205,18 +202,18 @@ export default function ReviewRequests() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-(--surface-secondary) text-(--text-tertiary) text-[10px] font-bold uppercase border-b border-(--border-light)">
-                    <th className="px-6 py-4">{t.project}</th>
-                    <th className="px-6 py-4">{t.studentName}</th>
-                    <th className="px-6 py-4 whitespace-nowrap">{t.metadata}</th>
-                    <th className="px-6 py-4">{ct.status}</th>
-                    <th className="px-6 py-4">{t.requestedAt}</th>
-                    <th className="px-6 py-4">{ct.actions}</th>
+                    <th className="px-6 py-4">{t('instructor.reviewRequests.project')}</th>
+                    <th className="px-6 py-4">{t('instructor.reviewRequests.studentName')}</th>
+                    <th className="px-6 py-4 whitespace-nowrap">{t('instructor.reviewRequests.metadata')}</th>
+                    <th className="px-6 py-4">{t('instructor.reviewRequests.status')}</th>
+                    <th className="px-6 py-4">{t('instructor.reviewRequests.requestedAt')}</th>
+                    <th className="px-6 py-4">{t('instructor.reviewRequests.commonActions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-(--border-light) text-xs text-(--text-secondary)">
                   {paged.map((req) => {
                     const proj = projectById.get(String(req.projectId));
-                    const projectTitle = proj?.title || `${t.project} #${String(req.projectId).slice(0, 8)}`;
+                    const projectTitle = proj?.title || `${t('instructor.reviewRequests.project')} #${String(req.projectId).slice(0, 8)}`;
                     return (
                       <tr key={req.id} className="hover:bg-(--surface-secondary) transition-colors">
                         <td className="px-6 py-4">
@@ -231,25 +228,25 @@ export default function ReviewRequests() {
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1.5">
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-[10px] font-bold text-(--text-secondary)">
-                              {t.members}: {proj?.memberCount ?? 0}
+                              {t('instructor.reviewRequests.members')}: {proj?.memberCount ?? 0}
                             </span>
                             {/* ponytail: ProjectResponse DTO only exposes memberCount today (BE: ProjectResponse.java).
                                 totalSections / totalSources not in the wire payload; revisit when BE enriches. */}
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-[10px] font-bold text-(--text-tertiary)">
-                              {t.sections}: —
+                              {t('instructor.reviewRequests.sections')}: —
                             </span>
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-[10px] font-bold text-(--text-tertiary)">
-                              {t.sources}: —
+                              {t('instructor.reviewRequests.sources')}: —
                             </span>
                           </div>
                         </td>
                         <td className="px-6 py-4"><StatusBadge status={req.status} /></td>
                         <td className="px-6 py-4 whitespace-nowrap text-[10px] font-mono text-(--text-tertiary)">
-                          {req.requestedAt ? formatDateTime(req.requestedAt, language) : '—'}
+                          {req.requestedAt ? formatDateTime(req.requestedAt, i18n.language) : '—'}
                         </td>
                         <td className="px-6 py-4">
                           <Link to={`/instructor/requests/${encodeURIComponent(req.projectId)}?review=${encodeURIComponent(req.id)}`}
-                            className="text-xs font-black text-(--brand) hover:underline">{t.review}</Link>
+                            className="text-xs font-black text-(--brand) hover:underline">{t('instructor.reviewRequests.review')}</Link>
                         </td>
                       </tr>
                     );
@@ -262,30 +259,30 @@ export default function ReviewRequests() {
           <div id="review-table" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {paged.map((req) => {
               const proj = projectById.get(String(req.projectId));
-              const projectTitle = proj?.title || `${t.project} #${String(req.projectId).slice(0, 8)}`;
+              const projectTitle = proj?.title || `${t('instructor.reviewRequests.project')} #${String(req.projectId).slice(0, 8)}`;
               return (
                 <EntityCard
                   key={req.id}
                   className="hover:-translate-y-1 hover:shadow-lg transition-all duration-200"
                   title={projectTitle}
-                  subtitle={req.studentName ? `${t.studentName || (language === 'vi' ? 'Sinh viên' : 'Student')}: ${req.studentName}` : undefined}
+                  subtitle={req.studentName ? `${t('instructor.reviewRequests.studentName')}: ${req.studentName}` : undefined}
                   status={req.status}
                   onClick={() => { window.location.href = `/instructor/requests/${encodeURIComponent(req.projectId)}?review=${encodeURIComponent(req.id)}`; }}
                 >
                   <div className="flex flex-wrap gap-1.5 text-[10px] font-mono text-(--text-tertiary)">
                     <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">
-                      {t.members || 'Members'}: {proj?.memberCount ?? 0}
+                      {t('instructor.reviewRequests.members')}: {proj?.memberCount ?? 0}
                     </span>
                     {/* ponytail: same deferral as the list view — BE DTO only ships memberCount today. */}
                     <span className="px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-(--text-tertiary) font-bold">
-                      {t.sections || 'Sections'}: —
+                      {t('instructor.reviewRequests.sections')}: —
                     </span>
                     <span className="px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-(--text-tertiary) font-bold">
-                      {t.sources || 'Sources'}: —
+                      {t('instructor.reviewRequests.sources')}: —
                     </span>
                   </div>
                   <div className="mt-2 text-[10px] font-mono text-(--text-tertiary)">
-                    {req.requestedAt ? formatDateTime(req.requestedAt, language) : ''}
+                    {req.requestedAt ? formatDateTime(req.requestedAt, i18n.language) : ''}
                   </div>
                 </EntityCard>
               );
@@ -295,9 +292,9 @@ export default function ReviewRequests() {
 
         {totalPages > 1 && (
           <div className="flex justify-between items-center mt-6 text-xs">
-            <button disabled={safePage === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{ct.back}</button>
-            <span className="text-(--text-tertiary) font-mono font-bold">{t.page} {safePage + 1} {t.of} {totalPages}</span>
-            <button disabled={safePage >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{ct.next}</button>
+            <button disabled={safePage === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{t('back')}</button>
+            <span className="text-(--text-tertiary) font-mono font-bold">{t('instructor.reviewRequests.page')} {safePage + 1} {t('instructor.reviewRequests.of')} {totalPages}</span>
+            <button disabled={safePage >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{t('instructor.reviewRequests.commonNext')}</button>
           </div>
         )}
       </main>

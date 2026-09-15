@@ -6,232 +6,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 
-const CROSSFADE = {
-  type: 'spring',
-  stiffness: 260,
-  damping: 34,
-  mass: 0.8,
-};
-const EASE = [0.23, 1, 0.32, 1];
-
-const ALLOW = {
-  numeric: /^[0-9]$/,
-  alphanumeric: /^[0-9a-zA-Z]$/,
-};
-
-function useOtpInput({
-  length = 6,
-  mode = 'numeric',
-  defaultValue = '',
-  disabled = false,
-  onChange,
-  onComplete,
-} = {}) {
-  const allow = ALLOW[mode];
-
-  const keep = useCallback(
-    (text) =>
-      text
-        .split('')
-        .filter((c) => allow.test(c))
-        .join(''),
-    [allow],
-  );
-
-  const [chars, setChars] = useState(() => {
-    const seed = defaultValue
-      .split('')
-      .filter((c) => ALLOW[mode].test(c))
-      .slice(0, length);
-    return Array.from({ length }, (_, i) => seed[i] ?? '');
-  });
-  const [focusedIndex, setFocusedIndex] = useState(-1);
-
-  const charsRef = useRef(chars);
-  charsRef.current = chars;
-  const refs = useRef([]);
-
-  const changed = useRef(onChange);
-  changed.current = onChange;
-  const completed = useRef(onComplete);
-  completed.current = onComplete;
-
-  useEffect(() => {
-    setChars((prev) =>
-      prev.length === length
-        ? prev
-        : Array.from({ length }, (_, i) => prev[i] ?? ''),
-    );
-    refs.current.length = length;
-  }, [length]);
-
-  const commit = useCallback((next) => {
-    charsRef.current = next;
-    setChars(next);
-    const value = next.join('');
-    changed.current?.(value);
-    if (next.length > 0 && next.every((c) => c !== '')) completed.current?.(value);
-  }, []);
-
-  const focusAt = useCallback(
-    (index) => {
-      const el = refs.current[Math.max(0, Math.min(length - 1, index))];
-      if (!el) return;
-      el.focus();
-      el.select();
-    },
-    [length],
-  );
-
-  const fillFrom = useCallback(
-    (index, text) => {
-      const incoming = keep(text);
-      if (incoming.length === 0) return;
-      const next = [...charsRef.current];
-      let cursor = index;
-      for (const c of incoming) {
-        if (cursor >= length) break;
-        next[cursor] = c;
-        cursor += 1;
-      }
-      commit(next);
-      focusAt(cursor);
-    },
-    [commit, focusAt, keep, length],
-  );
-
-  const getCellProps = useCallback(
-    (index) => ({
-      ref: (el) => {
-        refs.current[index] = el;
-      },
-      value: chars[index] ?? '',
-      disabled,
-      type: 'text',
-      inputMode: mode === 'numeric' ? 'numeric' : 'text',
-      autoComplete: index === 0 ? 'one-time-code' : 'off',
-      autoCorrect: 'off',
-      autoCapitalize: 'off',
-      spellCheck: false,
-      onChange: (e) => {
-        const previous = charsRef.current[index] ?? '';
-        const raw = e.currentTarget.value;
-        const trimmed =
-          raw.length > 1 && previous && raw.startsWith(previous)
-            ? raw.slice(previous.length)
-            : raw;
-        const incoming = keep(trimmed);
-
-        if (incoming.length === 0) {
-          if (raw.length === 0 && previous) {
-            const next = [...charsRef.current];
-            next[index] = '';
-            commit(next);
-          }
-          e.currentTarget.value = charsRef.current[index] ?? '';
-          return;
-        }
-
-        if (incoming.length === 1) {
-          const next = [...charsRef.current];
-          next[index] = incoming;
-          e.currentTarget.value = incoming;
-          commit(next);
-          if (index < length - 1) focusAt(index + 1);
-          return;
-        }
-
-        fillFrom(index, incoming);
-      },
-      onKeyDown: (e) => {
-        if (e.key === 'Backspace') {
-          e.preventDefault();
-          const current = charsRef.current;
-          const next = [...current];
-          if (current[index]) {
-            next[index] = '';
-            commit(next);
-            return;
-          }
-          if (index > 0) {
-            next[index - 1] = '';
-            commit(next);
-            focusAt(index - 1);
-          }
-          return;
-        }
-        if (e.key === 'Delete') {
-          e.preventDefault();
-          const next = [...charsRef.current];
-          next[index] = '';
-          commit(next);
-          return;
-        }
-        if (e.key === 'ArrowLeft') {
-          e.preventDefault();
-          focusAt(index - 1);
-          return;
-        }
-        if (e.key === 'ArrowRight') {
-          e.preventDefault();
-          focusAt(index + 1);
-          return;
-        }
-        if (e.key === 'Home') {
-          e.preventDefault();
-          focusAt(0);
-          return;
-        }
-        if (e.key === 'End') {
-          e.preventDefault();
-          focusAt(length - 1);
-        }
-      },
-      onPaste: (e) => {
-        e.preventDefault();
-        const text = keep(e.clipboardData.getData('text'));
-        fillFrom(text.length >= length ? 0 : index, text);
-      },
-      onFocus: (e) => {
-        e.currentTarget.select();
-        const firstEmpty = charsRef.current.findIndex((c) => c === '');
-        if (firstEmpty !== -1 && firstEmpty < index) {
-          focusAt(firstEmpty);
-          return;
-        }
-        setFocusedIndex(index);
-      },
-      onBlur: (e) => {
-        const to = e.relatedTarget;
-        if (to && refs.current.includes(to)) return;
-        setFocusedIndex(-1);
-      },
-    }),
-    [chars, commit, disabled, fillFrom, focusAt, keep, length, mode],
-  );
-
-  const value = chars.join('');
-
-  return {
-    chars,
-    value,
-    length,
-    complete: chars.length > 0 && chars.every((c) => c !== ''),
-    focusedIndex,
-    getCellProps,
-    focusAt,
-    clear: useCallback(() => {
-      commit(Array.from({ length }, () => ''));
-      focusAt(0);
-    }, [commit, focusAt, length]),
-  };
+function digitsOnly(value, length) {
+  return String(value ?? '').replace(/\D/g, '').slice(0, length);
 }
 
 export function OtpInput({
   length = 6,
-  mode = 'numeric',
   defaultValue = '',
   onChange,
   onComplete,
@@ -240,188 +21,150 @@ export function OtpInput({
   successMessage = '',
   hint = '',
   label = 'Verification code',
-  groupEvery = 3,
   disabled = false,
   autoFocus = false,
   focusOnError = true,
   className = '',
   ref,
 }) {
-  const reduced = useReducedMotion();
+  const [value, setValue] = useState(() => digitsOnly(defaultValue, length));
+  const [focused, setFocused] = useState(false);
+  const [selectionStart, setSelectionStart] = useState(value.length);
+  const inputRef = useRef(null);
+  const completedValueRef = useRef(null);
   const statusId = useId();
-
-  const { chars, focusedIndex, getCellProps, focusAt, clear } = useOtpInput({
-    length,
-    mode,
-    defaultValue,
-    disabled,
-    onChange,
-    onComplete,
-  });
-
-  const wasError = useRef(false);
   const error = status === 'error';
   const success = status === 'success';
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      clear: () => {
-        clear();
-        focusAt(0);
-      },
-      focus: () => focusAt(0),
-    }),
-    [clear, focusAt],
-  );
+  const focus = useCallback(() => inputRef.current?.focus(), []);
+  const commit = useCallback((nextValue) => {
+    const rawValue = String(nextValue ?? '');
+    const rawDigits = rawValue.replace(/\D/g, '');
+    const next = rawDigits.slice(0, length);
+    setValue(next);
+    onChange?.(next);
+    if (/[^\d\s-]/.test(rawValue) || rawDigits.length !== length) {
+      completedValueRef.current = null;
+    } else if (completedValueRef.current !== next) {
+      completedValueRef.current = next;
+      onComplete?.(next);
+    }
+    return next;
+  }, [length, onChange, onComplete]);
+  const clear = useCallback(() => {
+    commit('');
+    setSelectionStart(0);
+    focus();
+  }, [commit, focus]);
+
+  useImperativeHandle(ref, () => ({ clear, focus }), [clear, focus]);
 
   useEffect(() => {
-    if (error && !wasError.current && focusOnError && !disabled) focusAt(0);
-    wasError.current = error;
-  }, [error, focusOnError, disabled, focusAt]);
+    if (error && focusOnError && !disabled) focus();
+  }, [disabled, error, focus, focusOnError]);
 
-  useEffect(() => {
-    if (autoFocus && !disabled) focusAt(0);
-  }, [autoFocus, disabled, focusAt]);
-
-  const enter = reduced ? { duration: 0 } : { duration: 0.22, ease: EASE };
-  const swap = reduced ? { duration: 0 } : CROSSFADE;
-  const hasStatus =
-    hint.length > 0 || errorMessage.length > 0 || successMessage.length > 0;
-
+  const hasStatus = Boolean(hint || errorMessage || successMessage);
   const message = error ? errorMessage : success ? successMessage : hint;
   const messageTone = error
     ? 'text-rose-600 dark:text-rose-400'
     : success
       ? 'text-emerald-600 dark:text-emerald-400'
       : 'text-slate-500 dark:text-slate-400';
+  const activeIndex = Math.min(selectionStart, Math.max(0, length - 1));
 
   return (
-    <div className={`inline-flex flex-col ${className}`}>
-      <motion.div
-        role="group"
-        aria-label={label}
-        className="relative flex gap-2"
-        initial={false}
-        variants={{ idle: { x: 0 }, wrong: { x: [0, -5, 4, -3, 0] } }}
-        animate={error && !reduced ? 'wrong' : 'idle'}
-        transition={{ duration: 0.32, ease: EASE }}
-      >
-        {Array.from({ length }, (_, i) => {
-          const char = chars[i] ?? '';
-          const active = focusedIndex === i;
-          const gap = groupEvery > 0 && i > 0 && i % groupEvery === 0;
+    <div className={`inline-flex w-fit flex-col ${className}`}>
+      <div className="relative">
+        <div
+          data-otp-visual
+          aria-hidden="true"
+          onClick={focus}
+          className={`flex items-center gap-2 ${error ? 'animate-[otpShake_0.32s_cubic-bezier(0.23,1,0.32,1)] motion-reduce:animate-none' : ''}`}
+        >
+          {Array.from({ length }, (_, index) => {
+            const char = value[index];
+            const active = focused && !disabled && index === activeIndex;
+            const tone = error
+              ? 'border-rose-500 bg-white dark:border-rose-400 dark:bg-zinc-900'
+              : success
+                ? 'border-emerald-500 bg-white dark:border-emerald-400 dark:bg-zinc-900'
+                : active
+                  ? 'border-indigo-500 bg-white ring-2 ring-indigo-500/20 dark:border-indigo-400 dark:bg-zinc-900 dark:ring-indigo-400/20'
+                  : char
+                    ? 'border-slate-300 bg-white dark:border-slate-600 dark:bg-zinc-900'
+                    : 'border-slate-200 bg-slate-100/70 dark:border-slate-700 dark:bg-zinc-800/50';
 
-          return (
-            <div key={i} className={`relative h-12 w-10 ${gap ? 'ml-3' : ''}`}>
-              <input
-                {...getCellProps(i)}
-                aria-label={`${label}, character ${i + 1} of ${length}`}
-                aria-invalid={error || undefined}
-                aria-describedby={hasStatus ? statusId : undefined}
-                className={`h-12 w-10 rounded-[10px] border-2 text-center text-[15px] text-transparent caret-transparent outline-none transition-[background-color,border-color,box-shadow] duration-150 selection:bg-transparent focus-visible:outline-none disabled:opacity-50 ${
-                  error
-                    ? 'border-rose-500 bg-white dark:border-rose-400 dark:bg-zinc-900'
-                    : success
-                      ? 'border-emerald-500 bg-white dark:border-emerald-400 dark:bg-zinc-900'
-                      : active
-                        ? 'border-indigo-500 bg-white dark:border-indigo-400 dark:bg-zinc-900'
-                        : char
-                          ? 'border-slate-300 bg-white dark:border-slate-600 dark:bg-zinc-900'
-                          : 'border-slate-200 bg-slate-100/70 dark:border-slate-700 dark:bg-zinc-800/50'
-                }`}
-              />
-
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-0 grid place-items-center"
+            return (
+              <div
+                key={index}
+                data-otp-cell
+                data-active={active || undefined}
+                className={`relative flex h-12 w-10 items-center justify-center overflow-hidden rounded-[10px] border-2 font-mono text-[15px] tabular-nums text-slate-700 transition-[background-color,border-color,box-shadow,opacity] duration-150 motion-reduce:transition-none dark:text-slate-200 ${index === 3 ? 'ml-3' : ''} ${disabled ? 'opacity-50' : ''} ${tone}`}
               >
-                <AnimatePresence initial={false} mode="popLayout">
-                  {char ? (
-                    <motion.span
-                      key={char}
-                      initial={
-                        reduced
-                          ? false
-                          : {
-                              opacity: 0,
-                              scale: 0.97,
-                              y: 10,
-                              filter: 'blur(6px)',
-                            }
-                      }
-                      animate={{
-                        opacity: 1,
-                        scale: 1,
-                        y: 0,
-                        filter: 'blur(0px)',
-                      }}
-                      exit={
-                        reduced
-                          ? { opacity: 0 }
-                          : {
-                              opacity: 0,
-                              scale: 0.98,
-                              y: -6,
-                              filter: 'blur(3px)',
-                            }
-                      }
-                      transition={enter}
-                      className="col-start-1 row-start-1 font-mono text-[15px] tabular-nums text-slate-700 dark:text-slate-200"
-                    >
-                      {char}
-                    </motion.span>
-                  ) : null}
-                </AnimatePresence>
+                {char && (
+                  <span
+                    key={`${index}-${char}`}
+                    className="animate-[otpDigitEnter_0.22s_cubic-bezier(0.23,1,0.32,1)_both] motion-reduce:animate-none"
+                  >
+                    {char}
+                  </span>
+                )}
+                {active && !char && (
+                  <span className="absolute h-[17px] w-[1.5px] rounded-[1px] bg-slate-700 animate-[otpCaret_1.06s_linear_infinite] motion-reduce:animate-none dark:bg-slate-200" />
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-                {active && !char && !disabled ? (
-                  <motion.span
-                    className="col-start-1 row-start-1 block h-[17px] w-[1.5px] rounded-[1px] bg-slate-700 dark:bg-slate-200"
-                    initial={{ opacity: 1 }}
-                    animate={
-                      reduced ? { opacity: 1 } : { opacity: [1, 1, 0, 0] }
-                    }
-                    transition={
-                      reduced
-                        ? { duration: 0 }
-                        : {
-                            duration: 1.06,
-                            times: [0, 0.5, 0.5, 1],
-                            repeat: Infinity,
-                            ease: 'linear',
-                          }
-                    }
-                  />
-                ) : null}
-              </span>
-            </div>
-          );
-        })}
-      </motion.div>
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          maxLength={length}
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="one-time-code"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          autoFocus={autoFocus}
+          disabled={disabled}
+          aria-label={label}
+          aria-invalid={error || undefined}
+          aria-describedby={hasStatus ? statusId : undefined}
+          onFocus={(event) => {
+            setFocused(true);
+            setSelectionStart(event.currentTarget.selectionStart ?? value.length);
+          }}
+          onBlur={() => setFocused(false)}
+          onSelect={(event) => setSelectionStart(event.currentTarget.selectionStart ?? value.length)}
+          onChange={(event) => {
+            const next = commit(event.currentTarget.value);
+            setSelectionStart(Math.min(event.currentTarget.selectionStart ?? next.length, next.length));
+          }}
+          onPaste={(event) => {
+            const pasted = event.clipboardData.getData('text');
+            const digits = digitsOnly(pasted, length);
+            if (digits !== pasted || digits.length === length) {
+              event.preventDefault();
+              commit(pasted);
+              setSelectionStart(digits.length);
+            }
+          }}
+          className="absolute inset-0 z-10 h-12 w-full cursor-text opacity-0 disabled:cursor-not-allowed"
+        />
+      </div>
 
       {hasStatus && (
-        <>
-          <div
-            aria-hidden
-            className="mt-2 grid h-4 text-[11.5px] leading-[16px]"
-          >
-            <AnimatePresence initial={false} mode="wait">
-              <motion.span
-                key={status}
-                initial={reduced ? { opacity: 0 } : { opacity: 0, y: 3 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={reduced ? { opacity: 0 } : { opacity: 0, y: -3 }}
-                transition={swap}
-                className={`col-start-1 row-start-1 ${messageTone}`}
-              >
-                {message}
-              </motion.span>
-            </AnimatePresence>
-          </div>
-          <span id={statusId} role="status" className="sr-only">
-            {message}
-          </span>
-        </>
+        <p
+          key={`${status}-${message}`}
+          id={statusId}
+          role="status"
+          className={`mt-2 h-4 animate-[otpStatusEnter_0.2s_ease-out_both] text-[11.5px] leading-[16px] motion-reduce:animate-none ${messageTone}`}
+        >
+          {message}
+        </p>
       )}
     </div>
   );
