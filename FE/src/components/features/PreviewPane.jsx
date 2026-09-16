@@ -15,6 +15,7 @@ import {
   resolveImageSrc,
 } from '../../utils/formatters/markdownBlocks.js';
 import AssetToggle from './AssetToggle.jsx';
+import GeneratedReferences from './GeneratedReferences.jsx';
 
 function MissingImage({ alt }) {
   const { t } = useTranslation();
@@ -110,18 +111,7 @@ export default function PreviewPane({
         {(!deferredLatex && generatedReferences.length === 0 && !useLegacy && markdown.trim() === '') && (
           <p className="max-w-prose mx-auto text-slate-400 italic">{t('student.workspace.emptyPreview')}</p>
         )}
-        {generatedReferences.length > 0 && (
-          <section className="max-w-prose mx-auto text-slate-700">
-            <ol className="space-y-3 text-sm">
-              {generatedReferences.map(reference => (
-                <li key={reference.key} className="flex gap-2 leading-relaxed">
-                  <span className="shrink-0 text-indigo-700">[{reference.number}]</span>
-                  <span>{reference.reference}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
+        <GeneratedReferences references={generatedReferences} className="max-w-prose mx-auto text-slate-700" />
       </div>
     </div>
   );

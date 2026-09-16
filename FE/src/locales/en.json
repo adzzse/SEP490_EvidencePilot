@@ -496,6 +496,8 @@
   "pdfAttached": "PDF attached. Extraction queued.",
   "attachPdfFailed": "Failed to attach PDF.",
   "references": "References",
+  "generatedReferences": "Generated references",
+  "generatedReferencesReadOnly": "Read-only; managed from the paper References list.",
   "noReferences": "No references selected for this paper yet.",
   "addToReferences": "Add to References",
   "removeReference": "Remove from References",
