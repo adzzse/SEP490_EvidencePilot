@@ -10,6 +10,7 @@ import PaperReferencesPanel from './PaperReferencesPanel.jsx';
 export default function SourceLibraryContent({
   sources, project, isLocked, setViewerFile, fetchSources, onOpenSourceMap,
   paperReferences = [], referencesLoading = false, referencesError = '',
+  referenceCheck = null, referenceCheckLoading = false, referenceCheckError = '', onRetryReferenceCheck,
   referenceSourceIds = null, canMutateReferences = false,
   onAddReference, onRemoveReference, onReferencesChanged,
   showToast, readOnly = false, compact = false,
@@ -60,6 +61,7 @@ export default function SourceLibraryContent({
           .map(item => ({ ...item, error: item.error || t('failedToAddSource') }));
 
         if (fetchSources) await fetchSources();
+        if (onReferencesChanged) await onReferencesChanged();
         if (failures.length > 0) {
           const succeeded = response.data?.succeeded?.length
           ?? Math.max(doiRequest.dois.length - failures.length, 0);
@@ -85,6 +87,7 @@ export default function SourceLibraryContent({
       showToast(t('sourceUploaded'));
       setShowSourceModal(false);
       if (fetchSources) await fetchSources();
+      if (onReferencesChanged) await onReferencesChanged();
     } catch (error) {
       const message = error?.response?.data?.message
         || error?.response?.data?.detail
@@ -190,6 +193,10 @@ export default function SourceLibraryContent({
           references={paperReferences}
           loading={referencesLoading}
           error={referencesError}
+          referenceCheck={referenceCheck}
+          referenceCheckLoading={referenceCheckLoading}
+          referenceCheckError={referenceCheckError}
+          onRetryReferenceCheck={onRetryReferenceCheck}
           canMutate={canMutateReferences && !readOnly}
           isLocked={isLocked}
           attachingId={attachingSourceId}

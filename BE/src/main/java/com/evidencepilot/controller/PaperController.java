@@ -3,6 +3,7 @@ package com.evidencepilot.controller;
 import com.evidencepilot.dto.response.CitationValidationResponse;
 import com.evidencepilot.dto.response.DocumentResponse;
 import com.evidencepilot.dto.response.PaperReferenceResponse;
+import com.evidencepilot.dto.response.PaperReferenceCheckResponse;
 import com.evidencepilot.dto.response.PaperSectionResponse;
 import com.evidencepilot.dto.response.PaperMetadataResponse;
 import com.evidencepilot.dto.response.PaperStandardSuggestionResponse;
@@ -258,6 +259,22 @@ public class PaperController {
     public List<PaperReferenceResponse> references(
             @Parameter(description = "Paper document UUID") @PathVariable UUID paperId) {
         return paperReferenceService.list(paperId, currentUserService.requireCurrentUser().getId());
+    }
+
+    @Operation(summary = "Check imported references against project Sources",
+            description = "Parses the paper's imported References sections and returns advisory local matches. "
+                    + "This operation does not modify the paper, Sources, or declared paper References.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Reference check returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Access denied"),
+            @ApiResponse(responseCode = "404", description = "Paper not found")
+    })
+    @GetMapping("/papers/{paperId}/references/check")
+    public PaperReferenceCheckResponse checkReferences(
+            @Parameter(description = "Paper document UUID") @PathVariable UUID paperId) {
+        return paperReferenceService.check(
+                paperId, currentUserService.requireCurrentUser().getId());
     }
 
     @Operation(summary = "Add a paper reference",

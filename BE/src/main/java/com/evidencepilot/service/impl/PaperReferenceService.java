@@ -1,9 +1,11 @@
 package com.evidencepilot.service.impl;
 
+import com.evidencepilot.dto.response.PaperReferenceCheckResponse;
 import com.evidencepilot.dto.response.PaperReferenceResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperReference;
+import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
@@ -25,12 +27,38 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.text.Normalizer;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class PaperReferenceService {
+
+    private static final Pattern DOI_PATTERN = Pattern.compile(
+            "(?i)10\\.\\d{4,9}/[-._;()/:A-Z0-9]+");
+    private static final Pattern EP_KEY_PATTERN = Pattern.compile(
+            "(?i)\\bep[0-9a-f]{32}\\b");
+    private static final Pattern YEAR_PATTERN = Pattern.compile(
+            "(?<!\\d)(19\\d{2}|20\\d{2})(?!\\d)");
+    private static final Pattern BIBITEM_PATTERN = Pattern.compile(
+            "(?s)\\\\bibitem(?:\\[[^]]*])?\\{([^}]+)}(.*?)(?=\\\\bibitem|\\z)");
+    private static final Pattern NUMBERED_ENTRY_PATTERN = Pattern.compile(
+            "(?m)(?=^\\s*(?:\\[\\d+]|\\d+[.)])\\s+)");
+    private static final Set<String> REFERENCE_TITLES = Set.of(
+            "references", "reference", "bibliography", "works cited");
+
+    private record ParsedEntry(String rawText, String citationKey, String doi, Integer year) {
+    }
+
+    private record Match(Document source, PaperReferenceCheckResponse.MatchReason reason, boolean ambiguous) {
+    }
 
     private final DocumentRepository documentRepository;
     private final PaperReferenceRepository paperReferenceRepository;
@@ -40,6 +68,229 @@ public class PaperReferenceService {
     private final SourceMatchingService sourceMatchingService;
     private final UserRepository userRepository;
     private final CurrentUserServiceImpl currentUserService;
+
+    @Transactional(readOnly = true)
+    public PaperReferenceCheckResponse check(UUID paperId, UUID requesterId) {
+        User requester = requireUser(requesterId);
+        Document paper = requirePaper(paperId);
+        currentUserService.requireProjectAccess(requester, paper.getProject());
+
+        List<PaperSection> referenceSections = paperSectionRepository
+                .findByDocumentIdOrderBySectionOrderAsc(paperId).stream()
+                .filter(PaperSection::isActive)
+                .filter(section -> isReferenceTitle(section.getSectionTitle()))
+                .toList();
+        if (referenceSections.isEmpty()) {
+            return emptyCheck(false);
+        }
+
+        List<ParsedEntry> entries = parseEntries(referenceSections);
+        if (entries.isEmpty()) {
+            return emptyCheck(true);
+        }
+
+        List<Document> visibleSources = sourceMatchingService.activeSources(paper.getProject().getId());
+        Set<UUID> declaredIds = sourceMatchingService.referenceSources(paperId).stream()
+                .map(Document::getId)
+                .collect(Collectors.toSet());
+        List<PaperReferenceCheckResponse.Item> items = new ArrayList<>();
+        for (int index = 0; index < entries.size(); index++) {
+            ParsedEntry entry = entries.get(index);
+            items.add(toCheckItem(index + 1, entry, match(entry, visibleSources), declaredIds));
+        }
+        return response(true, items);
+    }
+
+    private static boolean isReferenceTitle(String title) {
+        return REFERENCE_TITLES.contains(normalizeText(title));
+    }
+
+    private static List<ParsedEntry> parseEntries(List<PaperSection> sections) {
+        List<ParsedEntry> entries = new ArrayList<>();
+        for (PaperSection section : sections) {
+            String content = section.getContentTex();
+            if (content == null || content.isBlank()) {
+                continue;
+            }
+            Matcher bibitems = BIBITEM_PATTERN.matcher(content);
+            boolean hasBibitems = false;
+            int previousEnd = 0;
+            while (bibitems.find()) {
+                hasBibitems = true;
+                addEntries(entries, content.substring(previousEnd, bibitems.start()), null);
+                addEntry(entries, bibitems.group(2), bibitems.group(1));
+                previousEnd = bibitems.end();
+            }
+            if (!hasBibitems) {
+                addEntries(entries, content, null);
+            }
+        }
+        return entries;
+    }
+
+    private static void addEntries(List<ParsedEntry> entries, String content, String citationKey) {
+        String cleanedContent = cleanEntry(content);
+        String[] blocks = cleanedContent.split("(?:\\R\\s*){2,}");
+        if (blocks.length == 1) {
+            blocks = blocks[0].split(NUMBERED_ENTRY_PATTERN.pattern());
+        }
+        boolean keyed = false;
+        for (String block : blocks) {
+            if (addEntry(entries, block, keyed ? null : citationKey)) keyed = true;
+        }
+    }
+
+    private static boolean addEntry(List<ParsedEntry> entries, String content, String citationKey) {
+        String rawText = cleanEntry(content);
+        if (rawText.isBlank()) return false;
+        entries.add(parsedEntry(rawText, citationKey));
+        return true;
+    }
+
+    private static ParsedEntry parsedEntry(String rawText, String citationKey) {
+        Matcher keyMatcher = EP_KEY_PATTERN.matcher(rawText);
+        Matcher doiMatcher = DOI_PATTERN.matcher(rawText);
+        return new ParsedEntry(rawText,
+                citationKey == null && keyMatcher.find() ? keyMatcher.group() : citationKey,
+                doiMatcher.find() ? normalizeDoi(doiMatcher.group()) : null,
+                extractYear(rawText));
+    }
+
+    private static String cleanEntry(String rawText) {
+        if (rawText == null) {
+            return "";
+        }
+        return rawText
+                .replaceAll("(?s)\\\\begin\\{thebibliography}\\{[^}]*}", "")
+                .replaceAll("(?s)\\\\end\\{thebibliography}", "")
+                .replaceAll("(?m)^\\s*\\\\bibliography\\{[^}]*}\\s*$", "")
+                .trim();
+    }
+
+    private static String normalizeDoi(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.trim().toLowerCase(Locale.ROOT)
+                .replaceFirst("^(?:https://doi\\.org/|http://dx\\.doi\\.org/)", "")
+                .replaceFirst("[.,;:\\)\\]\\}]+$", "");
+    }
+
+    private static String normalizeText(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFKD)
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\p{L}\\p{N}]+", " ")
+                .trim();
+        return normalized.replaceAll("\\s+", " ");
+    }
+
+    private static Integer extractYear(String value) {
+        Matcher matcher = YEAR_PATTERN.matcher(value == null ? "" : value);
+        return matcher.find() ? Integer.valueOf(matcher.group()) : null;
+    }
+
+    private static Match match(ParsedEntry entry, List<Document> visibleSources) {
+        UUID citationSourceId = SourceMatchingService.citationDocumentId(entry.citationKey()).orElse(null);
+        if (citationSourceId != null) {
+            Document citationSource = visibleSources.stream()
+                    .filter(source -> citationSourceId.equals(source.getId()))
+                    .findFirst()
+                    .orElse(null);
+            if (citationSource != null) {
+                return new Match(citationSource, PaperReferenceCheckResponse.MatchReason.CITATION_KEY, false);
+            }
+        }
+
+        if (entry.doi() != null) {
+            List<Document> doiMatches = visibleSources.stream()
+                    .filter(source -> entry.doi().equals(normalizeDoi(source.getDoi())))
+                    .toList();
+            if (doiMatches.size() == 1) {
+                return new Match(doiMatches.getFirst(), PaperReferenceCheckResponse.MatchReason.DOI, false);
+            }
+            if (doiMatches.size() > 1) {
+                return new Match(null, PaperReferenceCheckResponse.MatchReason.AMBIGUOUS, true);
+            }
+        }
+
+        String normalizedEntry = normalizeText(entry.rawText());
+        List<Document> titleMatches = visibleSources.stream()
+                .filter(source -> {
+                    String title = normalizeText(source.getTitle());
+                    return title.length() >= 16
+                            && normalizedEntry.contains(title)
+                            && (entry.year() == null || source.getPublicationYear() == null
+                            || entry.year().equals(source.getPublicationYear()));
+                })
+                .toList();
+        if (titleMatches.size() == 1) {
+            return new Match(titleMatches.getFirst(), PaperReferenceCheckResponse.MatchReason.TITLE_YEAR, false);
+        }
+        if (titleMatches.size() > 1) {
+            return new Match(null, PaperReferenceCheckResponse.MatchReason.AMBIGUOUS, true);
+        }
+        return new Match(null, PaperReferenceCheckResponse.MatchReason.NONE, false);
+    }
+
+    private static PaperReferenceCheckResponse.Status sourceStatus(Document source) {
+        if (source.getProcessingStatus() == ProcessingStatus.READY
+                || source.getProcessingStatus() == ProcessingStatus.COMPLETED) {
+            return PaperReferenceCheckResponse.Status.READY;
+        }
+        String fileUrl = source.getFileUrl();
+        if (fileUrl == null || fileUrl.isBlank() || "pending".equalsIgnoreCase(fileUrl.trim())) {
+            return PaperReferenceCheckResponse.Status.MISSING_FILE;
+        }
+        if (source.getProcessingStatus() == ProcessingStatus.FAILED
+                || source.getProcessingStatus() == ProcessingStatus.PARTIAL) {
+            return PaperReferenceCheckResponse.Status.UNAVAILABLE;
+        }
+        return PaperReferenceCheckResponse.Status.PROCESSING;
+    }
+
+    private static PaperReferenceCheckResponse.Item toCheckItem(
+            int index, ParsedEntry entry, Match match, Set<UUID> declaredIds) {
+        if (match.source() == null) {
+            PaperReferenceCheckResponse.Status status = match.ambiguous()
+                    || normalizeText(entry.rawText()).length() < 16
+                    ? PaperReferenceCheckResponse.Status.NEEDS_REVIEW
+                    : PaperReferenceCheckResponse.Status.MISSING_SOURCE;
+            return new PaperReferenceCheckResponse.Item(index, entry.rawText(), entry.doi(), entry.year(),
+                    status, match.reason(), null, null, false);
+        }
+        Document source = match.source();
+        return new PaperReferenceCheckResponse.Item(index, entry.rawText(), entry.doi(), entry.year(),
+                sourceStatus(source), match.reason(), source.getId(), source.getTitle(),
+                declaredIds.contains(source.getId()));
+    }
+
+    private PaperReferenceCheckResponse emptyCheck(boolean referenceSectionFound) {
+        return response(referenceSectionFound, List.of());
+    }
+
+    private PaperReferenceCheckResponse response(
+            boolean referenceSectionFound, List<PaperReferenceCheckResponse.Item> items) {
+        PaperReferenceCheckResponse.Summary summary = new PaperReferenceCheckResponse.Summary(
+                items.size(),
+                count(items, PaperReferenceCheckResponse.Status.READY),
+                count(items, PaperReferenceCheckResponse.Status.MISSING_FILE),
+                count(items, PaperReferenceCheckResponse.Status.PROCESSING),
+                count(items, PaperReferenceCheckResponse.Status.UNAVAILABLE),
+                count(items, PaperReferenceCheckResponse.Status.MISSING_SOURCE),
+                count(items, PaperReferenceCheckResponse.Status.NEEDS_REVIEW),
+                (int) items.stream()
+                        .filter(item -> item.matchedSourceId() != null && !item.declaredReference())
+                        .count());
+        return new PaperReferenceCheckResponse(referenceSectionFound, summary, items);
+    }
+
+    private static int count(
+            List<PaperReferenceCheckResponse.Item> items, PaperReferenceCheckResponse.Status status) {
+        return (int) items.stream().filter(item -> item.status() == status).count();
+    }
 
     @Transactional(readOnly = true)
     public List<PaperReferenceResponse> list(UUID paperId, UUID requesterId) {

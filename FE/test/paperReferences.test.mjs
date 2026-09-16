@@ -36,6 +36,10 @@ test('paper references build citation numbers in declaration order', () => {
 test('paper references routes match the backend contract', () => {
   assert.equal(API_ROUTES.PAPERS.REFERENCES('paper-1'), '/api/papers/paper-1/references');
   assert.equal(
+    API_ROUTES.PAPERS.REFERENCE_CHECK('paper-1'),
+    '/api/papers/paper-1/references/check',
+  );
+  assert.equal(
     API_ROUTES.PAPERS.REFERENCE_BY_ID('paper-1', 'source-2'),
     '/api/papers/paper-1/references/source-2',
   );

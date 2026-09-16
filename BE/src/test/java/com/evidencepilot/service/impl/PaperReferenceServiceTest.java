@@ -1,5 +1,6 @@
 package com.evidencepilot.service.impl;
 
+import com.evidencepilot.dto.response.PaperReferenceCheckResponse;
 import com.evidencepilot.dto.response.PaperReferenceResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Document;
@@ -21,6 +22,7 @@ import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -30,9 +32,11 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 class PaperReferenceServiceTest {
 
@@ -77,6 +81,130 @@ class PaperReferenceServiceTest {
         when(documentRepository.findByIdForUpdate(paperId)).thenReturn(Optional.of(paper));
         when(projectMemberRepository.findByProjectIdAndUserId(projectId, leaderId))
                 .thenReturn(List.of(member(ProjectRole.LEADER)));
+    }
+
+    @Test
+    void checkMatchesDoiCitationKeyAndUniqueTitleYearInReferenceOrder() {
+        Document ready = source(ProcessingStatus.READY, "ready.pdf");
+        ready.setDoi("10.1000/ready");
+        ready.setTitle("Reliable Evidence Retrieval for Research Writing");
+        ready.setPublicationYear(2024);
+        Document missingFile = source(ProcessingStatus.METADATA_FETCHED, "pending");
+        Document processing = source(ProcessingStatus.PROCESSING, "processing.pdf");
+        processing.setTitle("Structured Citation Checking in Collaborative Editors");
+        processing.setPublicationYear(2025);
+        Document unavailable = source(ProcessingStatus.FAILED, "failed.pdf");
+        unavailable.setDoi("10.1000/failed");
+
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperId))
+                .thenReturn(List.of(referenceSection("""
+                        A. Author. Reliable Evidence Retrieval for Research Writing. 2024. https://doi.org/10.1000/READY.
+
+                        \\bibitem{%s} Metadata-only work.
+
+                        \\bibitem{processing} B. Author. Structured Citation Checking in Collaborative Editors. 2025.
+
+                        \\bibitem{failed} C. Author. Failed extraction work. https://doi.org/10.1000/failed.
+                        """.formatted(SourceMatchingService.citationKey(missingFile.getId())))));
+        when(sourceMatchingService.activeSources(projectId))
+                .thenReturn(List.of(ready, missingFile, processing, unavailable));
+        when(sourceMatchingService.referenceSources(paperId)).thenReturn(List.of(ready));
+
+        PaperReferenceCheckResponse result = service.check(paperId, leaderId);
+
+        assertThat(result.referenceSectionFound()).isTrue();
+        assertThat(result.items()).extracting(PaperReferenceCheckResponse.Item::status)
+                .containsExactly(
+                        PaperReferenceCheckResponse.Status.READY,
+                        PaperReferenceCheckResponse.Status.MISSING_FILE,
+                        PaperReferenceCheckResponse.Status.PROCESSING,
+                        PaperReferenceCheckResponse.Status.UNAVAILABLE);
+        assertThat(result.items()).extracting(PaperReferenceCheckResponse.Item::matchReason)
+                .containsExactly(
+                        PaperReferenceCheckResponse.MatchReason.DOI,
+                        PaperReferenceCheckResponse.MatchReason.CITATION_KEY,
+                        PaperReferenceCheckResponse.MatchReason.TITLE_YEAR,
+                        PaperReferenceCheckResponse.MatchReason.DOI);
+        assertThat(result.summary().matchedNotDeclared()).isEqualTo(3);
+    }
+
+    @Test
+    void checkKeepsEachBibitemAsOneEntryWhenItsTextHasBlankLines() {
+        Document first = source(ProcessingStatus.READY, "first.pdf");
+        Document second = source(ProcessingStatus.READY, "second.pdf");
+        String firstKey = SourceMatchingService.citationKey(first.getId());
+        String secondKey = SourceMatchingService.citationKey(second.getId());
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperId))
+                .thenReturn(List.of(referenceSection("""
+                        \\begin{thebibliography}{9}
+                        \\bibitem{%s} First paragraph of one reference.
+
+                        Second paragraph of the same reference.
+                        \\bibitem{%s} A separate reference.
+                        \\end{thebibliography}
+                        """.formatted(firstKey, secondKey))));
+        when(sourceMatchingService.activeSources(projectId)).thenReturn(List.of(first, second));
+        when(sourceMatchingService.referenceSources(paperId)).thenReturn(List.of());
+
+        PaperReferenceCheckResponse result = service.check(paperId, leaderId);
+
+        assertThat(result.items()).hasSize(2);
+        assertThat(result.items().getFirst().rawText())
+                .contains("First paragraph", "Second paragraph");
+        assertThat(result.items()).extracting(PaperReferenceCheckResponse.Item::matchReason)
+                .containsExactly(
+                        PaperReferenceCheckResponse.MatchReason.CITATION_KEY,
+                        PaperReferenceCheckResponse.MatchReason.CITATION_KEY);
+    }
+
+    @Test
+    void checkDoesNotChooseAmbiguousTitleAndKeepsMissingEntryVisible() {
+        Document first = source(ProcessingStatus.READY, "a.pdf");
+        first.setTitle("Shared Long Research Paper Title");
+        first.setPublicationYear(2024);
+        Document second = source(ProcessingStatus.READY, "b.pdf");
+        second.setTitle(first.getTitle());
+        second.setPublicationYear(2024);
+
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperId))
+                .thenReturn(List.of(referenceSection("""
+                        Author. Shared Long Research Paper Title. 2024.
+
+                        Author. A Completely Missing Research Work. 2023.
+                        """)));
+        when(sourceMatchingService.activeSources(projectId)).thenReturn(List.of(first, second));
+        when(sourceMatchingService.referenceSources(paperId)).thenReturn(List.of());
+
+        PaperReferenceCheckResponse result = service.check(paperId, leaderId);
+
+        assertThat(result.items()).extracting(PaperReferenceCheckResponse.Item::status)
+                .containsExactly(
+                        PaperReferenceCheckResponse.Status.NEEDS_REVIEW,
+                        PaperReferenceCheckResponse.Status.MISSING_SOURCE);
+        assertThat(result.items().getFirst().matchedSourceId()).isNull();
+        assertThat(result.summary().detected()).isEqualTo(2);
+    }
+
+    @Test
+    void checkReturnsNoItemsWhenPaperHasNoReferenceSection() {
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperId))
+                .thenReturn(List.of(section("Body text")));
+
+        PaperReferenceCheckResponse result = service.check(paperId, leaderId);
+
+        assertThat(result.referenceSectionFound()).isFalse();
+        assertThat(result.summary().detected()).isZero();
+        verify(sourceMatchingService, never()).activeSources(any());
+    }
+
+    @Test
+    void checkPropagatesProjectAccessDenialWithoutReadingSources() {
+        ResponseStatusException denied = new ResponseStatusException(HttpStatus.FORBIDDEN, "denied");
+        doThrow(denied).when(currentUserService).requireProjectAccess(leader, project);
+
+        assertThatThrownBy(() -> service.check(paperId, leaderId)).isSameAs(denied);
+
+        verifyNoInteractions(sourceMatchingService);
     }
 
     @Test
@@ -274,7 +402,15 @@ class PaperReferenceServiceTest {
 
     private PaperSection section(String tex) {
         PaperSection section = new PaperSection();
+        section.setSectionTitle("Introduction");
+        section.setActive(true);
         section.setContentTex(tex);
+        return section;
+    }
+
+    private PaperSection referenceSection(String tex) {
+        PaperSection section = section(tex);
+        section.setSectionTitle("References");
         return section;
     }
 

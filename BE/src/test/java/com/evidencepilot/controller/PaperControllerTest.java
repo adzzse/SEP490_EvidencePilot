@@ -4,6 +4,7 @@ import com.evidencepilot.dto.response.DocumentResponse;
 import com.evidencepilot.dto.response.JobSubmitResponse;
 import com.evidencepilot.dto.response.PaperSectionResponse;
 import com.evidencepilot.dto.response.PaperMetadataResponse;
+import com.evidencepilot.dto.response.PaperReferenceCheckResponse;
 import com.evidencepilot.service.PaperStandardService;
 import com.evidencepilot.dto.response.PaperStandardSuggestionResponse;
 import com.evidencepilot.model.Document;
@@ -597,6 +598,31 @@ class PaperControllerTest {
     }
 
     @Test
+    void referenceCheckReturnsImportedReferenceSummary() throws Exception {
+        UUID paperId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        User user = new User();
+        user.setId(userId);
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+
+        PaperReferenceCheckResponse response = new PaperReferenceCheckResponse(
+                true,
+                new PaperReferenceCheckResponse.Summary(1, 0, 0, 0, 0, 1, 0, 0),
+                List.of(new PaperReferenceCheckResponse.Item(
+                        1, "Missing work", null, 2024,
+                        PaperReferenceCheckResponse.Status.MISSING_SOURCE,
+                        PaperReferenceCheckResponse.MatchReason.NONE,
+                        null, null, false)));
+        when(paperReferenceService.check(paperId, userId)).thenReturn(response);
+
+        mockMvc.perform(get("/api/papers/{paperId}/references/check", paperId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.referenceSectionFound").value(true))
+                .andExpect(jsonPath("$.summary.missingSource").value(1))
+                .andExpect(jsonPath("$.items[0].status").value("MISSING_SOURCE"));
+    }
+
+    @Test
     void references_mapsServiceErrorsToStatusEnvelope() throws Exception {
         UUID paperId = UUID.randomUUID();
         UUID sourceId = UUID.randomUUID();
@@ -609,6 +635,10 @@ class PaperControllerTest {
                 .when(paperReferenceService).remove(any(), any(), any());
 
         mockMvc.perform(get("/api/papers/{paperId}/references", paperId))
+                .andExpect(status().isNotFound());
+        when(paperReferenceService.check(any(), any()))
+                .thenThrow(new com.evidencepilot.exception.ResourceNotFoundException(paperId, "Paper"));
+        mockMvc.perform(get("/api/papers/{paperId}/references/check", paperId))
                 .andExpect(status().isNotFound());
         mockMvc.perform(delete("/api/papers/{paperId}/references/{sourceId}", paperId, sourceId))
                 .andExpect(status().isConflict())

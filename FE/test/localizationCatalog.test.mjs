@@ -496,6 +496,24 @@ test('English and Vietnamese catalogs have matching leaf types and interpolation
   }
 });
 
+test('reference check copy exists in both catalogs with matching placeholders', () => {
+  const keys = [
+    'referenceCheckTitle', 'referenceCheckRunning', 'referenceCheckLoadFailed', 'referenceCheckRetry',
+    'referenceCheckEmpty', 'referenceCheckSummary', 'referenceCheckAllReady', 'referenceCheckGuidance',
+    'referenceCheckViewIssues', 'referenceCheckStatusReady', 'referenceCheckStatusMissingFile',
+    'referenceCheckStatusProcessing', 'referenceCheckStatusUnavailable', 'referenceCheckStatusMissingSource',
+    'referenceCheckStatusNeedsReview', 'referenceCheckNotDeclared',
+  ];
+  for (const key of keys) {
+    assert.equal(typeof locales.en[key], 'string', `missing en ${key}`);
+    assert.equal(typeof locales.vi[key], 'string', `missing vi ${key}`);
+  }
+  for (const key of ['referenceCheckSummary', 'referenceCheckViewIssues']) {
+    const placeholders = value => [...value.matchAll(/\{\{\s*[^{}]+\s*\}\}/g)].map(match => match[0]);
+    assert.deepEqual(placeholders(locales.vi[key]), placeholders(locales.en[key]), `placeholder mismatch at ${key}`);
+  }
+});
+
 test('status catalogs explicitly cover every shared StatusBadge value', () => {
   const statusBadgeSource = fs.readFileSync(path.join(SOURCE_ROOT, 'components', 'ui', 'StatusBadge.jsx'), 'utf8');
   const colors = statusBadgeSource.match(/const COLORS = \{([\s\S]*?)\n\};/)?.[1];

@@ -18,6 +18,7 @@ export const API_ROUTES = Object.freeze({
   }),
   PAPERS: Object.freeze({
     REFERENCES: (paperId) => `/api/papers/${paperId}/references`,
+    REFERENCE_CHECK: (paperId) => `/api/papers/${paperId}/references/check`,
     REFERENCE_BY_ID: (paperId, sourceId) => `/api/papers/${paperId}/references/${sourceId}`,
   }),
   SOURCES: Object.freeze({

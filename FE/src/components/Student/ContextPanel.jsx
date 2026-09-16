@@ -15,6 +15,7 @@ export default function ContextPanel({
   // Source tab
   sources, isUploading, setIsUploading, project, setViewerFile, fetchSources, onOpenSourceMap,
   paperReferences = [], referencesLoading = false, referencesError = '', referenceSourceIds = null,
+  referenceCheck = null, referenceCheckLoading = false, referenceCheckError = '', onRetryReferenceCheck,
   canMutateReferences = false, onAddReference, onRemoveReference, onReferencesChanged,
   // Requirements tab
   selectedPaper, selectedSection, isAssignedSection, isSectionDirty, onHandoffChanged, pollAiJob,
@@ -92,6 +93,8 @@ export default function ContextPanel({
               sources={sources} project={project} isLocked={isLocked} setViewerFile={setViewerFile}
               fetchSources={fetchSources} onOpenSourceMap={onOpenSourceMap}
               paperReferences={paperReferences} referencesLoading={referencesLoading} referencesError={referencesError}
+              referenceCheck={referenceCheck} referenceCheckLoading={referenceCheckLoading}
+              referenceCheckError={referenceCheckError} onRetryReferenceCheck={onRetryReferenceCheck}
               referenceSourceIds={referenceSourceIds} canMutateReferences={canMutateReferences}
               onAddReference={onAddReference} onRemoveReference={onRemoveReference} onReferencesChanged={onReferencesChanged}
               showToast={showToast} readOnly={Boolean(reviewContent)}
