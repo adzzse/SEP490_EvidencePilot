@@ -49,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({FeedbackServiceImpl.class, FeedbackAnchorService.class, CurrentUserServiceImpl.class,
         SubmissionReadinessService.class, SectionStandardService.class, ProjectCollectionService.class,
+        com.evidencepilot.service.FeedbackAttachmentService.class,
         FeedbackRevisionMySqlTest.JsonConfig.class})
 class FeedbackRevisionMySqlTest {
     @Container
@@ -72,6 +73,7 @@ class FeedbackRevisionMySqlTest {
     @Autowired private SubmissionReadinessService readiness;
     @Autowired private ObjectMapper json;
     @MockBean private AiModelClient model;
+    @MockBean private com.evidencepilot.service.DocumentObjectStorage storage;
     @MockBean private PromptTemplateService prompts;
     @MockBean private AiGenerationConfigService generationConfig;
     @MockBean private SystemNotificationService notifications;
@@ -186,8 +188,8 @@ class FeedbackRevisionMySqlTest {
             if (actor.getRole() == UserRole.STUDENT) {
                 assertThat(item.canEdit() || item.canDelete() || item.canMarkDone() || item.canReopen()).isFalse();
                 assertThatThrownBy(() -> feedback.prepareFeedbackState(root.id(),
-                        new com.evidencepilot.dto.request.FeedbackStateRequest(com.evidencepilot.model.enums.FeedbackThreadState.DONE, item.revision())))
-                        .hasMessageContaining("403");
+                        new com.evidencepilot.dto.request.FeedbackStateRequest(com.evidencepilot.model.enums.FeedbackThreadState.RESOLVED, item.revision())))
+                        .hasMessageContaining("400");
             }
         }
         login(f.instructor());
@@ -195,7 +197,7 @@ class FeedbackRevisionMySqlTest {
         assertThatThrownBy(() -> feedback.updateFeedbackItem(root.id(),
                 new InstructorFeedbackRequest(f.first(), null, "Overwrite"))).hasMessageContaining("immutable");
         feedback.prepareFeedbackState(root.id(), new com.evidencepilot.dto.request.FeedbackStateRequest(
-                com.evidencepilot.model.enums.FeedbackThreadState.DONE, published.revision()));
+                com.evidencepilot.model.enums.FeedbackThreadState.RESOLVED, published.revision()));
         feedback.updateStatus(round.id(), "REVIEWED");
         assertThat(projectStatus(f.project())).isEqualTo("APPROVED");
         assertThat(jdbc.queryForList(legacySql, root.id().toString())).isEqualTo(legacyRows);

@@ -7,9 +7,11 @@ import { useTheme } from '../../context/ThemeContext';
 import TourLauncher from '../ui/TourLauncher.jsx';
 import ProfileModal from '../ui/ProfileModal.jsx';
 import StatusBadge from '../ui/StatusBadge.jsx';
+import SectionStandardsTab from '../Instructor/review/SectionStandardsTab.jsx';
+import AiSuggestionDrawer from '../Instructor/review/AiSuggestionDrawer.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
 
-export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, onRunCitationReview, canRunCitationReview = false, reviewBusy = false, reviewProgress = null, reviewError = null, reviewRound = null, reviewGuide = null }) {
+export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, onRunCitationReview, canRunCitationReview = false, reviewBusy = false, reviewProgress = null, reviewError = null, reviewRound = null, reviewGuide = null, review = null, reviewSection = null }) {
   const { user } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
@@ -19,6 +21,9 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
   // ponytail: review-only header menus share the hook-owned round state (no duplicate source)
   const [showRoundMenu, setShowRoundMenu] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [showStandards, setShowStandards] = useState(false);
+  const [showAiDrawer, setShowAiDrawer] = useState(false);
+  const [showMobileStandards, setShowMobileStandards] = useState(false);
   const isReview = workspaceMode === 'review';
   const activeRound = reviewRound?.orderedRequests?.find(r => String(r.id) === String(reviewRound.activeRequestId)) || reviewRound?.orderedRequests?.[0] || null;
   const canExport = project?.status === 'APPROVED' || project?.status === 'ARCHIVED';
@@ -44,19 +49,16 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
         </Link>
         <div data-tour="header-logo" className="w-7 h-7 bg-(--brand) text-(--on-brand) rounded-lg text-xs flex items-center justify-center font-bold shadow-sm shrink-0">EP</div>
-      </div>
-
-      <div className="min-w-0 flex-1 flex justify-center items-center gap-1.5 px-2">
-        <span data-tour="header-project-name" className="text-xs sm:text-sm font-bold text-(--text-primary) truncate max-w-full sm:max-w-[260px] lg:max-w-[360px]">{project?.title || t('project')}</span>
         {isReview && reviewRound?.orderedRequests?.length > 0 && (
           <div className="relative shrink-0">
             <button type="button" onClick={() => { setShowRoundMenu(!showRoundMenu); setShowGuide(false); setShowMoreMenu(false); }} aria-expanded={showRoundMenu} aria-label={t('instructor.review.reviewRound')}
-              className="flex items-center gap-1 rounded-lg border border-(--border) bg-(--surface-secondary) px-2 py-1 text-[11px] font-bold text-(--text-secondary) hover:text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)">
-              <span>{activeRound ? formatDateTime(activeRound.requestedAt, language) : ''}</span>
-              <svg className={`w-3 h-3 transition-transform ${showRoundMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+              title={activeRound ? formatDateTime(activeRound.requestedAt, language) : undefined}
+              className="flex h-7 max-w-[110px] sm:max-w-[160px] items-center gap-1 rounded-lg border border-(--border) bg-(--surface-secondary) px-2 text-[11px] font-bold text-(--text-secondary) hover:text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)">
+              <span className="truncate">{activeRound ? formatDateTime(activeRound.requestedAt, language) : ''}</span>
+              <svg className={`w-3 h-3 shrink-0 transition-transform ${showRoundMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
             </button>
             {showRoundMenu && (
-              <div className="absolute left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] max-h-80 overflow-y-auto py-1">
+              <div className="absolute left-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] max-h-80 overflow-y-auto py-1">
                 {reviewRound.orderedRequests.map(req => (
                   <button key={req.id} type="button" onClick={() => { reviewRound.setActiveRequestId(req.id); setShowRoundMenu(false); }}
                     aria-pressed={String(req.id) === String(reviewRound.activeRequestId)}
@@ -69,6 +71,10 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
             )}
           </div>
         )}
+      </div>
+
+      <div className="min-w-0 flex-1 flex justify-center items-center gap-1.5 px-2">
+        <span data-tour="header-project-name" className="text-xs sm:text-sm font-bold text-(--text-primary) truncate max-w-full sm:max-w-[260px] lg:max-w-[360px]">{project?.title || t('project')}</span>
       </div>
 
       <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
@@ -123,6 +129,29 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
             <button onClick={() => language !== 'en' && toggleLanguage()} className={`px-2 py-1 rounded-md transition ${language === 'en' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>EN</button>
             <button onClick={() => language !== 'vi' && toggleLanguage()} className={`px-2 py-1 rounded-md transition ${language === 'vi' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>VN</button>
           </div>
+          {isReview && review && (
+            <>
+              <div className="relative">
+                <button type="button" onClick={() => { setShowStandards(!showStandards); setShowAiDrawer(false); setShowGuide(false); setShowRoundMenu(false); setShowMoreMenu(false); }} className={iconButton} title={t('instructor.review.standardsTab')} aria-label={t('instructor.review.standardsTab')} aria-expanded={showStandards}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </button>
+                {showStandards && (
+                  <div className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] max-h-96 overflow-y-auto p-1">
+                    <div className="sticky top-0 bg-(--surface) px-3 py-2 flex justify-between items-center">
+                      <span className="text-xs font-bold text-(--text-primary)">{t('instructor.review.standardsTab')}</span>
+                      <button type="button" onClick={() => setShowStandards(false)} className={iconButton} aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                    </div>
+                    <div className="px-3 pb-3">
+                      <SectionStandardsTab review={review} selectedSection={reviewSection} />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button type="button" onClick={() => { setShowAiDrawer(!showAiDrawer); setShowStandards(false); setShowGuide(false); setShowRoundMenu(false); setShowMoreMenu(false); }} className={iconButton} title={t('instructor.review.aiSuggestionTab')} aria-label={t('instructor.review.aiSuggestionTab')} aria-expanded={showAiDrawer}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+              </button>
+            </>
+          )}
           {workspaceMode !== 'review' && onRunCitationReview && (
             <span className="inline-flex items-center gap-1" title={reviewBusy ? t('reviewing') : canRunCitationReview ? t('citationReviewDescription') : t('citationReviewUnavailable')}>
               <button type="button" data-tour="header-ai-review" onClick={onRunCitationReview} disabled={!canRunCitationReview || reviewBusy}
@@ -167,6 +196,13 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
             <div className="absolute right-0 top-full mt-2 w-[min(18rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] overflow-hidden">
               {workspaceMode !== 'review' && <button onClick={() => runMobileAction(onShowHistory)} disabled={historyDisabled} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{t('versionHistory')}</button>}
               {workspaceMode !== 'review' && onRunCitationReview && <button onClick={() => runMobileAction(onRunCitationReview)} disabled={!canRunCitationReview || reviewBusy} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{reviewBusy ? t('loading') : t('aiReview')}</button>}
+              {isReview && review && <button onClick={() => { setShowAiDrawer(true); setShowMoreMenu(false); }} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{t('instructor.review.aiSuggestionTab')}</button>}
+              {isReview && review && <button onClick={() => setShowMobileStandards(!showMobileStandards)} aria-expanded={showMobileStandards} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{t('instructor.review.standardsTab')}</button>}
+              {isReview && review && showMobileStandards && (
+                <div className="px-4 pb-3">
+                  <SectionStandardsTab review={review} selectedSection={reviewSection} />
+                </div>
+              )}
               <button onClick={() => runMobileAction(toggleTheme)} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{theme === 'light' ? t('darkMode') : t('lightMode')}</button>
               <div className="px-4 py-3 flex items-center justify-between">
                 <span className="text-xs font-semibold text-(--text-primary)">{t('language')}</span>
@@ -180,6 +216,15 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
           )}
         </div>
       </div>
+      {isReview && review && showAiDrawer && (
+        <div className="fixed right-0 top-14 bottom-0 w-[min(24rem,calc(100vw-1rem))] bg-(--surface) border-l border-(--border) shadow-xl z-[99999] overflow-y-auto p-3" role="complementary" aria-label={t('instructor.review.aiSuggestionTab')}>
+          <div className="sticky top-0 bg-(--surface) pb-2 flex justify-between items-center">
+            <span className="text-xs font-bold text-(--text-primary)">{t('instructor.review.aiSuggestionTab')}</span>
+            <button type="button" onClick={() => setShowAiDrawer(false)} className={iconButton} aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+          </div>
+          <AiSuggestionDrawer review={review} />
+        </div>
+      )}
     </header>
   );
 }

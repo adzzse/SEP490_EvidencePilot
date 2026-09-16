@@ -98,13 +98,13 @@ class ProgressReportServiceImplTest {
         var resolved = new com.evidencepilot.model.InstructorFeedback();
         resolved.setSection(section);
         resolved.setPublishedAt(LocalDateTime.now());
-        resolved.setThreadState(com.evidencepilot.model.enums.FeedbackThreadState.DONE);
+        resolved.setThreadState(com.evidencepilot.model.enums.FeedbackThreadState.RESOLVED);
         var open = new com.evidencepilot.model.InstructorFeedback();
         open.setSection(section);
         open.setPublishedAt(LocalDateTime.now());
         var draft = new com.evidencepilot.model.InstructorFeedback();
         draft.setSection(section);
-        draft.setThreadState(com.evidencepilot.model.enums.FeedbackThreadState.DONE);
+        draft.setThreadState(com.evidencepilot.model.enums.FeedbackThreadState.RESOLVED);
         when(instructorFeedbackRepository.findByRequestProjectId(project.getId()))
                 .thenReturn(List.of(resolved, open, draft));
         when(projectMemberRepository.findByProjectId(project.getId()))

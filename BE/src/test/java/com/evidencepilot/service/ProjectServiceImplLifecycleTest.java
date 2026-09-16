@@ -9,6 +9,9 @@ import com.evidencepilot.model.enums.PaperStandard;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
+import com.evidencepilot.repository.DocumentRepository;
+import com.evidencepilot.repository.PaperSectionRepository;
+import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
@@ -41,6 +44,15 @@ class ProjectServiceImplLifecycleTest {
 
     @Mock
     private ProjectMemberRepository projectMemberRepository;
+
+    @Mock
+    private DocumentRepository documentRepository;
+
+    @Mock
+    private ProjectDocumentRepository projectDocumentRepository;
+
+    @Mock
+    private PaperSectionRepository paperSectionRepository;
 
     @Mock
     private UserRepository userRepository;
@@ -387,6 +399,9 @@ class ProjectServiceImplLifecycleTest {
         return new ProjectServiceImpl(
                 projectRepository,
                 projectMemberRepository,
+                documentRepository,
+                projectDocumentRepository,
+                paperSectionRepository,
                 userRepository,
                 currentUserService,
                 systemNotificationService,

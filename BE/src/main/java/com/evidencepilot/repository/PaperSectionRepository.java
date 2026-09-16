@@ -24,6 +24,9 @@ public interface PaperSectionRepository extends JpaRepository<PaperSection, UUID
     List<PaperSection> findByDocumentIdAndAssignedUserIdOrderBySectionOrderAsc(UUID documentId, UUID assignedUserId);
     // Sections across every document of one project — admin project-detail modal.
     long countByDocument_Project_Id(UUID projectId);
+    // Batch twin of the memberCounts pattern — feeds ProjectResponse.sectionCount on list endpoints.
+    @Query("SELECT s.document.project.id, COUNT(s) FROM PaperSection s WHERE s.document.project.id IN :projectIds GROUP BY s.document.project.id")
+    List<Object[]> countByProjectIds(@org.springframework.data.repository.query.Param("projectIds") List<UUID> projectIds);
     // Full section list across every document of one project (admin modal Sections tab).
     List<PaperSection> findByDocument_Project_IdOrderByDocument_IdAscSectionOrderAsc(UUID projectId);
     // Bulk hard-delete all sections for a paper — used by resetSectionsForStandard.

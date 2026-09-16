@@ -16,7 +16,9 @@ public record ProjectResponse(
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
     String currentUserRole,
-    long memberCount
+    long memberCount,
+    long sourceCount,
+    long sectionCount
 ) {
     public static ProjectResponse from(Project project) {
         return new ProjectResponse(
@@ -28,7 +30,9 @@ public record ProjectResponse(
             project.getCreatedAt(),
             project.getUpdatedAt(),
             null,
-            project.getProjectMembers() != null ? project.getProjectMembers().size() : 0
+            project.getProjectMembers() != null ? project.getProjectMembers().size() : 0,
+            0,
+            0
         );
     }
 
@@ -42,7 +46,9 @@ public record ProjectResponse(
             project.getCreatedAt(),
             project.getUpdatedAt(),
             currentUserRole,
-            project.getProjectMembers() != null ? project.getProjectMembers().size() : 0
+            project.getProjectMembers() != null ? project.getProjectMembers().size() : 0,
+            0,
+            0
         );
     }
 
@@ -56,5 +62,22 @@ public record ProjectResponse(
                 .findFirst().orElse(null);
         }
         return from(project, role);
+    }
+
+    // ponytail: read paths enrich counts via the service batch helper; write responses keep 0.
+    public static ProjectResponse withCounts(ProjectResponse base, long sourceCount, long sectionCount) {
+        return new ProjectResponse(
+            base.id(),
+            base.title(),
+            base.description(),
+            base.status(),
+            base.targetStandard(),
+            base.createdAt(),
+            base.updatedAt(),
+            base.currentUserRole(),
+            base.memberCount(),
+            sourceCount,
+            sectionCount
+        );
     }
 }

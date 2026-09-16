@@ -46,6 +46,28 @@ export default function ProjectDetail() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
+  // ponytail: common action labels for SectionManager/SectionRow/StandardConfigModal (were an undefined `ct` → crash).
+  const ct = { delete: t('delete'), add: t('add'), cancel: t('cancel'), saving: t('saving'), save: t('save') };
+  // ponytail: section components take a scoped label object, not the i18next
+  // function (passing `t` raw renders every label as undefined/empty).
+  const sectionT = {
+    selectPaperSections: t('instructor.projectDetail.selectPaperSections'),
+    processingSections: t('instructor.projectDetail.processingSections'),
+    noSectionsHelp: t('instructor.projectDetail.noSectionsHelp'),
+    sectionConflict: t('instructor.projectDetail.sectionConflict'),
+    sectionsUnsaved: t('instructor.projectDetail.sectionsUnsaved'),
+    rename: t('instructor.projectDetail.rename'),
+    unassigned: t('instructor.projectDetail.unassigned'),
+    dragToReorder: t('instructor.projectDetail.dragToReorder'),
+    unassignToReorder: t('instructor.projectDetail.unassignToReorder'),
+    deleteSectionConfirm: t('instructor.projectDetail.deleteSectionConfirm'),
+    reloadSection: t('instructor.projectDetail.reloadSection'),
+    configStandard: t('instructor.projectDetail.configStandard'),
+    standardLocked: t('instructor.projectDetail.standardLocked'),
+    standardRequirements: t('instructor.projectDetail.standardRequirements'),
+    noStandardRequirements: t('instructor.projectDetail.noStandardRequirements'),
+    addStandardRequirement: t('instructor.projectDetail.addStandardRequirement'),
+  };
   const undoStrings = {
     header: t('instructor.projectDetail.undoHeader'),
     bodyTemplate: t('instructor.projectDetail.undoBodyTemplate'),
@@ -1239,7 +1261,7 @@ export default function ProjectDetail() {
                   projectReadOnly={projectReadOnly}
                   sectionStructureSaving={sectionStructureSaving}
                   sectionEvals={sectionEvals}
-                  t={t}
+                  t={sectionT}
                   ct={ct}
                   users={users}
                   projectMembers={projectMembers}

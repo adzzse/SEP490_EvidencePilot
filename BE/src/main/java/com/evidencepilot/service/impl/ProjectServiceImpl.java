@@ -8,12 +8,16 @@ import com.evidencepilot.dto.response.ProjectMemberResponse;
 import com.evidencepilot.dto.response.ProjectResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.enums.PaperStandard;
+import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.UserRole;
+import com.evidencepilot.repository.DocumentRepository;
+import com.evidencepilot.repository.PaperSectionRepository;
+import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
@@ -45,6 +49,9 @@ public class ProjectServiceImpl {
 
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
+    private final DocumentRepository documentRepository;
+    private final ProjectDocumentRepository projectDocumentRepository;
+    private final PaperSectionRepository paperSectionRepository;
     private final UserRepository userRepository;
     private final CurrentUserServiceImpl currentUserService;
     private final SystemNotificationService systemNotificationService;
@@ -53,11 +60,11 @@ public class ProjectServiceImpl {
 
     public List<ProjectResponse> getAllProjects() {
         User currentUser = currentUserService.requireCurrentUser();
-        return projectMemberRepository.findByUserId(currentUser.getId()).stream()
+        List<Project> projects = projectMemberRepository.findByUserId(currentUser.getId()).stream()
                 .map(ProjectMember::getProject)
                 .filter(Project::isActive)
-                .map(ProjectResponse::from)
                 .toList();
+        return toResponses(projects);
     }
 
     public PagedResponse<ProjectResponse> getAllProjects(
@@ -74,15 +81,40 @@ public class ProjectServiceImpl {
                 projectSpec(currentUser, q, status, active),
                 pageable);
         List<Project> projects = results.getContent();
-        List<UUID> projectIds = projects.stream().map(Project::getId).toList();
-        List<Object[]> memberCountsRaw = projectIds.isEmpty()
-                ? List.of()
-                : projectMemberRepository.countByProjectIds(projectIds);
+        List<ProjectResponse> responses = toResponses(projects);
+        return PagedResponse.from(new org.springframework.data.domain.PageImpl<>(responses, pageable, results.getTotalElements()));
+    }
+
+    public ProjectResponse getProjectById(UUID id) {
+        User currentUser = currentUserService.requireCurrentUser();
+        Project project = findActiveProject(id);
+        currentUserService.requireProjectAccess(currentUser, project);
+        ProjectResponse base = ProjectResponse.from(project, currentUser.getId());
+        List<UUID> ids = List.of(project.getId());
+        long sources = sumRows(documentRepository.countDirectByProjectIds(ids, DocumentType.SOURCE))
+                + sumRows(projectDocumentRepository.countSharedSourcesByProjectIds(ids, DocumentType.SOURCE));
+        long sections = sumRows(paperSectionRepository.countByProjectIds(ids));
+        return ProjectResponse.withCounts(base, sources, sections);
+    }
+
+    // ponytail: one batch query per count type (same shape as the memberCounts query) —
+    // no per-project N+1, no FE-side fan-out for the Metadata badges.
+    private List<ProjectResponse> toResponses(List<Project> projects) {
+        List<UUID> projectIds = idsOf(projects);
         Map<UUID, Long> memberCounts = new java.util.HashMap<>();
-        for (Object[] row : memberCountsRaw) {
-            memberCounts.put((UUID) row[0], ((Number) row[1]).longValue());
+        Map<UUID, Long> sourceCounts = new java.util.HashMap<>();
+        Map<UUID, Long> sectionCounts = new java.util.HashMap<>();
+        if (!projectIds.isEmpty()) {
+            memberCounts.putAll(countMap(projectMemberRepository.countByProjectIds(projectIds)));
+            for (Object[] row : documentRepository.countDirectByProjectIds(projectIds, DocumentType.SOURCE)) {
+                sourceCounts.merge((UUID) row[0], ((Number) row[1]).longValue(), Long::sum);
+            }
+            for (Object[] row : projectDocumentRepository.countSharedSourcesByProjectIds(projectIds, DocumentType.SOURCE)) {
+                sourceCounts.merge((UUID) row[0], ((Number) row[1]).longValue(), Long::sum);
+            }
+            sectionCounts.putAll(countMap(paperSectionRepository.countByProjectIds(projectIds)));
         }
-        List<ProjectResponse> responses = projects.stream()
+        return projects.stream()
                 .map(p -> new ProjectResponse(
                         p.getId(),
                         p.getTitle(),
@@ -92,17 +124,31 @@ public class ProjectServiceImpl {
                         p.getCreatedAt(),
                         p.getUpdatedAt(),
                         null,
-                        memberCounts.getOrDefault(p.getId(), 0L)
+                        memberCounts.getOrDefault(p.getId(), 0L),
+                        sourceCounts.getOrDefault(p.getId(), 0L),
+                        sectionCounts.getOrDefault(p.getId(), 0L)
                 ))
                 .toList();
-        return PagedResponse.from(new org.springframework.data.domain.PageImpl<>(responses, pageable, results.getTotalElements()));
     }
 
-    public ProjectResponse getProjectById(UUID id) {
-        User currentUser = currentUserService.requireCurrentUser();
-        Project project = findActiveProject(id);
-        currentUserService.requireProjectAccess(currentUser, project);
-        return ProjectResponse.from(project, currentUser.getId());
+    private static List<UUID> idsOf(List<Project> projects) {
+        return projects.stream().map(Project::getId).toList();
+    }
+
+    private static Map<UUID, Long> countMap(List<Object[]> rows) {
+        Map<UUID, Long> counts = new java.util.HashMap<>();
+        for (Object[] row : rows) {
+            counts.put((UUID) row[0], ((Number) row[1]).longValue());
+        }
+        return counts;
+    }
+
+    private static long sumRows(List<Object[]> rows) {
+        long total = 0;
+        for (Object[] row : rows) {
+            total += ((Number) row[1]).longValue();
+        }
+        return total;
     }
 
     @Transactional

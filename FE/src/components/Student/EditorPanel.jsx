@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import LatexEditor from '../features/LatexEditor';
 import FeedbackPanel from './FeedbackPanel.jsx';
 import PreviewPane from '../features/PreviewPane';
@@ -8,6 +9,7 @@ import { buildCitationNumbers, buildReferenceEntries } from '../../utils/paperRe
 import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
 import { useTranslation } from 'react-i18next';
 import { mapScrollPosition } from '../../utils/student/scrollSync.js';
+import { clearReanchor, getPendingReanchor, usePendingReanchor } from '../../stores/reanchorStore.js';
 
 const getScrollAnchors = (container, editor) => {
   const origin = container.getBoundingClientRect().top + container.clientTop - container.scrollTop;
@@ -26,7 +28,7 @@ const getScrollAnchors = (container, editor) => {
 };
 
 export default function EditorPanel({
-  compact, review,
+  compact, review, projectId,
   selectedPaper, selectedSectionId, assignedSections, canEditCurrentSection, currentSection, displayContent, updateCode,
   editorWidth, onEditorResizeStart,
   saveStatus, lastSaved, handleSaveDraft,
@@ -41,7 +43,7 @@ export default function EditorPanel({
   onEditorUserScroll,
   isReviewVisible = true, onToggleReviewVisible,
   feedback, feedbackOpen = false, setFeedbackOpen, activeFeedbackId, onSelectFeedback,
-  feedbackRequestId, setFeedbackRequestId, feedbackScope, setFeedbackScope,
+  feedbackRequestId, setFeedbackRequestId, feedbackScope, setFeedbackScope, onStudentState,
   citationIndex = {},
   paperReferences = [],
 }) {
@@ -116,11 +118,45 @@ export default function EditorPanel({
     return () => { observer.disconnect(); cancelAnimationFrame(measureFrameRef.current); measureFrameRef.current = null; };
   }, [measureFeedback]);
   useEffect(() => { setOverlapIds([]); measureFeedback(); }, [selectedSectionId, feedbackOpen, measureFeedback]);
+  const pendingReanchor = usePendingReanchor();
+  const [complexSelection, setComplexSelection] = useState(null);
+  // Transient comment FAB: coordinates are single-frame truth — any scroll,
+  // doc change, collapse, section switch, or Escape unmounts it immediately.
+  const [fab, setFab] = useState(null);
+  const [composerFocusToken, setComposerFocusToken] = useState(0);
   const handleFeedbackClick = useCallback(ids => {
     setOverlapIds(ids);
     const item = (review?.feedbackItems || feedback?.items || []).find(entry => entry.id === ids[0]);
     if (item) onSelectFeedback?.(item);
   }, [review, feedback?.items, onSelectFeedback]);
+  // ponytail: preview text is unmappable — route to the Editor instead of
+  // string-matching (indexOf resolves recurring words to their first
+  // occurrence: the phantom-duplicate bug). Anchors come only from the Editor.
+  const handlePreviewSelect = useCallback(result => {
+    if (result?.kind === 'preview-selection' && review) setComplexSelection(result);
+    else setComplexSelection(null);
+  }, [review]);
+  const lockPreviewSelection = useCallback(() => {
+    setComplexSelection(null);
+    window.getSelection()?.removeAllRanges();
+    switchReviewMode(false);
+    // Anchor creation happens only from selection.main.from/to in the Editor.
+  }, [review, switchReviewMode]);
+  useEffect(() => { setComplexSelection(null); }, [selectedSectionId]);
+  useEffect(() => { setFab(null); }, [selectedSectionId, feedbackOpen]);
+  useEffect(() => {
+    if (!fab) return undefined;
+    const onKey = event => { if (event.key === 'Escape') setFab(null); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [fab]);
+  const openComposerFromFab = useCallback(() => {
+    if (!review) return;
+    if (getPendingReanchor()) review.reanchorThread?.();
+    else review.captureSourceSelection?.();
+    setFab(null);
+    setComposerFocusToken(token => token + 1);
+  }, [review]);
   const closeFeedback = () => {
     setFeedbackOpen(false);
     containerRef.current?.querySelector('[data-tour="editor-feedback"]')?.focus();
@@ -129,7 +165,7 @@ export default function EditorPanel({
   // Sync by source anchors so tall preview blocks (especially tables) can move at their own rate.
   const syncScrollRef = useRef(null);
   const editorScrollBridge = useCallback(() => { syncScrollRef.current?.('editor'); measureFeedback(); }, [measureFeedback]);
-  const previewScrollBridge = useCallback(() => syncScrollRef.current?.('preview'), []);
+  const previewScrollBridge = useCallback(() => { syncScrollRef.current?.('preview'); setFab(null); }, []);
   const layoutBridge = useCallback(() => { syncScrollRef.current?.(); measureFeedback(); }, [measureFeedback]);
 
   // Recreated per section so pending scrolls reset; both panes start at top.
@@ -194,6 +230,27 @@ export default function EditorPanel({
         {review.snapshotState === 'LEGACY_NO_SNAPSHOT' && <p role="alert">{t('instructor.review.legacySnapshotNotice')}</p>}
         {review.snapshotState === 'LOAD_ERROR' && <p role="alert">{t('instructor.review.snapshotLoadError')} <button type="button" onClick={() => review.setSnapshotRetry(value => value + 1)}>{t('retry')}</button></p>}
       </div>}
+      {review && pendingReanchor && (
+        <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-[11px] font-semibold text-teal-800 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200">
+          <span>{t('instructor.review.reanchorBanner')}</span>
+          <span className="ml-auto flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => review.reanchorThread?.()}
+              className="rounded-md bg-teal-600 px-2.5 py-1 text-[10px] font-black text-white hover:bg-teal-700"
+            >
+              {t('instructor.review.lockAnchor')}
+            </button>
+            <button
+              type="button"
+              onClick={clearReanchor}
+              className="rounded-md border border-teal-300 px-2.5 py-1 text-[10px] font-bold"
+            >
+              {t('cancel')}
+            </button>
+          </span>
+        </div>
+      )}
       <div className={`flex-1 min-h-0 min-w-0 flex gap-2 ${narrow ? 'flex-col' : ''}`}>
       <div style={{ flex: narrow ? '1 1 0' : threePanes ? '1 1 480px' : `${editorWidth} 1 0` }} className={`bg-(--surface) rounded-lg shadow-sm border border-(--border) ${(narrow && previewVisible) || (review && showPreview) ? 'hidden' : 'flex'} flex-col overflow-hidden min-w-0 min-h-0`}>
         <div data-tour="editor-toolbar" className="h-10 border-b border-(--border-light) flex items-center justify-between px-3 bg-(--surface) shadow-sm shrink-0 z-10">
@@ -205,10 +262,16 @@ export default function EditorPanel({
           <div className="flex items-center gap-2 sm:gap-3">
             {review && (
               <>
-                <button type="button" onClick={() => review.setDiffEnabled(!review.diffEnabled)} aria-pressed={review.diffEnabled} title={t('instructor.review.showChanges')}
-                  className={`shrink-0 rounded-md border border-(--border) px-2.5 py-1 text-[11px] font-bold focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors ${review.diffEnabled ? 'bg-(--brand-soft) text-(--brand-foreground)' : 'bg-(--surface-tertiary) text-(--text-primary) hover:bg-(--border)'}`}>
-                  {t('instructor.review.showChanges')}
-                </button>
+                <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold text-(--text-secondary) cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={review.diffEnabled}
+                    onChange={event => review.setDiffEnabled(event.target.checked)}
+                    aria-label={t('instructor.review.showChanges')}
+                    className="h-3.5 w-3.5 accent-emerald-600 focus-visible:ring-2 focus-visible:ring-(--brand)"
+                  />
+                  <span>{t('instructor.review.showChanges')}</span>
+                </label>
                 <button type="button" onClick={() => switchReviewMode(!showPreview)} aria-pressed={showPreview}
                 className="shrink-0 rounded-md border border-(--border) bg-(--surface-tertiary) px-2.5 py-1 text-[11px] font-bold text-(--text-primary) hover:bg-(--border) focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors">
                 {showPreview ? t('student.workspace.latexLabel') : t('preview')}
@@ -367,7 +430,7 @@ export default function EditorPanel({
         <div className="flex-1 min-h-0 overflow-hidden">
           <LatexEditor key={review ? `${review.viewMode}-${review.activeRequestId}-${selectedSectionId}` : selectedSectionId || 'no-section'} ref={editorRef} content={displayContent} savedContent={currentSection?.contentTex || ''} savedVersion={currentSection?.version}
             feedbackItems={sectionFeedback} activeFeedbackId={review?.activeFeedbackId || activeFeedbackId} feedbackVisible={Boolean(review) || feedbackOpen} onFeedbackClick={handleFeedbackClick} onFeedbackChange={measureFeedback}
-            onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} mediaAssets={mediaAssets} changeRanges={review?.changeRanges || []} />
+            onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onSelection={review ? setFab : undefined} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} mediaAssets={mediaAssets} changeRanges={review?.changeRanges || []} />
         </div>
         <GeneratedReferences
           references={generatedReferences}
@@ -382,7 +445,7 @@ export default function EditorPanel({
       {feedback && <div id="student-feedback-panel" hidden={!feedbackOpen} style={{ flex: narrow ? '0 0 44%' : threePanes ? '0 0 320px' : `${100 - editorWidth} 1 0` }}
         className={`${feedbackOpen ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-(--border) bg-(--surface) shadow-sm`}>
         <FeedbackPanel feedback={feedback} sectionId={selectedSectionId} activeId={activeFeedbackId} onSelect={onSelectFeedback} onClose={closeFeedback} visible={feedbackOpen}
-          positions={positions} narrow={narrow} requestId={feedbackRequestId} setRequestId={setFeedbackRequestId} scope={feedbackScope} setScope={setFeedbackScope} overlapIds={overlapIds} />
+          positions={positions} narrow={narrow} requestId={feedbackRequestId} setRequestId={setFeedbackRequestId} scope={feedbackScope} setScope={setFeedbackScope} overlapIds={overlapIds} onStudentState={onStudentState} projectId={projectId} />
       </div>}
       <div style={{ flex: review ? '1 1 0' : threePanes ? '1 1 400px' : `${100 - editorWidth} 1 0` }} className={`${(!review && previewVisible) || (review && showPreview) ? 'flex' : 'hidden'} min-w-0 min-h-0 bg-(--surface) rounded-xl shadow-sm border border-(--border) flex-col overflow-hidden`}>
         <div className="h-11 border-b border-(--border-light) flex items-center justify-between px-4 bg-(--surface)">
@@ -391,6 +454,18 @@ export default function EditorPanel({
             {t('preview')}
           </div>
           <div className="flex items-center gap-1">
+            {review && (
+              <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold text-(--text-secondary) cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={review.diffEnabled}
+                  onChange={event => review.setDiffEnabled(event.target.checked)}
+                  aria-label={t('instructor.review.showChanges')}
+                  className="h-3.5 w-3.5 accent-emerald-600 focus-visible:ring-2 focus-visible:ring-(--brand)"
+                />
+                <span>{t('instructor.review.showChanges')}</span>
+              </label>
+            )}
             {review && showPreview && (
               <button type="button" onClick={() => switchReviewMode(false)}
                 className="rounded-md border border-(--border) bg-(--surface-tertiary) px-2.5 py-1 text-[11px] font-bold text-(--text-primary) hover:bg-(--border) focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors">
@@ -422,12 +497,61 @@ export default function EditorPanel({
             citationNumbers={citationNumbers}
             referencesTitle={currentSection?.sectionTitle || t('references')}
             changeRanges={review?.changeRanges || []}
+            onPreviewSelect={review ? handlePreviewSelect : undefined}
           />
         </div>
       </div>
+      {review && complexSelection && (
+        <div
+          role="alert"
+          style={{
+            position: 'fixed',
+            left: Math.min(Math.max((complexSelection.rect?.left ?? 200) - 40, 8), window.innerWidth - 300),
+            top: Math.max((complexSelection.rect?.bottom ?? 200) + 8, 8),
+          }}
+          className="z-50 w-72 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 shadow-xl dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+        >
+          <p className="font-bold">{t('instructor.review.previewUnavailableTitle')}</p>
+          <div className="mt-2 flex gap-1.5">
+            <button
+              type="button"
+              onClick={lockPreviewSelection}
+              className="flex-1 rounded-lg bg-amber-600 px-2 py-1.5 text-[10px] font-black text-white hover:bg-amber-700"
+            >
+              {t('instructor.review.previewUnavailableAction')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setComplexSelection(null)}
+              aria-label={t('studentFeedback.close')}
+              className="rounded-lg border border-amber-300 px-2 py-1.5 text-[10px] font-bold"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+      {review && fab?.coords && createPortal(
+        <button
+          type="button"
+          aria-label={getPendingReanchor() ? t('instructor.review.lockAnchorHere') : t('instructor.review.addComment')}
+          title={getPendingReanchor() ? t('instructor.review.lockAnchorHere') : t('instructor.review.addComment')}
+          onMouseDown={event => event.preventDefault()}
+          onClick={openComposerFromFab}
+          style={{
+            position: 'fixed',
+            left: fab.coords.right,
+            top: fab.coords.top - 25,
+          }}
+          className="z-50 flex h-5 w-5 items-center justify-center rounded text-teal-700 hover:bg-teal-50 focus-visible:ring-2 focus-visible:ring-teal-300 dark:text-teal-300 dark:hover:bg-teal-950"
+        >
+          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v14M5 12h14" /></svg>
+        </button>,
+        document.body,
+      )}
       {review && (
         <div className="w-[340px] xl:w-[380px] max-w-full shrink-0 min-h-0 overflow-y-auto overflow-x-hidden rounded-xl border border-(--border) bg-(--surface) shadow-sm p-2">
-          <InstructorFeedbackPanel review={review} selectedSection={currentSection} onSelectFeedback={onSelectFeedback} />
+          <InstructorFeedbackPanel review={review} selectedSection={currentSection} onSelectFeedback={onSelectFeedback} projectId={projectId} focusSignal={composerFocusToken} composerFocusToken={composerFocusToken} />
         </div>
       )}
       </div>

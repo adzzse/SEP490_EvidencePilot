@@ -117,9 +117,10 @@ class FeedbackControllerTest {
     void retiredConversationRoutesAreNotAvailable() throws Exception {
         UUID itemId = UUID.randomUUID();
         UUID replyId = UUID.randomUUID();
+        // POST .../replies was reintroduced on the new thread model (cycle-scoped,
+        // published replies); only the legacy answer/patch/delete routes stay retired.
         for (var request : java.util.List.of(
                 post("/api/instructor-feedback/{id}/answer", itemId),
-                post("/api/instructor-feedback/{id}/replies", itemId),
                 patch("/api/instructor-feedback/{id}/replies/{replyId}", itemId, replyId),
                 delete("/api/instructor-feedback/{id}/replies/{replyId}", itemId, replyId))) {
             mockMvc.perform(request.contentType(MediaType.APPLICATION_JSON)
@@ -130,12 +131,43 @@ class FeedbackControllerTest {
     }
 
     @Test
+    void reply_bindsCycleAndReturnsCreatedOrOk() throws Exception {
+        UUID itemId = UUID.randomUUID();
+        UUID cycleId = UUID.randomUUID();
+        String body = "{\"requestId\":\"" + cycleId + "\",\"content\":\"Fixed in V2\"}";
+        when(service.postReply(eq(itemId), any(com.evidencepilot.dto.request.FeedbackReplyRequest.class)))
+                .thenReturn(new com.evidencepilot.dto.response.PostReplyResult(null, true));
+        mockMvc.perform(post("/api/instructor-feedback/{id}/replies", itemId)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+        when(service.postReply(eq(itemId), any(com.evidencepilot.dto.request.FeedbackReplyRequest.class)))
+                .thenReturn(new com.evidencepilot.dto.response.PostReplyResult(null, false));
+        mockMvc.perform(post("/api/instructor-feedback/{id}/replies", itemId)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void reanchor_bindsRange() throws Exception {
+        UUID itemId = UUID.randomUUID();
+        String fingerprint = "a".repeat(64);
+        mockMvc.perform(patch("/api/instructor-feedback/{id}/anchor", itemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"from\":0,\"to\":8,\"contentVersion\":1,\"fingerprint\":\""
+                                + fingerprint
+                                + "\",\"representation\":\"latex-source-lf-v1\",\"offsetUnit\":\"utf16\"}"))
+                .andExpect(status().isOk());
+        verify(service).reanchor(eq(itemId),
+                any(com.evidencepilot.dto.request.FeedbackAnchorRequest.class));
+    }
+
+    @Test
     void feedbackState_bindsRevision() throws Exception {
         UUID itemId = UUID.randomUUID();
         mockMvc.perform(patch("/api/instructor-feedback/{id}/state", itemId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"state\":\"DONE\",\"expectedRevision\":2}"))
+                        .content("{\"state\":\"RESOLVED\",\"expectedRevision\":2}"))
                 .andExpect(status().isOk());
-        verify(service).prepareFeedbackState(itemId, new FeedbackStateRequest(FeedbackThreadState.DONE, 2L));
+        verify(service).prepareFeedbackState(itemId, new FeedbackStateRequest(FeedbackThreadState.RESOLVED, 2L));
     }
 }

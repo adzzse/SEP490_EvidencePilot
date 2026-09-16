@@ -7,9 +7,19 @@ const FEEDBACK_REQUEST_STATUSES = new Set(['PENDING', 'RETURNED', 'REVIEWED']);
 const FEEDBACK_LOCATIONS = new Set(['ATTACHED', 'MODIFIED', 'DETACHED', 'SECTION', 'UNLOCATED']);
 
 export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect, onClose, visible,
-  positions, narrow, requestId, setRequestId, scope, setScope, overlapIds = [] }) {
+  positions, narrow, requestId, setRequestId, scope, setScope, overlapIds = [], onStudentState, projectId }) {
   const { t, i18n } = useTranslation();
   const [threadState, setThreadState] = useState('OPEN');
+  const [studentNotes, setStudentNotes] = useState({});
+  const [studentBusyId, setStudentBusyId] = useState(null);
+  const sendStudentState = (item, status) => {
+    if (!onStudentState || studentBusyId === item.id) return;
+    setStudentBusyId(item.id);
+    Promise.resolve(onStudentState(item, status, studentNotes[item.id] || '')).then(ok => {
+      if (ok) setStudentNotes(prev => ({ ...prev, [item.id]: '' }));
+      setStudentBusyId(current => (current === item.id ? null : current));
+    });
+  };
   const [layout, setLayout] = useState([]);
   const scrollerRef = useRef(null);
   const cardsRef = useRef(new Map());
@@ -17,7 +27,7 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
   const [scrollTop, setScrollTop] = useState(0);
   useEffect(() => {
     const active = feedback.items.find(item => item.id === activeId);
-    if (active && (active.threadState || 'OPEN') === 'DONE') setThreadState('ALL');
+    if (active && ['RESOLVED', 'REJECTED'].includes(active.threadState || 'OPEN')) setThreadState('ALL');
   }, [activeId, feedback.items]);
   const filtered = useMemo(() => feedback.items.filter(item => {
     return (!requestId || item.requestId === requestId)
@@ -98,7 +108,8 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
       </div>
       <select className={`${control} w-full mt-2`} value={threadState} onChange={event => setThreadState(event.target.value)} aria-label={t('studentFeedback.threadFilter')}>
         <option value="OPEN">{t('studentFeedback.open')}</option>
-        <option value="DONE">{t('studentFeedback.done')}</option>
+        <option value="RESOLVED">{t('studentFeedback.resolved')}</option>
+        <option value="REJECTED">{t('studentFeedback.rejected')}</option>
         <option value="ALL">{t('studentFeedback.all')}</option>
       </select>
       <select className={`${control} w-full mt-2`} value={requestId || ''} onChange={event => setRequestId(event.target.value || null)} aria-label={t('studentFeedback.roundFilter')}>
@@ -152,6 +163,11 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
               {t(`studentFeedback.location.${FEEDBACK_LOCATIONS.has(locationStatus) ? locationStatus : 'UNLOCATED'}`)}
               {locationStatus === 'UNLOCATED' && item.lineReference ? ` · ${item.lineReference}` : ''}
             </p>}
+            {(locationStatus === 'DETACHED' || locationStatus === 'MODIFIED') && anchor?.original?.exact && (
+              <p className="mt-2 rounded bg-(--surface-secondary) p-2 text-[11px] italic line-through opacity-60">
+                {t('studentFeedback.originalContext')}: {anchor.original.exact}
+              </p>
+            )}
             {active && <div className="mt-3 space-y-3">
               <p className="text-[10px] text-(--text-tertiary)">{date(item.createdAt)}</p>
               {anchor?.original?.exact && <details className="rounded-md border border-(--border) bg-(--surface-secondary) px-2 py-1.5">
@@ -159,8 +175,65 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
                 <p className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono leading-relaxed">{anchor.original.exact}</p>
               </details>}
               {canNavigate && <button type="button" className={`${control} font-semibold`} onClick={() => select(item)}>{t('studentFeedback.goToText')}</button>}
-              {item.threadState === 'DONE' && <p className="rounded-md bg-(--surface-secondary) p-2 text-[11px] text-(--text-secondary)">{t('studentFeedback.doneNotice')}</p>}
-
+              {item.threadState === 'RESOLVED' && <p className="rounded-md bg-(--surface-secondary) p-2 text-[11px] text-(--text-secondary)">{t('studentFeedback.resolvedNotice')}</p>}
+              {item.threadState === 'REJECTED' && <p className="rounded-md bg-(--surface-secondary) p-2 text-[11px] text-(--text-secondary)">{t('studentFeedback.rejectedNotice')}</p>}
+              {(item.attachments || []).length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {item.attachments.map(attachment => (
+                    <a key={attachment.id} href={attachment.url} target="_blank" rel="noreferrer" title={attachment.mimeType}>
+                      <img src={attachment.url} alt="" loading="lazy" decoding="async" className="h-14 w-14 rounded-md border border-(--border) object-cover" />
+                    </a>
+                  ))}
+                </div>
+              )}
+              {(item.replies || []).length > 0 && (
+                <ul className="space-y-1.5">
+                  {item.replies.map(reply => (
+                    <li key={reply.id} className="rounded-md bg-(--surface-secondary)/70 px-2 py-1.5">
+                      <p className="text-[9px] font-bold text-(--text-tertiary)">
+                        {reply.authorName || reply.authorRole} · {date(reply.createdAt)}
+                      </p>
+                      <p className="mt-0.5 whitespace-pre-wrap break-words leading-relaxed">{reply.content}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {item.requestStatus === 'RETURNED' && onStudentState && (
+                <div className="space-y-1.5">
+                  {item.studentStatus && (
+                    <p className="text-[10px] font-bold text-(--text-tertiary)">
+                      {t('studentFeedback.studentState', { status: item.studentStatus })}
+                      {item.studentNote ? ` · ${item.studentNote}` : ''}
+                    </p>
+                  )}
+                  <textarea
+                    value={studentNotes[item.id] ?? item.studentNote ?? ''}
+                    onChange={event => setStudentNotes(prev => ({ ...prev, [item.id]: event.target.value }))}
+                    placeholder={t('studentFeedback.studentNotePlaceholder')}
+                    rows={2}
+                    disabled={studentBusyId === item.id}
+                    className="w-full rounded-md border border-(--border) bg-(--surface) px-2 py-1.5 text-xs"
+                  />
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      disabled={studentBusyId === item.id}
+                      onClick={() => sendStudentState(item, 'IMPLEMENTED')}
+                      className="flex-1 rounded-md bg-emerald-600 px-2 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
+                    >
+                      {t('studentFeedback.markFixed')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={studentBusyId === item.id}
+                      onClick={() => sendStudentState(item, 'WONT_FIX')}
+                      className="flex-1 rounded-md border border-(--border) px-2 py-1.5 text-[11px] font-bold text-(--text-secondary) disabled:opacity-50"
+                    >
+                      {t('studentFeedback.wontFix')}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>}
           </article>;
         })}

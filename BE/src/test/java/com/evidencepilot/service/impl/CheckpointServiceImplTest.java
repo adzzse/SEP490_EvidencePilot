@@ -154,13 +154,13 @@ class CheckpointServiceImplTest {
         when(projectRepository.findById(project.getId())).thenReturn(java.util.Optional.of(project));
         var resolved = new com.evidencepilot.model.InstructorFeedback();
         resolved.setPublishedAt(LocalDateTime.now());
-        resolved.setThreadState(com.evidencepilot.model.enums.FeedbackThreadState.DONE);
+        resolved.setThreadState(com.evidencepilot.model.enums.FeedbackThreadState.RESOLVED);
         var open = new com.evidencepilot.model.InstructorFeedback();
         open.setPublishedAt(LocalDateTime.now());
         // A pending instructor state change must not leak into student-visible counts.
-        open.setPendingState(com.evidencepilot.model.enums.FeedbackThreadState.DONE);
+        open.setPendingState(com.evidencepilot.model.enums.FeedbackThreadState.RESOLVED);
         var draft = new com.evidencepilot.model.InstructorFeedback();
-        draft.setThreadState(com.evidencepilot.model.enums.FeedbackThreadState.DONE);
+        draft.setThreadState(com.evidencepilot.model.enums.FeedbackThreadState.RESOLVED);
         when(instructorFeedbackRepository.findByRequestProjectId(project.getId()))
                 .thenReturn(List.of(resolved, open, draft));
         service.capture(project.getId(), "RETURNED");

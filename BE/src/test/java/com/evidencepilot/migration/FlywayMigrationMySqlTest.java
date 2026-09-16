@@ -68,7 +68,7 @@ class FlywayMigrationMySqlTest {
         Integer successfulMigrations = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
                 Integer.class);
-        assertThat(successfulMigrations).isEqualTo(33);
+        assertThat(successfulMigrations).isEqualTo(38);
 
         assertThat(jdbcTemplate.queryForList("""
                         SELECT constraint_name
@@ -150,6 +150,15 @@ class FlywayMigrationMySqlTest {
                           AND column_name = 'pass_threshold'
                         """))
                 .containsEntry("is_nullable", "YES");
+        // V35: minted-but-unclaimed uploads have no thread yet.
+        assertThat(jdbcTemplate.queryForMap("""
+                        SELECT is_nullable
+                        FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'feedback_attachments'
+                          AND column_name = 'feedback_id'
+                        """))
+                .containsEntry("is_nullable", "YES");
         assertThat(jdbcTemplate.queryForList("""
                         SELECT column_name
                         FROM information_schema.columns
@@ -171,7 +180,58 @@ class FlywayMigrationMySqlTest {
                         WHERE table_schema = DATABASE()
                           AND table_name = 'instructor_feedbacks'
                         """, String.class))
-                .contains("published_at", "thread_state", "pending_state");
+                .contains("published_at", "thread_state", "pending_state", "student_status", "student_note");
+        // V37: independent review snapshots + student ack toggle.
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()",
+                String.class))
+                .contains("review_section_snapshots");
+        assertThat(jdbcTemplate.queryForObject("""
+                        SELECT check_clause
+                        FROM information_schema.check_constraints
+                        WHERE constraint_schema = DATABASE()
+                          AND constraint_name = 'chk_instructor_feedback_student_status'
+                        """, String.class))
+                .contains("IMPLEMENTED", "WONT_FIX");
+        // V34: DONE eradicated from the state machine, replies cycle-scoped,
+        // idempotency scoped to (thread, author), attachments table present.
+        assertThat(jdbcTemplate.queryForObject("""
+                        SELECT check_clause
+                        FROM information_schema.check_constraints
+                        WHERE constraint_schema = DATABASE()
+                          AND constraint_name = 'chk_instructor_feedback_thread_state'
+                        """, String.class))
+                .contains("RESOLVED", "REJECTED").doesNotContain("DONE");
+        assertThat(jdbcTemplate.queryForList("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'feedback_replies'
+                        """, String.class))
+                .contains("request_id", "idempotency_key");
+        assertThat(jdbcTemplate.queryForList("""
+                        SELECT constraint_name
+                        FROM information_schema.table_constraints
+                        WHERE constraint_schema = DATABASE()
+                          AND table_name = 'feedback_attachments'
+                          AND constraint_type = 'CHECK'
+                        """, String.class))
+                .contains("chk_fb_att_target", "chk_fb_att_size");
+        // V36: link-only attachments; the FK is provenance, the clone is truth.
+        assertThat(jdbcTemplate.queryForList("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'feedback_attachments'
+                        """, String.class))
+                .contains("media_asset_id");
+        assertThat(jdbcTemplate.queryForList("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema = DATABASE()
+                          AND table_name = 'project_media'
+                        """, String.class))
+                .contains("file_size_bytes");
 
         assertThat(jdbcTemplate.queryForMap(
                 "SELECT data_type FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'citation_review_rounds' AND column_name = 'generation_meta'"))
@@ -304,10 +364,10 @@ class FlywayMigrationMySqlTest {
                 .migrate()
                 .migrationsExecuted;
 
-        assertThat(migrationsExecuted).isEqualTo(32);
+        assertThat(migrationsExecuted).isEqualTo(37);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
-                Integer.class)).isEqualTo(33);
+                Integer.class)).isEqualTo(38);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT type FROM flyway_schema_history WHERE installed_rank = 1",
                 String.class)).isEqualTo("BASELINE");

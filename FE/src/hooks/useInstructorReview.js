@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api.js';
 import useUndoDelete from '../components/ui/UndoDelete.jsx';
 import { normalizeSource, resolveAnchor, sourceFingerprint } from '../utils/student/feedbackAnchors.js';
+import { clearReanchor, getPendingReanchor } from '../stores/reanchorStore.js';
 import { wordDiff } from '../utils/instructor/wordDiff.js';
 
 export async function loadAllProjectSources(projectId) {
@@ -51,6 +52,7 @@ export default function useInstructorReview({ projectId, enabled }) {
   const [successMessage, setSuccessMessage] = useState('');
   const [diffEnabled, setDiffEnabled] = useState(false);
   const [baseline, setBaseline] = useState(null);
+  const [submittedSnap, setSubmittedSnap] = useState(null);
   const [baselineSectionId, setBaselineSectionId] = useState(null);
   const [feedbackDrafts, setFeedbackDrafts] = useState({});
   const draftKey = JSON.stringify([projectId, activeRequestId, selectedSectionId]);
@@ -248,17 +250,26 @@ export default function useInstructorReview({ projectId, enabled }) {
 
   useEffect(() => {
     if (!enabled) return;
-    if (!diffEnabled || !projectId || !selectedSectionId) { setBaseline(null); setBaselineSectionId(null); return; }
+    if (!diffEnabled || !activeRequest?.id || !selectedSectionId) { setBaseline(null); setSubmittedSnap(null); setBaselineSectionId(null); return; }
     setBaseline(null);
+    setSubmittedSnap(null);
     setBaselineSectionId(null);
     let cancelled = false;
-    api.get(`/api/projects/${projectId}/checkpoints/latest/sections/${selectedSectionId}`, {
-      params: activeRequest?.requestedAt ? { before: activeRequest.requestedAt } : {},
+    // ponytail: diff compares only review milestones (BASELINE vs SUBMITTED),
+    // never checkpoints or save history.
+    api.get(`/api/feedback-requests/${activeRequest.id}/section-snapshots`, {
+      params: { sectionId: selectedSectionId },
     })
-      .then(r => { if (!cancelled) { setBaseline(r.data); setBaselineSectionId(selectedSectionId); } })
-      .catch(() => { if (!cancelled) { setBaseline(null); setBaselineSectionId(null); } });
+      .then(r => {
+        if (cancelled) return;
+        const rows = r.data || [];
+        setBaseline(rows.find(s => s.snapshotType === 'BASELINE') || null);
+        setSubmittedSnap(rows.find(s => s.snapshotType === 'SUBMITTED') || null);
+        setBaselineSectionId(selectedSectionId);
+      })
+      .catch(() => { if (!cancelled) { setBaseline(null); setSubmittedSnap(null); setBaselineSectionId(null); } });
     return () => { cancelled = true; };
-  }, [diffEnabled, projectId, selectedSectionId, activeRequest?.requestedAt]);
+  }, [diffEnabled, activeRequest?.id, selectedSectionId]);
 
   const selectedSection = sections.find(s => String(s.id) === String(selectedSectionId)) || null;
 
@@ -277,14 +288,14 @@ export default function useInstructorReview({ projectId, enabled }) {
     return contained || guides.find(g => normalizeKey(g.sectionType) === 'default') || null;
   }, [guides, selectedSection]);
 
-  // ponytail: word-level submitted-vs-baseline diff (was whole-block mark).
+  // ponytail: word-level BASELINE-vs-SUBMITTED diff (was checkpoint-vs-live).
   // Normalized first so change offsets line up with displayContent (what the
   // LaTeX editor and Preview both render); all three views share diffResult.
   const diffResult = useMemo(() => {
-    if (!diffEnabled || !baseline || !selectedSection) return null;
-    if (String(baselineSectionId) !== String(selectedSection.id)) return null;
-    return wordDiff(normalizeSource(baseline.contentTex || ''), normalizeSource(selectedSection.contentTex || ''));
-  }, [diffEnabled, baseline, baselineSectionId, selectedSection]);
+    if (!diffEnabled || !baseline || !submittedSnap) return null;
+    if (String(baselineSectionId) !== String(selectedSection?.id)) return null;
+    return wordDiff(normalizeSource(baseline.contentTex || ''), normalizeSource(submittedSnap.contentTex || ''));
+  }, [diffEnabled, baseline, submittedSnap, baselineSectionId, selectedSection]);
   const diffOps = diffResult?.ops || null;
   const diffTruncated = !!diffResult?.truncated;
   const changeRanges = diffResult?.ranges || [];
@@ -308,9 +319,20 @@ export default function useInstructorReview({ projectId, enabled }) {
 
   useEffect(() => { if (!enabled) return; loadFeedback(); return () => { feedbackLoadRef.current += 1; }; }, [loadFeedback, enabled]);
 
-  const handleSubmitFeedback = async (e) => {
+  // ponytail: mutations return the full post-commit thread DTO — merge it
+  // surgically instead of invalidating/refetching (a fast refetch would race
+  // the slow commit and ghost the change). Full reloads stay for mount,
+  // round switches, transitions (many rows change), and explicit refresh.
+  const mergeThread = useCallback(thread => {
+    if (!thread?.id) return;
+    setFeedbackItems(previous => (previous.some(item => String(item.id) === String(thread.id))
+      ? previous.map(item => (String(item.id) === String(thread.id) ? thread : item))
+      : [...previous, thread]));
+  }, []);
+
+  const handleSubmitFeedback = async (e, mediaAssetIds) => {
     e.preventDefault();
-    if (!enabled || !canCreateRoot || !activeRequestId || !selectedSectionId || !feedbackDraft.trim()) return;
+    if (!enabled || !canCreateRoot || !activeRequestId || !selectedSectionId || !feedbackDraft.trim()) return false;
     setSavingFeedback(true); setErrorMessage('');
     try {
       const body = {
@@ -325,22 +347,28 @@ export default function useInstructorReview({ projectId, enabled }) {
           representation: 'latex-source-lf-v1',
           offsetUnit: 'utf16',
         } : null,
+        ...(mediaAssetIds?.length ? { mediaAssetIds } : {}),
       };
       if (editingFeedbackId) {
-        await api.patch(`/api/instructor-feedback/${editingFeedbackId}`, body);
+        const { data } = await api.patch(`/api/instructor-feedback/${editingFeedbackId}`, body);
+        mergeThread(data);
       } else {
-        await api.post(`/api/feedback-requests/${activeRequestId}/feedback`, body);
+        const { data } = await api.post(`/api/feedback-requests/${activeRequestId}/feedback`, body);
+        mergeThread(data);
       }
       clearFeedbackDraft();
-      await loadFeedback();
+      return true;
     } catch (err) {
       setErrorMessage(err?.response?.data?.message || t('instructor.review.saveFeedbackFailed'));
+      return false;
     } finally { setSavingFeedback(false); }
   };
 
   const captureSourceSelection = async () => {
     if (!enabled || !canCreateRoot || !selectedSection) return;
     const range = sourceEditorRef.current?.getSelectionRange?.();
+    // ponytail: CodeMirror's doc is LF — normalize the DB text BEFORE measuring,
+    // or raw \r\n lengths drift from/to (line-10 highlight bug).
     const source = normalizeSource(selectedSection.contentTex || '');
     if (!range || range.to <= range.from || range.to > source.length || !Number.isInteger(selectedSection.version)) {
       setErrorMessage(t('instructor.review.selectSourceRange'));
@@ -370,6 +398,43 @@ export default function useInstructorReview({ projectId, enabled }) {
     clearFeedbackDraft();
   };
 
+  // Relocates a draft thread's anchor to the current editor selection.
+  // Same-section only: the thread row stays bound to its section, so locking
+  // onto another section's text would corrupt the section-scoped model —
+  // cross-section moves are new threads. Frozen cycles are rejected by the
+  // server (409); the button that starts this flow only renders on drafts.
+  const reanchorThread = async () => {
+    const pending = getPendingReanchor();
+    if (!enabled || !pending || !selectedSection) return false;
+    if (String(pending.sectionId) !== String(selectedSection.id)) {
+      setErrorMessage(t('instructor.review.reanchorSameSection'));
+      return false;
+    }
+    const range = sourceEditorRef.current?.getSelectionRange?.();
+    const source = normalizeSource(selectedSection.contentTex || '');
+    if (!range || range.to <= range.from || range.to > source.length) {
+      setErrorMessage(t('instructor.review.selectSourceRange'));
+      return false;
+    }
+    setErrorMessage('');
+    try {
+      const { data } = await api.patch(`/api/instructor-feedback/${pending.threadId}/anchor`, {
+        from: range.from,
+        to: range.to,
+        contentVersion: selectedSection.version,
+        fingerprint: await sourceFingerprint(source),
+        representation: 'latex-source-lf-v1',
+        offsetUnit: 'utf16',
+      });
+      mergeThread(data);
+      clearReanchor();
+      return true;
+    } catch (err) {
+      setErrorMessage(err?.response?.data?.message || t('instructor.review.saveFeedbackFailed'));
+      return false;
+    }
+  };
+
   const handleDeleteFeedback = async (itemId) => {
     const sid = String(itemId);
     const item = feedbackItems.find(f => String(f.id) === sid);
@@ -389,16 +454,40 @@ export default function useInstructorReview({ projectId, enabled }) {
     }, () => { loadFeedback(); });
   };
 
-  const prepareState = async (feedback, state) => {
+  const prepareState = async (feedback, state, note, student) => {
     setErrorMessage('');
     try {
-      await api.patch(`/api/instructor-feedback/${feedback.id}/state`, {
+      const { data } = await api.patch(`/api/instructor-feedback/${feedback.id}/state`, {
         state,
         expectedRevision: feedback.revision,
+        ...(note?.trim() ? { note: note.trim() } : {}),
+        ...(student?.studentStatus ? { studentStatus: student.studentStatus } : {}),
+        ...(student?.studentNote?.trim() ? { studentNote: student.studentNote.trim() } : {}),
       });
-      await loadFeedback();
+      mergeThread(data);
+      return true;
     } catch (err) {
       setErrorMessage(err?.response?.data?.message || t('instructor.review.updateStatusFailed'));
+      return false;
+    }
+  };
+
+  const postReply = async (item, content, mediaAssetIds) => {
+    const text = (content || '').trim();
+    if (!enabled || !text || !item?.id || !item?.requestId) return false;
+    setErrorMessage('');
+    try {
+      const { data } = await api.post(`/api/instructor-feedback/${item.id}/replies`, {
+        requestId: item.requestId,
+        content: text,
+        idempotencyKey: crypto.randomUUID(),
+        ...(mediaAssetIds?.length ? { mediaAssetIds } : {}),
+      });
+      mergeThread(data);
+      return true;
+    } catch (err) {
+      setErrorMessage(err?.response?.data?.message || t('instructor.review.replyFailed'));
+      return false;
     }
   };
 
@@ -625,8 +714,10 @@ export default function useInstructorReview({ projectId, enabled }) {
     captureSourceSelection,
     handleEditFeedback,
     handleCancelEdit,
+    reanchorThread,
     handleDeleteFeedback,
     prepareState,
+    postReply,
     selectFeedback,
     handleTransitionStatus,
     handleGenerateSuggestions,

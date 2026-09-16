@@ -3,8 +3,12 @@ package com.evidencepilot.service;
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
+import com.evidencepilot.repository.DocumentRepository;
+import com.evidencepilot.repository.PaperSectionRepository;
+import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
@@ -39,6 +43,15 @@ class ProjectServiceImplPagingTest {
 
     @Mock
     private ProjectMemberRepository projectMemberRepository;
+
+    @Mock
+    private DocumentRepository documentRepository;
+
+    @Mock
+    private ProjectDocumentRepository projectDocumentRepository;
+
+    @Mock
+    private PaperSectionRepository paperSectionRepository;
 
     @Mock
     private UserRepository userRepository;
@@ -77,10 +90,19 @@ class ProjectServiceImplPagingTest {
                         3));
         when(projectMemberRepository.countByProjectIds(List.of(project.getId())))
                 .thenReturn(List.<Object[]>of(new Object[]{project.getId(), 2L}));
+        when(documentRepository.countDirectByProjectIds(List.of(project.getId()), DocumentType.SOURCE))
+                .thenReturn(List.<Object[]>of(new Object[]{project.getId(), 3L}));
+        when(projectDocumentRepository.countSharedSourcesByProjectIds(List.of(project.getId()), DocumentType.SOURCE))
+                .thenReturn(List.<Object[]>of(new Object[]{project.getId(), 2L}));
+        when(paperSectionRepository.countByProjectIds(List.of(project.getId())))
+                .thenReturn(List.<Object[]>of(new Object[]{project.getId(), 5L}));
 
         ProjectServiceImpl service = new ProjectServiceImpl(
                 projectRepository,
                 projectMemberRepository,
+                documentRepository,
+                projectDocumentRepository,
+                paperSectionRepository,
                 userRepository,
                 currentUserService,
                 systemNotificationService,
@@ -102,6 +124,8 @@ class ProjectServiceImplPagingTest {
         assertThat(response.totalElements()).isEqualTo(3);
         assertThat(response.totalPages()).isEqualTo(2);
         assertThat(response.content().getFirst().memberCount()).isEqualTo(2L);
+        assertThat(response.content().getFirst().sourceCount()).isEqualTo(5L);
+        assertThat(response.content().getFirst().sectionCount()).isEqualTo(5L);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
         verify(projectRepository).findAll(any(Specification.class), pageableCaptor.capture());
@@ -121,6 +145,9 @@ class ProjectServiceImplPagingTest {
         ProjectServiceImpl service = new ProjectServiceImpl(
                 projectRepository,
                 projectMemberRepository,
+                documentRepository,
+                projectDocumentRepository,
+                paperSectionRepository,
                 userRepository,
                 currentUserService,
                 systemNotificationService,

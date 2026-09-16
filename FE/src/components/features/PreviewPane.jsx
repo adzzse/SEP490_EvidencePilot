@@ -1,4 +1,4 @@
-import { useMemo, useDeferredValue } from 'react';
+import { Component, useMemo, useDeferredValue } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -22,6 +22,47 @@ function MissingImage({ alt }) {
   return <span className="text-red-500 text-xs">{t('student.workspace.missingImage', { alt: alt || t('student.workspace.defaultImageAlt') })}</span>;
 }
 
+// ponytail: injected <ins>/<del> diff tags can split a math block and make the
+// KaTeX AST parser throw. Fall back to a raw preformatted string, never crash.
+class PreviewDiffBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { crashed: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { crashed: true };
+  }
+
+  componentDidUpdate(previous) {
+    if (this.state.crashed
+      && (previous.markdown !== this.props.markdown || previous.changeKey !== this.props.changeKey)) {
+      // eslint-disable-next-line react/no-did-update-set-state
+      this.setState({ crashed: false });
+    }
+  }
+
+  render() {
+    if (this.state.crashed) {
+      return <pre className="max-w-prose mx-auto whitespace-pre-wrap break-words text-xs text-slate-700">{this.props.markdown}</pre>;
+    }
+    return this.props.children;
+  }
+}
+
+// Preview text has no source map (block-level data-src-* only; KaTeX has
+// none at all) — every non-collapsed selection is unmappable by construction.
+// Never return offsets or searchable snippets; the parent routes to the Editor.
+function describePreviewSelection(container) {
+  const selection = typeof window === 'undefined' ? null : window.getSelection();
+  if (!container || !selection || selection.isCollapsed || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!container.contains(range.commonAncestorContainer)) return null;
+  if (!selection.toString().trim()) return null;
+  const rect = range.getBoundingClientRect();
+  return { kind: 'preview-selection', rect: { left: rect.left, top: rect.top, bottom: rect.bottom } };
+}
+
 export default function PreviewPane({
   sectionTitle,
   latex,
@@ -34,6 +75,7 @@ export default function PreviewPane({
   zoom = 100,
   // ponytail: shared changeRanges from useInstructorReview — same model as the LaTeX editor.
   changeRanges = [],
+  onPreviewSelect,
 }) {
   const { t } = useTranslation();
   // ponytail: shared hook — concurrent mounts reuse one in-flight /api/media/urls.
@@ -90,7 +132,12 @@ export default function PreviewPane({
   const heading = sectionTitle || (generatedReferences.length > 0 ? referencesTitle || t('references') : '');
 
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto bg-white p-8" onScroll={onScroll}>
+    <div
+      ref={scrollRef}
+      className="h-full overflow-y-auto bg-white p-8"
+      onScroll={onScroll}
+      onMouseUp={event => onPreviewSelect?.(describePreviewSelection(event.currentTarget))}
+    >
       <div style={{ zoom: zoom / 100 }}>
         {heading && <h2 className="max-w-prose mx-auto text-lg font-bold mb-3 text-slate-800">{heading}</h2>}
         {useLegacy ? (
@@ -98,6 +145,7 @@ export default function PreviewPane({
         ) : (
           markdown.trim() !== '' && (
             <div className="max-w-prose mx-auto break-words preview-content">
+              <PreviewDiffBoundary markdown={markdown} changeKey={changeRanges.length}>
               <ReactMarkdown
                 remarkPlugins={remarkPlugins}
                 rehypePlugins={rehypePlugins}
@@ -105,6 +153,7 @@ export default function PreviewPane({
               >
                 {markdown}
               </ReactMarkdown>
+              </PreviewDiffBoundary>
             </div>
           )
         )}

@@ -46,7 +46,8 @@ import static org.mockito.Mockito.when;
 }, showSql = false)
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@Import({FeedbackServiceImpl.class, FeedbackAnchorService.class, ObjectMapper.class})
+@Import({FeedbackServiceImpl.class, FeedbackAnchorService.class, ObjectMapper.class,
+        com.evidencepilot.service.FeedbackAttachmentService.class})
 class FeedbackPublicationMySqlTest {
     @Container
     private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46");
@@ -67,6 +68,7 @@ class FeedbackPublicationMySqlTest {
     @MockBean private CheckpointServiceImpl checkpoints;
     @MockBean private ProjectCollectionService collections;
     @MockBean private SubmissionReadinessService readiness;
+    @MockBean private com.evidencepilot.service.DocumentObjectStorage storage;
 
     @Test
     void returnWaitsForTheDraftInsertAndPublishesItInTheSameRound() throws Exception {

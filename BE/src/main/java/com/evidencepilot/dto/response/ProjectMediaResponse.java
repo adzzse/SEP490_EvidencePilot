@@ -10,5 +10,6 @@ public record ProjectMediaResponse(
     String storageKey,
     String texFilename,
     String mimeType,
+    Long fileSizeBytes,
     LocalDateTime uploadedAt
 ) {}

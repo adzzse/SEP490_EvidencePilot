@@ -101,8 +101,16 @@ export default function SourceLibraryContent({
   const visibleSources = (sources || []).filter(src => (src.originalFilename || '').toLowerCase().includes(sourceSearchQuery.trim().toLowerCase()));
 
   return (
-    <div className={`${compact ? 'p-3 gap-4' : 'p-5 gap-6'} flex flex-col min-w-0 max-w-full overflow-x-hidden animate-in fade-in duration-300`}>
-      <div className="flex items-center gap-2">
+    // ponytail: review (compact) lives inside the FilePanel scroll container, so the root
+    // stays bare — padding/scroll come from the parent and no overflow-* may trap sticky.
+    // Student keeps its original classes untouched.
+    <div className={compact
+      ? 'flex min-w-0 flex-col gap-4'
+      : 'p-5 gap-6 flex flex-col min-w-0 max-w-full overflow-x-hidden animate-in fade-in duration-300'}>
+      {/* ponytail: review-only sticky band mirrors the Media Asset search bar (FilePanel.jsx); student tab keeps the plain row. */}
+      <div className={compact
+        ? 'sticky top-0 z-10 -mx-3 flex items-center gap-2 border-b border-(--border) bg-(--surface-secondary) px-3 py-2'
+        : 'flex items-center gap-2'}>
         <input type="text" value={sourceSearchQuery} onChange={event => setSourceSearchQuery(event.target.value)} placeholder={t('searchSources')}
           aria-label={t('searchSources')}
           className="min-w-0 flex-1 text-xs border border-(--border) rounded-lg px-2.5 py-2 bg-(--surface) outline-none focus:ring-1 focus:ring-indigo-500 text-(--text-primary)" />

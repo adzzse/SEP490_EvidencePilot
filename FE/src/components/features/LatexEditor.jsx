@@ -253,15 +253,17 @@ function buildCiteMask(view, citationIndexRef) {
 
 const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = content, savedVersion,
   feedbackItems, activeFeedbackId, feedbackVisible = false, onFeedbackClick, onFeedbackChange,
-  onChange, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onLayoutChange, onUserScroll, citationIndex = {}, mediaAssets = [], changeRanges = [] }, ref) {
+  onChange, onSelection, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onLayoutChange, onUserScroll, citationIndex = {}, mediaAssets = [], changeRanges = [] }, ref) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
   const trackerRef = useRef(null);
   if (!trackerRef.current) trackerRef.current = createChangeTracker(savedContent, content);
   const onChangeRef = useRef(onChange);
+  const selectionRef = useRef(onSelection);
   const feedbackClickRef = useRef(onFeedbackClick);
   const feedbackChangeRef = useRef(onFeedbackChange);
   onChangeRef.current = onChange;
+  selectionRef.current = onSelection;
   feedbackClickRef.current = onFeedbackClick;
   feedbackChangeRef.current = onFeedbackChange;
   const lastEmittedRef = useRef('');
@@ -339,6 +341,16 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
     getSelectionRange: () => {
       const selection = viewRef.current?.state.selection.main;
       return selection ? { from: selection.from, to: selection.to } : null;
+    },
+    // ANCHOR-FORBIDDEN: text search resolves recurring words to their first
+    // occurrence (phantom duplicates). Feedback anchors must come only from
+    // selection.main.from/to via captureSourceSelection. This exists solely
+    // for the find/replace toolbar (replaceFirst), where first-match is correct.
+    findOffset: (query) => {
+      const v = viewRef.current;
+      if (!v || !query) return null;
+      const at = v.state.doc.toString().indexOf(query);
+      return at < 0 ? null : at;
     },
     insertAtCursor: (text, cursorOffset) => {
       const v = viewRef.current;
@@ -506,6 +518,15 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
       if (update.selectionSet || update.docChanged) {
         assetPeekFnRef.current?.(update.view);
       }
+      // FAB channel: emit on selectionSet (coords valid this frame), null on
+      // collapse/doc change. Coordinates are single-frame truth — the parent
+      // must treat them as stale on the next scroll/selection event.
+      if (update.selectionSet || update.docChanged) {
+        const sel = update.state.selection.main;
+        selectionRef.current?.(sel.empty
+          ? null
+          : { from: sel.from, to: sel.to, coords: update.view.coordsAtPos(sel.from) });
+      }
     });
 
     const config = {
@@ -572,9 +593,9 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
           '.cm-content': { color: isDark ? '#f8fafc' : '#000000', breakWords: 'break-word', overflowWrap: 'anywhere' },
           '.cm-line': { color: isDark ? '#f8fafc' : '#000000', wordBreak: 'break-word', overflowWrap: 'anywhere' },
           '.cm-content *, .cm-line *': { color: isDark ? '#f8fafc !important' : '#000000 !important' },
-          '.cm-activeLine': { backgroundColor: isDark ? '#0f172a !important' : '#ffffff !important' },
+          '.cm-activeLine': { backgroundColor: 'transparent !important' },
           '.cm-activeLineGutter': { backgroundColor: isDark ? '#0f172a !important' : '#ffffff !important' },
-          '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: isDark ? 'rgba(99, 102, 241, 0.35) !important' : 'rgba(224, 231, 255, 0.6) !important' },
+          '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: 'rgba(99, 102, 241, 0.35) !important' },
           '.cm-lintRange': { wordBreak: 'break-word', overflowWrap: 'anywhere', maxWidth: '100%' },
           '.cm-lintRange-warning': { backgroundColor: 'transparent', borderBottom: '2px solid #eab308' },
           '.cm-lintRange-error': { backgroundColor: 'transparent', borderBottom: '2px solid #ef4444' },
@@ -637,12 +658,18 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
 
     viewRef.current = new EditorView({ state, parent: containerRef.current });
     viewRef.current.scrollDOM.scrollTop = previousScroll;
+    // Test/debug handle: lets specs drive selectionSet programmatically
+    // (readOnly editors are not keyboard-focusable, and mouse drags are
+    // viewport-flaky). Production path is untouched — dispatch still flows
+    // through the real updateListener.
+    viewRef.current.dom.__cmView = viewRef.current;
     onLayoutChangeRef.current?.();
 
     // Scroll listener lives with the view so readOnly/fontSize/theme rebuilds re-bind it.
     const handleScroll = () => {
       onScrollRef.current?.();
       onUserScrollRef.current?.(); // e.g. instantly close the inline citation card
+      selectionRef.current?.(null); // scroll-kill: coordinates are stale the millisecond content moves
       setAssetPeek(prev => (prev && prev.pinned ? prev : null));
     };
     viewRef.current.scrollDOM.addEventListener('scroll', handleScroll, { passive: true });

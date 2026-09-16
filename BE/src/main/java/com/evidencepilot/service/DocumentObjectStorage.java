@@ -1,6 +1,8 @@
 package com.evidencepilot.service;
 
 import io.minio.BucketExistsArgs;
+import io.minio.CopyObjectArgs;
+import io.minio.CopySource;
 import io.minio.GetObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MakeBucketArgs;
@@ -72,6 +74,17 @@ public class DocumentObjectStorage {
 
     public String readText(String objectKey) {
         return new String(read(objectKey), StandardCharsets.UTF_8);
+    }
+
+    public long contentLength(String objectKey) {
+        try {
+            return minioClient.statObject(StatObjectArgs.builder()
+                    .bucket(bucketName)
+                    .object(objectKey)
+                    .build()).size();
+        } catch (Exception e) {
+            throw new DocumentStorageException("Failed to inspect object " + objectKey + " in MinIO", e);
+        }
     }
 
     public void write(String objectKey, InputStream stream, long size, String contentType) {
@@ -198,6 +211,32 @@ public class DocumentObjectStorage {
                     .build());
         } catch (Exception e) {
             throw new DocumentStorageException("Failed to sign object " + objectKey + " in MinIO", e);
+        }
+    }
+
+    public String presignedPutUrl(String objectKey, int expiryMinutes) {
+        try {
+            return minioPresignClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
+                    .method(Method.PUT)
+                    .bucket(bucketName)
+                    .object(objectKey)
+                    .expiry(expiryMinutes, TimeUnit.MINUTES)
+                    .build());
+        } catch (Exception e) {
+            throw new DocumentStorageException("Failed to sign upload for object " + objectKey + " in MinIO", e);
+        }
+    }
+
+    public void copy(String sourceKey, String destKey) {
+        try {
+            minioClient.copyObject(CopyObjectArgs.builder()
+                    .bucket(bucketName)
+                    .object(destKey)
+                    .source(CopySource.builder().bucket(bucketName).object(sourceKey).build())
+                    .build());
+        } catch (Exception e) {
+            throw new DocumentStorageException(
+                    "Failed to copy object " + sourceKey + " to " + destKey + " in MinIO", e);
         }
     }
 

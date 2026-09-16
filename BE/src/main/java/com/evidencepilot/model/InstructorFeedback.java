@@ -1,11 +1,14 @@
 package com.evidencepilot.model;
 
 import com.evidencepilot.model.enums.FeedbackThreadState;
+import com.evidencepilot.model.enums.StudentStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import org.hibernate.annotations.JdbcTypeCode;
@@ -85,6 +88,22 @@ public class InstructorFeedback {
 
     @Column(name = "pending_state_opt_version")
     private Long pendingStateOptVersion;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "student_status", length = 12)
+    private StudentStatus studentStatus;
+
+    @Column(name = "student_note", columnDefinition = "TEXT")
+    private String studentNote;
+
+    @OneToMany(mappedBy = "feedback", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("createdAt ASC")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private List<FeedbackReply> replies = new ArrayList<>();
+
+    @OneToMany(mappedBy = "feedback", cascade = CascadeType.ALL, orphanRemoval = true)
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private List<FeedbackAttachment> attachments = new ArrayList<>();
 
     @Override
     public boolean equals(Object o) {

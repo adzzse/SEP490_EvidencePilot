@@ -1,10 +1,14 @@
 package com.evidencepilot.controller;
 
+import com.evidencepilot.dto.request.FeedbackAnchorRequest;
+import com.evidencepilot.dto.request.FeedbackReplyRequest;
 import com.evidencepilot.dto.request.FeedbackStateRequest;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.dto.response.FeedbackRequestResponseDto;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
+import com.evidencepilot.dto.response.PostReplyResult;
+import com.evidencepilot.service.impl.FeedbackServiceImpl;
 import com.evidencepilot.dto.response.ReviewReadinessResponse;
 import com.evidencepilot.dto.response.ReviewSubmissionSnapshotResponse;
 import com.evidencepilot.service.impl.FeedbackServiceImpl;
@@ -80,6 +84,23 @@ public class FeedbackController {
         return feedbackService.getSubmissionSnapshot(id);
     }
 
+    @Operation(summary = "Get review section snapshots",
+            description = "Returns the BASELINE (at Return for Revision) and SUBMITTED "
+                    + "(at Submit for Review) per-section snapshots for one review request. "
+                    + "The diff view compares only these two rows — never save history.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Snapshots returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Not the request's instructor or student"),
+            @ApiResponse(responseCode = "404", description = "Feedback request not found")
+    })
+    @GetMapping("/feedback-requests/{id}/section-snapshots")
+    public List<com.evidencepilot.dto.response.ReviewSectionSnapshotDto> getSectionSnapshots(
+            @Parameter(description = "Feedback request UUID") @PathVariable UUID id,
+            @Parameter(description = "Optional paper section UUID") @RequestParam(required = false) UUID sectionId) {
+        return feedbackService.getSectionSnapshots(id, sectionId);
+    }
+
     @Operation(summary = "Submit instructor feedback",
             description = "Creates instructor feedback for one paper section in a feedback request. "
                     + "The current user is extracted from the JWT.")
@@ -147,6 +168,58 @@ public class FeedbackController {
     public InstructorFeedbackResponseDto prepareFeedbackState(
             @PathVariable UUID id, @Valid @RequestBody FeedbackStateRequest request) {
         return feedbackService.prepareFeedbackState(id, request);
+    }
+
+    @Operation(summary = "Get a single feedback thread",
+            description = "Returns one thread with its replies and attachments. "
+                    + "Students cannot see unpublished drafts.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Thread returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "404", description = "Feedback thread not found")
+    })
+    @GetMapping("/instructor-feedback/{id}")
+    public InstructorFeedbackResponseDto getThread(
+            @Parameter(description = "Instructor feedback thread UUID") @PathVariable UUID id) {
+        return feedbackService.getThread(id);
+    }
+
+    @Operation(summary = "Re-anchor a draft thread",
+            description = "Moves a draft thread's anchor to a new range in the same section. "
+                    + "Drafts only: threads on closed (RETURNED or later) cycles are immutable "
+                    + "history and return 409 — create a new thread on the current text instead.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Anchor updated, full thread returned"),
+            @ApiResponse(responseCode = "400", description = "Range does not match the reviewed source"),
+            @ApiResponse(responseCode = "403", description = "Not the author instructor"),
+            @ApiResponse(responseCode = "404", description = "Feedback thread not found"),
+            @ApiResponse(responseCode = "409", description = "Review cycle is closed")
+    })
+    @PatchMapping("/instructor-feedback/{id}/anchor")
+    public InstructorFeedbackResponseDto reanchor(
+            @Parameter(description = "Instructor feedback thread UUID") @PathVariable UUID id,
+            @Valid @RequestBody FeedbackAnchorRequest request) {
+        return feedbackService.reanchor(id, request);
+    }
+
+    @Operation(summary = "Reply to a feedback thread",
+            description = "Posts a reply on a published thread, pinned to an explicit RETURNED "
+                    + "review cycle. Replies are published immediately. Resending the same "
+                    + "idempotency key with identical content returns the original reply.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Reply created"),
+            @ApiResponse(responseCode = "200", description = "Idempotent replay, original reply returned"),
+            @ApiResponse(responseCode = "403", description = "No access to this feedback"),
+            @ApiResponse(responseCode = "404", description = "Feedback thread not found"),
+            @ApiResponse(responseCode = "409", description = "Thread unpublished, cycle not returned, or key reuse with different content")
+    })
+    @PostMapping("/instructor-feedback/{id}/replies")
+    public ResponseEntity<InstructorFeedbackResponseDto> postReply(
+            @Parameter(description = "Instructor feedback thread UUID") @PathVariable UUID id,
+            @Valid @RequestBody FeedbackReplyRequest request) {
+        PostReplyResult result = feedbackService.postReply(id, request);
+        return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
+                .body(feedbackService.getThread(id));
     }
 
     @Operation(summary = "Update feedback request status",

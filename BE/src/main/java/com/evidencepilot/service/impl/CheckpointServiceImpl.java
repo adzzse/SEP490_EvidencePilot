@@ -63,7 +63,8 @@ public class CheckpointServiceImpl {
             int open = 0;
             for (InstructorFeedback feedback : instructorFeedbackRepository.findByRequestProjectId(projectId)) {
                 if (feedback.getPublishedAt() == null) continue;
-                if (feedback.getThreadState() == FeedbackThreadState.DONE) resolved++; else open++;
+                if (feedback.getThreadState() == FeedbackThreadState.RESOLVED
+                        || feedback.getThreadState() == FeedbackThreadState.REJECTED) resolved++; else open++;
             }
             snapshot.set("feedback", objectMapper.createObjectNode()
                     .put("resolved", resolved)

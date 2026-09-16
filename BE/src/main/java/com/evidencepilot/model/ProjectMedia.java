@@ -36,6 +36,9 @@ public class ProjectMedia {
 
     private String mimeType;
 
+    @Column(name = "file_size_bytes")
+    private Long fileSizeBytes;
+
     @Column(name = "uploaded_at")
     private LocalDateTime uploadedAt;
 

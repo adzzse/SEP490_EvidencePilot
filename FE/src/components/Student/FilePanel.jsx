@@ -105,7 +105,7 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
               <span className="text-[11px] font-bold text-(--text-secondary) tracking-wider uppercase">{t('sources')}</span>
             </button>
             {openGroups.sources && (
-              <div className="max-h-[40vh] overflow-y-auto overflow-x-hidden border-b border-(--border) bg-(--surface)">
+              <div className="max-h-[40vh] overflow-y-auto overflow-x-hidden border-b border-(--border) bg-(--surface) px-3 pb-3">
                 {sourcesContent}
               </div>
             )}

@@ -28,7 +28,11 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     Optional<Document> findByIdForUpdate(@Param("id") UUID id);
 
     long countByActiveTrueAndDocType(DocumentType docType);
-    long countByProcessingStatus(ProcessingStatus processingStatus);
+    // Direct sources uploaded to each project — batch twin of the memberCounts pattern.
+    @Query("SELECT d.project.id, COUNT(d) FROM Document d WHERE d.project.id IN :projectIds AND d.docType = :docType AND d.active = true GROUP BY d.project.id")
+    List<Object[]> countDirectByProjectIds(
+            @Param("projectIds") List<UUID> projectIds,
+            @Param("docType") DocumentType docType);    long countByProcessingStatus(ProcessingStatus processingStatus);
     long countByCollectionId(UUID collectionId);
     List<Document> findByProjectId(UUID projectId);
     org.springframework.data.domain.Slice<Document> findByProjectId(UUID projectId, org.springframework.data.domain.Pageable pageable);

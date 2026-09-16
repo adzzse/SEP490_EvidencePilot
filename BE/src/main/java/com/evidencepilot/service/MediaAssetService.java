@@ -69,6 +69,7 @@ public class MediaAssetService {
         media.setStorageKey(storageKey);
         media.setTexFilename(texFilename);
         media.setMimeType(file.getContentType());
+        media.setFileSizeBytes(file.getSize());
         media.setUploadedAt(LocalDateTime.now());
         try {
             media = projectMediaRepository.saveAndFlush(media);
@@ -199,6 +200,7 @@ public class MediaAssetService {
                 m.getStorageKey(),
                 m.getTexFilename(),
                 m.getMimeType(),
+                m.getFileSizeBytes(),
                 m.getUploadedAt()
         );
     }

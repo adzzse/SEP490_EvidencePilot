@@ -3,6 +3,7 @@ package com.evidencepilot.dto.response;
 import com.evidencepilot.model.InstructorFeedback;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.enums.FeedbackThreadState;
+import com.evidencepilot.model.enums.StudentStatus;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -28,12 +29,16 @@ public record InstructorFeedbackResponseDto(
         FeedbackThreadState threadState,
         FeedbackThreadState pendingState,
         Long revision,
+        StudentStatus studentStatus,
+        String studentNote,
         boolean canMarkDone,
         boolean canReopen,
         boolean canEdit,
         boolean canDelete,
         UUID assignedUserId,
-        String assignedUserName
+        String assignedUserName,
+        java.util.List<FeedbackReplyResponseDto> replies,
+        java.util.List<FeedbackAttachmentResponseDto> attachments
 ) {
     public static InstructorFeedbackResponseDto fromFeedback(
             InstructorFeedback feedback,
@@ -44,7 +49,9 @@ public record InstructorFeedbackResponseDto(
             boolean canReopen,
             boolean canEdit,
             boolean canDelete,
-            FeedbackThreadState pendingState) {
+            FeedbackThreadState pendingState,
+            java.util.List<FeedbackReplyResponseDto> replies,
+            java.util.List<FeedbackAttachmentResponseDto> attachments) {
         return new InstructorFeedbackResponseDto(
                 feedback.getId(),
                 feedback.getRequest() != null ? feedback.getRequest().getId() : null,
@@ -66,12 +73,16 @@ public record InstructorFeedbackResponseDto(
                 feedback.getThreadState() == null ? FeedbackThreadState.OPEN : feedback.getThreadState(),
                 pendingState,
                 feedback.getOptVersion(),
+                feedback.getStudentStatus(),
+                feedback.getStudentNote(),
                 canMarkDone,
                 canReopen,
                 canEdit,
                 canDelete,
                 section != null && section.getAssignedUser() != null ? section.getAssignedUser().getId() : null,
-                section != null ? displayName(section.getAssignedUser()) : null);
+                section != null ? displayName(section.getAssignedUser()) : null,
+                replies == null ? java.util.List.of() : replies,
+                attachments == null ? java.util.List.of() : attachments);
     }
 
     private static boolean isStale(Integer anchorVersion, Integer currentVersion) {

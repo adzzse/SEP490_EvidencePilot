@@ -117,7 +117,33 @@ public class GlobalExceptionHandler {
             DataIntegrityViolationException exception,
             HttpServletRequest request) {
 
+        String constraint = constraintName(exception);
+        if (constraint.contains("chk_instructor_feedback_thread_state")
+                || constraint.contains("chk_instructor_feedback_pending_state")) {
+            return build(HttpStatus.CONFLICT, "Invalid thread transition.", request,
+                    Map.of("code", "THREAD_STATE_CONFLICT"));
+        }
+        if (constraint.contains("chk_instructor_feedback_student_status")) {
+            return build(HttpStatus.CONFLICT, "Invalid student status.", request,
+                    Map.of("code", "STUDENT_STATUS_CONFLICT"));
+        }
+        if (constraint.contains("chk_rss_type")) {
+            return build(HttpStatus.CONFLICT, "Invalid snapshot type.", request,
+                    Map.of("code", "SNAPSHOT_TYPE_CONFLICT"));
+        }
+        if (constraint.contains("uq_feedback_replies_idempotency")) {
+            return build(HttpStatus.CONFLICT, "Idempotency key was already used with different content.", request,
+                    Map.of("code", "REPLY_IDEMPOTENCY_REPLAY"));
+        }
         return build(HttpStatus.CONFLICT, "Request conflicts with existing data.", request);
+    }
+
+    private static String constraintName(DataIntegrityViolationException exception) {
+        StringBuilder chain = new StringBuilder();
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause.getMessage() != null) chain.append(cause.getMessage()).append(' ');
+        }
+        return chain.toString();
     }
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)

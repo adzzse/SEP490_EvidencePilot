@@ -230,13 +230,11 @@ export default function ReviewRequests() {
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-[10px] font-bold text-(--text-secondary)">
                               {t('instructor.reviewRequests.members')}: {proj?.memberCount ?? 0}
                             </span>
-                            {/* ponytail: ProjectResponse DTO only exposes memberCount today (BE: ProjectResponse.java).
-                                totalSections / totalSources not in the wire payload; revisit when BE enriches. */}
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-[10px] font-bold text-(--text-tertiary)">
-                              {t('instructor.reviewRequests.sections')}: —
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-[10px] font-bold text-(--text-secondary)">
+                              {t('instructor.reviewRequests.sections')}: {proj?.sectionCount ?? '—'}
                             </span>
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-[10px] font-bold text-(--text-tertiary)">
-                              {t('instructor.reviewRequests.sources')}: —
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-[10px] font-bold text-(--text-secondary)">
+                              {t('instructor.reviewRequests.sources')}: {proj?.sourceCount ?? '—'}
                             </span>
                           </div>
                         </td>
@@ -273,12 +271,11 @@ export default function ReviewRequests() {
                     <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">
                       {t('instructor.reviewRequests.members')}: {proj?.memberCount ?? 0}
                     </span>
-                    {/* ponytail: same deferral as the list view — BE DTO only ships memberCount today. */}
-                    <span className="px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-(--text-tertiary) font-bold">
-                      {t('instructor.reviewRequests.sections')}: —
+                    <span className="px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-(--text-secondary) font-bold">
+                      {t('instructor.reviewRequests.sections')}: {proj?.sectionCount ?? '—'}
                     </span>
-                    <span className="px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-(--text-tertiary) font-bold">
-                      {t('instructor.reviewRequests.sources')}: —
+                    <span className="px-1.5 py-0.5 rounded-md bg-(--surface-secondary) border border-(--border-light) text-(--text-secondary) font-bold">
+                      {t('instructor.reviewRequests.sources')}: {proj?.sourceCount ?? '—'}
                     </span>
                   </div>
                   <div className="mt-2 text-[10px] font-mono text-(--text-tertiary)">

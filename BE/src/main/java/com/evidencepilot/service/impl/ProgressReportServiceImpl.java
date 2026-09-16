@@ -78,7 +78,8 @@ public class ProgressReportServiceImpl {
         for (InstructorFeedback feedback : feedbackList) {
             if (feedback.getPublishedAt() == null || feedback.getSection() == null) continue;
             int[] counts = feedbackCounts.computeIfAbsent(feedback.getSection().getId(), k -> new int[2]);
-            if (feedback.getThreadState() == FeedbackThreadState.DONE) counts[0]++; else counts[1]++;
+            if (feedback.getThreadState() == FeedbackThreadState.RESOLVED
+                    || feedback.getThreadState() == FeedbackThreadState.REJECTED) counts[0]++; else counts[1]++;
         }
         List<ProgressReportResponse.SectionPanel> allPanels = new ArrayList<>();
         for (PaperSection section : allSections) {
