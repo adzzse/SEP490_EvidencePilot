@@ -674,9 +674,4 @@ class AdminServiceTest {
                 .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode().value()).isEqualTo(400));
     }
 
-    private void assertForbidden(Runnable action) {
-        assertThatThrownBy(action::run)
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode().value()).isEqualTo(403));
-    }
 }

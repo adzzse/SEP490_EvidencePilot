@@ -140,6 +140,21 @@ cd BE
 mvn test
 ```
 
+Backend tests are grouped by purpose under `BE/src/test/java`:
+
+```text
+mainflow/com/evidencepilot/       # product flows: auth, projects, documents,
+                                  # citation review, feedback, export
+contract/com/evidencepilot/       # security, API/error, schema/migration,
+                                  # async and operational boundaries
+infrastructure/com/evidencepilot/ # admin, seed/bootstrap, maintenance,
+                                  # configuration-only checks
+```
+
+The tier folders are organizational only: Java `package` declarations remain
+`com.evidencepilot...`, so Maven/Spring/JUnit discovery and package access stay
+unchanged. Keep new tests in the tier that matches the behavior they protect.
+
 Frontend:
 
 ```bash

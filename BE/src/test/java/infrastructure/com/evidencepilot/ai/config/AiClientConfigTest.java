@@ -19,7 +19,7 @@ class AiClientConfigTest {
         contextRunner
                 .withPropertyValues(
                         "ai.model.local-base-url=http://127.0.0.1:8000",
-                        "ai.model.ngrok-base-url=https://good-lumpish-headstone.ngrok-free.dev",
+                        "ai.model.ngrok-base-url=https://wren-fun-hyena.ngrok-free.app",
                         "ai.model.base-url=https://configured-ai.example.test")
                 .run(context -> {
                     assertThat(context.getBean("aiModelBaseUrl", String.class))
