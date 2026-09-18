@@ -1002,6 +1002,9 @@ class AdminExcelSeedServiceTest {
         assertThat(n).isEqualTo(1);
         verify(collections, times(1)).addSource(doc, collection, owner);
         assertThat(job.getErrors()).isEmpty();
+        assertThat(job.getSuccessfulRows()).isOne();
+        assertThat(job.getProcessed()).isOne();
+        assertThat(job.getResult()).containsEntry("collections", 1);
     }
 
     @Test
@@ -1033,6 +1036,34 @@ class AdminExcelSeedServiceTest {
                 List.of(collectionRow("C1", "ghost@example.test", "10.1234/abc", "2")), job);
         assertThat(n).isZero();
         assertThat(job.getErrors()).anyMatch(m -> m.contains("unresolvable owner"));
+        assertThat(job.getSkippedRows()).isOne();
+        assertThat(job.getProcessed()).isOne();
         verify(collections, never()).createSeedCollection(any(), any(), any());
+    }
+
+    @Test
+    void seedJobProcessesCollectionsSheet() {
+        var service = service();
+        var users = (com.evidencepilot.repository.UserRepository)
+                org.springframework.test.util.ReflectionTestUtils.getField(service, "userRepository");
+        var collections = (com.evidencepilot.service.impl.ProjectCollectionService)
+                org.springframework.test.util.ReflectionTestUtils.getField(service, "projectCollectionService");
+        var owner = doiInstructor();
+        when(users.findByEmail("prof@example.test")).thenReturn(java.util.Optional.of(owner));
+        when(collections.createSeedCollection(eq(owner), eq("C1"), any()))
+                .thenReturn(new com.evidencepilot.model.Collection());
+
+        var job = new AdminExcelSeedService.SeedJob();
+        org.springframework.test.util.ReflectionTestUtils.setField(job, "total", 1);
+        var parsed = new AdminExcelSeedService.ParsedSeed(
+                Map.of("collections", List.of(collectionRow("C1", "prof@example.test", "10.1234/abc", "2"))),
+                List.of());
+        org.springframework.test.util.ReflectionTestUtils.invokeMethod(
+                service, "runJob", job, parsed, new AdminExcelSeedService.ZipBundle(Map.of(), List.of()), null);
+
+        assertThat(job.getStatus()).isEqualTo("DONE");
+        assertThat(job.getSuccessfulRows()).isOne();
+        assertThat(job.getProcessed()).isOne();
+        assertThat(job.getResult()).containsEntry("collections", 1);
     }
 }

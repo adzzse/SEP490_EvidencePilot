@@ -695,12 +695,13 @@ public class AdminExcelSeedService {
         Authentication previous = context.getAuthentication();
         context.setAuthentication(auth);
         try {
-            job.result = Map.of("users", 0, "projects", 0, "members", 0, "sources", 0, "papers", 0, "sections", 0);
+            job.result = Map.of("users", 0, "projects", 0, "members", 0, "sources", 0, "collections", 0, "papers", 0, "sections", 0);
             var userRows = parsed.sheets().getOrDefault("users", List.of());
             commitUsers(userRows, job);
             var projects = commitProjects(parsed.sheets().getOrDefault("projects", List.of()), job);
             commitMembers(parsed.sheets().getOrDefault("members", List.of()), job, projects);
             commitSources(parsed.sheets().getOrDefault("sources", List.of()), job, projects);
+            commitCollections(parsed.sheets().getOrDefault("collections", List.of()), job);
             commitPapers(parsed.sheets().getOrDefault("papers", List.of()), bundle.files(), job, projects);
             commitSections(parsed.sheets().getOrDefault("sections", List.of()), job, projects);
         } catch (Exception e) {
@@ -1045,10 +1046,11 @@ public class AdminExcelSeedService {
         int n = 0;
         int links = 0;
         for (var r : rows) {
+            if (job != null) job.startRows("collections", 1);
             var owner = userRepository.findByEmail(
                     r.getOrDefault("owner_email", "").toLowerCase(Locale.ROOT)).orElse(null);
             if (owner == null || owner.getRole() != UserRole.INSTRUCTOR) {
-                if (job != null) job.errors.add("collections row " + r.get("_row") + ": unresolvable owner");
+                if (job != null) job.skipped("collections row " + r.get("_row") + ": unresolvable owner", 1);
                 continue;
             }
             var collection = projectCollectionService.createSeedCollection(
@@ -1067,8 +1069,7 @@ public class AdminExcelSeedService {
             }
             n++;
             if (job != null) {
-                job.processed++;
-                job.currentStep = "collections";
+                job.succeeded("collections", 1);
             }
         }
         log.info("Seed collections committed: {} collections, {} source links", n, links);
