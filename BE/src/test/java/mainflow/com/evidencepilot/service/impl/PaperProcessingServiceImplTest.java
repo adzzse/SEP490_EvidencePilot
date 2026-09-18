@@ -379,6 +379,7 @@ class PaperProcessingServiceImplTest {
                 auditService,
                 sectionStandardEvaluationRepository,
                 feedbackAnchorService,
+                mock(com.evidencepilot.repository.AssignmentSectionBaselineRepository.class),
                 new com.fasterxml.jackson.databind.ObjectMapper());
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId)).thenReturn(List.of());
@@ -537,6 +538,7 @@ class PaperProcessingServiceImplTest {
                 auditService,
                 sectionStandardEvaluationRepository,
                 feedbackAnchorService,
+                mock(com.evidencepilot.repository.AssignmentSectionBaselineRepository.class),
                 new com.fasterxml.jackson.databind.ObjectMapper());
 
         Project project = project(ProjectStatus.IN_PROGRESS);
@@ -601,6 +603,7 @@ class PaperProcessingServiceImplTest {
                 auditService,
                 sectionStandardEvaluationRepository,
                 feedbackAnchorService,
+                mock(com.evidencepilot.repository.AssignmentSectionBaselineRepository.class),
                 new com.fasterxml.jackson.databind.ObjectMapper());
 
         Project project = project(ProjectStatus.IN_PROGRESS);
@@ -1053,6 +1056,7 @@ class PaperProcessingServiceImplTest {
                 auditService,
                 sectionStandardEvaluationRepository,
                 feedbackAnchorService,
+                mock(com.evidencepilot.repository.AssignmentSectionBaselineRepository.class),
                 new com.fasterxml.jackson.databind.ObjectMapper());
     }
 

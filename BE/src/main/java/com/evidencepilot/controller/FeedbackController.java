@@ -1,13 +1,10 @@
 package com.evidencepilot.controller;
 
-import com.evidencepilot.dto.request.FeedbackAnchorRequest;
-import com.evidencepilot.dto.request.FeedbackReplyRequest;
-import com.evidencepilot.dto.request.FeedbackStateRequest;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
+import com.evidencepilot.dto.response.ComparisonSourceDto;
 import com.evidencepilot.dto.response.FeedbackRequestResponseDto;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
-import com.evidencepilot.dto.response.PostReplyResult;
 import com.evidencepilot.service.impl.FeedbackServiceImpl;
 import com.evidencepilot.dto.response.ReviewReadinessResponse;
 import com.evidencepilot.dto.response.ReviewSubmissionSnapshotResponse;
@@ -101,6 +98,27 @@ public class FeedbackController {
         return feedbackService.getSectionSnapshots(id, sectionId);
     }
 
+    @Operation(summary = "Get revision comparison source",
+            description = "Returns the active request's SUBMITTED section content together with "
+                    + "its comparison baseline: the latest earlier RETURNED request's BASELINE "
+                    + "row for the section, else the initial assignment baseline, else null "
+                    + "(honest unavailable — never invented). The diff view consumes this "
+                    + "instead of comparing rows within a single request.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Comparison source returned"),
+            @ApiResponse(responseCode = "400", description = "Section does not belong to the project"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Not the request's instructor or student"),
+            @ApiResponse(responseCode = "404", description = "Feedback request not found"),
+            @ApiResponse(responseCode = "409", description = "Active review has no submitted snapshot")
+    })
+    @GetMapping("/feedback-requests/{id}/comparison-source")
+    public ComparisonSourceDto getComparisonSource(
+            @Parameter(description = "Feedback request UUID") @PathVariable UUID id,
+            @Parameter(description = "Paper section UUID") @RequestParam UUID sectionId) {
+        return feedbackService.getComparisonSource(id, sectionId);
+    }
+
     @Operation(summary = "Submit instructor feedback",
             description = "Creates instructor feedback for one paper section in a feedback request. "
                     + "The current user is extracted from the JWT.")
@@ -120,17 +138,20 @@ public class FeedbackController {
     @Operation(summary = "List feedback items for a request",
             description = "Returns the per-section feedback items of one feedback request, "
                     + "each with section title/order, the section version it was written against, "
-                    + "and a stale flag when the section has been edited since.")
+                    + "and a stale flag when the section has been edited since. "
+                    + "Student members only receive sections assigned to them; leaders, "
+                    + "instructors and admins may additionally filter by section.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Feedback items returned"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
-            @ApiResponse(responseCode = "403", description = "Not the request's instructor or student"),
+            @ApiResponse(responseCode = "403", description = "Not the request's instructor or student, or section not assigned to the member"),
             @ApiResponse(responseCode = "404", description = "Feedback request not found")
     })
     @GetMapping("/feedback-requests/{id}/feedback")
     public List<InstructorFeedbackResponseDto> getFeedbackItems(
-            @Parameter(description = "Feedback request UUID") @PathVariable UUID id) {
-        return feedbackService.getFeedbackItems(id);
+            @Parameter(description = "Feedback request UUID") @PathVariable UUID id,
+            @Parameter(description = "Optional paper section UUID") @RequestParam(required = false) UUID sectionId) {
+        return feedbackService.getFeedbackItems(id, sectionId);
     }
 
     @Operation(summary = "Edit a feedback item",
@@ -164,12 +185,6 @@ public class FeedbackController {
         return ResponseEntity.noContent().build();
     }
 
-    @PatchMapping("/instructor-feedback/{id}/state")
-    public InstructorFeedbackResponseDto prepareFeedbackState(
-            @PathVariable UUID id, @Valid @RequestBody FeedbackStateRequest request) {
-        return feedbackService.prepareFeedbackState(id, request);
-    }
-
     @Operation(summary = "Get a single feedback thread",
             description = "Returns one thread with its replies and attachments. "
                     + "Students cannot see unpublished drafts.")
@@ -184,58 +199,22 @@ public class FeedbackController {
         return feedbackService.getThread(id);
     }
 
-    @Operation(summary = "Re-anchor a draft thread",
-            description = "Moves a draft thread's anchor to a new range in the same section. "
-                    + "Drafts only: threads on closed (RETURNED or later) cycles are immutable "
-                    + "history and return 409 — create a new thread on the current text instead.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Anchor updated, full thread returned"),
-            @ApiResponse(responseCode = "400", description = "Range does not match the reviewed source"),
-            @ApiResponse(responseCode = "403", description = "Not the author instructor"),
-            @ApiResponse(responseCode = "404", description = "Feedback thread not found"),
-            @ApiResponse(responseCode = "409", description = "Review cycle is closed")
-    })
-    @PatchMapping("/instructor-feedback/{id}/anchor")
-    public InstructorFeedbackResponseDto reanchor(
-            @Parameter(description = "Instructor feedback thread UUID") @PathVariable UUID id,
-            @Valid @RequestBody FeedbackAnchorRequest request) {
-        return feedbackService.reanchor(id, request);
-    }
-
-    @Operation(summary = "Reply to a feedback thread",
-            description = "Posts a reply on a published thread, pinned to an explicit RETURNED "
-                    + "review cycle. Replies are published immediately. Resending the same "
-                    + "idempotency key with identical content returns the original reply.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Reply created"),
-            @ApiResponse(responseCode = "200", description = "Idempotent replay, original reply returned"),
-            @ApiResponse(responseCode = "403", description = "No access to this feedback"),
-            @ApiResponse(responseCode = "404", description = "Feedback thread not found"),
-            @ApiResponse(responseCode = "409", description = "Thread unpublished, cycle not returned, or key reuse with different content")
-    })
-    @PostMapping("/instructor-feedback/{id}/replies")
-    public ResponseEntity<InstructorFeedbackResponseDto> postReply(
-            @Parameter(description = "Instructor feedback thread UUID") @PathVariable UUID id,
-            @Valid @RequestBody FeedbackReplyRequest request) {
-        PostReplyResult result = feedbackService.postReply(id, request);
-        return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
-                .body(feedbackService.getThread(id));
-    }
-
     @Operation(summary = "Update feedback request status",
-            description = "Transitions a feedback request to a new status (RETURNED, REVIEWED, or REJECTED) "
-                    + "and sets the project status to ACTIVE. Replaces the old RPC-style status endpoints.")
+            description = "Transitions a feedback request to a new status (RETURNED or REVIEWED). "
+                    + "Request-level REJECTED is retired: stored REJECTED rows remain readable, "
+                    + "but new transitions to REJECTED are rejected. Replaces the old RPC-style status endpoints.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Status updated"),
             @ApiResponse(responseCode = "400", description = "Invalid status value"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
             @ApiResponse(responseCode = "403", description = "Not the assigned instructor"),
-            @ApiResponse(responseCode = "404", description = "Feedback request not found")
+            @ApiResponse(responseCode = "404", description = "Feedback request not found"),
+            @ApiResponse(responseCode = "409", description = "Illegal or retired transition")
     })
     @PatchMapping("/feedback-requests/{id}/status")
     public FeedbackRequestResponseDto updateStatus(
             @Parameter(description = "Feedback request UUID") @PathVariable UUID id,
-            @Parameter(description = "New status: RETURNED, REVIEWED, or REJECTED") @RequestParam String status) {
+            @Parameter(description = "New status: RETURNED or REVIEWED") @RequestParam String status) {
         return feedbackService.updateStatus(id, status);
     }
 }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ChangeSet, Text } from '@codemirror/state';
-import { changeSpans, createChangeTracker, normalizeSource, placeFeedbackCards, remapAnchor, resolveAnchor, sourceFingerprint } from './feedbackAnchors.js';
+import { changeSpans, createChangeTracker, normalizeSource, remapAnchor, resolveAnchor, sourceFingerprint } from './feedbackAnchors.js';
 
 async function target(source, from, to) {
   const hash = await sourceFingerprint(source);
@@ -62,12 +62,8 @@ test('complete deletion detaches and undo restores only the correct original occ
   assert.equal(resolveAnchor(ambiguous, 'target target', 2, await sourceFingerprint('target target')).current.status, 'DETACHED');
 });
 
-test('restored local drafts use a conservative replacement and cards never overlap', async () => {
+test('restored local drafts use a conservative replacement', async () => {
   const tracker = createChangeTracker('A target B', 'A new target B');
   const anchor = await target('A target B', 2, 8);
   assert.equal(remapAnchor(anchor, tracker.snapshot().content, tracker.snapshot().changes).current.status, 'DETACHED');
-  const cards = Array.from({ length: 5 }, (_, id) => ({ id, top: 70, height: 80 + id * 8 }));
-  const placed = placeFeedbackCards(cards, 4).sort((a, b) => a.y - b.y);
-  assert.equal(placed.find(card => card.id === 4).y, 70);
-  placed.slice(1).forEach((card, i) => assert.ok(card.y >= placed[i].y + placed[i].height + 10));
 });

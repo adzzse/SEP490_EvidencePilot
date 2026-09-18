@@ -7,6 +7,7 @@ import com.evidencepilot.dto.response.PaperValidationResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentMetadata;
+import com.evidencepilot.model.AssignmentSectionBaseline;
 import com.evidencepilot.model.InstructorFeedback;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
@@ -16,6 +17,7 @@ import com.evidencepilot.model.enums.PaperStandard;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.repository.DocumentRepository;
+import com.evidencepilot.repository.AssignmentSectionBaselineRepository;
 import com.evidencepilot.repository.DocumentMetadataRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
@@ -77,6 +79,7 @@ public class PaperProcessingServiceImpl {
     private final AuditService auditService;
     private final SectionStandardEvaluationRepository sectionStandardEvaluationRepository;
     private final FeedbackAnchorService feedbackAnchorService;
+    private final AssignmentSectionBaselineRepository assignmentSectionBaselineRepository;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     public List<PaperSectionResponse> getPaperSections(UUID documentId) {
@@ -424,6 +427,7 @@ public class PaperProcessingServiceImpl {
                 project.setUpdatedAt(LocalDateTime.now());
                 projectRepository.save(project);
             }
+            captureInitialBaseline(project, saved, LocalDateTime.now());
             systemNotificationService.createNotification(
                     section.getAssignedUser(),
                     currentUser,
@@ -432,6 +436,29 @@ public class PaperProcessingServiceImpl {
                     currentUser.getEmail() + " assigned you to section \"" + section.getSectionTitle() + "\".");
         }
         return response;
+    }
+
+    /**
+     * Freezes the immutable first-handoff baseline for a section.
+     * Insert-if-absent on UNIQUE(project_id, section_id): reassignment,
+     * unassign, and member changes never alter the row. A concurrent
+     * duplicate insert is swallowed — the existing row already holds it.
+     */
+    public void captureInitialBaseline(Project project, PaperSection section, LocalDateTime now) {
+        if (project == null || project.getId() == null || section == null || section.getId() == null) return;
+        if (assignmentSectionBaselineRepository.existsByProjectIdAndSectionId(
+                project.getId(), section.getId())) return;
+        AssignmentSectionBaseline baseline = new AssignmentSectionBaseline();
+        baseline.setProject(project);
+        baseline.setSection(section);
+        baseline.setContentTex(section.getContentTex());
+        baseline.setContentVersion(section.getVersion());
+        baseline.setCreatedAt(now);
+        try {
+            assignmentSectionBaselineRepository.save(baseline);
+        } catch (org.springframework.dao.DataIntegrityViolationException duplicate) {
+            log.debug("Initial baseline already captured for section {}", section.getId());
+        }
     }
 
     @Transactional
@@ -963,6 +990,7 @@ public class PaperProcessingServiceImpl {
                 section.setAssignedUser(newAssignee);
                 changed = true;
                 if (newAssignee != null) {
+                    captureInitialBaseline(project, section, LocalDateTime.now());
                     systemNotificationService.createNotification(
                             newAssignee,
                             currentUser,

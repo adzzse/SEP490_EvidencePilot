@@ -56,7 +56,9 @@ export function wordDiff(before, after) {
   const aTokens = tokenize(a);
   const bTokens = tokenize(b);
   if (aTokens.length > MAX_TOKENS || bTokens.length > MAX_TOKENS) {
-    return { ops: [[-1, a], [1, b]], truncated: true, ranges: rangesFromOps([[-1, a], [1, b]]) };
+    // ponytail: a whole-document range would mislead — report truncation with
+    // no ranges and let the UI say so honestly instead of lighting everything.
+    return { ops: [[-1, a], [1, b]], truncated: true, ranges: [] };
   }
   const ops = merge(lcsOps(aTokens, bTokens));
   return { ops, truncated: false, ranges: rangesFromOps(ops) };

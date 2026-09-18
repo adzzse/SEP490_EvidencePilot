@@ -8,8 +8,51 @@ import { wordDiff, rangesFromOps, blockOverlapsRanges } from '../wordDiff.js';
 import { applyChangeHighlights, renderLatexToHtml } from '../../formatters/latexHtml.js';
 import { rehypeChangeRanges } from '../../formatters/markdownBlocks.js';
 
+test('oversized inputs truncate honestly without ranges', () => {
+  const big = Array.from({ length: 2100 }, (_, i) => `w${i}`).join(' ');
+  const result = wordDiff(big, `${big} tail`);
+  assert.equal(result.truncated, true);
+  assert.deepEqual(result.ranges, []);
+});
+
 test('identical texts produce no change ranges', () => {
   assert.deepEqual(wordDiff('same text', 'same text').ranges, []);
+});
+
+test('single-character replacement yields one minimal range', () => {
+  const before = 'This is a test feedback, this is version 4';
+  const after = 'This is a test feedback, this is version 5';
+  const { ranges, truncated } = wordDiff(before, after);
+  assert.equal(truncated, false);
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0].type, 'modified');
+  assert.equal(after.slice(ranges[0].sourceStart, ranges[0].sourceEnd), '5');
+});
+
+test('inserted word yields one added range', () => {
+  const before = 'Machine learning systems require testing.';
+  const after = 'Machine learning systems require extensive testing.';
+  const { ranges } = wordDiff(before, after);
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0].type, 'added');
+  assert.equal(after.slice(ranges[0].sourceStart, ranges[0].sourceEnd).trim(), 'extensive');
+});
+
+test('deleted word yields no added range', () => {
+  const { ranges } = wordDiff('require extensive testing.', 'require testing.');
+  assert.deepEqual(ranges, []);
+});
+
+test('CRLF-only differences produce no ranges', () => {
+  const { ranges } = wordDiff('line one\r\nline two', 'line one\nline two');
+  assert.deepEqual(ranges, []);
+});
+
+test('empty baseline marks the whole insertion honestly', () => {
+  const after = 'New paragraph.';
+  const { ranges } = wordDiff('', after);
+  assert.equal(ranges.length, 1);
+  assert.equal(after.slice(ranges[0].sourceStart, ranges[0].sourceEnd), after);
 });
 
 test('added runs carry exact offsets into the after text', () => {
@@ -56,6 +99,33 @@ test('blockOverlapsRanges matches half-open overlap', () => {
   assert.equal(blockOverlapsRanges(19, 30, ranges), true);
   assert.equal(blockOverlapsRanges(20, 30, ranges), false);
   assert.equal(blockOverlapsRanges(0, 5, []), false);
+});
+
+test('latex preview does not whole-mark a block for a partial unmappable range', () => {
+  const before = 'See $x$ here.';
+  const after = 'See $y$ here.';
+  const { ranges } = wordDiff(before, after);
+  assert.ok(ranges.length > 0);
+  const out = applyChangeHighlights(renderLatexToHtml(after), ranges, after);
+  assert.doesNotMatch(out, /<p[^>]*preview-change-added/);
+});
+
+test('latex preview still marks a fully covered block', () => {
+  const out = applyChangeHighlights(renderLatexToHtml('\\[y\\]'), wordDiff('\\[x\\]', '\\[y\\]').ranges, '\\[y\\]');
+  assert.match(out, /preview-change-added/);
+});
+
+test('markdown fallback marks only fully covered elements', () => {
+  const tree = () => ({ children: [
+    { type: 'element', tagName: 'p', properties: {}, position: { start: { offset: 0 }, end: { offset: 10 } },
+      children: [{ type: 'element', tagName: 'strong', children: [{ type: 'text', value: 'Hello' }] }] },
+  ] });
+  const partial = tree();
+  rehypeChangeRanges([{ sourceStart: 0, sourceEnd: 5 }])(partial);
+  assert.deepEqual(partial.children[0].properties.className || [], []);
+  const full = tree();
+  rehypeChangeRanges([{ sourceStart: 0, sourceEnd: 10 }])(full);
+  assert.ok(full.children[0].properties.className.includes('preview-change-added'));
 });
 
 test('latex preview highlights the changed rendered words rather than the whole paragraph', () => {

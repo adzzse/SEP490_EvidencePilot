@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import api from '../services/api.js';
 import useUndoDelete from '../components/ui/UndoDelete.jsx';
 import { normalizeSource, resolveAnchor, sourceFingerprint } from '../utils/student/feedbackAnchors.js';
-import { clearReanchor, getPendingReanchor } from '../stores/reanchorStore.js';
 import { wordDiff } from '../utils/instructor/wordDiff.js';
+import { previousRequest } from '../utils/reviewRounds.js';
 
 export async function loadAllProjectSources(projectId) {
   const sources = [];
@@ -54,6 +54,7 @@ export default function useInstructorReview({ projectId, enabled }) {
   const [baseline, setBaseline] = useState(null);
   const [submittedSnap, setSubmittedSnap] = useState(null);
   const [baselineSectionId, setBaselineSectionId] = useState(null);
+  const [baselineUnavailable, setBaselineUnavailable] = useState(false);
   const [feedbackDrafts, setFeedbackDrafts] = useState({});
   const draftKey = JSON.stringify([projectId, activeRequestId, selectedSectionId]);
   const { content: feedbackDraft = '', lineReference: feedbackLineRef = '',
@@ -250,24 +251,29 @@ export default function useInstructorReview({ projectId, enabled }) {
 
   useEffect(() => {
     if (!enabled) return;
-    if (!diffEnabled || !activeRequest?.id || !selectedSectionId) { setBaseline(null); setSubmittedSnap(null); setBaselineSectionId(null); return; }
+    if (!diffEnabled || !activeRequest?.id || !selectedSectionId) { setBaseline(null); setSubmittedSnap(null); setBaselineSectionId(null); setBaselineUnavailable(false); return; }
     setBaseline(null);
     setSubmittedSnap(null);
     setBaselineSectionId(null);
+    setBaselineUnavailable(false);
     let cancelled = false;
-    // ponytail: diff compares only review milestones (BASELINE vs SUBMITTED),
-    // never checkpoints or save history.
-    api.get(`/api/feedback-requests/${activeRequest.id}/section-snapshots`, {
+    // ponytail: comparison source is server-resolved (latest earlier RETURNED
+    // BASELINE, else initial assignment baseline, else null) — never compare
+    // rows within the single active request.
+    api.get(`/api/feedback-requests/${activeRequest.id}/comparison-source`, {
       params: { sectionId: selectedSectionId },
     })
       .then(r => {
         if (cancelled) return;
-        const rows = r.data || [];
-        setBaseline(rows.find(s => s.snapshotType === 'BASELINE') || null);
-        setSubmittedSnap(rows.find(s => s.snapshotType === 'SUBMITTED') || null);
+        const data = r.data || {};
+        const submitted = data.submitted || null;
+        const baselineRow = data.baseline || null;
+        setBaseline(baselineRow ? { contentTex: baselineRow.contentTex || '' } : null);
+        setSubmittedSnap(submitted ? { contentTex: submitted.contentTex || '' } : null);
         setBaselineSectionId(selectedSectionId);
+        setBaselineUnavailable(!baselineRow && !!submitted);
       })
-      .catch(() => { if (!cancelled) { setBaseline(null); setSubmittedSnap(null); setBaselineSectionId(null); } });
+      .catch(() => { if (!cancelled) { setBaseline(null); setSubmittedSnap(null); setBaselineSectionId(null); setBaselineUnavailable(false); } });
     return () => { cancelled = true; };
   }, [diffEnabled, activeRequest?.id, selectedSectionId]);
 
@@ -303,19 +309,25 @@ export default function useInstructorReview({ projectId, enabled }) {
   const loadFeedback = useCallback(async () => {
     if (!enabled) return;
     const generation = ++feedbackLoadRef.current;
-    if (orderedRequests.length === 0) {
+    if (orderedRequests.length === 0 || !activeRequestId) {
       setFeedbackItems([]);
       return;
     }
     try {
-      const responses = await Promise.all(orderedRequests.map(request =>
-        api.get(`/api/feedback-requests/${request.id}/feedback`)));
+      // ponytail: the workspace only ever renders the active request plus the
+      // immediately previous returned one (cards, carry-over, History) — load
+      // those two rounds instead of flattening the whole history.
+      const ids = [activeRequestId];
+      const prev = previousRequest(orderedRequests, activeRequestId);
+      if (prev && String(prev.id) !== String(activeRequestId)) ids.push(prev.id);
+      const responses = await Promise.all(ids.map(id =>
+        api.get(`/api/feedback-requests/${id}/feedback`)));
       if (generation !== feedbackLoadRef.current) return;
       setFeedbackItems(responses.flatMap(response => response.data || []));
     } catch {
       setErrorMessage(t('instructor.review.loadFeedbackFailed'));
     }
-  }, [orderedRequests, t, enabled]);
+  }, [orderedRequests, activeRequestId, t, enabled]);
 
   useEffect(() => { if (!enabled) return; loadFeedback(); return () => { feedbackLoadRef.current += 1; }; }, [loadFeedback, enabled]);
 
@@ -388,51 +400,106 @@ export default function useInstructorReview({ projectId, enabled }) {
     }
   };
 
+  // ponytail: create-mode auto-arm — every non-empty editor selection becomes
+  // the draft target without a confirmation click. Silent on empty/collapsed
+  // (that must NOT clear an armed passage — stickiness lives in the draft
+  // store), skipped entirely while editing (seeded passages are explicit).
+  const autoCaptureSelection = useCallback(async () => {
+    if (!enabled || !canCreateRoot || !selectedSection || editingFeedbackId) return;
+    const range = sourceEditorRef.current?.getSelectionRange?.();
+    const source = normalizeSource(selectedSection.contentTex || '');
+    if (!range || range.to <= range.from || range.to > source.length
+      || !Number.isInteger(selectedSection.version)) return;
+    try {
+      updateFeedbackDraft({
+        anchor: {
+          from: range.from,
+          to: range.to,
+          contentVersion: selectedSection.version,
+          fingerprint: await sourceFingerprint(source),
+        }, lineReference: ''
+      });
+    } catch {
+      // Silent by design — the composer keeps its previous target.
+    }
+  }, [enabled, canCreateRoot, selectedSection, editingFeedbackId]);
+
+  // ponytail: Preview-armed passages share the editor's anchor contract —
+  // offsets are validated against the same normalized source + version, so a
+  // mapped Preview range is indistinguishable from an editor selection.
+  // Anything unmappable never reaches here (the banner refuses it instead).
+  const commitPreviewSelection = useCallback(async ({ from, to }) => {
+    if (!enabled || !canCreateRoot || !selectedSection) return false;
+    const source = normalizeSource(selectedSection.contentTex || '');
+    if (!Number.isInteger(from) || !Number.isInteger(to) || to <= from
+      || to > source.length || !Number.isInteger(selectedSection.version)) return false;
+    try {
+      updateFeedbackDraft({
+        anchor: {
+          from,
+          to,
+          contentVersion: selectedSection.version,
+          fingerprint: await sourceFingerprint(source),
+        }, lineReference: ''
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [enabled, canCreateRoot, selectedSection]);
+
+  // ponytail: passage-adjust intent shared by the edit card (which starts it)
+  // and the EditorPanel FAB (which confirms it). Confirming writes the draft
+  // only — Update persists, Cancel discards. No auto-remap anywhere.
+  const [passageAdjust, setPassageAdjust] = useState(null);
+  const startPassageAdjust = useCallback(feedbackId => {
+    if (enabled) setPassageAdjust({ feedbackId });
+  }, [enabled]);
+  const cancelPassageAdjust = useCallback(() => setPassageAdjust(null), []);
+  useEffect(() => { setPassageAdjust(null); }, [selectedSectionId, activeRequestId]);
+  const confirmPassageSelection = useCallback(async () => {
+    if (!enabled || !canCreateRoot || !selectedSection || !passageAdjust) return false;
+    const range = sourceEditorRef.current?.getSelectionRange?.();
+    const source = normalizeSource(selectedSection.contentTex || '');
+    if (!range || range.to <= range.from || range.to > source.length
+      || !Number.isInteger(selectedSection.version)) return false;
+    try {
+      updateFeedbackDraft({
+        anchor: {
+          from: range.from,
+          to: range.to,
+          contentVersion: selectedSection.version,
+          fingerprint: await sourceFingerprint(source),
+        }, lineReference: ''
+      });
+      setPassageAdjust(null);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [enabled, canCreateRoot, selectedSection, passageAdjust]);
+
   const handleEditFeedback = (item) => {
     selectFeedback(item);
     const key = JSON.stringify([projectId, activeRequestId, item.sectionId]);
-    setFeedbackDrafts(previous => ({ ...previous, [key]: { editingId: item.id, content: item.content || '', lineReference: item.lineReference || '', anchor: null } }));
+    // ponytail: seed the draft from the stored original passage (immutable
+    // review-time Target) — never from the live-resolved current, which may be
+    // remapped or DETACHED after later section edits.
+    const original = item.anchor?.original;
+    setFeedbackDrafts(previous => ({ ...previous, [key]: {
+      editingId: item.id,
+      content: item.content || '',
+      lineReference: item.lineReference || '',
+      anchor: original && original.from != null && original.to != null
+        ? { from: original.from, to: original.to,
+            contentVersion: original.contentVersion, fingerprint: original.fingerprint }
+        : null,
+    } }));
   };
 
   const handleCancelEdit = () => {
     clearFeedbackDraft();
-  };
-
-  // Relocates a draft thread's anchor to the current editor selection.
-  // Same-section only: the thread row stays bound to its section, so locking
-  // onto another section's text would corrupt the section-scoped model —
-  // cross-section moves are new threads. Frozen cycles are rejected by the
-  // server (409); the button that starts this flow only renders on drafts.
-  const reanchorThread = async () => {
-    const pending = getPendingReanchor();
-    if (!enabled || !pending || !selectedSection) return false;
-    if (String(pending.sectionId) !== String(selectedSection.id)) {
-      setErrorMessage(t('instructor.review.reanchorSameSection'));
-      return false;
-    }
-    const range = sourceEditorRef.current?.getSelectionRange?.();
-    const source = normalizeSource(selectedSection.contentTex || '');
-    if (!range || range.to <= range.from || range.to > source.length) {
-      setErrorMessage(t('instructor.review.selectSourceRange'));
-      return false;
-    }
-    setErrorMessage('');
-    try {
-      const { data } = await api.patch(`/api/instructor-feedback/${pending.threadId}/anchor`, {
-        from: range.from,
-        to: range.to,
-        contentVersion: selectedSection.version,
-        fingerprint: await sourceFingerprint(source),
-        representation: 'latex-source-lf-v1',
-        offsetUnit: 'utf16',
-      });
-      mergeThread(data);
-      clearReanchor();
-      return true;
-    } catch (err) {
-      setErrorMessage(err?.response?.data?.message || t('instructor.review.saveFeedbackFailed'));
-      return false;
-    }
+    setPassageAdjust(null);
   };
 
   const handleDeleteFeedback = async (itemId) => {
@@ -452,43 +519,6 @@ export default function useInstructorReview({ projectId, enabled }) {
         loadFeedback();
       }
     }, () => { loadFeedback(); });
-  };
-
-  const prepareState = async (feedback, state, note, student) => {
-    setErrorMessage('');
-    try {
-      const { data } = await api.patch(`/api/instructor-feedback/${feedback.id}/state`, {
-        state,
-        expectedRevision: feedback.revision,
-        ...(note?.trim() ? { note: note.trim() } : {}),
-        ...(student?.studentStatus ? { studentStatus: student.studentStatus } : {}),
-        ...(student?.studentNote?.trim() ? { studentNote: student.studentNote.trim() } : {}),
-      });
-      mergeThread(data);
-      return true;
-    } catch (err) {
-      setErrorMessage(err?.response?.data?.message || t('instructor.review.updateStatusFailed'));
-      return false;
-    }
-  };
-
-  const postReply = async (item, content, mediaAssetIds) => {
-    const text = (content || '').trim();
-    if (!enabled || !text || !item?.id || !item?.requestId) return false;
-    setErrorMessage('');
-    try {
-      const { data } = await api.post(`/api/instructor-feedback/${item.id}/replies`, {
-        requestId: item.requestId,
-        content: text,
-        idempotencyKey: crypto.randomUUID(),
-        ...(mediaAssetIds?.length ? { mediaAssetIds } : {}),
-      });
-      mergeThread(data);
-      return true;
-    } catch (err) {
-      setErrorMessage(err?.response?.data?.message || t('instructor.review.replyFailed'));
-      return false;
-    }
   };
 
   const selectFeedback = (feedback, { focus = false } = {}) => {
@@ -518,12 +548,25 @@ export default function useInstructorReview({ projectId, enabled }) {
     if (!enabled) return;
     if (!feedbackLink) return;
     const feedback = feedbackItems.find(item => String(item.id) === String(feedbackLink));
-    if (!feedback) return;
-    selectFeedback(feedback, { focus: true });
-    const search = new URLSearchParams(location.search);
-    search.delete('review');
-    search.delete('feedback');
-    navigate({ pathname: location.pathname, search: search.toString() }, { replace: true });
+    if (feedback) {
+      selectFeedback(feedback, { focus: true });
+      const search = new URLSearchParams(location.search);
+      search.delete('review');
+      search.delete('feedback');
+      navigate({ pathname: location.pathname, search: search.toString() }, { replace: true });
+      return;
+    }
+    // Single-round pool: a deep link may point outside the two loaded rounds.
+    // Fetch that one thread on demand instead of loading all of history.
+    let cancelled = false;
+    api.get(`/api/instructor-feedback/${feedbackLink}`)
+      .then(({ data }) => {
+        if (cancelled || !data?.id) return;
+        mergeThread(data);
+        selectFeedback(data, { focus: true });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [feedbackLink, feedbackItems, location.pathname, location.search, navigate]);
 
   useEffect(() => {
@@ -543,7 +586,7 @@ export default function useInstructorReview({ projectId, enabled }) {
       setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: res.data.status } : r));
       await loadFeedback();
       setPendingTransition(null);
-      setSuccessMessage(targetStatus === 'REVIEWED' ? t('instructor.review.reviewApproved') : targetStatus === 'REJECTED' ? t('instructor.review.reviewRejected') : t('instructor.review.reviewReturned'));
+      setSuccessMessage(targetStatus === 'REVIEWED' ? t('instructor.review.reviewApproved') : t('instructor.review.reviewReturned'));
       if (targetStatus === 'REVIEWED') {
         setTimeout(() => navigate('/instructor/requests'), 1000);
       }
@@ -683,6 +726,7 @@ export default function useInstructorReview({ projectId, enabled }) {
     successMessage,
     diffEnabled,
     setDiffEnabled,
+    baselineUnavailable,
     diffOps,
     diffTruncated,
     changeRanges,
@@ -712,12 +756,15 @@ export default function useInstructorReview({ projectId, enabled }) {
     feedbackFocusToken,
     handleSubmitFeedback,
     captureSourceSelection,
+    autoCaptureSelection,
+    commitPreviewSelection,
+    isAdjustingPassage: !!passageAdjust,
+    startPassageAdjust,
+    cancelPassageAdjust,
+    confirmPassageSelection,
     handleEditFeedback,
     handleCancelEdit,
-    reanchorThread,
     handleDeleteFeedback,
-    prepareState,
-    postReply,
     selectFeedback,
     handleTransitionStatus,
     handleGenerateSuggestions,

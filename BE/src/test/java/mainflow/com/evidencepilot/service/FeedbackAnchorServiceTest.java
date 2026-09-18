@@ -113,6 +113,37 @@ class FeedbackAnchorServiceTest {
                 .isInstanceOf(ResponseStatusException.class);
     }
 
+    @Test
+    void staleVersionAndMalformedContractAreBadRequests() throws Exception {
+        var feedback = feedback("one target tail", null);
+        String hash = FeedbackAnchorService.fingerprint("one target tail");
+        // Snapshot pins version 1: a version-2 stamp from a newer round mismatches.
+        assertThatThrownBy(() -> service.initialize(feedback,
+                new FeedbackAnchorRequest(4, 10, 2, hash, FeedbackAnchorService.REPRESENTATION, "utf16")))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("reviewed source");
+        // Fingerprint from edited text mismatches the reviewed source.
+        assertThatThrownBy(() -> service.initialize(feedback,
+                new FeedbackAnchorRequest(4, 10, 1,
+                        FeedbackAnchorService.fingerprint("one TARGET tail"),
+                        FeedbackAnchorService.REPRESENTATION, "utf16")))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("reviewed source");
+        // Malformed contract shapes (all-or-nothing): bad representation, bad
+        // unit, null bounds, empty range — every one refuses, never stores.
+        assertThatThrownBy(() -> service.initialize(feedback,
+                new FeedbackAnchorRequest(4, 10, 1, hash, "bogus-repr", "utf16")))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.initialize(feedback,
+                new FeedbackAnchorRequest(4, 10, 1, hash, FeedbackAnchorService.REPRESENTATION, "utf32")))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.initialize(feedback,
+                new FeedbackAnchorRequest(null, 10, 1, hash, FeedbackAnchorService.REPRESENTATION, "utf16")))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.initialize(feedback,
+                new FeedbackAnchorRequest(10, 10, 1, hash, FeedbackAnchorService.REPRESENTATION, "utf16")))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThat(feedback.getAnchorJson()).isNull();
+    }
+
     private FeedbackAnchorRequest request(String source, int from, int to) {
         return new FeedbackAnchorRequest(from, to, 1, FeedbackAnchorService.fingerprint(source),
                 FeedbackAnchorService.REPRESENTATION, "utf16");

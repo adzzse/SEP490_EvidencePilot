@@ -19,7 +19,7 @@ import { hasActiveExtraction } from '../../utils/student/extractionPolling.js';
 import useInstructorReview, { loadAllProjectSources } from '../../hooks/useInstructorReview.js';
 import { InstructorReviewGuide } from '../../components/Instructor/InstructorFeedbackPanel.jsx';
 import useProjectFeedback from '../../hooks/useProjectFeedback.js';
-import { feedbackKeys, upsertThread } from '../../services/feedbackKeys.js';
+import { feedbackKeys } from '../../services/feedbackKeys.js';
 import { usePaperReferences } from '../../hooks/usePaperReferences.js';
 import { normalizeSource } from '../../utils/student/feedbackAnchors.js';
 import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
@@ -167,10 +167,10 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   const mediaAssets = workspace.mediaAssets;
   const papers = workspace.papers;
   const selectedPaper = workspace.selectedPaper;
-  const feedback = useProjectFeedback(isReview ? null : project?.id);
+  const [feedbackRequestId, setFeedbackRequestId] = useState(null);
+  const feedback = useProjectFeedback(isReview ? null : project?.id, isReview ? null : feedbackRequestId);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [activeFeedbackId, setActiveFeedbackId] = useState(null);
-  const [feedbackRequestId, setFeedbackRequestId] = useState(null);
   const [feedbackScope, setFeedbackScope] = useState('section');
   const pendingFeedbackRef = useRef(null);
   const defaultFeedbackRoundRef = useRef(null);
@@ -330,7 +330,15 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   const openFeedback = (requestId, feedbackId = null, items = feedback.items) => {
     const target = feedbackId && items.find(item => String(item.id) === String(feedbackId));
     if (target) return handleSelectFeedback(target);
-    if (feedbackId) { showToast(t('studentFeedback.reviewUnavailable')); return false; }
+    if (feedbackId) {
+      // Single-round pool: scope to the link's round and let the effect retry
+      // once it loads instead of failing on a not-yet-loaded round.
+      if (requestId && String(feedbackRequestId) !== String(requestId)) {
+        setFeedbackRequestId(requestId);
+        return true;
+      }
+      showToast(t('studentFeedback.reviewUnavailable')); return false;
+    }
     setFeedbackRequestId(requestId || null);
     setFeedbackScope('project');
     setStudentFeedbackOpen(true);
@@ -371,9 +379,13 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
         if (notification.feedbackId) query.set('feedback', notification.feedbackId);
         navigate(`/instructor/requests/${encodeURIComponent(round.projectId)}?${query}`);
       } else if (String(round.projectId) === String(project?.id)) {
-        const items = await feedback.refresh();
-        if (!items || String(projectRef.current?.id) !== String(round.projectId)) return;
-        if (!await openFeedback(round.id, notification.feedbackId, items)) return;
+        // Single-round pool: load the notification's round directly so the
+        // target resolves even when it differs from the viewed round.
+        const { data } = await api.get(`/api/feedback-requests/${round.id}/feedback`);
+        const list = (data || []).map(item => ({ ...item, requestStatus: round.status,
+          instructorName: item.instructorName || round.instructorName }));
+        setFeedbackRequestId(round.id);
+        if (!await openFeedback(round.id, notification.feedbackId, list)) return;
       }
       else {
         if (dirtySectionsRef.current.has(selectedSectionIdRef.current) && !window.confirm(t('unsavedPaperSwitch'))) return;
@@ -405,7 +417,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     }
     pendingFeedbackRef.current = item;
     setActiveFeedbackId(item.id);
-    setFeedbackRequestId(null);
+    setFeedbackRequestId(item.requestId || null);
     setFeedbackScope('section');
     setStudentFeedbackOpen(true);
     if (String(item.sectionId) === String(selectedSectionId)) {
@@ -416,28 +428,6 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       }
     }
     return true;
-  };
-
-  const handleStudentState = async (item, studentStatus, studentNote) => {
-    if (isReview || !item?.id || !studentStatus) return false;
-    try {
-      const { data: thread } = await api.patch(`/api/instructor-feedback/${item.id}/state`, {
-        state: item.threadState || 'OPEN',
-        expectedRevision: item.revision,
-        studentStatus,
-        ...(studentNote?.trim() ? { studentNote: studentNote.trim() } : {}),
-      });
-      // ponytail: the PATCH returns the post-commit thread — merge it, never
-      // refetch (a fast refetch would race the commit and ghost the change).
-      feedback.queryClient.setQueryData(
-        feedbackKeys.rounds(project?.id),
-        previous => upsertThread(previous, thread),
-      );
-      return true;
-    } catch (err) {
-      showToast(err?.response?.data?.message || t('studentFeedback.studentStateFailed'));
-      return false;
-    }
   };
 
   const handleSelectPaper = async (p) => {
@@ -1669,7 +1659,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
 
         <EditorPanel onViewFullPaper={() => setShowFullPaperPreview(true)} review={isReview ? review.workflow : null} projectId={projectId} compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={isReview ? undefined : handleSaveDraft} insertLatexTag={isReview ? undefined : insertLatexTag} insertSymbol={isReview ? undefined : insertSymbol} handleFindReplace={isReview ? undefined : handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} isLocked={isLocked} findings={editorFindings} onFindingClick={handleFindingClick} onOpenSourceMap={openSourceMap} onRunCitationReview={handleRunAiReview} onOpenCitationReview={handleOpenCitationReview} reviewBusy={loadingAiReview} reviewProgress={aiReviewProgress} reviewFindingsCount={(aiReviewResult?.findings || []).length} reviewError={aiReviewError?.message} onEditorUserScroll={handleReviewScrollClose} isReviewVisible={isReviewVisible} onToggleReviewVisible={toggleReviewVisible} citationIndex={citationIndex}
           feedback={isReview ? undefined : feedback} feedbackOpen={feedbackOpen} setFeedbackOpen={setStudentFeedbackOpen} activeFeedbackId={activeFeedbackId} onSelectFeedback={isReview ? item => { review.workflow.selectFeedback(item); setActiveTab('Review'); setIsDrawerOpen(true); if (isCompactWorkspace) setIsFileTreeOpen(false); } : handleSelectFeedback}
-          feedbackRequestId={feedbackRequestId} setFeedbackRequestId={setFeedbackRequestId} feedbackScope={feedbackScope} setFeedbackScope={setFeedbackScope} paperReferences={paperReferences} onStudentState={isReview ? undefined : handleStudentState} />
+          feedbackRequestId={feedbackRequestId} setFeedbackRequestId={setFeedbackRequestId} feedbackScope={feedbackScope} setFeedbackScope={setFeedbackScope} userProjectRole={project?.currentUserRole} currentUserId={user?.id}           paperReferences={paperReferences} />
 
         {!isReview && <ContextPanel compact={isCompactWorkspace} isOpen={isDrawerOpen} width={rightDrawerWidth} activeTab={activeTab} setActiveTab={setActiveTab} showToast={showToast}
           sources={sources} paperReferences={paperReferences} referencesLoading={paperRefs.loading} referencesError={paperRefs.error} referenceCheck={paperRefs.check} referenceCheckLoading={paperRefs.checkLoading} referenceCheckError={paperRefs.checkError} onRetryReferenceCheck={paperRefs.reload} referenceSourceIds={referenceSourceIds} canMutateReferences={canMutateReferences} onAddReference={handleAddReference} onRemoveReference={handleRemoveReference} onReferencesChanged={paperRefs.reload} isUploading={isUploading} setIsUploading={setIsUploading} project={project} setViewerFile={setViewerFile} fetchSources={fetchSources} onOpenSourceMap={openSourceMap} isLocked={isLocked}

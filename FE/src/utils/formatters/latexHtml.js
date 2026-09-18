@@ -199,7 +199,11 @@ export function applyChangeHighlights(html, changeRanges, source = '') {
           pieces[part.index] = `${piece.slice(0, from)}<span class="preview-change-added">${piece.slice(from, to)}</span>${piece.slice(to)}`;
         }
       }
-      if (fallback && !textParts.some(p => p.marks.length)) open = open.replace(/class="/, 'class="preview-change-added ');
+      // ponytail: a whole block lights up only when a range genuinely covers
+      // it (full rewrite, empty baseline, truncation) — never from a partial
+      // range that merely failed character mapping. The editor stays exact.
+      const coversBlock = changeRanges.some(range => range.sourceStart <= start && range.sourceEnd >= end);
+      if (fallback && coversBlock && !textParts.some(p => p.marks.length)) open = open.replace(/class="/, 'class="preview-change-added ');
       return `${open}${pieces.join('')}${close}`;
     },
   );

@@ -3,10 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { Modal } from '../index';
 import SectionEvidenceTab from './review/SectionEvidenceTab.jsx';
 import FeedbackThreadsTab from './review/FeedbackThreadsTab.jsx';
+import FeedbackCard from './review/FeedbackCard.jsx';
 import ReviewOverviewBlock from './review/ReviewOverviewBlock.jsx';
-import { formatDateTime } from '../../utils/formatters/date.js';
+import { selectPreviousCards } from '../../utils/instructor/historySelector.js';
 
-const ACTION_LABELS = { REVIEWED: 'instructor.review.approve', RETURNED: 'instructor.review.returnForRevision', REJECTED: 'instructor.review.rejectSubmission' };
+const ACTION_LABELS = { REVIEWED: 'instructor.review.approve', RETURNED: 'instructor.review.returnForRevision' };
 
 export function InstructorReviewGuide({ review, selectedSection }) {
   const { t } = useTranslation();
@@ -32,7 +33,7 @@ export function InstructorReviewGuide({ review, selectedSection }) {
 }
 
 export default function InstructorFeedbackPanel({ review, selectedSection, projectId, focusSignal = 0, composerFocusToken = 0 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { activeRequest, isHistoricalRound, errorMessage, successMessage, transitioningRequestId, pendingTransition, setPendingTransition, requestLocked, canReturn, handleTransitionStatus } = review;
   const [panelTab, setPanelTab] = useState('feedback');
   useEffect(() => {
@@ -51,7 +52,6 @@ export default function InstructorFeedbackPanel({ review, selectedSection, proje
       {!requestLocked && <>
         {canReturn && <button type="button" disabled={actionDisabled} onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'RETURNED' })} className={`${actionBtn} min-w-[116px] flex-[1.2_1_116px] bg-amber-500`}>{t('instructor.review.returnForRevision')}</button>}
         <button type="button" disabled={actionDisabled} onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'REVIEWED' })} className={`${actionBtn} min-w-[76px] flex-[1_1_76px] bg-emerald-600`}>{t('instructor.review.approve')}</button>
-        <button type="button" disabled={actionDisabled} onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'REJECTED' })} className={`${actionBtn} min-w-[76px] flex-[1_1_76px] bg-rose-600`}>{t('instructor.review.rejectSubmission')}</button>
       </>}
     </div>
     {errorMessage && <p role="alert" className="text-rose-700">{errorMessage}</p>}
@@ -85,21 +85,23 @@ export default function InstructorFeedbackPanel({ review, selectedSection, proje
           <SectionEvidenceTab review={review} selectedSection={selectedSection} />
         )}
 
-        {panelTab === 'history' && (
-          <ul className="space-y-1.5">
-            {(review.orderedRequests || []).map(request => (
-              <li key={request.id} className="flex items-center justify-between gap-2 rounded-lg border border-(--border-light) px-2.5 py-2 text-[11px]">
-                <span className="font-semibold text-(--text-secondary)">
-                  {request.requestedAt ? formatDateTime(request.requestedAt, i18n.language) : t('status.UNKNOWN')}
-                </span>
-                <span className="font-black uppercase text-(--text-tertiary)">{request.status}</span>
-              </li>
-            ))}
-            {(review.orderedRequests || []).length === 0 && (
+        {panelTab === 'history' && (() => {
+          // ponytail: every published root card of the immediately previous
+          // round for this section. Same component as the Feedback tab,
+          // read-only. updatedAt never orders.
+          const previous = selectPreviousCards(
+            review.feedbackItems, review.orderedRequests, review.activeRequestId, selectedSection?.id);
+          if (previous.length === 0) {
+            return (
               <p className="py-2 text-center text-[11px] italic text-(--text-tertiary)">{t('studentFeedback.empty')}</p>
-            )}
-          </ul>
-        )}
+            );
+          }
+          return (
+            <ul className="space-y-2">
+              {previous.map(item => <FeedbackCard key={item.id} item={item} readOnly />)}
+            </ul>
+          );
+        })()}
 
       </div>
     </div>
@@ -110,8 +112,7 @@ export default function InstructorFeedbackPanel({ review, selectedSection, proje
       <div className="space-y-4 text-xs">
         <p className="text-(--text-secondary)">
           {pendingTransition?.targetStatus === 'REVIEWED' ? t('instructor.review.finalizeReviewConfirm')
-            : pendingTransition?.targetStatus === 'REJECTED' ? t('instructor.review.rejectConfirm')
-              : `${t('instructor.review.returnForRevision')} · ${draftCount} ${t('instructor.review.draft')}`}
+            : `${t('instructor.review.returnForRevision')} · ${draftCount} ${t('instructor.review.draft')}`}
         </p>
         <div className="flex gap-3 pt-2">
           <button type="button" onClick={() => setPendingTransition(null)} disabled={!!transitioningRequestId}

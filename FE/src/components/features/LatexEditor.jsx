@@ -252,7 +252,7 @@ function buildCiteMask(view, citationIndexRef) {
 }
 
 const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = content, savedVersion,
-  feedbackItems, activeFeedbackId, feedbackVisible = false, onFeedbackClick, onFeedbackChange,
+  feedbackItems, activeFeedbackId, feedbackVisible = false, onFeedbackClick,
   onChange, onSelection, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onLayoutChange, onUserScroll, citationIndex = {}, mediaAssets = [], changeRanges = [] }, ref) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
@@ -261,11 +261,9 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
   const onChangeRef = useRef(onChange);
   const selectionRef = useRef(onSelection);
   const feedbackClickRef = useRef(onFeedbackClick);
-  const feedbackChangeRef = useRef(onFeedbackChange);
   onChangeRef.current = onChange;
   selectionRef.current = onSelection;
   feedbackClickRef.current = onFeedbackClick;
-  feedbackChangeRef.current = onFeedbackChange;
   const lastEmittedRef = useRef('');
   const onScrollRef = useRef(null);
   const onLayoutChangeRef = useRef(null);
@@ -505,9 +503,6 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
       if (update.geometryChanged) onLayoutChangeRef.current?.();
       if (update.docChanged && !update.transactions.some(transaction => transaction.annotation(hydrateSource))) {
         trackerRef.current.record(update.changes, update.state.doc.toString());
-      }
-      if (update.state.field(feedbackRanges) !== update.startState.field(feedbackRanges)) {
-        feedbackChangeRef.current?.(update.state.field(feedbackRanges).items);
       }
       if (update.docChanged && onChangeRef.current) {
         const text = update.state.doc.toString();

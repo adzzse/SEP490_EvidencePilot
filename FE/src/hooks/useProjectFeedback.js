@@ -1,28 +1,34 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api.js';
 import { feedbackKeys } from '../services/feedbackKeys.js';
+import { roundNumberFor } from '../utils/reviewRounds.js';
 
-async function fetchProjectThreads(projectId, signal) {
+// ponytail: one selected round per view — fetch its threads only, never
+// fan-out every historical round and flatten. The requests list stays for
+// the round picker; items always belong to a single round (or none).
+async function fetchRoundThreads(projectId, requestId, signal) {
   const response = await api.get('/api/feedback-requests', { signal });
   const rounds = (response.data || []).filter(round => String(round.projectId) === String(projectId))
     .sort((a, b) => String(b.requestedAt || '').localeCompare(String(a.requestedAt || '')) || String(a.id).localeCompare(String(b.id)));
-  const groups = await Promise.all(rounds.map(async (round, index) => {
-    const result = await api.get(`/api/feedback-requests/${round.id}/feedback`, { signal });
-    return (result.data || []).map(item => ({
+  if (!requestId) return { requests: rounds, items: [] };
+  const round = rounds.find(item => String(item.id) === String(requestId));
+  const result = await api.get(`/api/feedback-requests/${requestId}/feedback`, { signal });
+  return {
+    requests: rounds,
+    items: (result.data || []).map(item => ({
       ...item,
-      roundNumber: rounds.length - index,
-      requestStatus: round.status,
-      instructorName: item.instructorName || round.instructorName,
-    }));
-  }));
-  return { requests: rounds, items: groups.flat() };
+      roundNumber: roundNumberFor(rounds, requestId),
+      requestStatus: round?.status,
+      instructorName: item.instructorName || round?.instructorName,
+    })),
+  };
 }
 
-export default function useProjectFeedback(projectId) {
+export default function useProjectFeedback(projectId, requestId) {
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: feedbackKeys.rounds(projectId),
-    queryFn: ({ signal }) => fetchProjectThreads(projectId, signal),
+    queryKey: [...feedbackKeys.rounds(projectId), String(requestId ?? '')],
+    queryFn: ({ signal }) => fetchRoundThreads(projectId, requestId, signal),
     enabled: Boolean(projectId),
     staleTime: 30_000,
   });

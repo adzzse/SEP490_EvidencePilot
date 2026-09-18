@@ -1291,6 +1291,9 @@ public class AdminExcelSeedService {
             s.setActive(true);
             s.setUpdatedAt(LocalDateTime.now());
             paperSectionRepository.save(s);
+            if (s.getAssignedUser() != null) {
+                paperProcessingService.captureInitialBaseline(project, s, LocalDateTime.now());
+            }
             n++;
             if (job != null) {
                 job.succeeded("sections", 1);

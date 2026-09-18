@@ -9,7 +9,7 @@ import { buildCitationNumbers, buildReferenceEntries } from '../../utils/paperRe
 import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
 import { useTranslation } from 'react-i18next';
 import { mapScrollPosition } from '../../utils/student/scrollSync.js';
-import { clearReanchor, getPendingReanchor, usePendingReanchor } from '../../stores/reanchorStore.js';
+import { previousRequest, selectFeedbackForRound } from '../../utils/reviewRounds.js';
 
 const getScrollAnchors = (container, editor) => {
   const origin = container.getBoundingClientRect().top + container.clientTop - container.scrollTop;
@@ -43,7 +43,8 @@ export default function EditorPanel({
   onEditorUserScroll,
   isReviewVisible = true, onToggleReviewVisible,
   feedback, feedbackOpen = false, setFeedbackOpen, activeFeedbackId, onSelectFeedback,
-  feedbackRequestId, setFeedbackRequestId, feedbackScope, setFeedbackScope, onStudentState,
+  feedbackRequestId, setFeedbackRequestId, feedbackScope, setFeedbackScope,
+  userProjectRole = 'MEMBER', currentUserId = null,
   citationIndex = {},
   paperReferences = [],
 }) {
@@ -95,8 +96,6 @@ export default function EditorPanel({
     });
     return () => cancelAnimationFrame(frame);
   }, [showPreview, editorRef]);
-  const [positions, setPositions] = useState([]);
-  const [overlapIds, setOverlapIds] = useState([]);
   const measureFrameRef = useRef(null);
   const narrow = compact || (availableWidth > 0 && availableWidth < 780);
   const canShowThree = availableWidth >= 1240;
@@ -104,37 +103,46 @@ export default function EditorPanel({
   const previewVisible = (narrow ? showPreview : true) && (!feedbackOpen || threePanes);
   useEffect(() => { scrollFractionRef.current = { editor: 0, preview: 0 }; pendingRestoreRef.current = null; setShowPreview(false); }, [selectedSectionId, review?.activeFeedbackId]);
   useEffect(() => { if (feedbackOpen) setShowPreview(false); }, [feedbackOpen]);
-  const sectionFeedback = useMemo(() => (review?.feedbackItems || feedback?.items || []).filter(item => String(item.sectionId) === String(selectedSectionId)), [review?.feedbackItems, feedback?.items, selectedSectionId]);
-  const measureFeedback = useCallback(() => {
-    if (measureFrameRef.current != null) return;
-    measureFrameRef.current = requestAnimationFrame(() => {
-      measureFrameRef.current = null;
-      setPositions(editorRef.current?.getFeedbackPositions?.() || []);
-    });
-  }, [editorRef]);
+  // ponytail: highlights never flatten history. Instructor sees the active
+  // request (drafts included) plus the immediately previous returned round's
+  // carry-over for this section — never N-2. Student sees the loaded round.
+  const sectionFeedback = useMemo(() => {
+    const pool = review?.feedbackItems || feedback?.items || [];
+    if (!review) return pool.filter(item => String(item.sectionId) === String(selectedSectionId));
+    const scope = { sectionId: selectedSectionId };
+    const active = selectFeedbackForRound(pool, { ...scope, requestId: review.activeRequestId, publishedOnly: false });
+    const prev = previousRequest(review.orderedRequests, review.activeRequestId);
+    if (!prev) return active;
+    const seen = new Set(active.map(item => String(item.id)));
+    return [...active, ...selectFeedbackForRound(pool, { ...scope, requestId: prev.id }).filter(item => !seen.has(String(item.id)))];
+  }, [review?.feedbackItems, feedback?.items, selectedSectionId, review?.activeRequestId, review?.orderedRequests]);
   useEffect(() => {
-    const observer = new ResizeObserver(entries => { setAvailableWidth(entries[0].contentRect.width); measureFeedback(); });
+    const observer = new ResizeObserver(entries => { setAvailableWidth(entries[0].contentRect.width); });
     if (containerRef.current) observer.observe(containerRef.current);
     return () => { observer.disconnect(); cancelAnimationFrame(measureFrameRef.current); measureFrameRef.current = null; };
-  }, [measureFeedback]);
-  useEffect(() => { setOverlapIds([]); measureFeedback(); }, [selectedSectionId, feedbackOpen, measureFeedback]);
-  const pendingReanchor = usePendingReanchor();
+  }, []);
   const [complexSelection, setComplexSelection] = useState(null);
   // Transient comment FAB: coordinates are single-frame truth — any scroll,
   // doc change, collapse, section switch, or Escape unmounts it immediately.
   const [fab, setFab] = useState(null);
   const [composerFocusToken, setComposerFocusToken] = useState(0);
   const handleFeedbackClick = useCallback(ids => {
-    setOverlapIds(ids);
     const item = (review?.feedbackItems || feedback?.items || []).find(entry => entry.id === ids[0]);
     if (item) onSelectFeedback?.(item);
   }, [review, feedback?.items, onSelectFeedback]);
-  // ponytail: preview text is unmappable — route to the Editor instead of
-  // string-matching (indexOf resolves recurring words to their first
-  // occurrence: the phantom-duplicate bug). Anchors come only from the Editor.
+  // ponytail: mapped Preview ranges arm the draft exactly like editor
+  // selections (same canonical contract); unmappable content refuses with an
+  // honest banner instead of string-matching (indexOf resolves recurring words
+  // to their first occurrence: the phantom-duplicate bug).
   const handlePreviewSelect = useCallback(result => {
-    if (result?.kind === 'preview-selection' && review) setComplexSelection(result);
-    else setComplexSelection(null);
+    if (result?.kind !== 'preview-selection' || !review) { setComplexSelection(null); return; }
+    if (result.from != null && result.to != null) {
+      setComplexSelection(null);
+      review.commitPreviewSelection?.({ from: result.from, to: result.to });
+      setComposerFocusToken(token => token + 1);
+    } else {
+      setComplexSelection(result);
+    }
   }, [review]);
   const lockPreviewSelection = useCallback(() => {
     setComplexSelection(null);
@@ -152,10 +160,26 @@ export default function EditorPanel({
   }, [fab]);
   const openComposerFromFab = useCallback(() => {
     if (!review) return;
-    if (getPendingReanchor()) review.reanchorThread?.();
-    else review.captureSourceSelection?.();
+    review.captureSourceSelection?.();
     setFab(null);
     setComposerFocusToken(token => token + 1);
+  }, [review]);
+  // ponytail: the same floating affordance confirms a new passage while
+  // adjusting an edit (chat icon, draft-only) and creates from a fresh
+  // selection (message-plus). Ordinary edit-mode selections raise nothing —
+  // reviewing never clobbers a seeded passage.
+  const confirmPassageFromFab = useCallback(() => {
+    if (!review) return;
+    review.confirmPassageSelection?.();
+    setFab(null);
+    setComposerFocusToken(token => token + 1);
+  }, [review]);
+  const handleEditorSelection = useCallback(sel => {
+    if (!review) { setFab(null); return; }
+    if (review.isAdjustingPassage) { setFab(sel ? { ...sel, mode: 'confirm' } : null); return; }
+    if (review.editingFeedbackId) { setFab(null); return; }
+    setFab(sel);
+    if (sel) review?.autoCaptureSelection?.();
   }, [review]);
   const closeFeedback = () => {
     setFeedbackOpen(false);
@@ -164,9 +188,9 @@ export default function EditorPanel({
 
   // Sync by source anchors so tall preview blocks (especially tables) can move at their own rate.
   const syncScrollRef = useRef(null);
-  const editorScrollBridge = useCallback(() => { syncScrollRef.current?.('editor'); measureFeedback(); }, [measureFeedback]);
+  const editorScrollBridge = useCallback(() => { syncScrollRef.current?.('editor'); }, []);
   const previewScrollBridge = useCallback(() => { syncScrollRef.current?.('preview'); setFab(null); }, []);
-  const layoutBridge = useCallback(() => { syncScrollRef.current?.(); measureFeedback(); }, [measureFeedback]);
+  const layoutBridge = useCallback(() => { syncScrollRef.current?.(); }, []);
 
   // Recreated per section so pending scrolls reset; both panes start at top.
   useEffect(() => {
@@ -230,27 +254,6 @@ export default function EditorPanel({
         {review.snapshotState === 'LEGACY_NO_SNAPSHOT' && <p role="alert">{t('instructor.review.legacySnapshotNotice')}</p>}
         {review.snapshotState === 'LOAD_ERROR' && <p role="alert">{t('instructor.review.snapshotLoadError')} <button type="button" onClick={() => review.setSnapshotRetry(value => value + 1)}>{t('retry')}</button></p>}
       </div>}
-      {review && pendingReanchor && (
-        <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-[11px] font-semibold text-teal-800 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200">
-          <span>{t('instructor.review.reanchorBanner')}</span>
-          <span className="ml-auto flex gap-1.5">
-            <button
-              type="button"
-              onClick={() => review.reanchorThread?.()}
-              className="rounded-md bg-teal-600 px-2.5 py-1 text-[10px] font-black text-white hover:bg-teal-700"
-            >
-              {t('instructor.review.lockAnchor')}
-            </button>
-            <button
-              type="button"
-              onClick={clearReanchor}
-              className="rounded-md border border-teal-300 px-2.5 py-1 text-[10px] font-bold"
-            >
-              {t('cancel')}
-            </button>
-          </span>
-        </div>
-      )}
       <div className={`flex-1 min-h-0 min-w-0 flex gap-2 ${narrow ? 'flex-col' : ''}`}>
       <div style={{ flex: narrow ? '1 1 0' : threePanes ? '1 1 480px' : `${editorWidth} 1 0` }} className={`bg-(--surface) rounded-lg shadow-sm border border-(--border) ${(narrow && previewVisible) || (review && showPreview) ? 'hidden' : 'flex'} flex-col overflow-hidden min-w-0 min-h-0`}>
         <div data-tour="editor-toolbar" className="h-10 border-b border-(--border-light) flex items-center justify-between px-3 bg-(--surface) shadow-sm shrink-0 z-10">
@@ -272,6 +275,11 @@ export default function EditorPanel({
                   />
                   <span>{t('instructor.review.showChanges')}</span>
                 </label>
+                {review.diffEnabled && (review.baselineUnavailable || review.diffTruncated) && (
+                  <span role="status" className="hidden max-w-[220px] truncate text-[10px] font-semibold italic text-(--text-tertiary) md:inline" title={review.diffTruncated ? t('instructor.review.diffTruncated') : t('instructor.review.noComparisonBaseline')}>
+                    {review.diffTruncated ? t('instructor.review.diffTruncated') : t('instructor.review.noComparisonBaseline')}
+                  </span>
+                )}
                 <button type="button" onClick={() => switchReviewMode(!showPreview)} aria-pressed={showPreview}
                 className="shrink-0 rounded-md border border-(--border) bg-(--surface-tertiary) px-2.5 py-1 text-[11px] font-bold text-(--text-primary) hover:bg-(--border) focus-visible:ring-2 focus-visible:ring-(--brand) transition-colors">
                 {showPreview ? t('student.workspace.latexLabel') : t('preview')}
@@ -429,8 +437,8 @@ export default function EditorPanel({
         )}
         <div className="flex-1 min-h-0 overflow-hidden">
           <LatexEditor key={review ? `${review.viewMode}-${review.activeRequestId}-${selectedSectionId}` : selectedSectionId || 'no-section'} ref={editorRef} content={displayContent} savedContent={currentSection?.contentTex || ''} savedVersion={currentSection?.version}
-            feedbackItems={sectionFeedback} activeFeedbackId={review?.activeFeedbackId || activeFeedbackId} feedbackVisible={Boolean(review) || feedbackOpen} onFeedbackClick={handleFeedbackClick} onFeedbackChange={measureFeedback}
-            onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onSelection={review ? setFab : undefined} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} mediaAssets={mediaAssets} changeRanges={review?.changeRanges || []} />
+            feedbackItems={sectionFeedback} activeFeedbackId={review?.activeFeedbackId || activeFeedbackId} feedbackVisible={Boolean(review) || feedbackOpen} onFeedbackClick={handleFeedbackClick}
+            onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onSelection={review ? handleEditorSelection : undefined} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} mediaAssets={mediaAssets} changeRanges={review?.changeRanges || []} />
         </div>
         <GeneratedReferences
           references={generatedReferences}
@@ -444,8 +452,8 @@ export default function EditorPanel({
       </div>
       {feedback && <div id="student-feedback-panel" hidden={!feedbackOpen} style={{ flex: narrow ? '0 0 44%' : threePanes ? '0 0 320px' : `${100 - editorWidth} 1 0` }}
         className={`${feedbackOpen ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-(--border) bg-(--surface) shadow-sm`}>
-        <FeedbackPanel feedback={feedback} sectionId={selectedSectionId} activeId={activeFeedbackId} onSelect={onSelectFeedback} onClose={closeFeedback} visible={feedbackOpen}
-          positions={positions} narrow={narrow} requestId={feedbackRequestId} setRequestId={setFeedbackRequestId} scope={feedbackScope} setScope={setFeedbackScope} overlapIds={overlapIds} onStudentState={onStudentState} projectId={projectId} />
+          <FeedbackPanel feedback={feedback} sectionId={selectedSectionId} activeId={activeFeedbackId} onSelect={onSelectFeedback} onClose={closeFeedback} visible={feedbackOpen}
+          requestId={feedbackRequestId} setRequestId={setFeedbackRequestId} scope={feedbackScope} setScope={setFeedbackScope} userProjectRole={userProjectRole} currentUserId={currentUserId} />
       </div>}
       <div style={{ flex: review ? '1 1 0' : threePanes ? '1 1 400px' : `${100 - editorWidth} 1 0` }} className={`${(!review && previewVisible) || (review && showPreview) ? 'flex' : 'hidden'} min-w-0 min-h-0 bg-(--surface) rounded-xl shadow-sm border border-(--border) flex-col overflow-hidden`}>
         <div className="h-11 border-b border-(--border-light) flex items-center justify-between px-4 bg-(--surface)">
@@ -465,6 +473,11 @@ export default function EditorPanel({
                 />
                 <span>{t('instructor.review.showChanges')}</span>
               </label>
+            )}
+            {review && review.diffEnabled && (review.baselineUnavailable || review.diffTruncated) && (
+              <span role="status" className="hidden max-w-[220px] truncate text-[10px] font-semibold italic text-(--text-tertiary) md:inline" title={review.diffTruncated ? t('instructor.review.diffTruncated') : t('instructor.review.noComparisonBaseline')}>
+                {review.diffTruncated ? t('instructor.review.diffTruncated') : t('instructor.review.noComparisonBaseline')}
+              </span>
             )}
             {review && showPreview && (
               <button type="button" onClick={() => switchReviewMode(false)}
@@ -511,7 +524,13 @@ export default function EditorPanel({
           }}
           className="z-50 w-72 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 shadow-xl dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
         >
-          <p className="font-bold">{t('instructor.review.previewUnavailableTitle')}</p>
+          <p className="font-bold">
+            {review.selectedAnchor
+              ? t('instructor.review.previewArmedPassage', {
+                  from: review.selectedAnchor.from, to: review.selectedAnchor.to,
+                })
+              : t('instructor.review.previewUnavailableTitle')}
+          </p>
           <div className="mt-2 flex gap-1.5">
             <button
               type="button"
@@ -534,18 +553,20 @@ export default function EditorPanel({
       {review && fab?.coords && createPortal(
         <button
           type="button"
-          aria-label={getPendingReanchor() ? t('instructor.review.lockAnchorHere') : t('instructor.review.addComment')}
-          title={getPendingReanchor() ? t('instructor.review.lockAnchorHere') : t('instructor.review.addComment')}
+          aria-label={t(fab.mode === 'confirm' ? 'instructor.review.useThisPassage' : 'instructor.review.addComment')}
+          title={t(fab.mode === 'confirm' ? 'instructor.review.useThisPassage' : 'instructor.review.addComment')}
           onMouseDown={event => event.preventDefault()}
-          onClick={openComposerFromFab}
+          onClick={fab.mode === 'confirm' ? confirmPassageFromFab : openComposerFromFab}
           style={{
             position: 'fixed',
             left: fab.coords.right,
             top: fab.coords.top - 25,
           }}
-          className="z-50 flex h-5 w-5 items-center justify-center rounded text-teal-700 hover:bg-teal-50 focus-visible:ring-2 focus-visible:ring-teal-300 dark:text-teal-300 dark:hover:bg-teal-950"
+          className="z-50 flex h-5 w-5 items-center justify-center rounded text-teal-700/80 hover:bg-teal-50 hover:text-teal-700 focus-visible:ring-2 focus-visible:ring-teal-300 dark:text-teal-300/80 dark:hover:bg-teal-950 dark:hover:text-teal-300"
         >
-          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v14M5 12h14" /></svg>
+          {fab.mode === 'confirm'
+            ? <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m9.5 12 1.8 1.8 3.4-3.6" /></svg>
+            : <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /><path strokeLinecap="round" strokeWidth="2" d="M18.5 13.5v5M16 16h5" /></svg>}
         </button>,
         document.body,
       )}
