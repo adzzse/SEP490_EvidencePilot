@@ -522,7 +522,7 @@
   "referenceCheckStatusMissingSource": "Chưa có trong Sources",
   "referenceCheckStatusNeedsReview": "Cần xác nhận",
   "referenceCheckNotDeclared": "Chưa được thêm vào References của bài",
-  "refCheckAction": "Ref Check",
+  "refCheckAction": "Kiểm tra Reference",
   "refCheckDescription": "Lưu References và kiểm tra từng tài liệu đã có trong Sources của dự án hay chưa.",
   "citationReviewNotApplicableAbstract": "Citation Review không áp dụng cho Abstract.",
   "failedToRemoveReference": "Không thể xóa tài liệu tham khảo.",

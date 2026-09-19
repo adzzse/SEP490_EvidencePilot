@@ -865,13 +865,14 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       window.clearTimeout(timer);
     };
   }, [isReview, project?.id, sources, papers, refreshReferences]);
-  // citationKey → {authors, publicationYear} for in-editor \cite{} pill masking.
+  // citationKey → paper metadata for in-editor \cite{} pill masking.
   // Primary: the paper's explicit References. Overlay: AI source-match candidates.
   const citationIndex = useMemo(() => {
     const map = {};
-    (paperReferences || []).forEach(reference => {
+    (paperReferences || []).forEach((reference, index) => {
       if (!reference?.citationKey) return;
       map[reference.citationKey] = {
+        number: index + 1,
         authors: reference.authors || '',
         publicationYear: reference.publicationYear || null,
       };

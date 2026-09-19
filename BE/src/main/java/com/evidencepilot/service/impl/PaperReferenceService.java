@@ -50,7 +50,7 @@ public class PaperReferenceService {
     private static final Pattern BIBITEM_PATTERN = Pattern.compile(
             "(?s)\\\\bibitem(?:\\[[^]]*])?\\{([^}]+)}(.*?)(?=\\\\bibitem|\\z)");
     private static final Pattern NUMBERED_ENTRY_PATTERN = Pattern.compile(
-            "(?m)(?=^\\s*(?:\\[\\d+]|\\d+[.)])\\s+)");
+            "(?m)(?=^[ \\t]*(?:-[ \\t]*)?(?:\\[\\d+]|\\d+[.)])[ \\t]+)");
     private static final Set<String> REFERENCE_TITLES = Set.of(
             "references", "reference", "bibliography", "works cited");
 
@@ -131,12 +131,11 @@ public class PaperReferenceService {
     private static void addEntries(List<ParsedEntry> entries, String content, String citationKey) {
         String cleanedContent = cleanEntry(content);
         String[] blocks = cleanedContent.split("(?:\\R\\s*){2,}");
-        if (blocks.length == 1) {
-            blocks = blocks[0].split(NUMBERED_ENTRY_PATTERN.pattern());
-        }
         boolean keyed = false;
         for (String block : blocks) {
-            if (addEntry(entries, block, keyed ? null : citationKey)) keyed = true;
+            for (String numberedBlock : block.split(NUMBERED_ENTRY_PATTERN.pattern())) {
+                if (addEntry(entries, numberedBlock, keyed ? null : citationKey)) keyed = true;
+            }
         }
     }
 

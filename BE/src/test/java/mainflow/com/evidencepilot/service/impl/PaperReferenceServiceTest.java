@@ -158,6 +158,27 @@ class PaperReferenceServiceTest {
     }
 
     @Test
+    void checkSplitsNumberedEntriesInsideMineruReferenceBlocks() {
+        String firstBlock = numberedReferences(1, 12);
+        String secondBlock = numberedReferences(13, 24);
+        String thirdBlock = numberedReferences(25, 36);
+        String fourthBlock = numberedReferences(37, 48);
+        String fifthBlock = numberedReferences(49, 60);
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperId))
+                .thenReturn(List.of(referenceSection(String.join("\n\n",
+                        firstBlock, secondBlock, thirdBlock, fourthBlock, fifthBlock))));
+        when(sourceMatchingService.activeSources(projectId)).thenReturn(List.of());
+        when(sourceMatchingService.referenceSources(paperId)).thenReturn(List.of());
+
+        PaperReferenceCheckResponse result = service.check(paperId, leaderId);
+
+        assertThat(result.summary().detected()).isEqualTo(60);
+        assertThat(result.items()).hasSize(60);
+        assertThat(result.items().getFirst().rawText()).startsWith("- [1] Reference 1.");
+        assertThat(result.items().getLast().rawText()).startsWith("- [60] Reference 60.");
+    }
+
+    @Test
     void checkDoesNotChooseAmbiguousTitleAndKeepsMissingEntryVisible() {
         Document first = source(ProcessingStatus.READY, "a.pdf");
         first.setTitle("Shared Long Research Paper Title");
@@ -412,6 +433,12 @@ class PaperReferenceServiceTest {
         PaperSection section = section(tex);
         section.setSectionTitle("References");
         return section;
+    }
+
+    private String numberedReferences(int from, int to) {
+        return java.util.stream.IntStream.rangeClosed(from, to)
+                .mapToObj(index -> "- [" + index + "] Reference " + index + ".")
+                .collect(java.util.stream.Collectors.joining("\n"));
     }
 
     private ProjectMember member(ProjectRole role) {

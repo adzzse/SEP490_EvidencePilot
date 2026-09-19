@@ -88,7 +88,7 @@ test('shared References UI keeps Save/history access, no handoff, and section ac
         function HeaderHarness() {
           const [kind, setKind] = useState('reference');
           const action = {
-            reference: { label: 'Ref Check', description: 'Reference check', onClick: () => { window.__referenceCheckCalls += 1; }, disabled: false, busy: false, progress: null, error: null },
+            reference: { label: 'Reference Check', description: 'Reference check', onClick: () => { window.__referenceCheckCalls += 1; }, disabled: false, busy: false, progress: null, error: null },
             abstract: { label: 'Citation Review', description: 'Citation Review is not applicable to Abstract.', onClick: () => { window.__citationReviewCalls += 1; }, disabled: true, busy: false, progress: null, error: null },
             ordinary: { label: 'Citation Review', description: 'Citation review', onClick: () => { window.__citationReviewCalls += 1; }, disabled: false, busy: false, progress: null, error: null },
           }[kind];
@@ -166,7 +166,7 @@ test('shared References UI keeps Save/history access, no handoff, and section ac
 
   const header = page.getByTestId('header-host');
   const visibleAction = (label) => header.locator('button:visible').filter({ hasText: label }).first();
-  await visibleAction('Ref Check').waitFor();
+  await visibleAction('Reference Check').waitFor();
   const saveButton = page.getByRole('button', { name: 'Save', exact: true }).first();
   await saveButton.waitFor();
   assert.equal(await saveButton.isEnabled(), true);
@@ -186,14 +186,14 @@ test('shared References UI keeps Save/history access, no handoff, and section ac
   assert.equal(await page.evaluate(() => window.__referenceCheckCalls), 0);
 
   await page.getByTestId('reference-mode').click();
-  await visibleAction('Ref Check').click();
+  await visibleAction('Reference Check').click();
   assert.equal(await page.evaluate(() => window.__referenceCheckCalls), 1);
   assert.equal(await page.evaluate(() => window.__citationReviewCalls), 1);
 
   await page.setViewportSize({ width: 375, height: 800 });
   await page.getByTestId('reference-mode').click();
   await header.getByRole('button', { name: 'Open menu' }).click();
-  const mobileReferenceButton = header.locator('button:visible').filter({ hasText: 'Ref Check' }).first();
+  const mobileReferenceButton = header.locator('button:visible').filter({ hasText: 'Reference Check' }).first();
   await mobileReferenceButton.waitFor();
   await mobileReferenceButton.click();
   assert.equal(await page.evaluate(() => window.__referenceCheckCalls), 2);

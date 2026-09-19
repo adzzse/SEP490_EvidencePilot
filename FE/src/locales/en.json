@@ -522,7 +522,7 @@
   "referenceCheckStatusMissingSource": "Missing from Sources",
   "referenceCheckStatusNeedsReview": "Needs confirmation",
   "referenceCheckNotDeclared": "Not added to paper References",
-  "refCheckAction": "Ref Check",
+  "refCheckAction": "Reference Check",
   "refCheckDescription": "Save References and check whether each entry exists in project Sources.",
   "citationReviewNotApplicableAbstract": "Citation Review is not applicable to Abstract.",
   "failedToRemoveReference": "Failed to remove reference.",

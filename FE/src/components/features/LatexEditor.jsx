@@ -155,7 +155,7 @@ class InfoIconWidget extends WidgetType {
   ignoreEvent() { return true; } // CM must not swallow the DOM click
 }
 
-// --- Citation pill masking: \cite{id} renders as (Author, Year); cursor
+// --- Citation pill masking: paper References render as numeric [n]; cursor
 // proximity (±1 char) dissolves the mask to reveal the raw LaTeX. ---
 
 function firstAuthorSurname(authors) {
@@ -176,11 +176,12 @@ class CitePillWidget extends WidgetType {
   toDOM() {
     const span = document.createElement('span');
     span.className = `cm-cite-pill${this.meta ? '' : ' cm-cite-pill--unresolved'}`;
+    const number = Number.isInteger(this.meta?.number) ? this.meta.number : null;
     const surname = firstAuthorSurname(this.meta?.authors);
     const year = this.meta?.publicationYear || null;
-    span.textContent = surname || year
+    span.textContent = number != null ? `[${number}]` : (surname || year
       ? `(${surname || this.key}${year ? `, ${year}` : ''})`
-      : this.key;
+      : this.key);
     span.title = `\\cite{${this.key}}`;
     span.contentEditable = 'false';
     return span;
