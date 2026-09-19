@@ -11,7 +11,7 @@ import SectionStandardsTab from '../Instructor/review/SectionStandardsTab.jsx';
 import AiSuggestionDrawer from '../Instructor/review/AiSuggestionDrawer.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
 
-export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, onRunCitationReview, canRunCitationReview = false, reviewBusy = false, reviewProgress = null, reviewError = null, reviewRound = null, reviewGuide = null, review = null, reviewSection = null }) {
+export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, reviewAction = null, reviewRound = null, reviewGuide = null, review = null, reviewSection = null }) {
   const { user } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
@@ -152,19 +152,19 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
               </button>
             </>
           )}
-          {workspaceMode !== 'review' && onRunCitationReview && (
-            <span className="inline-flex items-center gap-1" title={reviewBusy ? t('reviewing') : canRunCitationReview ? t('citationReviewDescription') : t('citationReviewUnavailable')}>
-              <button type="button" data-tour="header-ai-review" onClick={onRunCitationReview} disabled={!canRunCitationReview || reviewBusy}
-                aria-label={t('aiReview')}
+          {workspaceMode !== 'review' && reviewAction && (
+            <span className="inline-flex items-center gap-1" title={reviewAction.busy ? t('reviewing') : reviewAction.description}>
+              <button type="button" data-tour="header-ai-review" onClick={reviewAction.onClick} disabled={reviewAction.disabled || reviewAction.busy}
+                aria-label={reviewAction.label}
                 className="flex h-8 items-center gap-1 rounded-lg bg-(--brand) px-2 text-xs font-bold text-(--on-brand) transition-colors hover:bg-(--brand-hover) disabled:opacity-50">
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-                <span className="hidden lg:inline">{reviewBusy ? t('loading') : t('aiReview')}</span>
+                <span className="hidden lg:inline">{reviewAction.busy ? t('loading') : reviewAction.label}</span>
               </button>
-              {reviewBusy && reviewProgress?.total > 0 && (
-                <span className="hidden sm:inline text-[10px] font-bold text-indigo-600">{Math.round(((reviewProgress.current || 0) / reviewProgress.total) * 100)}%</span>
+              {reviewAction.busy && reviewAction.progress?.total > 0 && (
+                <span className="hidden sm:inline text-[10px] font-bold text-indigo-600">{Math.round(((reviewAction.progress.current || 0) / reviewAction.progress.total) * 100)}%</span>
               )}
-              {reviewError && (
-                <span className="hidden md:inline max-w-[180px] truncate text-[10px] font-semibold text-rose-600" title={reviewError}>{reviewError}</span>
+              {reviewAction.error && (
+                <span className="hidden md:inline max-w-[180px] truncate text-[10px] font-semibold text-rose-600" title={reviewAction.error}>{reviewAction.error}</span>
               )}
             </span>
           )}
@@ -195,7 +195,7 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
           {showMoreMenu && (
             <div className="absolute right-0 top-full mt-2 w-[min(18rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] overflow-hidden">
               {workspaceMode !== 'review' && <button onClick={() => runMobileAction(onShowHistory)} disabled={historyDisabled} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{t('versionHistory')}</button>}
-              {workspaceMode !== 'review' && onRunCitationReview && <button onClick={() => runMobileAction(onRunCitationReview)} disabled={!canRunCitationReview || reviewBusy} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{reviewBusy ? t('loading') : t('aiReview')}</button>}
+              {workspaceMode !== 'review' && reviewAction && <button onClick={() => runMobileAction(reviewAction.onClick)} disabled={reviewAction.disabled || reviewAction.busy} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{reviewAction.busy ? t('loading') : reviewAction.label}</button>}
               {isReview && review && <button onClick={() => { setShowAiDrawer(true); setShowMoreMenu(false); }} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{t('instructor.review.aiSuggestionTab')}</button>}
               {isReview && review && <button onClick={() => setShowMobileStandards(!showMobileStandards)} aria-expanded={showMobileStandards} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{t('instructor.review.standardsTab')}</button>}
               {isReview && review && showMobileStandards && (

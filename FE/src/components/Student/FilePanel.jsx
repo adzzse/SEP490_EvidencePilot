@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useMediaUrls } from '../../hooks/useMediaUrls.js';
 import DeleteConfirm from '../ui/DeleteConfirm.jsx';
 
-export default function FilePanel({ compact, isOpen, width, onResizeStart, sections, assignedSections, selectedSectionId, onSelectSection, selectedPaper, onSelectPaper, onViewFullPaper, papers, onUploadPaper, sources, onUploadSource, onDeleteSource, mediaAssets, onUploadMedia, onDeleteMedia, onInsertMedia, showToast, isLocked, onSaveDraft, saveStatus, reviewMode = false, sourcesContent = null, onCollapse }) {
+export default function FilePanel({ compact, isOpen, width, onResizeStart, sections, assignedSections, canEditSection, selectedSectionId, onSelectSection, selectedPaper, onSelectPaper, onViewFullPaper, papers, onUploadPaper, sources, onUploadSource, onDeleteSource, mediaAssets, onUploadMedia, onDeleteMedia, onInsertMedia, showToast, isLocked, onSaveDraft, saveStatus, reviewMode = false, sourcesContent = null, onCollapse }) {
   const { t } = useTranslation();
   const [mediaSearchQuery, setMediaSearchQuery] = useState('');
   const [hoveredMedia, setHoveredMedia] = useState(null);
@@ -67,9 +67,10 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
           ) : (
             sections.map(sec => {
               const isAssigned = assignedSections.some(s => String(s.id) === String(sec.id));
+              const isEditable = canEditSection?.(sec) ?? isAssigned;
               const isSelected = String(sec.id) === String(selectedSectionId);
               return (
-                <div key={sec.id} className={`flex items-center justify-between text-xs font-medium p-2 rounded-md transition-all mt-1 group ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 border border-indigo-100 dark:border-indigo-800 shadow-sm' : isAssigned ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-(--text-primary)' : 'text-(--text-secondary) hover:bg-(--surface-tertiary)'}`}>
+                <div key={sec.id} className={`flex items-center justify-between text-xs font-medium p-2 rounded-md transition-all mt-1 group ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 border border-indigo-100 dark:border-indigo-800 shadow-sm' : isEditable ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-(--text-primary)' : 'text-(--text-secondary) hover:bg-(--surface-tertiary)'}`}>
                   <button type="button" aria-label={sec.sectionTitle || t('untitled')} aria-pressed={isSelected} onClick={() => onSelectSection(sec)} className="flex flex-1 items-center gap-2 truncate text-left cursor-pointer">
                     {isAssigned ? (
                       <svg className="w-3.5 h-3.5 shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
@@ -89,7 +90,7 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
                     </span>
                   )}
                   <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1 py-0.5 rounded shrink-0">v{sec.version || 1}</span>
-                  {isSelected && isAssigned && onSaveDraft && (
+                  {isSelected && isEditable && onSaveDraft && (
                     <button onClick={(e) => { e.stopPropagation(); onSaveDraft(); }} disabled={isLocked || saveStatus === 'saving'} className="text-xs font-bold text-white bg-(--brand) hover:bg-(--brand-hover) disabled:cursor-not-allowed disabled:opacity-50 px-2 py-1 rounded shrink-0 cursor-pointer" title={isLocked ? t('saveReadOnly') : t('saveSection')}>{t('save')}</button>
                   )}
                 </div>

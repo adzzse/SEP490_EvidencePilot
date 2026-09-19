@@ -5,6 +5,7 @@ import SectionRequirementsPanel from './SectionRequirementsPanel.jsx';
 import SourceLibraryContent from './SourceLibraryContent.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
 import { PROJECT_STATUSES } from '../../constants';
+import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
 
 const FEEDBACK_STATUSES = new Set(['PENDING', 'RETURNED', 'REVIEWED']);
 
@@ -167,11 +168,17 @@ export default function ContextPanel({
                               {confirmationSnapshot.papers.map(paper => <div key={paper.id}>
                                 <h4 className="font-bold">{paper.title || t('paper')}</h4>
                                 {paper.sections.map(section => <div key={section.id} className="mt-2 border-t border-(--border) pt-2">
+                                  {(() => {
+                                    const sharedReferences = isReferenceSectionTitle(section.title);
+                                    const handoffState = sharedReferences ? 'NOT_REQUIRED' : section.handoffState;
+                                    return <>
                                   <p className="font-semibold">{section.title}</p>
-                                  <p>{t('feedbackAssignee')}: {section.assignedUserName || t('feedbackUnassigned')}</p>
-                                  {section.handoffState && <p>{t(section.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : section.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}</p>}
+                                  <p>{t('feedbackAssignee')}: {section.assignedUserName || (sharedReferences ? t('referenceSharedEditors') : t('feedbackUnassigned'))}</p>
+                                  {handoffState && <p>{t(handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : handoffState === 'STALE' ? 'handoffStateStale' : handoffState === 'NOT_REQUIRED' ? 'handoffStateNotRequired' : 'handoffStateUnconfirmed')}</p>}
                                   <p>{t('feedbackConfirmedBy')}: {section.confirmedByName || '—'}</p>
                                   <p>{t('confirmationTime')}: {formatDateTime(section.confirmedAt)}</p>
+                                    </>;
+                                  })()}
                                 </div>)}
                               </div>)}
                             </>}

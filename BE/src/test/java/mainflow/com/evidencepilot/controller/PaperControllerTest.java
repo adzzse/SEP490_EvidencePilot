@@ -426,6 +426,32 @@ class PaperControllerTest {
     }
 
     @Test
+    void reviewSectionRejectsPolicyExemptSectionBeforeSubmittingJob() throws Exception {
+        UUID documentId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        Document document = paperDocument(UUID.randomUUID());
+        document.setId(documentId);
+        document.setActive(true);
+        document.setDocType(DocumentType.PAPER);
+        PaperSection section = sectionOf(document);
+        section.setId(sectionId);
+        section.setActive(true);
+        section.setSectionTitle("Abstract");
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(paperSectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
+        when(sectionCitationReviewService.prepareReview(section)).thenThrow(
+                new ResponseStatusException(HttpStatus.BAD_REQUEST, "CITATION_REVIEW_NOT_APPLICABLE"));
+
+        mockMvc.perform(post("/api/papers/{documentId}/sections/{sectionId}/review", documentId, sectionId))
+                .andExpect(status().isBadRequest());
+
+        verify(aiEvaluationService, never())
+                .submitSectionCitationReview(any(), any(), any(), any(), any());
+    }
+
+    @Test
     void delete_returns204() throws Exception {
         UUID id = UUID.randomUUID();
         mockMvc.perform(delete("/api/papers/{id}", id)).andExpect(status().isNoContent());

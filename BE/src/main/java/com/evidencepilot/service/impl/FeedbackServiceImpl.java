@@ -710,7 +710,9 @@ public class FeedbackServiceImpl {
     }
 
     private static boolean sameUuid(String candidate, UUID expected) {
-        return expected != null && expected.toString().equals(candidate);
+        return candidate == null
+                ? expected == null
+                : expected != null && expected.toString().equals(candidate);
     }
 
     private static ResponseStatusException notFound(String type, UUID id) {

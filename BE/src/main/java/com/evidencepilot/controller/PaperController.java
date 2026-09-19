@@ -437,6 +437,7 @@ public class PaperController {
                     + "Poll GET /api/jobs/{jobId} for the result.")
     @ApiResponses({
             @ApiResponse(responseCode = "202", description = "Review queued"),
+            @ApiResponse(responseCode = "400", description = "Citation Review is not applicable to this section"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
             @ApiResponse(responseCode = "403", description = "Access denied"),
             @ApiResponse(responseCode = "404", description = "Paper not found")

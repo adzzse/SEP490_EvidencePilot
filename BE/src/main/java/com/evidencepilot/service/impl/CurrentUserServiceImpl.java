@@ -4,11 +4,13 @@ import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.UserRepository;
+import com.evidencepilot.service.PaperStandardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -24,6 +26,7 @@ public class CurrentUserServiceImpl {
 
     private final UserRepository userRepository;
     private final FeedbackRequestRepository feedbackRequestRepository;
+    private final PaperStandardService paperStandardService;
 
     public User requireCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -199,6 +202,13 @@ public class CurrentUserServiceImpl {
             throw new ResponseStatusException(
                     org.springframework.http.HttpStatus.CONFLICT,
                     "Section is inactive.");
+        }
+        if (paperStandardService.isReferenceSectionTitle(section.getSectionTitle())
+                && currentUser.getRole() == UserRole.STUDENT
+                && currentUser.getAccountStatus() == AccountStatus.ACTIVE
+                && hasProjectRole(currentUser, section.getDocument().getProject(),
+                        Set.of(ProjectRole.LEADER, ProjectRole.MEMBER))) {
+            return;
         }
         requireSectionAssignment(currentUser, section);
     }

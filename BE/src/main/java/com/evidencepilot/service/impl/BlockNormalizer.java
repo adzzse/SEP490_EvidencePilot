@@ -40,6 +40,7 @@ public final class BlockNormalizer {
             "methodology", "results", "discussion",
             "conclusion", "conclusions",
             "references", "appendix",
+            "author", "authors",
             "acknowledgement", "acknowledgements",
             "acknowledgment", "acknowledgments",
             "keywords");
@@ -116,7 +117,7 @@ public final class BlockNormalizer {
                 || normalized.equals("key words");
     }
 
-    private static String stripHeadingNumber(String heading) {
+    static String stripHeadingNumber(String heading) {
         return HEADING_NUMBER.matcher(heading.strip()).replaceFirst("");
     }
 

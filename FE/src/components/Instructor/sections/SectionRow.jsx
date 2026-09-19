@@ -1,5 +1,6 @@
 import DeleteConfirm from '../../ui/DeleteConfirm.jsx';
 import { studentDisplayName } from '../../../utils/instructor/studentSearch.js';
+import { isReferenceSectionTitle } from '../../../utils/formatters/latexHtml.js';
 
 export default function SectionRow({
   section: s,
@@ -26,7 +27,8 @@ export default function SectionRow({
   onDragStart,
   onDragOver,
   onDrop,
-}) {
+  }) {
+  const isReferenceSection = isReferenceSectionTitle(s.sectionTitle);
   return (
     <div
       draggable={!isLocked && !isSaving}
@@ -103,19 +105,25 @@ export default function SectionRow({
               {t.configStandard}
             </button>
           )}
-          <select
-            value={s.assignedUserId || ''}
-            onChange={e => { const v = e.target.value; onAssign(s.id, v ? v : null); }}
-            disabled={isReadOnly || isSaving}
-            className="min-w-0 flex-1 max-h-60 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs outline-none overflow-y-auto disabled:bg-[var(--surface-tertiary)] disabled:text-[var(--text-tertiary)] sm:flex-none"
-          >
-            <option value="">{t.unassigned}</option>
-            {projectMembers
-              .filter(member => users.some(user => String(user.id) === String(member.userId)))
-              .map(member => (
-                <option key={member.userId} value={member.userId}>{studentDisplayName(member ?? {})}</option>
-              ))}
-          </select>
+          {isReferenceSection ? (
+            <span role="status" className="rounded border border-indigo-200 px-2 py-1 text-[10px] font-bold text-indigo-700">
+              {t.referenceSharedEditors}
+            </span>
+          ) : (
+            <select
+              value={s.assignedUserId || ''}
+              onChange={e => { const v = e.target.value; onAssign(s.id, v ? v : null); }}
+              disabled={isReadOnly || isSaving}
+              className="min-w-0 flex-1 max-h-60 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs outline-none overflow-y-auto disabled:bg-[var(--surface-tertiary)] disabled:text-[var(--text-tertiary)] sm:flex-none"
+            >
+              <option value="">{t.unassigned}</option>
+              {projectMembers
+                .filter(member => users.some(user => String(user.id) === String(member.userId)))
+                .map(member => (
+                  <option key={member.userId} value={member.userId}>{studentDisplayName(member ?? {})}</option>
+                ))}
+            </select>
+          )}
           {isConflict && (
             <button data-testid={`reload-section-${s.id}`} onClick={() => onReloadConflict(s.id)} className="rounded bg-amber-500 px-2 py-1 text-[10px] font-bold text-white hover:bg-amber-600">{t.reloadSection}</button>
           )}

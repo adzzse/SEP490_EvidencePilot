@@ -10,28 +10,26 @@ export function usePaperReferences(paperId) {
   const [error, setError] = useState('');
   const [checkLoading, setCheckLoading] = useState(false);
   const [checkError, setCheckError] = useState('');
-  const requestId = useRef(0);
+  const referencesRequestId = useRef(0);
+  const checkRequestId = useRef(0);
   const currentPaperId = useRef(paperId);
   currentPaperId.current = paperId;
 
-  const reload = useCallback(async () => {
+  const reloadReferences = useCallback(async () => {
     if (currentPaperId.current !== paperId) return;
-    const id = ++requestId.current;
-    const isCurrent = () => id === requestId.current && currentPaperId.current === paperId;
+    const id = ++referencesRequestId.current;
+    const isCurrent = () => id === referencesRequestId.current && currentPaperId.current === paperId;
     if (!paperId) {
       setSnapshot({ paperId, references: [], check: null });
       setError('');
       setCheckError('');
       setLoading(false);
-      setCheckLoading(false);
       return;
     }
     setLoading(true);
-    setCheckLoading(true);
-    const [referencesResult, checkResult] = await Promise.allSettled([
+    const referencesResult = await Promise.allSettled([
       api.get(API_ROUTES.PAPERS.REFERENCES(paperId)),
-      api.get(API_ROUTES.PAPERS.REFERENCE_CHECK(paperId)),
-    ]);
+    ]).then(([result]) => result);
     if (!isCurrent()) return;
 
     setSnapshot(current => ({
@@ -39,33 +37,69 @@ export function usePaperReferences(paperId) {
       references: referencesResult.status === 'fulfilled'
         ? referencesResult.value.data || []
         : current.paperId === paperId ? current.references : [],
-      check: checkResult.status === 'fulfilled'
-        ? checkResult.value.data
-        : current.paperId === paperId ? current.check : null,
+      check: current.paperId === paperId ? current.check : null,
     }));
     setError(referencesResult.status === 'rejected' ? 'referencesLoadFailed' : '');
-    setCheckError(checkResult.status === 'rejected' ? 'referenceCheckLoadFailed' : '');
     setLoading(false);
+  }, [paperId]);
+
+  const clearCheck = useCallback(() => {
+    checkRequestId.current += 1;
+    setSnapshot(current => current.paperId === paperId
+      ? { ...current, check: null }
+      : current);
+    setCheckError('');
     setCheckLoading(false);
   }, [paperId]);
 
+  const runCheck = useCallback(async () => {
+    if (!paperId || currentPaperId.current !== paperId) return null;
+    const id = ++checkRequestId.current;
+    setCheckLoading(true);
+    setCheckError('');
+    try {
+      const { data } = await api.get(API_ROUTES.PAPERS.REFERENCE_CHECK(paperId));
+      if (id !== checkRequestId.current || currentPaperId.current !== paperId) return null;
+      setSnapshot(current => ({
+        paperId,
+        references: current.paperId === paperId ? current.references : [],
+        check: data,
+      }));
+      return data;
+    } catch (requestError) {
+      if (id === checkRequestId.current && currentPaperId.current === paperId) {
+        setCheckError('referenceCheckLoadFailed');
+      }
+      throw requestError;
+    } finally {
+      if (id === checkRequestId.current && currentPaperId.current === paperId) {
+        setCheckLoading(false);
+      }
+    }
+  }, [paperId]);
+
   useEffect(() => {
+    clearCheck();
     setSnapshot({ paperId, references: [], check: null });
     setError('');
-    setCheckError('');
-    reload();
-    return () => { requestId.current += 1; };
-  }, [reload]);
+    reloadReferences();
+    return () => {
+      referencesRequestId.current += 1;
+      checkRequestId.current += 1;
+    };
+  }, [paperId, clearCheck, reloadReferences]);
 
   const addReference = useCallback(async (sourceId) => {
+    clearCheck();
     await api.post(API_ROUTES.PAPERS.REFERENCE_BY_ID(paperId, sourceId));
-    await reload();
-  }, [paperId, reload]);
+    await reloadReferences();
+  }, [paperId, clearCheck, reloadReferences]);
 
   const removeReference = useCallback(async (sourceId) => {
+    clearCheck();
     await api.delete(API_ROUTES.PAPERS.REFERENCE_BY_ID(paperId, sourceId));
-    await reload();
-  }, [paperId, reload]);
+    await reloadReferences();
+  }, [paperId, clearCheck, reloadReferences]);
 
   return {
     references,
@@ -74,7 +108,9 @@ export function usePaperReferences(paperId) {
     error,
     checkLoading,
     checkError,
-    reload,
+    reloadReferences,
+    runCheck,
+    clearCheck,
     addReference,
     removeReference,
   };

@@ -165,6 +165,11 @@ public class PaperStandardService {
         return normalized != null ? normalized : title.trim();
     }
 
+    public boolean isReferenceSectionTitle(String title) {
+        String normalized = normalizeSectionTitle(title);
+        return "References".equals(normalized) || "Works Cited".equals(normalized);
+    }
+
     private static String guidance(String title) {
         return switch (title) {
             case "Abstract" -> "Summarize the problem, method, main result, and contribution.";

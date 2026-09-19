@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api from '../../services/api.js';
 import Modal from '../ui/Modal.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
+import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
 
 const CHECK_KEYS = {
   REVISION_CHANGED: 'feedbackRevisionRequired',
@@ -137,12 +138,20 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
                             <li key={section.id} className="space-y-1 text-[11px] text-(--text-secondary)">
                               <div className="flex items-center gap-2">
                                 <span className="truncate">{section.title}</span>
+                                {(() => {
+                                  const sharedReferences = isReferenceSectionTitle(section.title);
+                                  const handoffState = sharedReferences ? 'NOT_REQUIRED' : section.handoffState;
+                                  return (
+                                    <>
                                 <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:border-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300">
-                                  v{section.contentVersion} - {section.assignedUserName || t('feedbackUnassigned')}{section.assignedUserCode ? ` - ${section.assignedUserCode}` : ''}
+                                  v{section.contentVersion} - {section.assignedUserName || (sharedReferences ? t('referenceSharedEditors') : t('feedbackUnassigned'))}{section.assignedUserCode ? ` - ${section.assignedUserCode}` : ''}
                                 </span>
-                                <span className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${section.handoffState === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                                  {t(section.handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : section.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}
+                                <span className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${handoffState === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : handoffState === 'NOT_REQUIRED' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {t(handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : handoffState === 'STALE' ? 'handoffStateStale' : handoffState === 'NOT_REQUIRED' ? 'handoffStateNotRequired' : 'handoffStateUnconfirmed')}
                                 </span>
+                                    </>
+                                  );
+                                })()}
                               </div>
                               {section.confirmedAt && <p>{t('confirmedAt')}: {formatDateTime(section.confirmedAt)}</p>}
                               {(section.blockers || []).length > 0 && (

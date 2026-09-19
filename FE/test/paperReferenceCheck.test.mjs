@@ -120,7 +120,7 @@ test('paper reference panel keeps the advisory check independent and refreshable
         function Harness() {
           const state = usePaperReferences('paper-1');
           return React.createElement(React.Fragment, null,
-            React.createElement('button', { type: 'button', onClick: state.reload }, 'Reload check'),
+            React.createElement('button', { type: 'button', onClick: state.runCheck }, 'Ref Check'),
             React.createElement(PaperReferencesPanel, {
               references: state.references,
               loading: state.loading,
@@ -128,7 +128,7 @@ test('paper reference panel keeps the advisory check independent and refreshable
               referenceCheck: state.check,
               referenceCheckLoading: state.checkLoading,
               referenceCheckError: state.checkError,
-              onRetryReferenceCheck: state.reload,
+              onRetryReferenceCheck: state.runCheck,
             }),
           );
         }
@@ -144,6 +144,10 @@ test('paper reference panel keeps the advisory check independent and refreshable
   const address = server.httpServer.address();
   const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${address.port}/__paper_reference_check_test__`);
+  await page.getByText('Existing reference').waitFor();
+  assert.equal(checkRequests, 0);
+  assert.equal(await page.getByRole('region', { name: 'Reference check' }).count(), 0);
+  await page.getByRole('button', { name: 'Ref Check' }).click();
   const region = page.getByRole('region', { name: 'Reference check' });
   await region.waitFor();
   assert.match(await region.textContent(), /2 references detected/i);
@@ -153,7 +157,7 @@ test('paper reference panel keeps the advisory check independent and refreshable
   assert.match(await region.textContent(), /Missing work\. 2023\./);
   assert.match(await region.textContent(), /Not added to paper References/i);
 
-  await page.getByRole('button', { name: 'Reload check' }).click();
+  await page.getByRole('button', { name: 'Ref Check' }).click();
   const ready = page.getByRole('status');
   await ready.waitFor();
   assert.match(await ready.textContent(), /Every imported reference has a ready Source/i);
@@ -162,6 +166,9 @@ test('paper reference panel keeps the advisory check independent and refreshable
   checkRequests = 0;
   const errorPage = await browser.newPage();
   await errorPage.goto(`http://127.0.0.1:${address.port}/__paper_reference_check_test__?error`);
+  await errorPage.getByText('Existing reference').waitFor();
+  assert.equal(checkRequests, 0);
+  await errorPage.getByRole('button', { name: 'Ref Check' }).click();
   const alert = errorPage.getByRole('alert');
   await alert.waitFor();
   assert.match(await alert.textContent(), /Could not check imported references\./i);

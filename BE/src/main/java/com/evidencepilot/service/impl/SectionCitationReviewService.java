@@ -320,10 +320,13 @@ public class SectionCitationReviewService {
     }
 
     public String prepareReview(PaperSection section) {
-        ResolvedPrompt prompt = promptTemplateService.resolve("CITATION_REVIEW");
         String normalizedTitle = paperStandardService.normalizeSectionTitle(section.getSectionTitle());
-        String generation = isPolicyExempt(normalizedTitle)
-                ? NOT_APPLICABLE : aiModelClient.generationSelection().fingerprint();
+        if (isPolicyExempt(normalizedTitle)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "CITATION_REVIEW_NOT_APPLICABLE");
+        }
+        ResolvedPrompt prompt = promptTemplateService.resolve("CITATION_REVIEW");
+        String generation = aiModelClient.generationSelection().fingerprint();
         return reviewInputFingerprint(section, prompt, generation);
     }
 

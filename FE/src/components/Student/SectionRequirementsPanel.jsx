@@ -3,6 +3,7 @@ import { formatDateTime } from '../../utils/formatters/date.js';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api.js';
+import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
 
 const VERDICT_STYLE = {
   MET: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200',
@@ -135,28 +136,35 @@ export default function SectionRequirementsPanel({
   const requirements = evaluation?.requirements || [];
   const items = evaluation?.result?.items || [];
   const completed = evaluation?.status === 'COMPLETED' && !evaluation?.stale && !isDirty;
-  const confirmed = readinessSection?.handoffState === 'CONFIRMED';
+  const sharedReferences = isReferenceSectionTitle(selectedSection.sectionTitle);
+  const confirmed = sharedReferences || readinessSection?.handoffState === 'CONFIRMED';
   const canAct = isAssigned && !isLocked && !isDirty;
   const handoffBlocked = readinessSection?.blockers?.some(code => code !== 'SECTION_CONFIRMED');
   const confirmedName = readinessSection?.confirmedByName || readinessSection?.assignedUserName || null;
   const confirmedCode = readinessSection?.confirmedByCode || readinessSection?.assignedUserCode || null;
 
   const handoffSection = (
-    <section className="rounded-xl border border-(--border) bg-(--surface) p-3 shadow-sm">
+    <section className="rounded-xl border border-(--border) bg-(--surface) p-3 shadow-sm" aria-label={sharedReferences ? t('handoffStateNotRequired') : t('sectionHandoff')}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-xs font-bold text-(--text-primary)">{t('sectionHandoff')}</h3>
-          {isDirty && <p className="mt-1 text-[11px] leading-relaxed text-(--text-secondary)">{t('handoffSavedVersion')}</p>}
-          <p className="mt-2 text-[11px] text-(--text-secondary)">{t('confirmedBy')}: {confirmedName ? `${confirmedName}${confirmedCode ? ` - ${confirmedCode}` : ''}` : '—'}</p>
-          {readinessSection?.confirmedAt && <p className="mt-0.5 text-[11px] text-(--text-secondary)">{t('confirmedAt')}: {formatDateTime(readinessSection.confirmedAt)}</p>}
+          <h3 className="text-xs font-bold text-(--text-primary)">{sharedReferences ? t('handoffStateNotRequired') : t('sectionHandoff')}</h3>
+          {sharedReferences ? (
+            <p className="mt-2 text-[11px] leading-relaxed text-(--text-secondary)">{t('handoffNotRequired')}</p>
+          ) : (
+            <>
+              {isDirty && <p className="mt-1 text-[11px] leading-relaxed text-(--text-secondary)">{t('handoffSavedVersion')}</p>}
+              <p className="mt-2 text-[11px] text-(--text-secondary)">{t('confirmedBy')}: {confirmedName ? `${confirmedName}${confirmedCode ? ` - ${confirmedCode}` : ''}` : '—'}</p>
+              {readinessSection?.confirmedAt && <p className="mt-0.5 text-[11px] text-(--text-secondary)">{t('confirmedAt')}: {formatDateTime(readinessSection.confirmedAt)}</p>}
+            </>
+          )}
         </div>
-        <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black ${confirmed ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200'}`}>
-          {t(confirmed ? 'handoffStateConfirmed' : readinessSection?.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}
+        <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black ${sharedReferences || confirmed ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200'}`}>
+          {t(sharedReferences ? 'handoffStateNotRequired' : confirmed ? 'handoffStateConfirmed' : readinessSection?.handoffState === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed')}
         </span>
       </div>
-      {!isAssigned && <p className="mt-2 text-[11px] text-amber-700">{t('handoffAssigneeOnly')}</p>}
-      {handoffBlocked && <p className="mt-2 text-[11px] text-rose-700">{t('handoffBlocked')}</p>}
-      {isAssigned && !isLocked && (
+      {!sharedReferences && !isAssigned && <p className="mt-2 text-[11px] text-amber-700">{t('handoffAssigneeOnly')}</p>}
+      {!sharedReferences && handoffBlocked && <p className="mt-2 text-[11px] text-rose-700">{t('handoffBlocked')}</p>}
+      {!sharedReferences && isAssigned && !isLocked && (
         <button type="button" onClick={() => updateHandoff(!confirmed)} disabled={!canAct || busy !== '' || !readinessSection?.currentInputFingerprint || (!confirmed && handoffBlocked)}
           className={`mt-3 w-full rounded-lg px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40 ${confirmed ? 'border border-slate-300 bg-(--surface) text-(--text-secondary) hover:bg-(--surface-secondary)' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
           {busy === 'confirm' || busy === 'revoke' ? t('working') : t(confirmed ? 'revokeHandoff' : 'confirmHandoff')}

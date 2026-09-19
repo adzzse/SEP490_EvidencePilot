@@ -146,7 +146,7 @@ public class PaperProcessingServiceImpl {
         int lastEnd = 0;
 
         while (matcher.find()) {
-            String sectionName = matcher.group(1).trim();
+            String sectionName = BlockNormalizer.stripHeadingNumber(matcher.group(1));
             int start = matcher.start();
 
             if (index > 0) {
@@ -401,6 +401,11 @@ public class PaperProcessingServiceImpl {
         Document document = requireInstructorDocumentWriteAccess(documentId);
         User currentUser = currentUserService.requireCurrentUser();
         PaperSection section = requireSectionInDocument(sectionId, documentId);
+        if (assignedUserId != null && paperStandardService.isReferenceSectionTitle(section.getSectionTitle())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Reference sections are shared and cannot be assigned.");
+        }
         UUID previousAssigneeId = section.getAssignedUser() == null
                 ? null : section.getAssignedUser().getId();
         if (assignedUserId != null) {
@@ -892,6 +897,12 @@ public class PaperProcessingServiceImpl {
                     || item.sectionTitle().trim().length() > 255) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Section title must contain 1 to 255 characters");
+            }
+            if (paperStandardService.isReferenceSectionTitle(item.sectionTitle())
+                    && item.assignedUserId() != null) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Reference sections are shared and cannot be assigned.");
             }
             if (item.expectedRevision() == null || item.expectedRevision() < 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

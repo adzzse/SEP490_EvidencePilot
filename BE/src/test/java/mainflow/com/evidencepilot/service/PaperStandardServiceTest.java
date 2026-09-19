@@ -4,6 +4,8 @@ import com.evidencepilot.model.enums.PaperStandard;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 
@@ -18,6 +20,18 @@ class PaperStandardServiceTest {
     private final AiModelClient aiModelClient = mock(AiModelClient.class);
     private final PaperStandardService service = new PaperStandardService(
             aiModelClient, new ObjectMapper());
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Reference", "References", "Bibliography", "Works Cited", " references "})
+    void recognizesSharedReferenceSectionTitles(String title) {
+        assertThat(service.isReferenceSectionTitle(title)).isTrue();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Abstract", "Introduction", "Related Work", ""})
+    void doesNotTreatOrdinarySectionsAsSharedReferences(String title) {
+        assertThat(service.isReferenceSectionTitle(title)).isFalse();
+    }
 
     @BeforeEach
     void classifierDefaultsToCustom() {

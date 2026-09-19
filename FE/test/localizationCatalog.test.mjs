@@ -281,7 +281,7 @@ const DYNAMIC_KEY_DOMAINS = new Map([
 const WORKSPACE_EXPLICIT_STATE_KEYS = new Map([
   ['confidence', ['confidenceHigh', 'confidenceMedium', 'confidenceLow', 'unknown']],
   ['relation', ['relationSupports', 'relationContradicts', 'relationNotFound', 'unknown']],
-  ['handoff', ['handoffStateConfirmed', 'handoffStateStale', 'handoffStateUnconfirmed']],
+  ['handoff', ['handoffStateConfirmed', 'handoffStateStale', 'handoffStateUnconfirmed', 'handoffStateNotRequired']],
   ['reference', ['referenceAvailable', 'referenceMissingPdf', 'referenceProcessing']],
   ['readiness', [
     'feedbackRevisionRequired', 'reviewCheckProjectEditable', 'reviewCheckInstructorAssigned',

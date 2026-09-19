@@ -10,6 +10,10 @@ export function isReferenceSectionTitle(title = '') {
   return ['references', 'reference', 'bibliography', 'works cited'].includes(title.trim().toLowerCase());
 }
 
+export function isAbstractSectionTitle(title = '') {
+  return title.trim().toLowerCase() === 'abstract';
+}
+
 const HEADING_OPEN = /^\\(?:sub){0,2}section\*?\s*\{/;
 const ENV_OPEN = /^\\begin\{(table\*?|equation\*?|align\*?|aligned\*?)\}/;
 // Terminators that end a paragraph block. Lookaheads keep the cut at line start.

@@ -371,6 +371,31 @@ class FlywayMigrationMySqlTest {
                 """, UUID.randomUUID().toString(), documentId,
                 UUID.randomUUID().toString(), documentId);
 
+        int migrationsThroughV38 = Flyway.configure()
+                .dataSource(rehearsalJdbcTemplate.getDataSource())
+                .baselineOnMigrate(true)
+                .baselineVersion(MigrationVersion.fromVersion("1"))
+                .target(MigrationVersion.fromVersion("38"))
+                .load()
+                .migrate()
+                .migrationsExecuted;
+
+        assertThat(migrationsThroughV38).isEqualTo(37);
+        String referencesSectionId = UUID.randomUUID().toString();
+        String introductionSectionId = UUID.randomUUID().toString();
+        rehearsalJdbcTemplate.update("""
+                INSERT INTO paper_sections (
+                    id, document_id, assigned_user_id, section_order, section_title, content_tex,
+                    version, opt_version, active, handoff_confirmed_by, handoff_confirmed_at,
+                    handoff_content_version, handoff_input_fingerprint
+                ) VALUES
+                    (UUID_TO_BIN(?), UUID_TO_BIN(?), UUID_TO_BIN(?), 0, 'References', 'refs',
+                     1, 0, TRUE, UUID_TO_BIN(?), CURRENT_TIMESTAMP(6), 1, ?),
+                    (UUID_TO_BIN(?), UUID_TO_BIN(?), UUID_TO_BIN(?), 1, 'Introduction', 'intro',
+                     1, 0, TRUE, UUID_TO_BIN(?), CURRENT_TIMESTAMP(6), 1, ?)
+                """, referencesSectionId, documentId, userId, userId, "r".repeat(64),
+                introductionSectionId, documentId, userId, userId, "i".repeat(64));
+
         int migrationsExecuted = Flyway.configure()
                 .dataSource(rehearsalJdbcTemplate.getDataSource())
                 .baselineOnMigrate(true)
@@ -379,7 +404,7 @@ class FlywayMigrationMySqlTest {
                 .migrate()
                 .migrationsExecuted;
 
-        assertThat(migrationsExecuted).isEqualTo(38);
+        assertThat(migrationsExecuted).isEqualTo(1);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
                 Integer.class)).isEqualTo(39);
@@ -398,6 +423,24 @@ class FlywayMigrationMySqlTest {
         assertThat(rehearsalJdbcTemplate.queryForList(
                 "SELECT reference_index FROM document_references WHERE document_id = UUID_TO_BIN(?) ORDER BY reference_index",
                 Integer.class, documentId)).containsExactly(0, 1);
+        assertThat(rehearsalJdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM paper_sections
+                WHERE id = UUID_TO_BIN(?)
+                  AND assigned_user_id IS NULL
+                  AND handoff_confirmed_by IS NULL
+                  AND handoff_confirmed_at IS NULL
+                  AND handoff_content_version IS NULL
+                  AND handoff_input_fingerprint IS NULL
+                """, Integer.class, referencesSectionId)).isOne();
+        assertThat(rehearsalJdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM paper_sections
+                WHERE id = UUID_TO_BIN(?)
+                  AND assigned_user_id IS NOT NULL
+                  AND handoff_confirmed_by IS NOT NULL
+                  AND handoff_confirmed_at IS NOT NULL
+                  AND handoff_content_version IS NOT NULL
+                  AND handoff_input_fingerprint = ?
+                """, Integer.class, introductionSectionId, "i".repeat(64))).isOne();
         assertThat(rehearsalJdbcTemplate.queryForList("""
                         SELECT constraint_name
                         FROM information_schema.table_constraints

@@ -115,6 +115,21 @@ class SectionCitationReviewServiceTest {
         verifyNoInteractions(snapshotRepository, userRepository, auditService);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"Abstract", "References", "Bibliography", "Works Cited"})
+    void prepareReviewRejectsPolicyExemptSectionsBeforeModelSelection(String title) {
+        PaperSection section = section(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), title, "Saved text");
+        org.mockito.Mockito.clearInvocations(prompts, aiModelClient);
+
+        assertThatThrownBy(() -> service().prepareReview(section))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST))
+                .hasMessageContaining("CITATION_REVIEW_NOT_APPLICABLE");
+        verify(aiModelClient, never()).generationSelection();
+        verify(prompts, never()).resolve("CITATION_REVIEW");
+    }
+
     @Test
     void runPersistsGroundedSourceDiscrepancyFinding() {
         UUID projectId = UUID.randomUUID();

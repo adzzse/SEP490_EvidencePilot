@@ -1,8 +1,12 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDate, formatDateTime } from '../../../utils/formatters/date.js';
+import { isReferenceSectionTitle } from '../../../utils/formatters/latexHtml.js';
 
 function confirmationFor(section) {
+  if (isReferenceSectionTitle(section?.sectionTitle || section?.title)) {
+    return { state: 'NOT_REQUIRED', confirmedBy: null, confirmedAt: null };
+  }
   const confirmedBy = section?.confirmedByName ?? section?.handoffConfirmedByName ?? null;
   const confirmedAt = section?.confirmedAt ?? section?.handoffConfirmedAt ?? null;
   const confirmedVersion = section?.confirmedContentVersion ?? section?.handoffContentVersion;
@@ -18,12 +22,13 @@ function confirmationFor(section) {
 }
 
 function stateLabel(state, t) {
-  return t(state === 'CONFIRMED' ? 'handoffStateConfirmed' : state === 'STALE' ? 'handoffStateStale' : 'handoffStateUnconfirmed');
+  return t(state === 'CONFIRMED' ? 'handoffStateConfirmed' : state === 'STALE' ? 'handoffStateStale' : state === 'NOT_REQUIRED' ? 'handoffStateNotRequired' : 'handoffStateUnconfirmed');
 }
 
 function stateClass(state) {
   if (state === 'CONFIRMED') return 'bg-emerald-100 text-emerald-700';
   if (state === 'STALE') return 'bg-amber-100 text-amber-700';
+  if (state === 'NOT_REQUIRED') return 'bg-indigo-100 text-indigo-700';
   return 'bg-slate-100 text-slate-600';
 }
 

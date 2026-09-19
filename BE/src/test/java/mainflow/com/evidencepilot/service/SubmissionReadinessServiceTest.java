@@ -47,6 +47,7 @@ class SubmissionReadinessServiceTest {
     @Mock private PaperSectionRepository paperSectionRepository;
     @Mock private FeedbackRequestRepository feedbackRequestRepository;
     @Mock private SectionStandardService sectionStandardService;
+    @Mock private PaperStandardService paperStandardService;
     @Mock private SectionStandardEvaluationRepository evaluationRepository;
     @Mock private CitationReviewRoundRepository roundRepository;
     @Mock private CurrentUserServiceImpl currentUserService;
@@ -59,6 +60,7 @@ class SubmissionReadinessServiceTest {
         service = new SubmissionReadinessService(
                 projectRepository, documentRepository, paperSectionRepository,
                 feedbackRequestRepository, sectionStandardService,
+                paperStandardService,
                 evaluationRepository, roundRepository,
                 currentUserService, objectMapper);
     }
@@ -89,6 +91,60 @@ class SubmissionReadinessServiceTest {
         assertThat(changed.papers().get(0).sections().get(0).handoffState()).isEqualTo("STALE");
         assertThat(changed.checks()).filteredOn(check -> check.code().equals("SECTION_CONFIRMED"))
                 .extracting(check -> check.status()).containsExactly("UNSATISFIED");
+    }
+
+    @Test
+    void sharedReferencesAreNotReadinessOrHandoffBlockersAndSnapshotNullsAssignment() throws Exception {
+        Fixture fixture = fixture();
+        PaperSection references = new PaperSection();
+        references.setId(UUID.randomUUID());
+        references.setDocument(fixture.paper());
+        references.setSectionOrder(1);
+        references.setSectionTitle("References");
+        references.setContentTex("Saved references");
+        references.setVersion(1);
+        references.setOptVersion(0L);
+        references.setActive(true);
+        when(paperStandardService.isReferenceSectionTitle(org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(invocation -> "References".equals(invocation.getArgument(0)));
+        when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(
+                fixture.project().getId(), DocumentType.PAPER)).thenReturn(List.of(fixture.paper()));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(fixture.paper().getId()))
+                .thenReturn(List.of(fixture.section(), references));
+        when(sectionStandardService.inputFingerprint(org.mockito.ArgumentMatchers.any(PaperSection.class)))
+                .thenReturn("f".repeat(64));
+        when(paperSectionRepository.findByIdWithDocument(references.getId())).thenReturn(Optional.of(references));
+        when(projectRepository.findByIdForUpdate(fixture.project().getId())).thenReturn(Optional.of(fixture.project()));
+        when(currentUserService.requireCurrentUser()).thenReturn(fixture.leader());
+
+        var readiness = service.assess(fixture.project(), fixture.leader()).response();
+        var referenceResponse = readiness.papers().get(0).sections().stream()
+                .filter(section -> section.title().equals("References"))
+                .findFirst().orElseThrow();
+        assertThat(referenceResponse.assignedUserId()).isNull();
+        assertThat(referenceResponse.handoffState()).isEqualTo("NOT_REQUIRED");
+        assertThat(referenceResponse.blockers()).doesNotContain("ASSIGNEE_VALID", "SECTION_CONFIRMED");
+        assertThat(readiness.checks().stream()
+                .filter(check -> check.code().equals("ASSIGNEE_VALID") || check.code().equals("SECTION_CONFIRMED")))
+                .allMatch(check -> check.status().equals("SATISFIED"));
+
+        var snapshot = objectMapper.readTree(service.snapshot(
+                service.assess(fixture.project(), fixture.leader()), fixture.project(), fixture.leader(),
+                fixture.instructor(), LocalDateTime.of(2026, 9, 4, 12, 0)));
+        var snapshotReference = snapshot.get("papers").get(0).get("sections").get(1);
+        assertThat(snapshotReference.get("assignedUserId").isNull()).isTrue();
+        assertThat(snapshotReference.get("confirmedById").isNull()).isTrue();
+        assertThat(snapshotReference.get("confirmedAt").isNull()).isTrue();
+        assertThat(snapshotReference.get("confirmedContentVersion").isNull()).isTrue();
+        assertThat(snapshotReference.get("handoffState").asText()).isEqualTo("NOT_REQUIRED");
+
+        assertThatThrownBy(() -> service.confirm(
+                fixture.paper().getId(), references.getId(), "f".repeat(64)))
+                .isInstanceOfSatisfying(SubmissionReadinessException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("SECTION_HANDOFF_NOT_REQUIRED"));
+        assertThatThrownBy(() -> service.revoke(fixture.paper().getId(), references.getId()))
+                .isInstanceOfSatisfying(SubmissionReadinessException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("SECTION_HANDOFF_NOT_REQUIRED"));
     }
 
     @Test
@@ -370,7 +426,7 @@ class SubmissionReadinessServiceTest {
                 evaluations, currentUserService, objectMapper, transactions, prompts,
                 generationConfig);
         service = new SubmissionReadinessService(projectRepository, documentRepository, paperSectionRepository,
-                feedbackRequestRepository, standards,
+                feedbackRequestRepository, standards, paperStandardService,
                 org.mockito.Mockito.mock(SectionStandardEvaluationRepository.class),
                 org.mockito.Mockito.mock(CitationReviewRoundRepository.class),
                 currentUserService, objectMapper);

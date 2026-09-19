@@ -10,6 +10,7 @@ import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.UserRepository;
+import com.evidencepilot.service.PaperStandardService;
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +40,9 @@ class CurrentUserServiceImplTest {
     @Mock
     private FeedbackRequestRepository feedbackRequestRepository;
 
+    @Mock
+    private PaperStandardService paperStandardService;
+
     @Test
     void requireProjectAccessAllowsAssignedInstructorDuringReview() {
         User instructor = user(UserRole.INSTRUCTOR);
@@ -49,7 +53,7 @@ class CurrentUserServiceImplTest {
                 project.getId(), instructor.getId())).thenReturn(true);
 
         CurrentUserServiceImpl service =
-                new CurrentUserServiceImpl(userRepository, feedbackRequestRepository);
+                new CurrentUserServiceImpl(userRepository, feedbackRequestRepository, paperStandardService);
 
         assertThatCode(() -> service.requireProjectAccess(instructor, project))
                 .doesNotThrowAnyException();
@@ -61,7 +65,7 @@ class CurrentUserServiceImplTest {
         Project project = projectWithMembers(member(instructor, ProjectRole.INSTRUCTOR));
 
         CurrentUserServiceImpl service =
-                new CurrentUserServiceImpl(userRepository, feedbackRequestRepository);
+                new CurrentUserServiceImpl(userRepository, feedbackRequestRepository, paperStandardService);
 
         assertThatCode(() -> service.requireProjectWriteAccess(instructor, project))
                 .doesNotThrowAnyException();
@@ -73,7 +77,7 @@ class CurrentUserServiceImplTest {
         Project project = projectWithMembers(member(student, ProjectRole.MEMBER));
 
         CurrentUserServiceImpl service =
-                new CurrentUserServiceImpl(userRepository, feedbackRequestRepository);
+                new CurrentUserServiceImpl(userRepository, feedbackRequestRepository, paperStandardService);
 
         assertThatCode(() -> service.requireProjectWriteAccess(student, project))
                 .doesNotThrowAnyException();
@@ -113,13 +117,50 @@ class CurrentUserServiceImplTest {
     }
 
     @Test
+    void activeStudentMembersCanEditUnassignedReferencesButNotOtherStudentsSections() {
+        User leader = user(UserRole.STUDENT);
+        User member = user(UserRole.STUDENT);
+        User nonMember = user(UserRole.STUDENT);
+        User instructor = user(UserRole.INSTRUCTOR);
+        Project project = projectWithMembers(
+                member(leader, ProjectRole.LEADER),
+                member(member, ProjectRole.MEMBER),
+                member(instructor, ProjectRole.INSTRUCTOR));
+        Document document = new Document();
+        document.setProject(project);
+        PaperSection references = new PaperSection();
+        references.setDocument(document);
+        references.setSectionTitle("References");
+        PaperSection introduction = new PaperSection();
+        introduction.setDocument(document);
+        introduction.setSectionTitle("Introduction");
+        introduction.setAssignedUser(leader);
+        when(paperStandardService.isReferenceSectionTitle("References")).thenReturn(true);
+
+        assertThatCode(() -> service().requireSectionContentWriteAccess(member, references))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> service().requireSectionContentWriteAccess(member, introduction))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service().requireSectionContentWriteAccess(nonMember, references))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service().requireSectionContentWriteAccess(instructor, references))
+                .isInstanceOf(ResponseStatusException.class);
+
+        project.setStatus(ProjectStatus.SUBMITTED_FOR_REVIEW);
+        assertThatThrownBy(() -> service().requireSectionContentWriteAccess(member, references))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode())
+                        .isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    @Test
     void requireProjectManageAccessRejectsStudentEditor() {
         User student = user(UserRole.STUDENT);
         Project project = projectWithMembers(member(student, ProjectRole.MEMBER));
         project.setStatus(ProjectStatus.APPROVED);
 
         CurrentUserServiceImpl service =
-                new CurrentUserServiceImpl(userRepository, feedbackRequestRepository);
+                new CurrentUserServiceImpl(userRepository, feedbackRequestRepository, paperStandardService);
 
         assertThatThrownBy(() -> service.requireProjectManageAccess(student, project))
                 .isInstanceOf(ResponseStatusException.class)
@@ -298,7 +339,7 @@ class CurrentUserServiceImplTest {
     }
 
     private CurrentUserServiceImpl service() {
-        return new CurrentUserServiceImpl(userRepository, feedbackRequestRepository);
+        return new CurrentUserServiceImpl(userRepository, feedbackRequestRepository, paperStandardService);
     }
 
     private User user(UserRole role) {

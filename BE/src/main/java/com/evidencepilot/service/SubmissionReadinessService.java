@@ -60,6 +60,7 @@ public class SubmissionReadinessService {
     private final PaperSectionRepository paperSectionRepository;
     private final FeedbackRequestRepository feedbackRequestRepository;
     private final SectionStandardService sectionStandardService;
+    private final PaperStandardService paperStandardService;
     private final SectionStandardEvaluationRepository evaluationRepository;
     private final CitationReviewRoundRepository roundRepository;
     private final CurrentUserServiceImpl currentUserService;
@@ -85,6 +86,12 @@ public class SubmissionReadinessService {
         PaperSection section = requireSection(documentId, sectionId);
         User currentUser = currentUserService.requireCurrentUser();
         currentUserService.requireSectionContentWriteAccess(currentUser, section);
+        if (paperStandardService.isReferenceSectionTitle(section.getSectionTitle())) {
+            throw new SubmissionReadinessException(
+                    "SECTION_HANDOFF_NOT_REQUIRED",
+                    "Reference sections are shared and do not require handoff.",
+                    Map.of("sectionId", section.getId().toString()));
+        }
         if (section.getContentTex() == null || section.getContentTex().isBlank()) {
             throw new SubmissionReadinessException(
                     "SECTION_HANDOFF_NOT_READY",
@@ -123,6 +130,12 @@ public class SubmissionReadinessService {
         PaperSection section = requireSection(documentId, sectionId);
         User currentUser = currentUserService.requireCurrentUser();
         currentUserService.requireSectionContentWriteAccess(currentUser, section);
+        if (paperStandardService.isReferenceSectionTitle(section.getSectionTitle())) {
+            throw new SubmissionReadinessException(
+                    "SECTION_HANDOFF_NOT_REQUIRED",
+                    "Reference sections are shared and do not require handoff.",
+                    Map.of("sectionId", section.getId().toString()));
+        }
         if (section.getHandoffConfirmedBy() != null) {
             clearHandoff(section);
             paperSectionRepository.saveAndFlush(section);
@@ -238,8 +251,9 @@ public class SubmissionReadinessService {
                 }
 
                 User assigned = section.getAssignedUser();
-                boolean assigneeValid = assigned != null
-                        && studentMembers.containsKey(assigned.getId());
+                boolean handoffRequired = !paperStandardService.isReferenceSectionTitle(section.getSectionTitle());
+                boolean assigneeValid = !handoffRequired
+                        || assigned != null && studentMembers.containsKey(assigned.getId());
                 if (!assigneeValid) {
                     assigneesValid = false;
                     invalidAssigneeSectionIds.add(section.getId().toString());
@@ -249,12 +263,14 @@ public class SubmissionReadinessService {
                 String currentInputFingerprint = sectionStandardService.inputFingerprint(section);
                 boolean hasReceipt = section.getHandoffConfirmedBy() != null
                         || section.getHandoffInputFingerprint() != null;
-                boolean confirmed = assigneeValid
+                boolean confirmed = !handoffRequired || assigneeValid
                         && section.getHandoffConfirmedBy() != null
                         && assigned.getId().equals(section.getHandoffConfirmedBy().getId())
                         && currentInputFingerprint.equals(section.getHandoffInputFingerprint())
                         && Objects.equals(section.getVersion(), section.getHandoffContentVersion());
-                String handoffState = confirmed ? "CONFIRMED" : hasReceipt ? "STALE" : "UNCONFIRMED";
+                String handoffState = handoffRequired
+                        ? confirmed ? "CONFIRMED" : hasReceipt ? "STALE" : "UNCONFIRMED"
+                        : "NOT_REQUIRED";
                 if (!confirmed) {
                     sectionsConfirmed = false;
                     unconfirmedSectionIds.add(section.getId().toString());
@@ -399,7 +415,8 @@ public class SubmissionReadinessService {
                 sectionSnapshot.put("order", section.getSectionOrder());
                 sectionSnapshot.put("contentTex", section.getContentTex());
                 sectionSnapshot.put("contentVersion", section.getVersion());
-                sectionSnapshot.put("assignedUserId", section.getAssignedUser().getId());
+                sectionSnapshot.put("assignedUserId", section.getAssignedUser() == null
+                        ? null : section.getAssignedUser().getId());
                 sectionSnapshot.put("assignedUserName", displayName(section.getAssignedUser()));
                 sectionSnapshot.put("handoffState", handoffStates.get(section.getId()));
                 sectionSnapshot.put("confirmedById", section.getHandoffConfirmedBy() == null

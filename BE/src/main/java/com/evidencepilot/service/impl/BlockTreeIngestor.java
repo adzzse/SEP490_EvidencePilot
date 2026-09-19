@@ -10,11 +10,12 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -47,6 +48,9 @@ public class BlockTreeIngestor {
     /** Dotted arabic numbering (3.1, 3.1.2) marks a sub-section of 3. */
     private static final Pattern DOTTED_NUMBER =
             Pattern.compile("^(\\d+(?:\\.\\d+)+)\\b");
+    private static final Pattern REFERENCE_ENTRY = Pattern.compile("(?m)^\\s*-?\\s*\\[\\d+]");
+    private static final Pattern STANDALONE_PAGE_NUMBER = Pattern.compile("^\\d{1,4}$");
+    private static final int MAX_PAGE_FURNITURE_LENGTH = 160;
 
     private final ObjectMapper objectMapper;
 
@@ -68,11 +72,6 @@ public class BlockTreeIngestor {
             parsePreamble(blocks, 0, firstSectionIdx, metadata, seeds);
             parseBody(blocks, firstSectionIdx, metadata, seeds);
         }
-        Seed paperInfo = buildPaperInfoSeed(document, metadata);
-        if (paperInfo != null) {
-            seeds.add(0, paperInfo);
-        }
-
         List<PaperSection> sections = new ArrayList<>();
         int order = ORDER_STEP;
         for (Seed seed : seeds) {
@@ -88,64 +87,6 @@ public class BlockTreeIngestor {
             sections.add(section);
         }
         return new IngestionResult(metadata, sections);
-    }
-
-    /** Section 0: extracted frontmatter snapshot (title, authors, DOI, keywords). */
-    private Seed buildPaperInfoSeed(Document document, DocumentMetadata metadata) {
-        List<String> lines = new ArrayList<>();
-        if (metadata.getTitle() != null && !metadata.getTitle().isBlank()) {
-            lines.add("\\textbf{Title:} " + metadata.getTitle().strip());
-        }
-        List<String> names = new ArrayList<>();
-        LinkedHashSet<String> affiliations = new LinkedHashSet<>();
-        LinkedHashSet<String> emails = new LinkedHashSet<>();
-        try {
-            com.fasterxml.jackson.databind.JsonNode authors =
-                    objectMapper.readTree(metadata.getAuthorsJson() == null ? "[]" : metadata.getAuthorsJson());
-            if (authors.isArray()) {
-                for (com.fasterxml.jackson.databind.JsonNode author : authors) {
-                    String name = author.path("name").asText("").strip();
-                    if (!name.isBlank()) {
-                        names.add(name.length() > 200 ? name.substring(0, 200) : name);
-                    }
-                    for (com.fasterxml.jackson.databind.JsonNode value : author.path("affiliations")) {
-                        String affiliation = value.asText("").strip();
-                        if (!affiliation.isBlank()) {
-                            affiliations.add(affiliation);
-                        }
-                    }
-                    for (com.fasterxml.jackson.databind.JsonNode value : author.path("emails")) {
-                        String email = value.asText("").strip();
-                        if (!email.isBlank()) {
-                            emails.add(email);
-                        }
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-            // ponytail: malformed authors payload degrades to fewer lines, never a failed ingest.
-        }
-        if (!names.isEmpty()) {
-            lines.add("\\textbf{Authors:} " + String.join("; ", names));
-        }
-        if (!affiliations.isEmpty()) {
-            lines.add("\\textbf{Affiliations:} " + String.join("; ", affiliations));
-        }
-        if (!emails.isEmpty()) {
-            lines.add("\\textbf{Emails:} " + String.join("; ", emails));
-        }
-        if (document.getDoi() != null && !document.getDoi().isBlank()) {
-            lines.add("\\textbf{DOI:} " + document.getDoi().strip());
-        }
-        if (metadata.getKeywords() != null && !metadata.getKeywords().isBlank()) {
-            lines.add("\\textbf{Keywords:} " + metadata.getKeywords().strip());
-        }
-        if (lines.isEmpty()) {
-            return null;
-        }
-        Seed seed = new Seed("Paper Info", 0, 0);
-        lines.forEach(seed::append);
-        return seed;
     }
 
     private static final class Seed {
@@ -214,31 +155,25 @@ public class BlockTreeIngestor {
     private void parsePreamble(List<AiModelClient.ExtractionBlock> blocks, int from, int to,
             DocumentMetadata metadata, List<Seed> seeds) {
         List<AuthorDraft> authors = new ArrayList<>();
-        Seed frontMatter = null;
         boolean titleSet = false;
+        boolean explicitTitleSet = false;
         for (int i = from; i < to; i++) {
             AiModelClient.ExtractionBlock block = blocks.get(i);
             if (block == null || block.text() == null || block.text().isBlank()) {
                 continue;
             }
             if ("image".equals(block.type())) {
-                frontMatter = frontMatter(seeds, frontMatter, from, to);
-                frontMatter.append(renderContent(block));
                 continue;
             }
             if ("heading".equals(block.type()) && block.level() != null && block.level() == 1) {
-                if (!titleSet) {
+                if (!explicitTitleSet) {
                     metadata.setTitle(truncate(block.text().strip(), 1000));
                     titleSet = true;
-                } else {
-                    frontMatter = frontMatter(seeds, frontMatter, from, to);
-                    frontMatter.append(block.text().strip());
+                    explicitTitleSet = true;
                 }
                 continue;
             }
             if ("reference".equals(block.type())) {
-                frontMatter = frontMatter(seeds, frontMatter, from, to);
-                frontMatter.append(block.text().strip());
                 continue;
             }
             String text = block.text().strip();
@@ -251,9 +186,6 @@ public class BlockTreeIngestor {
                         Seed abstractSeed = new Seed("Abstract", i, i + 1);
                         abstractSeed.append(value);
                         seeds.add(abstractSeed);
-                    } else {
-                        frontMatter = frontMatter(seeds, frontMatter, from, to);
-                        frontMatter.append(text);
                     }
                 } else if (!value.isBlank()) {
                     setKeywords(metadata, seeds, value);
@@ -267,12 +199,12 @@ public class BlockTreeIngestor {
                     titleSet = true;
                     String rest = text.substring(firstLine.length()).strip();
                     if (!rest.isBlank()) {
-                        frontMatter = classifyAuthorBlock(rest, authors, seeds, frontMatter, from, to);
+                        classifyAuthorBlock(rest, authors);
                     }
                     continue;
                 }
             }
-            frontMatter = classifyAuthorBlock(text, authors, seeds, frontMatter, from, to);
+            classifyAuthorBlock(text, authors);
         }
         pendingAuthors(authors, metadata);
     }
@@ -280,6 +212,7 @@ public class BlockTreeIngestor {
     private void parseBody(List<AiModelClient.ExtractionBlock> blocks, int from,
             DocumentMetadata metadata, List<Seed> seeds) {
         int sectionLevel = resolveSectionLevel(blocks, from);
+        Set<Integer> referencePageFurniture = referencePageFurnitureIndexes(blocks, metadata.getTitle());
         Seed current = null;
         boolean currentIsReferences = false;
         for (int i = from; i <= blocks.size(); i++) {
@@ -305,8 +238,16 @@ public class BlockTreeIngestor {
                 i = j - 1;
                 continue;
             }
+            if (boundary && currentIsReferences && isAuthorHeading(block.text())) {
+                current.blockEnd = i;
+                seeds.add(current);
+                break;
+            }
             if (boundary && "reference".equals(block.type())) {
                 String refText = block.text() == null ? "" : block.text().strip();
+                if (referencePageFurniture.contains(i)) {
+                    continue;
+                }
                 if (currentIsReferences) {
                     if (current != null && !isReferencesHeader(refText)) {
                         current.append(refText);
@@ -341,7 +282,7 @@ public class BlockTreeIngestor {
                     current.blockEnd = i;
                     seeds.add(current);
                 }
-                current = new Seed(truncate(block.text().strip(), 255), i, i + 1);
+                current = new Seed(truncate(BlockNormalizer.stripHeadingNumber(block.text()), 255), i, i + 1);
                 currentIsReferences = false;
                 continue;
             }
@@ -360,6 +301,69 @@ public class BlockTreeIngestor {
                 current.append(renderContent(block));
             }
         }
+    }
+
+    private static Set<Integer> referencePageFurnitureIndexes(
+            List<AiModelClient.ExtractionBlock> blocks, String paperTitle) {
+        Map<String, Integer> frequencies = new LinkedHashMap<>();
+        for (AiModelClient.ExtractionBlock block : blocks) {
+            if (isShortReferenceFragment(block)) {
+                frequencies.merge(normalizeTitle(block.text()), 1, Integer::sum);
+            }
+        }
+
+        String normalizedTitle = normalizeTitle(paperTitle);
+        Set<Integer> indexes = new HashSet<>();
+        for (int i = 0; i < blocks.size(); i++) {
+            if (!isStandalonePageNumber(blocks.get(i))) {
+                continue;
+            }
+            int start = i;
+            int end = i;
+            while (start > 0 && isShortReferenceFragment(blocks.get(start - 1))) {
+                start--;
+            }
+            while (end + 1 < blocks.size() && isShortReferenceFragment(blocks.get(end + 1))) {
+                end++;
+            }
+            boolean repeatedPageFurniture = false;
+            for (int j = start; j <= end; j++) {
+                String normalized = normalizeTitle(blocks.get(j).text());
+                if ((!normalizedTitle.isBlank() && normalized.equals(normalizedTitle))
+                        || frequencies.getOrDefault(normalized, 0) > 1) {
+                    repeatedPageFurniture = true;
+                    break;
+                }
+            }
+            if (end - start < 2 || !repeatedPageFurniture) {
+                continue;
+            }
+            for (int j = start; j <= end; j++) {
+                String normalized = normalizeTitle(blocks.get(j).text());
+                if (isStandalonePageNumber(blocks.get(j))
+                        || (!normalizedTitle.isBlank() && normalized.equals(normalizedTitle))
+                        || frequencies.getOrDefault(normalized, 0) > 1) {
+                    indexes.add(j);
+                }
+            }
+        }
+        return indexes;
+    }
+
+    private static boolean isShortReferenceFragment(AiModelClient.ExtractionBlock block) {
+        if (block == null || !"reference".equals(block.type())
+                || block.text() == null || block.text().isBlank()) {
+            return false;
+        }
+        String text = collapse(block.text());
+        return text.length() <= MAX_PAGE_FURNITURE_LENGTH
+                && !REFERENCE_ENTRY.matcher(text).find()
+                && !isReferencesHeader(text);
+    }
+
+    private static boolean isStandalonePageNumber(AiModelClient.ExtractionBlock block) {
+        return isShortReferenceFragment(block)
+                && STANDALONE_PAGE_NUMBER.matcher(block.text().strip()).matches();
     }
 
     private static String renderContent(AiModelClient.ExtractionBlock block) {
@@ -403,7 +407,7 @@ public class BlockTreeIngestor {
     }
 
     private static boolean isReferencesHeader(String text) {
-        String normalized = normalizeTitle(text);
+        String normalized = normalizeTitle(BlockNormalizer.stripHeadingNumber(text));
         return normalized.equals("references")
                 || normalized.equals("reference")
                 || normalized.equals("bibliography")
@@ -415,6 +419,11 @@ public class BlockTreeIngestor {
         return "keywords".equals(normalized)
                 || "index terms".equals(normalized)
                 || "key words".equals(normalized);
+    }
+
+    private static boolean isAuthorHeading(String text) {
+        String normalized = normalizeTitle(text);
+        return "author".equals(normalized) || "authors".equals(normalized);
     }
 
     private static String normalizeTitle(String text) {
@@ -431,14 +440,6 @@ public class BlockTreeIngestor {
             }
         }
         return null;
-    }
-
-    private static Seed frontMatter(List<Seed> seeds, Seed frontMatter, int from, int to) {
-        if (frontMatter == null) {
-            frontMatter = new Seed("Front Matter", from, to);
-            seeds.add(frontMatter);
-        }
-        return frontMatter;
     }
 
     /** Keywords live in metadata and are appended to Abstract when one exists. */
@@ -471,8 +472,7 @@ public class BlockTreeIngestor {
                 .contains(collapse(needle).toLowerCase(Locale.ROOT));
     }
 
-    private Seed classifyAuthorBlock(String text, List<AuthorDraft> authors,
-            List<Seed> seeds, Seed frontMatter, int from, int to) {
+    private void classifyAuthorBlock(String text, List<AuthorDraft> authors) {
         List<String> emails = new ArrayList<>();
         Matcher matcher = EMAIL.matcher(text);
         while (matcher.find()) {
@@ -493,11 +493,7 @@ public class BlockTreeIngestor {
             String name = lines.isEmpty() ? "" : lines.get(0);
             List<String> affiliations = lines.size() > 1 ? lines.subList(1, lines.size()) : List.of();
             authors.add(new AuthorDraft(name, new ArrayList<>(affiliations), emails));
-            return frontMatter;
         }
-        Seed leftovers = frontMatter(seeds, frontMatter, from, to);
-        leftovers.append(text);
-        return leftovers;
     }
 
     private record AuthorDraft(String name, List<String> affiliations, List<String> emails) {
@@ -507,7 +503,7 @@ public class BlockTreeIngestor {
         List<Map<String, Object>> sanitized = new ArrayList<>();
         for (AuthorDraft draft : authors) {
             String name = truncate(draft.name().strip(), 500);
-            if (name.isBlank() && draft.emails().isEmpty()) {
+            if (name.isBlank()) {
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
