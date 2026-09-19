@@ -507,12 +507,15 @@ class AdminExcelSeedServiceTest {
     }
 
     @Test
-    void fatalFailureAfterOneWriteReportsPartialAndAccountsForRemainingRows() throws Exception {
+    void rowFailureDoesNotStopRemainingRows() throws Exception {
         var service = service();
         var projects = (com.evidencepilot.repository.ProjectRepository)
                 org.springframework.test.util.ReflectionTestUtils.getField(service, "projectRepository");
-        when(projects.save(any())).thenAnswer(call -> call.getArgument(0))
-                .thenThrow(new IllegalStateException("second row failure"));
+        var saves = new java.util.concurrent.atomic.AtomicInteger();
+        when(projects.save(any())).thenAnswer(call -> {
+            if (saves.incrementAndGet() == 2) throw new IllegalStateException("second row failure");
+            return call.getArgument(0);
+        });
         byte[] workbook = workbook(Map.of("projects", List.of(
                 row("project_title", "FIRST"), row("project_title", "SECOND"), row("project_title", "THIRD"))));
         try {
@@ -521,11 +524,13 @@ class AdminExcelSeedServiceTest {
             awaitCompletion(service, job);
             assertThat(job.getStatus()).isEqualTo("PARTIAL");
             assertThat(job.isComplete()).isFalse();
-            assertThat(job.getSuccessfulRows()).isOne();
+            assertThat(job.getSuccessfulRows()).isEqualTo(2);
             assertThat(job.getFailedRows()).isOne();
-            assertThat(job.getSkippedRows()).isOne();
+            assertThat(job.getSkippedRows()).isZero();
             assertThat(job.getProcessed()).isEqualTo(job.getTotal()).isEqualTo(3);
-            assertThat(job.getResult()).containsEntry("projects", 1);
+            assertThat(job.getResult()).containsEntry("projects", 2);
+            assertThat(job.getLogs()).anyMatch(entry -> entry.level().equals("ERROR")
+                    && entry.message().contains("second row failure"));
         } finally { service.shutdown(); }
     }
 

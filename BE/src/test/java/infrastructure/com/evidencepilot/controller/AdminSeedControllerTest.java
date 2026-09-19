@@ -200,6 +200,21 @@ class AdminSeedControllerTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void jobReturnsLiveLogs() throws Exception {
+        var job = new AdminExcelSeedService.SeedJob();
+        @SuppressWarnings("unchecked")
+        var logs = (List<AdminExcelSeedService.SeedLog>)
+                org.springframework.test.util.ReflectionTestUtils.getField(job, "logs");
+        logs.add(new AdminExcelSeedService.SeedLog("ERROR", "projects row 2: write failed"));
+        when(service.get(job.getId())).thenReturn(job);
+
+        mvc.perform(get("/api/admin/seed/jobs/" + job.getId()).header("Authorization", "Bearer fixture"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.logs[0].level").value("ERROR"))
+                .andExpect(jsonPath("$.logs[0].message").value("projects row 2: write failed"));
+    }
+
     private static MockMultipartFile file() {
         return new MockMultipartFile("file", "fixture.zip", "application/zip", new byte[]{1});
     }

@@ -169,6 +169,7 @@ public class AdminExcelSeedService {
         private volatile String currentStep = "";
         private int pendingRows;
         private final List<String> errors = java.util.Collections.synchronizedList(new ArrayList<>());
+        private final List<SeedLog> logs = java.util.Collections.synchronizedList(new ArrayList<>());
         private volatile Map<String, Integer> result = Map.of();
         private volatile long completedAt;
 
@@ -178,7 +179,14 @@ public class AdminExcelSeedService {
             }
         }
 
+        public List<SeedLog> getLogs() {
+            synchronized (logs) {
+                return List.copyOf(logs);
+            }
+        }
+
         private void startRows(String step, int count) {
+            if (!step.equals(currentStep)) info("Processing " + step);
             currentStep = step;
             pendingRows = count;
         }
@@ -194,10 +202,11 @@ public class AdminExcelSeedService {
             processed += count;
             pendingRows = 0;
             addCount(step, count);
+            info(step + ": " + count + " row(s) succeeded (" + processed + "/" + total + ")");
         }
 
         private void failed(String message, int count) {
-            errors.add(message);
+            error(message);
             failedRows += count;
             processed += count;
             pendingRows = 0;
@@ -205,11 +214,23 @@ public class AdminExcelSeedService {
 
         private void skipped(String message, int count) {
             errors.add(message);
+            logs.add(new SeedLog("WARN", message));
             skippedRows += count;
             processed += count;
             pendingRows = 0;
         }
+
+        private void info(String message) {
+            logs.add(new SeedLog("INFO", message));
+        }
+
+        private void error(String message) {
+            errors.add(message);
+            logs.add(new SeedLog("ERROR", message));
+        }
     }
+
+    public record SeedLog(String level, String message) {}
 
     public record ParsedSeed(Map<String, List<Map<String, String>>> sheets, List<String> errors) {}
     public record ZipBundle(Map<String, Path> files, List<String> errors, Path spoolDir) {
@@ -691,6 +712,7 @@ public class AdminExcelSeedService {
 
     private void runJob(SeedJob job, ParsedSeed parsed, ZipBundle bundle, Authentication auth) {
         job.status = "RUNNING";
+        job.info("Import started");
         var context = SecurityContextHolder.getContext();
         Authentication previous = context.getAuthentication();
         context.setAuthentication(auth);
@@ -713,6 +735,8 @@ public class AdminExcelSeedService {
             int remaining = job.total - job.processed;
             if (remaining > 0) job.skipped("Unprocessed rows skipped after job failure", remaining);
             job.complete = job.errors.isEmpty() && job.failedRows == 0 && job.skippedRows == 0 && job.processed == job.total;
+            job.info("Import finished: " + job.successfulRows + " succeeded, " + job.failedRows
+                    + " failed, " + job.skippedRows + " skipped");
             job.status = job.complete ? "DONE" : job.successfulRows > 0 ? "PARTIAL" : "FAILED";
             job.completedAt = System.nanoTime();
             pruneJobs();
@@ -810,29 +834,33 @@ public class AdminExcelSeedService {
         int n = 0;
         for (var e : groups.entrySet()) {
             if (job != null) job.startRows("users", e.getValue().size());
-            String role = e.getKey().role();
-            boolean silent = !e.getKey().invite();
-            List<AdminUserImportRequest.UserItem> items = e.getValue().stream().map(r ->
-                    new AdminUserImportRequest.UserItem(r.getOrDefault("email", ""), r.getOrDefault("first_name", ""),
-                            r.getOrDefault("last_name", ""), nullIfBlank(r.getOrDefault("student_code", "")))).toList();
-            var resp = adminService.importUsers(new AdminUserImportRequest(role, items), silent);
-            int succeeded = resp.created() + resp.updated();
-            n += succeeded;
-            resp.errors().forEach(err -> {
-                if (job != null) job.errors.add("users item " + err.item() + " [" + err.field() + "]: " + err.message());
-            });
-            if (job != null) {
-                job.succeeded("users", succeeded);
-                job.addCount("users_created", resp.created());
-                job.addCount("users_updated", resp.updated());
-                job.addCount("users_invitation_requested", silent ? 0 : resp.created());
-                job.addCount("users_silent_created", silent ? resp.created() : 0);
-                int unsuccessful = e.getValue().size() - succeeded;
-                int failed = resp.errors().stream().anyMatch(error -> error.item() == 0) ? unsuccessful
-                        : Math.min(unsuccessful, (int) resp.errors().stream().map(err -> err.item()).distinct().count());
-                job.failedRows += failed;
-                job.processed += failed;
-                if (unsuccessful > failed) job.skipped("users: rows skipped because their import batch could not complete", unsuccessful - failed);
+            try {
+                String role = e.getKey().role();
+                boolean silent = !e.getKey().invite();
+                List<AdminUserImportRequest.UserItem> items = e.getValue().stream().map(r ->
+                        new AdminUserImportRequest.UserItem(r.getOrDefault("email", ""), r.getOrDefault("first_name", ""),
+                                r.getOrDefault("last_name", ""), nullIfBlank(r.getOrDefault("student_code", "")))).toList();
+                var resp = adminService.importUsers(new AdminUserImportRequest(role, items), silent);
+                int succeeded = resp.created() + resp.updated();
+                n += succeeded;
+                resp.errors().forEach(err -> {
+                    if (job != null) job.error("users item " + err.item() + " [" + err.field() + "]: " + err.message());
+                });
+                if (job != null) {
+                    job.succeeded("users", succeeded);
+                    job.addCount("users_created", resp.created());
+                    job.addCount("users_updated", resp.updated());
+                    job.addCount("users_invitation_requested", silent ? 0 : resp.created());
+                    job.addCount("users_silent_created", silent ? resp.created() : 0);
+                    int unsuccessful = e.getValue().size() - succeeded;
+                    int failed = resp.errors().stream().anyMatch(error -> error.item() == 0) ? unsuccessful
+                            : Math.min(unsuccessful, (int) resp.errors().stream().map(err -> err.item()).distinct().count());
+                    job.failedRows += failed;
+                    job.processed += failed;
+                    if (unsuccessful > failed) job.skipped("users: rows skipped because their import batch could not complete", unsuccessful - failed);
+                }
+            } catch (Exception failure) {
+                failRows(job, "users batch", e.getValue().size(), failure);
             }
         }
         return n;
@@ -842,19 +870,21 @@ public class AdminExcelSeedService {
         Map<String, Project> projects = new LinkedHashMap<>();
         for (var r : rows) {
             if (job != null) job.startRows("projects", 1);
-            Project p = new Project();
-            p.setTitle(r.get("project_title"));
-            p.setDescription(nullIfBlank(r.getOrDefault("description", "")));
-            String st = r.getOrDefault("status", "CREATED");
-            p.setStatus(st.isBlank() ? ProjectStatus.CREATED : ProjectStatus.valueOf(st));
-            String std = r.getOrDefault("target_standard", "");
-            if (!std.isBlank()) p.setTargetStandard(PaperStandard.valueOf(std));
-            p.setActive(true);
-            p.setCreatedAt(LocalDateTime.now());
-            p.setUpdatedAt(LocalDateTime.now());
-            projects.put(r.get("project_title"), projectRepository.save(p));
-            if (job != null) {
-                job.succeeded("projects", 1);
+            try {
+                Project p = new Project();
+                p.setTitle(r.get("project_title"));
+                p.setDescription(nullIfBlank(r.getOrDefault("description", "")));
+                String st = r.getOrDefault("status", "CREATED");
+                p.setStatus(st.isBlank() ? ProjectStatus.CREATED : ProjectStatus.valueOf(st));
+                String std = r.getOrDefault("target_standard", "");
+                if (!std.isBlank()) p.setTargetStandard(PaperStandard.valueOf(std));
+                p.setActive(true);
+                p.setCreatedAt(LocalDateTime.now());
+                p.setUpdatedAt(LocalDateTime.now());
+                projects.put(r.get("project_title"), projectRepository.save(p));
+                if (job != null) job.succeeded("projects", 1);
+            } catch (Exception failure) {
+                failRow(job, "projects", r, failure);
             }
         }
         return projects;
@@ -864,25 +894,27 @@ public class AdminExcelSeedService {
         int n = 0;
         for (var r : rows) {
             if (job != null) job.startRows("members", 1);
-            var project = projects.get(r.get("project_title"));
-            var user = userRepository.findByEmail(r.getOrDefault("user_email", "").toLowerCase(Locale.ROOT)).orElse(null);
-            if (project == null || user == null) {
-                if (job != null) job.skipped("members row " + r.get("_row") + ": unresolvable FK", 1);
-                continue;
-            }
-            if (!memberRepository.findByProjectIdAndUserId(project.getId(), user.getId()).isEmpty()) {
-                if (job != null) job.skipped("members row " + r.get("_row") + ": duplicate membership", 1);
-                continue;
-            }
-            ProjectMember m = new ProjectMember();
-            m.setProject(project);
-            m.setUser(user);
-            m.setRole(ProjectRole.valueOf(r.getOrDefault("project_role", "MEMBER")));
-            m.setJoinedAt(LocalDateTime.now());
-            memberRepository.save(m);
-            n++;
-            if (job != null) {
-                job.succeeded("members", 1);
+            try {
+                var project = projects.get(r.get("project_title"));
+                var user = userRepository.findByEmail(r.getOrDefault("user_email", "").toLowerCase(Locale.ROOT)).orElse(null);
+                if (project == null || user == null) {
+                    if (job != null) job.skipped("members row " + r.get("_row") + ": unresolvable FK", 1);
+                    continue;
+                }
+                if (!memberRepository.findByProjectIdAndUserId(project.getId(), user.getId()).isEmpty()) {
+                    if (job != null) job.skipped("members row " + r.get("_row") + ": duplicate membership", 1);
+                    continue;
+                }
+                ProjectMember m = new ProjectMember();
+                m.setProject(project);
+                m.setUser(user);
+                m.setRole(ProjectRole.valueOf(r.getOrDefault("project_role", "MEMBER")));
+                m.setJoinedAt(LocalDateTime.now());
+                memberRepository.save(m);
+                n++;
+                if (job != null) job.succeeded("members", 1);
+            } catch (Exception failure) {
+                failRow(job, "members", r, failure);
             }
         }
         return n;
@@ -902,6 +934,7 @@ public class AdminExcelSeedService {
         Map<String, ResolvedSourceDoi> cache = new LinkedHashMap<>();
         for (var r : rows) {
             if (job != null) job.startRows("sources", 1);
+            try {
             var project = projects.get(r.get("project_title"));
             var uploader = instructorOf(project);
             if (project == null || uploader == null) {
@@ -1030,6 +1063,9 @@ public class AdminExcelSeedService {
             if (job != null) {
                 job.succeeded("sources", 1);
             }
+            } catch (Exception failure) {
+                failRow(job, "sources", r, failure);
+            }
         }
         return n;
     }
@@ -1047,6 +1083,7 @@ public class AdminExcelSeedService {
         int links = 0;
         for (var r : rows) {
             if (job != null) job.startRows("collections", 1);
+            try {
             var owner = userRepository.findByEmail(
                     r.getOrDefault("owner_email", "").toLowerCase(Locale.ROOT)).orElse(null);
             if (owner == null || owner.getRole() != UserRole.INSTRUCTOR) {
@@ -1070,6 +1107,9 @@ public class AdminExcelSeedService {
             n++;
             if (job != null) {
                 job.succeeded("collections", 1);
+            }
+            } catch (Exception failure) {
+                failRow(job, "collections", r, failure);
             }
         }
         log.info("Seed collections committed: {} collections, {} source links", n, links);
@@ -1158,6 +1198,7 @@ public class AdminExcelSeedService {
         int n = 0;
         for (var r : rows) {
             if (job != null) job.startRows("papers", 1);
+            try {
             var project = projects.get(r.get("project_title"));
             var uploader = instructorOf(project);
             if (project == null || uploader == null) {
@@ -1166,7 +1207,6 @@ public class AdminExcelSeedService {
             }
             String pf = r.getOrDefault("paper_file", "");
             String standard = r.getOrDefault("paper_standard", "").trim().toUpperCase(Locale.ROOT);
-            try {
                 if (project.getStatus().isReadOnly() || project.getStatus() == ProjectStatus.SUBMITTED_FOR_REVIEW) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Project is locked for paper changes");
                 }
@@ -1243,8 +1283,8 @@ public class AdminExcelSeedService {
                 }
                 n++;
                 if (job != null) job.succeeded("papers", 1);
-            } catch (Exception e) {
-                if (job != null) job.failed("papers row " + r.get("_row") + ": " + e.getMessage(), 1);
+            } catch (Exception failure) {
+                failRow(job, "papers", r, failure);
             }
         }
         return n;
@@ -1254,6 +1294,7 @@ public class AdminExcelSeedService {
         int n = 0;
         for (var r : rows) {
             if (job != null) job.startRows("sections", 1);
+            try {
             var project = projects.get(r.get("project_title"));
             if (project == null) {
                 if (job != null) job.skipped("sections row " + r.get("_row") + ": unknown project", 1);
@@ -1299,11 +1340,28 @@ public class AdminExcelSeedService {
             if (job != null) {
                 job.succeeded("sections", 1);
             }
+            } catch (Exception failure) {
+                failRow(job, "sections", r, failure);
+            }
         }
         return n;
     }
 
     // ---------- helpers ----------
+
+    private static void failRow(SeedJob job, String sheet, Map<String, String> row, Exception failure) {
+        failRows(job, sheet + " row " + row.getOrDefault("_row", "?"), 1, failure);
+    }
+
+    private static void failRows(SeedJob job, String label, int count, Exception failure) {
+        if (job == null) {
+            if (failure instanceof RuntimeException runtime) throw runtime;
+            throw new IllegalStateException(failure);
+        }
+        String message = failure.getMessage();
+        job.failed(label + ": " + (message == null || message.isBlank()
+                ? failure.getClass().getSimpleName() : message), count);
+    }
 
     /** Only an active Instructor member may own imported papers/sources. */
     private User instructorOf(Project project) {

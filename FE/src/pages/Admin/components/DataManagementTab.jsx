@@ -18,7 +18,9 @@ function DataManagementSection({ api }) {
   const [preview, setPreview] = useState(null);
   const [job, setJob] = useState(null);
   const pollRef = useRef(null);
+  const pollGenerationRef = useRef(0);
   const xlsxRef = useRef(null);
+  const logRef = useRef(null);
 
   const tourSteps = useCallback(() => [
     { popover: { title: t('admin.dataManagement'), description: t('admin.guideDataDesc'), side: 'center' } },
@@ -29,16 +31,23 @@ function DataManagementSection({ api }) {
   ], [t]);
   const { start } = useAdminTour('data', tourSteps);
 
-  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+  useEffect(() => () => {
+    pollGenerationRef.current += 1;
+    if (pollRef.current) clearTimeout(pollRef.current);
+  }, []);
+  useEffect(() => {
+    if (job?.logs?.length) logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
+  }, [job?.logs?.length]);
 
   const pollJob = useCallback((jobId) => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(async () => {
+    const generation = ++pollGenerationRef.current;
+    if (pollRef.current) clearTimeout(pollRef.current);
+    const poll = async () => {
       try {
         const r = await api.get(`/api/admin/seed/jobs/${jobId}`);
+        if (generation !== pollGenerationRef.current) return;
         setJob(r.data);
         if (['DONE', 'PARTIAL', 'FAILED'].includes(r.data.status)) {
-          clearInterval(pollRef.current);
           pollRef.current = null;
           setBusy(null);
           if (r.data.status === 'DONE') {
@@ -49,16 +58,20 @@ function DataManagementSection({ api }) {
               ? t('admin.seedPartial', { success: r.data.successfulRows ?? 0, failed: r.data.failedRows ?? 0, skipped: r.data.skippedRows ?? 0 })
               : t('admin.seedFailed'));
           }
+          return;
         }
       } catch (e) {
+        if (generation !== pollGenerationRef.current) return;
         if ([401, 403, 404].includes(e.response?.status)) {
-          clearInterval(pollRef.current);
           pollRef.current = null;
           setBusy(null); setJob(null); setMsg('');
           setErr(e.response.status === 404 ? t('admin.seedJobExpired') : e.response?.data?.message || e.message);
+          return;
         }
       }
-    }, 1000);
+      pollRef.current = setTimeout(poll, 1000);
+    };
+    pollRef.current = setTimeout(poll, 1000);
   }, [api, t]);
 
   const backup = async () => {
@@ -118,7 +131,7 @@ function DataManagementSection({ api }) {
   const uploadFile = async (file, isZip) => {
     if (!file) return;
     if (!window.confirm(t('admin.confirmSeedDemo'))) return;
-    setBusy('upload'); setErr(''); setMsg(''); setJob({ status: 'QUEUED', processed: 0, total: 1, progress: 0, currentStep: '', errors: [] });
+    setBusy('upload'); setErr(''); setMsg(''); setJob({ status: 'QUEUED', processed: 0, total: 1, progress: 0, currentStep: '', errors: [], logs: [] });
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -191,10 +204,22 @@ function DataManagementSection({ api }) {
               <ProgressBar value={job.progress || 0} />
             </div>
           )}
+          {job && (
+            <div className="space-y-1">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-(--text-secondary)">{t('admin.seedLogs')}</p>
+              <div ref={logRef} role="log" aria-live="polite" aria-relevant="additions text" className="min-h-12 max-h-64 overflow-y-auto rounded-xl border border-(--border) bg-(--surface-secondary) p-3 font-mono text-[11px]">
+                {job.logs?.map((entry, index) => (
+                  <p key={index} className={entry.level === 'ERROR' ? 'text-rose-600' : entry.level === 'WARN' ? 'text-amber-700' : 'text-(--text-secondary)'}>
+                    [{entry.level}] {entry.message}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
           {job && ['DONE', 'PARTIAL', 'FAILED'].includes(job.status) && job.result && (
             <div className="text-xs font-mono border border-(--border) rounded-xl p-3">
               {Object.entries(job.result).map(([k, v]) => <p key={k}>{k}: {v}</p>)}
-              {job.errors?.length > 0 && (
+              {!job.logs?.length && job.errors?.length > 0 && (
                 <details className="mt-2 text-amber-700">
                   <summary className="cursor-pointer">{t('admin.seedErrors', { count: job.errors.length })}</summary>
                   <ul className="mt-2 space-y-1">{job.errors.map((error, index) => <li key={index}>{error}</li>)}</ul>

@@ -1631,6 +1631,7 @@
     "seedDone": "Import complete: {{count}} successful rows.",
     "seedPartial": "Partially complete: {{success}} successful rows, {{failed}} failed rows, {{skipped}} skipped rows.",
     "seedErrors": "{{count}} error messages — show details",
+    "seedLogs": "Live import log",
     "seedJobExpired": "Seed job is no longer available. Job history is limited and lost on server restart. Check imported data before retrying.",
     "confirmSeedDemo": "Import this file? Successful changes are retained if a later step fails.",
     "guidePromptDesc": "Versioned prompts with guardrails.",

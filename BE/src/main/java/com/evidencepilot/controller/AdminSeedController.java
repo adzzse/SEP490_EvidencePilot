@@ -146,6 +146,7 @@ public class AdminSeedController {
         body.put("currentStep", job.getCurrentStep());
         body.put("progress", job.getTotal() == 0 ? 0 : (int) (100L * job.getProcessed() / Math.max(1, job.getTotal())));
         body.put("errors", job.getErrors());
+        body.put("logs", job.getLogs());
         body.put("result", job.getResult());
         return ResponseEntity.ok(body);
     }

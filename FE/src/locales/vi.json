@@ -1631,6 +1631,7 @@
     "seedDone": "Nhập hoàn tất: {{count}} dòng thành công.",
     "seedPartial": "Hoàn thành một phần: {{success}} dòng thành công, {{failed}} dòng lỗi, {{skipped}} dòng bỏ qua.",
     "seedErrors": "{{count}} thông báo lỗi — xem chi tiết",
+    "seedLogs": "Nhật ký nhập dữ liệu trực tiếp",
     "seedJobExpired": "Không còn thông tin job. Lịch sử có giới hạn và mất khi máy chủ khởi động lại. Kiểm tra dữ liệu đã nhập trước khi thử lại.",
     "confirmSeedDemo": "Nhập dữ liệu từ tệp này? Các thay đổi thành công được giữ lại nếu bước sau gặp lỗi.",
     "guidePromptDesc": "Prompt phiên bản có kiểm soát.",
