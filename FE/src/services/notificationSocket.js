@@ -21,7 +21,8 @@ function disconnect() {
   current?.deactivate();
 }
 
-// ponytail: exponential backoff was YAGNI for low-freq notifications — static 5s.
+// Reconnect uses a bounded fixed interval; REST reconciliation on connect prevents
+// missed events without adding another client-side timer state machine.
 function connect(token) {
   if (!token || (subscribers.size === 0 && entitySubscribers.size === 0)) return;
   if (client && activeToken === token) return;
@@ -51,6 +52,7 @@ function connect(token) {
           }
         });
       }
+      subscribers.forEach(({ onConnected }) => onConnected?.());
     },
     reconnectDelay: 5000,
   });
@@ -64,10 +66,10 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export function subscribeToNotifications(token, handler) {
+export function subscribeToNotifications(token, handler, options = {}) {
   if (!token || typeof handler !== 'function') return () => { };
 
-  const subscriber = { handler };
+  const subscriber = { handler, onConnected: options.onConnected };
   subscribers.add(subscriber);
   connect(token);
 

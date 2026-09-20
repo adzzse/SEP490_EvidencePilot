@@ -45,6 +45,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -157,6 +158,23 @@ public class ProjectController {
     public void deleteProject(
             @Parameter(description = "Project UUID") @PathVariable UUID id) {
         projectService.deleteProject(id);
+    }
+
+    @Operation(summary = "Restore a project from trash",
+            description = "Restores a soft-deleted project without changing its lifecycle status.")
+    @PatchMapping("/{id}/restore")
+    public ProjectResponse restoreProject(
+            @Parameter(description = "Project UUID") @PathVariable UUID id) {
+        return projectService.restoreProject(id);
+    }
+
+    @Operation(summary = "Unassign all sections for a student",
+            description = "Clears every current section assignment for the selected student in this project atomically.")
+    @PatchMapping("/{id}/members/{userId}/unassign-all")
+    public Map<String, Integer> unassignAllSections(
+            @Parameter(description = "Project UUID") @PathVariable UUID id,
+            @Parameter(description = "Student UUID") @PathVariable UUID userId) {
+        return Map.of("cleared", projectService.unassignAllSections(id, userId));
     }
 
     @Operation(summary = "List project members",

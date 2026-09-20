@@ -3,7 +3,7 @@ import api from '../services/api.js';
 import { feedbackKeys } from '../services/feedbackKeys.js';
 import { roundNumberFor } from '../utils/reviewRounds.js';
 
-// ponytail: one selected round per view — fetch its threads only, never
+// rationale: one selected round per view — fetch its threads only, never
 // fan-out every historical round and flatten. The requests list stays for
 // the round picker; items always belong to a single round (or none).
 async function fetchRoundThreads(projectId, requestId, signal) {
@@ -38,7 +38,7 @@ export default function useProjectFeedback(projectId, requestId) {
     return result.data?.items;
   };
 
-  // ponytail: mirror the old hook — a 401/403 clears the list instead of
+  // rationale: mirror the old hook — a 401/403 clears the list instead of
   // showing stale threads the account can no longer open.
   const revoked = query.error && [401, 403].includes(query.error.response?.status);
 

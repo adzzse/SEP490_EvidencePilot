@@ -3,6 +3,7 @@ package com.evidencepilot.service;
 import com.evidencepilot.service.impl.QdrantServiceImpl;
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.model.Document;
+import com.evidencepilot.model.DocumentExtractionCandidate;
 import com.evidencepilot.model.DocumentText;
 import com.evidencepilot.model.CollectionDocument;
 import com.evidencepilot.model.Project;
@@ -21,6 +22,7 @@ import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.service.impl.DocumentPersistenceService;
 import com.evidencepilot.service.impl.DocumentServiceImpl;
+import com.evidencepilot.service.impl.ExtractionCandidateService;
 import com.evidencepilot.service.impl.ProjectCollectionService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -88,6 +90,9 @@ class DocumentServiceImplAccessTest {
 
     @Mock
     private DocumentPersistenceService documentPersistenceService;
+
+    @Mock
+    private ExtractionCandidateService extractionCandidateService;
 
 
     @Mock
@@ -416,21 +421,25 @@ class DocumentServiceImplAccessTest {
     }
 
     @Test
-    void reExtractInvalidatesDerivedDataBeforeQueueing() {
+    void reExtractQueuesCandidateWithoutInvalidatingLiveDerivedData() {
         User user = user();
         Document source = document(project());
         source.setProcessingStatus(ProcessingStatus.READY);
         source.setFileHashSha256("file-hash");
+        DocumentExtractionCandidate candidate = new DocumentExtractionCandidate();
+        candidate.setId(UUID.randomUUID());
         when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+        when(extractionCandidateService.request(source.getId())).thenReturn(candidate);
         when(documentPersistenceService.markDocumentAsUploaded(
                 source.getId(), source.getFileUrl(), "file-hash")).thenReturn(source);
 
         service().reExtract(source.getId());
 
-        verify(documentObjectStorage).deleteExtractionCheckpoint(source.getId(), "file-hash");
-        verify(mediaAssetService).deleteExtractedForDocument(source);
-        verify(qdrantService).deleteVectors(source.getId());
+        verify(extractionCandidateService).request(source.getId());
+        verify(documentObjectStorage, never()).deleteExtractionCheckpoint(source.getId(), "file-hash");
+        verify(mediaAssetService, never()).deleteExtractedForDocument(source);
+        verify(qdrantService, never()).deleteVectors(source.getId());
         verify(documentPersistenceService).markDocumentAsUploaded(
                 source.getId(), source.getFileUrl(), "file-hash");
     }
@@ -1140,7 +1149,7 @@ class DocumentServiceImplAccessTest {
         when(currentUserService.requireCurrentUser()).thenReturn(stranger);
         when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
         when(projectDocumentRepository.findByDocumentId(source.getId())).thenReturn(List.of());
-        // ponytail: owning project exists, so the owner branch is out of scope.
+        // rationale: owning project exists, so the owner branch is out of scope.
         doThrow(new ResponseStatusException(
                 org.springframework.http.HttpStatus.FORBIDDEN, "Write access denied to project"))
                 .when(currentUserService).requireProjectWriteAccess(stranger, owning);
@@ -1185,6 +1194,7 @@ class DocumentServiceImplAccessTest {
                 paperSectionRepository,
                 currentUserService,
                 documentPersistenceService,
+                extractionCandidateService,
                 documentObjectStorage,
                 mediaAssetService,
                 qdrantService,

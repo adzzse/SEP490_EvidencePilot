@@ -8,6 +8,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 
 import lombok.Getter;
 import lombok.Setter;
+import com.evidencepilot.model.enums.PaperSectionType;
 
 @Entity
 @Table(name = "paper_sections")
@@ -37,6 +38,10 @@ public class PaperSection {
 
     @Column(name = "section_title", nullable = false)
     private String sectionTitle;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "section_kind", nullable = false, length = 20)
+    private PaperSectionType sectionType = PaperSectionType.STANDARD;
 
     @Column(name = "heading_level", nullable = false)
     private Integer headingLevel = 2;

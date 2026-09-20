@@ -16,8 +16,12 @@ import useUndoDelete, { UndoToast } from '../../components/ui/UndoDelete.jsx';
 import DeleteConfirm from '../../components/ui/DeleteConfirm.jsx';
 import ActionExpandHeader from '../../components/Instructor/ActionExpandHeader.jsx';
 import ContributionGraph from '../../components/Instructor/ContributionGraph.jsx';
-import SectionManager from '../../components/Instructor/sections/SectionManager.jsx';
+import EditPaperSectionModal from '../../components/Instructor/EditPaperSectionModal.jsx';
+import StandardRequirementsModal from '../../components/Instructor/sections/StandardRequirementsModal.jsx';
+import ProjectEditModal from '../../components/Instructor/ProjectEditModal.jsx';
 import { useAuth } from '../../context/AuthContext';
+import { hasProjectAction } from '../../utils/projectActions.js';
+import { formatDate, formatDateTime } from '../../utils/formatters/date.js';
 
 import {
   CITATION_STANDARDS,
@@ -28,7 +32,6 @@ import {
   API_ROUTES,
 } from '../../constants';
 
-const PROJECT_ACTIONS = Object.freeze(['archive', 'unarchive', 'complete']);
 const USER_ROLES = Object.freeze(['STUDENT', 'INSTRUCTOR', 'ADMIN']);
 const PROJECT_ROLES = Object.freeze(['MEMBER', 'LEADER', 'INSTRUCTOR']);
 const DOCUMENT_TYPES = Object.freeze(['PAPER', 'SOURCE']);
@@ -46,9 +49,9 @@ export default function ProjectDetail() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
-  // ponytail: common action labels for SectionManager/SectionRow/StandardConfigModal (were an undefined `ct` → crash).
+  // rationale: common action labels for SectionManager/SectionRow/StandardConfigModal (were an undefined `ct` → crash).
   const ct = { delete: t('delete'), add: t('add'), cancel: t('cancel'), saving: t('saving'), save: t('save') };
-  // ponytail: section components take a scoped label object, not the i18next
+  // rationale: section components take a scoped label object, not the i18next
   // function (passing `t` raw renders every label as undefined/empty).
   const sectionT = {
     selectPaperSections: t('instructor.projectDetail.selectPaperSections'),
@@ -57,6 +60,7 @@ export default function ProjectDetail() {
     sectionConflict: t('instructor.projectDetail.sectionConflict'),
     sectionsUnsaved: t('instructor.projectDetail.sectionsUnsaved'),
     rename: t('instructor.projectDetail.rename'),
+    editContent: t('instructor.projectDetail.editContent'),
     unassigned: t('instructor.projectDetail.unassigned'),
     dragToReorder: t('instructor.projectDetail.dragToReorder'),
     unassignToReorder: t('instructor.projectDetail.unassignToReorder'),
@@ -67,6 +71,56 @@ export default function ProjectDetail() {
     standardRequirements: t('instructor.projectDetail.standardRequirements'),
     noStandardRequirements: t('instructor.projectDetail.noStandardRequirements'),
     addStandardRequirement: t('instructor.projectDetail.addStandardRequirement'),
+  };
+  const paperEditorT = {
+    editPaperSections: t('instructor.projectDetail.editPaperSections'),
+    pages: t('pages'),
+    paperName: t('instructor.projectDetail.paperName'),
+    renamePaper: t('instructor.projectDetail.renamePaper'),
+    savePaperName: t('save'),
+    cancelPaperRename: t('cancel'),
+    paperEditor: t('instructor.projectDetail.paperEditor'),
+    sectionTitle: t('instructor.projectDetail.sectionTitle'),
+    sectionContent: t('instructor.projectDetail.sectionContent'),
+    assignedStudent: t('instructor.projectDetail.assignedStudent'),
+    unassigned: t('instructor.projectDetail.unassigned'),
+    selectSection: t('instructor.projectDetail.selectSection'),
+    standardConfigured: t('instructor.projectDetail.standardConfigured'),
+    standardNotConfigured: t('instructor.projectDetail.standardNotConfigured'),
+    viewStandard: t('instructor.projectDetail.viewStandard'),
+    standardRequirements: t('instructor.projectDetail.standardRequirements'),
+    noStandardRequirements: t('instructor.projectDetail.noStandardRequirements'),
+    changesSaved: t('instructor.projectDetail.changesSaved'),
+    configStandard: t('instructor.projectDetail.configStandard'),
+    standards: t('instructor.projectDetail.standards'),
+    referenceSharedEditors: t('instructor.projectDetail.referenceSharedEditors'),
+    bulkAssign: t('instructor.projectDetail.bulkAssign'),
+    bulkAssignHint: t('instructor.projectDetail.bulkAssignHint'),
+    bulkAssignmentStudent: t('instructor.projectDetail.bulkAssignmentStudent'),
+    selectStudent: t('instructor.projectDetail.selectStudent'),
+    applyAssignment: t('instructor.projectDetail.applyAssignment'),
+    unassignAll: t('instructor.projectDetail.unassignAll'),
+    unassignAllConfirm: t('instructor.projectDetail.unassignAllConfirm'),
+    selectedSections: count => t('instructor.projectDetail.selectedSections', { count }),
+    deleteSelectedSections: t('instructor.projectDetail.deleteSelectedSections'),
+    deleteSelectedSectionsConfirm: t('instructor.projectDetail.deleteSelectedSectionsConfirm'),
+    addSection: t('instructor.projectDetail.addSection'),
+    rename: t('instructor.projectDetail.rename'),
+    deleteSection: t('instructor.projectDetail.deleteSectionAction'),
+    deleteSectionConfirm: t('instructor.projectDetail.deleteSectionConfirm'),
+    reloadSection: t('instructor.projectDetail.reloadSectionAction'),
+    sectionsUnsaved: t('instructor.projectDetail.sectionsUnsaved'),
+    noUnsavedChanges: t('instructor.projectDetail.noUnsavedChanges'),
+    discardChanges: t('instructor.projectDetail.discardChangesAction'),
+    saveChanges: t('instructor.projectDetail.saveSectionChanges'),
+    discardUnsavedChanges: t('instructor.projectDetail.discardUnsavedChanges'),
+    discardUnsavedChangesHint: t('instructor.projectDetail.discardUnsavedChangesHint'),
+    keepEditing: t('instructor.projectDetail.keepEditing'),
+    noSectionsHelp: t('instructor.projectDetail.noSectionsHelp'),
+    editMode: t('instructor.projectDetail.editMode'),
+    previewMode: t('instructor.projectDetail.previewMode'),
+    closePages: t('instructor.projectDetail.closePages'),
+    closeEditor: t('instructor.projectDetail.closeEditor'),
   };
   const undoStrings = {
     header: t('instructor.projectDetail.undoHeader'),
@@ -80,6 +134,10 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [project, setProject] = useState(null);
+  const [showEditProject, setShowEditProject] = useState(false);
+  const [showEditPaper, setShowEditPaper] = useState(false);
+  const [savingProjectEdit, setSavingProjectEdit] = useState(false);
+  const [deletingProject, setDeletingProject] = useState(false);
   const [members, setMembers] = useState([]);
   const [papers, setPapers] = useState([]);
   const [sections, setSections] = useState([]);
@@ -127,6 +185,7 @@ export default function ProjectDetail() {
   const [collectionSourcePage, setCollectionSourcePage] = useState(0);
   const [collectionSourceTotalPages, setCollectionSourceTotalPages] = useState(0);
   const [selectedSourceIds, setSelectedSourceIds] = useState([]);
+  const [selectedProjectSourceIds, setSelectedProjectSourceIds] = useState([]);
   const [collectionSourcesLoading, setCollectionSourcesLoading] = useState(false);
   const sourceSelectionTouched = useRef(new Set());
   const [showSetUpPaper, setShowSetUpPaper] = useState(false);
@@ -144,7 +203,7 @@ export default function ProjectDetail() {
   const [shareLoadingId, setShareLoadingId] = useState(null);
   const [pendingAssign, setPendingAssign] = useState(null); // { sectionId, userId, userName }
   const [statusPending, setStatusPending] = useState(null);
-  // Phase 2: Assign Member local state
+  // Phase 2: Assign Students local state
   const [selectedMemberId, setSelectedMemberId] = useState(null);
   const [memberSearch, setMemberSearch] = useState('');
   const [sourceSearch, setSourceSearch] = useState('');
@@ -156,6 +215,7 @@ export default function ProjectDetail() {
   const [viewerFile, setViewerFile] = useState(null);
   // Section standards are configured here and checked by the assigned student.
   const [sectionEvals, setSectionEvals] = useState({});
+  const [standardViewSectionId, setStandardViewSectionId] = useState(null);
   const sectionLoadRequestRef = useRef(0);
   const anyDirty = draftDirty;
 
@@ -165,9 +225,9 @@ export default function ProjectDetail() {
   );
   const visibleCollectionSources = collectionSourcePages[collectionSourcePage] || [];
 
-  const loadProject = useCallback(async () => {
+  const loadProject = useCallback(async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const [projRes, memRes] = await Promise.all([
         api.get(`/api/projects/${id}`),
         api.get(`/api/projects/${id}/members`).catch(() => ({ data: [] })),
@@ -176,7 +236,7 @@ export default function ProjectDetail() {
       setStandard(projRes.data.targetStandard || '');
       setMembers(memRes.data || []);
     } catch { navigate('/instructor/projects'); }
-    finally { setLoading(false); }
+    finally { if (showLoading) setLoading(false); }
   }, [id, navigate]);
 
   const loadPapers = useCallback(async () => {
@@ -271,7 +331,10 @@ export default function ProjectDetail() {
   const loadSources = useCallback(async () => {
     try {
       const res = await api.get(`/api/sources/projects/${id}`);
-      setSources(res.data || []);
+      const nextSources = res.data || [];
+      setSources(nextSources);
+      setSelectedProjectSourceIds(current => current.filter(sourceId =>
+        nextSources.some(source => String(source.id) === String(sourceId))));
     } catch { }
   }, [id]);
 
@@ -328,16 +391,13 @@ export default function ProjectDetail() {
     [members],
   );
 
-  // Phase 2 & 3: filtered members for Assign Member search + selection
+  // Phase 2 & 3: filtered students for assignment search + selection.
   const filteredMembers = useMemo(() => {
-    let filtered = members;
-    if (user?.id) {
-      filtered = filtered.filter(m => String(m.userId) !== String(user.id));
-    }
+    let filtered = studentMembers;
     if (!memberSearch.trim()) return filtered;
     const q = memberSearch.toLowerCase();
     return filtered.filter(m => studentDisplayName(m).toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || String(m.userRole||'').toLowerCase().includes(q));
-  }, [members, memberSearch, user?.id]);
+  }, [studentMembers, memberSearch]);
 
   const filteredSources = useMemo(() => {
     if (!sourceSearch.trim()) return sources;
@@ -357,9 +417,9 @@ export default function ProjectDetail() {
   );
 
   const selectedMember = useMemo(() => {
-    if (selectedMemberId) return members.find(m => String(m.userId) === String(selectedMemberId)) || members.find(m => String(m.id) === String(selectedMemberId)) || null;
-    return members[0] || null;
-  }, [members, selectedMemberId]);
+    if (selectedMemberId) return studentMembers.find(m => String(m.userId) === String(selectedMemberId)) || studentMembers.find(m => String(m.id) === String(selectedMemberId)) || null;
+    return studentMembers[0] || null;
+  }, [studentMembers, selectedMemberId]);
 
   useEffect(() => {
     if (activeTab === 'review') loadFeedback();
@@ -371,9 +431,9 @@ export default function ProjectDetail() {
 
   // Phase 2: auto-select first member when members load
   useEffect(() => {
-    if (members.length > 0 && !selectedMemberId) setSelectedMemberId(String(members[0].userId || members[0].id));
-    if (members.length === 0) setSelectedMemberId(null);
-  }, [members, selectedMemberId]);
+    if (studentMembers.length > 0 && !selectedMemberId) setSelectedMemberId(String(studentMembers[0].userId || studentMembers[0].id));
+    if (studentMembers.length === 0) setSelectedMemberId(null);
+  }, [studentMembers, selectedMemberId]);
 
   const saveStandard = async (nextStandard) => {
     if (!nextStandard || !project) return;
@@ -599,8 +659,11 @@ export default function ProjectDetail() {
     const requests = [
       ...toShare.map(sourceId => ({ id: sourceId, promise: api.post(
         `/api/collections/${selectedCollectionId}/sources/${sourceId}/share-to-project/${id}`) })),
-      ...toUnshare.map(sourceId => ({ id: sourceId, promise: api.delete(
-        `/api/sources/projects/${id}/sources/${sourceId}`) })),
+      ...(toUnshare.length > 0 ? [{
+        id: 'bulk-unshare',
+        title: toUnshare.map(sourceId => titles.get(String(sourceId)) || sourceId).join(', '),
+        promise: api.post(`/api/sources/projects/${id}/unshare`, { sourceIds: toUnshare }),
+      }] : []),
     ];
     setShareLoadingId(selectedCollectionId);
     try {
@@ -608,7 +671,7 @@ export default function ProjectDetail() {
       await Promise.all([loadSources(), loadCollectionSources(selectedCollectionId)]);
       const failed = requests.filter((request, index) => results[index].status === 'rejected');
       if (failed.length > 0) {
-        alert(`${t('instructor.projectDetail.operationFailed')}: ${failed.map(request => titles.get(String(request.id)) || request.id).join(', ')}`);
+        alert(`${t('instructor.projectDetail.operationFailed')}: ${failed.map(request => request.title || titles.get(String(request.id)) || request.id).join(', ')}`);
         return;
       }
       setShowShareCollection(false);
@@ -636,13 +699,14 @@ export default function ProjectDetail() {
     setEditingPaperTitle(paper.title || paper.originalFilename || '');
   };
 
-  const handleSaveRename = async (paperId) => {
-    if (!editingPaperTitle.trim()) return;
+  const handleSaveRename = async (paperId, nextTitle = editingPaperTitle) => {
+    if (!nextTitle.trim()) return;
     try {
-      const newTitle = editingPaperTitle.trim();
+      const newTitle = nextTitle.trim();
       const newFilename = newTitle.endsWith('.tex') ? newTitle : newTitle + '.tex';
       await api.put(`/api/papers/${paperId}`, null, { params: { title: newTitle, originalFilename: newFilename } });
       setEditingPaperId(null);
+      setSelectedPaper(current => current?.id === paperId ? { ...current, title: newTitle, originalFilename: newFilename } : current);
       await loadPapers();
     } catch { alert(t('instructor.projectDetail.renameFailed')); }
   };
@@ -660,7 +724,7 @@ export default function ProjectDetail() {
 
   // Single batch endpoint — replaces Promise.all N-transaction trap.
   const handleSaveAllSections = async () => {
-    if (!selectedPaper || !anyDirty || pendingDelete) return;
+    if (!selectedPaper || !anyDirty || pendingDelete) return false;
     setSectionStructureSaving(true);
     setConflictSectionId(null);
     try {
@@ -677,7 +741,8 @@ export default function ProjectDetail() {
       const { data } = await api.put(`/api/papers/${selectedPaper.id}/sections/batch`, payload);
       setSections(data || []);
       setDraftSections(data || []);
-      await loadProject();
+      await loadProject(false);
+      return true;
     } catch (err) {
       const fieldErrors = err?.response?.data?.fieldErrors;
       const sid = fieldErrors?.sectionId || err?.response?.data?.details?.sectionId;
@@ -686,13 +751,16 @@ export default function ProjectDetail() {
       } else {
         alert(err?.response?.data?.message || t('instructor.projectDetail.reorderSectionsFailed'));
       }
+      return false;
     } finally {
       setSectionStructureSaving(false);
     }
   };
 
   const handleAddSection = async () => {
-    if (!selectedPaper) return;
+    const structureLockedNow = sections.some(section => section.assignedUserId)
+      || ['SUBMITTED_FOR_REVIEW', 'APPROVED', 'ARCHIVED'].includes(project?.status);
+    if (!selectedPaper || structureLockedNow || sectionStructureSaving) return;
     setSectionStructureSaving(true);
     try {
       await api.post(`/api/papers/${selectedPaper.id}/sections/create`, null, {
@@ -711,11 +779,17 @@ export default function ProjectDetail() {
     setEditingSectionTitle(section.sectionTitle);
   };
 
-  const handleSaveSectionRename = async (sectionId) => {
-    if (!editingSectionTitle.trim() || !selectedPaper) return;
+  const handleSaveSectionRename = async (sectionId, nextTitle = editingSectionTitle) => {
+    if (!nextTitle.trim() || !selectedPaper) return;
     // Draft-only — no API (Mandate 1)
-    setDraftSections(prev => prev.map(s => String(s.id) === String(sectionId) ? { ...s, sectionTitle: editingSectionTitle.trim() } : s));
+    setDraftSections(prev => prev.map(s => String(s.id) === String(sectionId) ? { ...s, sectionTitle: nextTitle.trim() } : s));
     setEditingSectionId(null);
+  };
+
+  const handleDiscardSectionDraft = () => {
+    setDraftSections(sections);
+    setConflictSectionId(null);
+    setShowEditPaper(false);
   };
 
   const handleDeleteSection = async (sectionId) => {
@@ -759,14 +833,40 @@ export default function ProjectDetail() {
       entityDetails: sourceId,
     }, async () => {
       try {
-        await api.delete(`/api/sources/projects/${id}/sources/${sourceId}`);
+        await api.post(`/api/sources/projects/${id}/unshare`, { sourceIds: [sourceId] });
       } catch (err) {
-        alert(err?.response?.data?.message || t('instructor.projectDetail.removeSourceFailed'));
+        const blocked = err?.response?.data?.blocked || [];
+        alert(blocked.length > 0
+          ? `${t('instructor.projectDetail.removeSourceBlocked')}: ${blocked.length}`
+          : (err?.response?.data?.message || t('instructor.projectDetail.removeSourceFailed')));
       }
       await loadSources();
     }, async () => {
       await loadSources();
     });
+  };
+
+  const toggleProjectSourceSelection = (sourceId) => {
+    const normalizedId = String(sourceId);
+    setSelectedProjectSourceIds(current => current.includes(normalizedId)
+      ? current.filter(id => id !== normalizedId)
+      : [...current, normalizedId]);
+  };
+
+  const handleRemoveSelectedSources = async () => {
+    if (selectedProjectSourceIds.length === 0) return;
+    const sourceIds = [...selectedProjectSourceIds];
+    try {
+      await api.post(`/api/sources/projects/${id}/unshare`, { sourceIds });
+      setSelectedProjectSourceIds([]);
+      await loadSources();
+    } catch (err) {
+      const blocked = err?.response?.data?.blocked || [];
+      alert(blocked.length > 0
+        ? `${t('instructor.projectDetail.removeSourceBlocked')}: ${blocked.length}`
+        : (err?.response?.data?.message || t('instructor.projectDetail.removeSourceFailed')));
+      await loadSources();
+    }
   };
 
   const handleAssignSection = async (sectionId, userId) => {
@@ -874,6 +974,12 @@ export default function ProjectDetail() {
     }
   };
 
+  const handleUnassignAll = () => {
+    setDraftSections(current => current.map(section => (
+      section.sectionType === 'REFERENCE' ? section : { ...section, assignedUserId: null }
+    )));
+  };
+
   const handlePatch = async (action) => {
     setStatusPending(action);
     try {
@@ -881,16 +987,47 @@ export default function ProjectDetail() {
       await loadProject();
     } catch {
       alert(t('instructor.projectDetail.projectActionFailed', {
-        action: t(`instructor.projectDetail.action.${PROJECT_ACTIONS.includes(action) ? action : 'UNKNOWN'}`),
+        action: t(`instructor.projectDetail.action.${['archive', 'unarchive', 'complete'].includes(action) ? action : 'UNKNOWN'}`),
       }));
     }
     finally { setStatusPending(null); }
   };
 
+  const handleDeleteProject = async () => {
+    if (deletingProject) return;
+    setDeletingProject(true);
+    try {
+      await api.delete(API_ROUTES.PROJECTS.BY_ID(id));
+      navigate('/instructor/projects');
+    } catch {
+      alert(t('instructor.projectManagement.deleteProjectFailed'));
+    } finally {
+      setDeletingProject(false);
+    }
+  };
+
+  const handleUpdateProject = async ({ title, description }) => {
+    if (!project || savingProjectEdit) return;
+    setSavingProjectEdit(true);
+    try {
+      const { data } = await api.put(`/api/projects/${id}`, {
+        title,
+        description,
+        targetStandard: project.targetStandard || null,
+      });
+      setProject(data || { ...project, title, description });
+      setShowEditProject(false);
+    } catch {
+      alert(t('instructor.projectManagement.updateProjectFailed'));
+    } finally {
+      setSavingProjectEdit(false);
+    }
+  };
+
   const TOUR_STEPS = [
     { element: '#project-header', popover: { title: t('instructor.projectDetail.tourProjectTitle'), description: t('instructor.projectDetail.tourProjectDesc'), side: 'bottom', align: 'start' } },
     { element: '#tab-setup', popover: { title: t('instructor.projectDetail.projectSetup'), description: t('instructor.projectDetail.tourSetupDesc'), side: 'bottom', align: 'center' } },
-    { element: '#tab-assign-member', popover: { title: t('instructor.projectDetail.assignMember'), description: t('instructor.projectDetail.tourProjectSettingsDesc'), side: 'bottom', align: 'center' } },
+    { element: '#tab-assign-member', popover: { title: t('instructor.projectDetail.assignStudents'), description: t('instructor.projectDetail.tourProjectSettingsDesc'), side: 'bottom', align: 'center' } },
     { element: '#tab-sections', popover: { title: t('instructor.projectDetail.projectSections'), description: t('instructor.projectDetail.tourSectionsDesc'), side: 'bottom', align: 'center' } },
     { element: '#tab-review', popover: { title: t('instructor.projectDetail.projectReview'), description: t('instructor.projectDetail.tourProjectReviewDesc'), side: 'bottom', align: 'center' } },
     { element: '#source-documents', popover: { title: t('instructor.projectDetail.sourceDocuments'), description: t('instructor.projectDetail.tourSourceDocumentsDesc'), side: 'top', align: 'start' } },
@@ -954,6 +1091,12 @@ export default function ProjectDetail() {
   const hasAssignedSections = sections.some(s => s.assignedUserId);
   const projectReadOnly = ['SUBMITTED_FOR_REVIEW', 'APPROVED', 'ARCHIVED'].includes(project.status);
   const sectionStructureLocked = hasAssignedSections || projectReadOnly;
+  const standardViewSection = displaySections.find(section => String(section.id) === String(standardViewSectionId)) || null;
+  const projectActionState = {
+    ...project,
+    active: project.active ?? true,
+    hasAuthoritativeData: Boolean(selectedPaper || papers.length),
+  };
 
   return (
     <div className="h-screen w-full flex flex-col overflow-hidden bg-[var(--page-bg)] text-[var(--text-primary)] font-sans">
@@ -974,22 +1117,41 @@ export default function ProjectDetail() {
               <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-[var(--text-tertiary)]"><StatusBadge status={project.status} /></p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {hasProjectAction(projectActionState, 'edit') && (
+                <button onClick={() => setShowEditProject(true)} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-bold text-[var(--brand-foreground)] transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]">
+                  {t('instructor.projectManagement.commonEdit')}
+                </button>
+              )}
               {/* PHASE 1: Status Control lifted from Settings tab — replaces View Evidence Trace */}
-              {project.status === 'IN_PROGRESS' && (
+              {hasProjectAction(projectActionState, 'delete') && (
+                <DeleteConfirm
+                  message={t('instructor.projectManagement.deleteProjectConfirm')}
+                  onConfirm={handleDeleteProject}
+                  triggerLabel={t('delete')}
+                  confirmLabel={t('delete')}
+                  cancelLabel={t('cancel')}
+                  disabled={deletingProject}
+                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-100"
+                >
+                  {deletingProject ? t('saving') : t('delete')}
+                </DeleteConfirm>
+              )}
+              {hasProjectAction(projectActionState, 'complete') && (
                 <button onClick={() => handlePatch('complete')} disabled={!!statusPending} className="rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white transition hover:bg-[var(--brand-hover)] disabled:opacity-50">
                   {statusPending === 'complete' ? '...' : t('instructor.projectDetail.markComplete')}
                 </button>
               )}
-              {project.status !== 'ARCHIVED' ? (
+              {hasProjectAction(projectActionState, 'archive') && (
                 <button onClick={() => handlePatch('archive')} disabled={!!statusPending} className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-amber-700 disabled:opacity-50">
                   {statusPending === 'archive' ? '...' : t('instructor.projectDetail.archive')}
                 </button>
-              ) : (
+              )}
+              {hasProjectAction(projectActionState, 'unarchive') && (
                 <button onClick={() => handlePatch('unarchive')} disabled={!!statusPending} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50">
                   {statusPending === 'unarchive' ? '...' : t('instructor.projectDetail.unarchive')}
                 </button>
               )}
-              <button onClick={() => setShowExportModal(true)} className="rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white transition hover:bg-[var(--brand-hover)]">{t('instructor.projectDetail.export')}</button>
+              {hasProjectAction(projectActionState, 'export') && <button onClick={() => setShowExportModal(true)} className="rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white transition hover:bg-[var(--brand-hover)]">{t('instructor.projectDetail.export')}</button>}
               <TourLauncher steps={TOUR_STEPS} tourKey="instructor-project-detail"
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--text-secondary)] shadow-sm transition-all hover:border-indigo-300 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-foreground)]" />
             </div>
@@ -1000,7 +1162,7 @@ export default function ProjectDetail() {
         <div className="flex flex-wrap items-center border-b border-[var(--border)] shrink-0 mb-6">
           {[
             { key: 'setup', label: t('instructor.projectDetail.projectSetup') },
-            { key: 'assign-member', label: t('instructor.projectDetail.assignMember') },
+            { key: 'assign-member', label: t('instructor.projectDetail.assignStudents') },
             { key: 'sections', label: t('instructor.projectDetail.projectSections') },
             { key: 'progress', label: t('instructor.projectDetail.projectProgressReport') },
             { key: 'review', label: t('instructor.projectDetail.projectReview') },
@@ -1025,12 +1187,34 @@ export default function ProjectDetail() {
               <div className="mb-3 shrink-0">
                 <ActionExpandHeader title={t('instructor.projectDetail.sourceDocuments')} placeholder={t('instructor.projectDetail.searchSource')} searchValue={sourceSearch} onSearch={setSourceSearch} onAdd={() => setShowAddSource(true)} addLabel={t('instructor.projectDetail.addSource')} />
               </div>
+              {selectedProjectSourceIds.length > 0 && (
+                <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <span>{t('instructor.projectDetail.selectedSources', { count: selectedProjectSourceIds.length })}</span>
+                  <DeleteConfirm
+                    message={t('instructor.projectDetail.removeSelectedSourcesConfirm', { count: selectedProjectSourceIds.length })}
+                    onConfirm={handleRemoveSelectedSources}
+                    triggerLabel={t('instructor.projectDetail.removeSelectedSources')}
+                    confirmLabel={t('instructor.projectDetail.removeSelectedSources')}
+                    cancelLabel={t('cancel')}
+                    className="rounded-md bg-rose-600 px-2.5 py-1.5 font-bold text-white transition hover:bg-rose-700"
+                  >
+                    {t('instructor.projectDetail.removeSelectedSources')}
+                  </DeleteConfirm>
+                </div>
+              )}
               {filteredSources.length === 0 ? (
                 <p className="text-xs italic text-[var(--text-tertiary)]">{sourceSearch ? t('instructor.projectDetail.noStudentsFound') : t('instructor.projectDetail.noSourceDocuments')}</p>
               ) : (
                 <div className="space-y-1 flex-1 min-h-0 overflow-y-auto">
                   {filteredSources.map(s => (
                     <div key={s.id} data-testid={`source-${s.id}`} className="flex items-center gap-2 rounded-lg bg-[var(--surface-secondary)] px-3 py-2 text-xs transition hover:bg-[var(--surface-tertiary)]">
+                      <input
+                        type="checkbox"
+                        checked={selectedProjectSourceIds.includes(String(s.id))}
+                        onChange={() => toggleProjectSourceSelection(s.id)}
+                        aria-label={t('instructor.projectDetail.selectSource', { name: s.title || s.originalFilename || s.id })}
+                        className="h-4 w-4 shrink-0 rounded border-[var(--border)] text-[var(--brand)] focus:ring-[var(--brand)]"
+                      />
                       <button onClick={() => { setSourceDetail(s); setShowSourceDetail(true); }} className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left">
                         <span className="min-w-0 truncate font-medium">{s.title || s.originalFilename || t('unknown')}</span>
                         <StatusBadge status={s.processingStatus || 'READY'} />
@@ -1182,35 +1366,16 @@ export default function ProjectDetail() {
                     </p>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   {selectedPaper && (
                     <button
-                      onClick={handleAddSection}
-                      disabled={sectionStructureLocked || sectionStructureSaving
-                        || selectedPaper.processingStatus === 'QUEUED'
-                        || selectedPaper.processingStatus === 'PROCESSING'}
+                      type="button"
+                      aria-label={t('instructor.projectDetail.editPaperAction')}
+                      onClick={() => setShowEditPaper(true)}
+                      disabled={displaySections.length === 0 || sectionStructureSaving || selectedPaper.processingStatus === 'QUEUED' || selectedPaper.processingStatus === 'PROCESSING'}
                       className="rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      + {t('instructor.projectDetail.addSection')}
-                    </button>
-                  )}
-                  {selectedPaper && anyDirty && (
-                    <button
-                      data-testid="save-section-changes"
-                      onClick={handleSaveAllSections}
-                      disabled={sectionStructureSaving || !!pendingDelete}
-                      title={sectionStructureLocked ? t('instructor.projectDetail.sectionStructureLocked') : undefined}
-                      className="px-3 py-1.5 bg-amber-500 text-white text-xs font-bold rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {t('instructor.projectDetail.saveSectionChanges')}
-                    </button>
-                  )}
-                  {selectedPaper && anyDirty && (
-                    <button
-                      onClick={() => { setDraftSections(sections); setConflictSectionId(null); }}
-                      className="px-3 py-1.5 bg-[var(--surface-tertiary)] text-[var(--text-secondary)] text-xs font-bold rounded-lg hover:opacity-80"
-                    >
-                      {t('instructor.projectDetail.discardSectionChanges')}
+                      {t('instructor.projectDetail.editPaperAction')}
                     </button>
                   )}
                 </div>
@@ -1251,32 +1416,40 @@ export default function ProjectDetail() {
                   <p>{t('instructor.projectDetail.noSectionsHelp')}</p>
                 </div>
               ) : (
-                <SectionManager
-                  selectedPaper={selectedPaper}
-                  sections={sections}
-                  draftSections={draftSections}
-                  displaySections={displaySections}
-                  conflictSectionId={conflictSectionId}
-                  sectionStructureLocked={sectionStructureLocked}
-                  projectReadOnly={projectReadOnly}
-                  sectionStructureSaving={sectionStructureSaving}
-                  sectionEvals={sectionEvals}
-                  t={sectionT}
-                  ct={ct}
-                  users={users}
-                  projectMembers={projectMembers}
-                  editingSectionId={editingSectionId}
-                  editingSectionTitle={editingSectionTitle}
-                  onStartRename={handleStartSectionRename}
-                  onSaveRename={handleSaveSectionRename}
-                  onCancelRename={()=>setEditingSectionId(null)}
-                  onEditingChange={setEditingSectionTitle}
-                  onDelete={handleDeleteSection}
-                  onAssign={handleAssignSection}
-                  onReloadConflict={handleReloadConflictSection}
-                  onDragEnd={handleDragEnd}
-                  onConfigSave={saveSectionStandard}
-                />
+                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto" aria-label={t('instructor.projectDetail.sectionSummary')}>
+                  {displaySections.map((section, index) => {
+                    const evaluation = sectionEvals[String(section.id)];
+                    const assignedMember = projectMembers.find(member => String(member.userId) === String(section.assignedUserId));
+                    return (
+                      <div key={section.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-xs font-black text-[var(--brand-foreground)]">{index + 1}</span>
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-bold text-[var(--text-primary)]">{section.sectionTitle || t('untitled')}</p>
+                            <p className="truncate text-[10px] text-[var(--text-tertiary)]">{section.sectionType === 'REFERENCE' ? t('instructor.projectDetail.referenceSharedEditors') : (assignedMember ? studentDisplayName(assignedMember) : t('instructor.projectDetail.unassigned'))}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${evaluation?.requirements?.length ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {evaluation?.requirements?.length ? t('instructor.projectDetail.standardConfigured') : t('instructor.projectDetail.standardNotConfigured')}
+                          </span>
+                          {evaluation?.requirements?.length > 0 && (
+                            <button
+                              type="button"
+                              data-testid={`view-standard-tab-${section.id}`}
+                              onClick={() => setStandardViewSectionId(section.id)}
+                              aria-label={`${t('instructor.projectDetail.viewStandard')}: ${section.sectionTitle}`}
+                              title={t('instructor.projectDetail.viewStandard')}
+                              className="rounded p-1 text-indigo-600 hover:bg-indigo-50"
+                            >
+                              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" /><circle cx="12" cy="12" r="2.5" /></svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -1295,7 +1468,7 @@ export default function ProjectDetail() {
                     <Link key={fb.id} to={`/instructor/requests/${encodeURIComponent(id)}?review=${encodeURIComponent(fb.id)}`} data-testid={`feedback-${fb.id}`} className="block rounded-lg bg-[var(--surface-secondary)] px-3 py-2 text-xs">
                       <div className="flex justify-between items-center">
                         <StatusBadge status={fb.status} />
-                        <span className="text-[var(--text-tertiary)]">{fb.requestedAt ? new Date(fb.requestedAt).toLocaleDateString(i18n.language) : ''}</span>
+                        <span className="text-[var(--text-tertiary)]">{fb.requestedAt ? formatDate(fb.requestedAt, i18n.language) : ''}</span>
                       </div>
                       <p className="mt-1 text-[var(--text-secondary)]">{t('instructor.projectDetail.studentLabel', { student: fb.studentName || fb.studentId })}</p>
                     </Link>
@@ -1380,7 +1553,7 @@ export default function ProjectDetail() {
                         <p className="font-bold text-[var(--text-primary)]">{contribution.userName}</p>
                         <span className="text-[10px] text-[var(--text-tertiary)]">
                           {t('instructor.projectDetail.lastRecordedEdit')}: {contribution.lastEditedAt
-                            ? new Date(contribution.lastEditedAt).toLocaleString(i18n.language)
+                            ? formatDateTime(contribution.lastEditedAt, i18n.language)
                             : '—'}
                         </span>
                       </div>
@@ -1414,7 +1587,7 @@ export default function ProjectDetail() {
                           <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{t('instructor.projectDetail.dailyEditHistory')}</p>
                           {contribution.dailyWordDeltas.map(day => (
                             <div key={day.date} className="flex items-center justify-between rounded bg-[var(--surface)] px-2 py-1 text-[10px]">
-                              <span>{new Date(`${day.date}T00:00:00`).toLocaleDateString(i18n.language)}</span>
+                              <span>{formatDate(`${day.date}T00:00:00Z`, i18n.language)}</span>
                               <span className="text-[var(--text-secondary)]">
                                 {day.saveCount} {t('instructor.projectDetail.savesShort')} · +{day.wordsAdded ?? Math.max(day.wordDelta, 0)}/-{day.wordsRemoved ?? Math.max(-day.wordDelta, 0)} {t('instructor.projectDetail.wordsShort')} · {day.wordDelta > 0 ? `+${day.wordDelta}` : day.wordDelta} {t('instructor.projectDetail.netWordChange').toLowerCase()}
                               </span>
@@ -1437,7 +1610,7 @@ export default function ProjectDetail() {
           </div>
         )}
 
-        {/* Tab: Assign Member — PHASE 2+3: former Settings, Status controls removed, 2-col layout */}
+        {/* Tab: Assign Students — PHASE 2+3: former Settings, Status controls removed, 2-col layout */}
         {(activeTab === 'assign-member' || activeTab === 'settings') && (
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-full overflow-hidden">
             {/* Left: Members list with search — expanded from 33% to 40% so search fits without horizontal scroll */}
@@ -1446,7 +1619,7 @@ export default function ProjectDetail() {
                 <ActionExpandHeader title={t('instructor.projectDetail.members')} placeholder={t('instructor.projectDetail.searchStudent')} searchValue={memberSearch} onSearch={setMemberSearch} onAdd={() => { setShowAdvancedAdd(true); loadUsers(); }} addLabel={t('instructor.projectDetail.add')} />
               </div>
               {filteredMembers.length === 0 ? (
-                <p className="text-xs italic text-[var(--text-tertiary)]">{memberSearch ? t('instructor.projectDetail.noStudentsFound') : t('instructor.projectDetail.noMembers')}</p>
+                <p className="text-xs italic text-[var(--text-tertiary)]">{memberSearch ? t('instructor.projectDetail.noStudentsFound') : t('instructor.projectDetail.noStudentsAssigned')}</p>
               ) : (
                 <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-1">
                   {filteredMembers.map(m => {
@@ -1509,7 +1682,7 @@ export default function ProjectDetail() {
         </div>
       </main>
 
-      <Modal open={showAddMember} onClose={closeAddMemberModal} title={t('instructor.projectDetail.addMember')} className="!overflow-visible">
+      <Modal open={showAddMember} onClose={closeAddMemberModal} title={t('instructor.projectDetail.addStudents')} className="!overflow-visible">
         <div className="space-y-4">
           <div className="relative">
             <svg aria-hidden="true" viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 fill-none stroke-[var(--text-tertiary)]" strokeWidth="2">
@@ -1726,7 +1899,53 @@ export default function ProjectDetail() {
           </div>
         )}
       </Modal>
+      <EditPaperSectionModal
+        open={showEditPaper}
+        paper={selectedPaper}
+        sections={displaySections}
+        serverSections={sections}
+        sectionEvals={sectionEvals}
+        projectMembers={projectMembers}
+        users={users}
+        projectReadOnly={projectReadOnly}
+        sectionStructureLocked={sectionStructureLocked}
+        sectionStructureSaving={sectionStructureSaving}
+        conflictSectionId={conflictSectionId}
+        onClose={() => setShowEditPaper(false)}
+        onDraftChange={setDraftSections}
+        onSave={handleSaveAllSections}
+        onDiscard={handleDiscardSectionDraft}
+        onAddSection={handleAddSection}
+        onDeleteSection={handleDeleteSection}
+        onSavePaperRename={handleSaveRename}
+        onStartRename={handleStartSectionRename}
+        onSaveRename={handleSaveSectionRename}
+        onReloadConflict={handleReloadConflictSection}
+        onSaveStandard={saveSectionStandard}
+        onUnassignAll={handleUnassignAll}
+        t={paperEditorT}
+        ct={ct}
+      />
 
+      <StandardRequirementsModal
+        open={Boolean(standardViewSection)}
+        section={standardViewSection}
+        requirements={standardViewSection ? sectionEvals[String(standardViewSection.id)]?.requirements || [] : []}
+        title={t('instructor.projectDetail.viewStandard')}
+        requirementsLabel={t('instructor.projectDetail.standardRequirements')}
+        emptyLabel={t('instructor.projectDetail.noStandardRequirements')}
+        closeLabel={t('close')}
+        onClose={() => setStandardViewSectionId(null)}
+      />
+
+      <ProjectEditModal
+        open={showEditProject}
+        project={project}
+        saving={savingProjectEdit}
+        onClose={() => setShowEditProject(false)}
+        onSave={handleUpdateProject}
+        t={t}
+      />
 
       <Modal open={showExportModal} onClose={() => setShowExportModal(false)} title={t('instructor.projectDetail.export')}>
         <div className="space-y-3 text-xs">

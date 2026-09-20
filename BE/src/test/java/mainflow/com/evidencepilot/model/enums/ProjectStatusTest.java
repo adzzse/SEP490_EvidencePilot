@@ -19,7 +19,7 @@ class ProjectStatusTest {
     @Test
     void returnedProjectsCanReenterTheReviewLoop() {
         assertThat(ProjectStatus.RETURNED.canTransitionTo(ProjectStatus.SUBMITTED_FOR_REVIEW)).isTrue();
-        assertThat(ProjectStatus.RETURNED.canTransitionTo(ProjectStatus.APPROVED)).isTrue();
+        assertThat(ProjectStatus.RETURNED.canTransitionTo(ProjectStatus.APPROVED)).isFalse();
         assertThat(ProjectStatus.RETURNED.canTransitionTo(ProjectStatus.IN_PROGRESS)).isTrue();
         assertThat(ProjectStatus.RETURNED.canTransitionTo(ProjectStatus.ARCHIVED)).isFalse();
     }

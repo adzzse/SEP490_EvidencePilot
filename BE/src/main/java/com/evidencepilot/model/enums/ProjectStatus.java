@@ -27,7 +27,7 @@ public enum ProjectStatus {
             ASSIGNED, EnumSet.of(IN_PROGRESS, SUBMITTED_FOR_REVIEW),
             IN_PROGRESS, EnumSet.of(SUBMITTED_FOR_REVIEW, APPROVED),
             SUBMITTED_FOR_REVIEW, EnumSet.of(RETURNED, APPROVED, IN_PROGRESS),
-            RETURNED, EnumSet.of(SUBMITTED_FOR_REVIEW, APPROVED, IN_PROGRESS),
+            RETURNED, EnumSet.of(SUBMITTED_FOR_REVIEW, IN_PROGRESS),
             APPROVED, EnumSet.of(ARCHIVED),
             ARCHIVED, EnumSet.of(APPROVED));
 

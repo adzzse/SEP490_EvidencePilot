@@ -9,7 +9,7 @@ function SearchIcon({ className = 'w-4 h-4' }) {
   );
 }
 
-// ponytail: single shared search input — 300ms debounce (mirrors SourceLibraryPanel),
+// rationale: single shared search input — 300ms debounce (mirrors SourceLibraryPanel),
 // icon + focus-ring tokens standardized so every admin tab behaves the same.
 export default function SearchBar({
   value,

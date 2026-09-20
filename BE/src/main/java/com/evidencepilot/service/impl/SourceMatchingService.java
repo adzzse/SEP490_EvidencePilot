@@ -68,10 +68,10 @@ public class SourceMatchingService {
         List<String> documentIds = allowedDocuments.keySet().stream()
                 .map(UUID::toString)
                 .toList();
-        // ponytail: Qdrant exposes single-query search only — fan the per-query calls
+        // rationale: Qdrant exposes single-query search only — fan the per-query calls
         // out on a bounded pool instead of stacking N sequential round-trips.
         List<List<QdrantSearchResult>> rawMatches = searchChunks(embeddings, excerpts, documentIds, topK);
-        // ponytail: one chunk query for the whole batch instead of one per hit.
+        // rationale: one chunk query for the whole batch instead of one per hit.
         Map<UUID, DocumentChunk> chunksById = fetchChunks(rawMatches);
         List<List<SourceMatch>> results = new ArrayList<>();
         for (List<QdrantSearchResult> matches : rawMatches) {

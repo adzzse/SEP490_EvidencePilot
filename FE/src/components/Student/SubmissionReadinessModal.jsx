@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import api from '../../services/api.js';
 import Modal from '../ui/Modal.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
-import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
 
 const CHECK_KEYS = {
   REVISION_CHANGED: 'feedbackRevisionRequired',
@@ -139,7 +138,7 @@ export default function SubmissionReadinessModal({ open, onClose, projectId, dir
                               <div className="flex items-center gap-2">
                                 <span className="truncate">{section.title}</span>
                                 {(() => {
-                                  const sharedReferences = isReferenceSectionTitle(section.title);
+                                  const sharedReferences = section.sectionType === 'REFERENCE';
                                   const handoffState = sharedReferences ? 'NOT_REQUIRED' : section.handoffState;
                                   return (
                                     <>

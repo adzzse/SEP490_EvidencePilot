@@ -83,7 +83,7 @@ function QueueSection({ api }) {
     }
   };
 
-  // ponytail: filter-aware live updates. A DOCUMENT_READY/_FAILED event carries
+  // rationale: filter-aware live updates. A DOCUMENT_READY/_FAILED event carries
   // no status/date payload, so the single row is fetched and evaluated against
   // the active filters BEFORE touching UI state — filtered lists never gain
   // rows that violate their own constraints.

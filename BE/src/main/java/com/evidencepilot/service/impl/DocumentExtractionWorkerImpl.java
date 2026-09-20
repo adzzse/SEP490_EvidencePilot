@@ -7,7 +7,9 @@ import com.evidencepilot.dto.SparseVector;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentChunk;
+import com.evidencepilot.model.DocumentExtractionCandidate;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.ExtractionCandidateStatus;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.DocumentExtractionWorker;
@@ -50,6 +52,7 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
     private final ObjectMapper objectMapper;
     private final MediaAssetService mediaAssetService;
     private final PaperProcessingServiceImpl paperProcessingService;
+    private final ExtractionCandidateService extractionCandidateService;
 
     @Override
     public void process(UUID documentId) {
@@ -59,6 +62,11 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
         }
         Document document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException(documentId, "Document"));
+        DocumentExtractionCandidate candidate = extractionCandidateService.findPending(documentId).orElse(null);
+        if (candidate != null) {
+            processCandidate(document, candidate);
+            return;
+        }
         try {
             processDocument(document);
         } catch (RuntimeException e) {
@@ -66,6 +74,111 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
                 log.warn("Could not requeue failed extraction for document {}", documentId);
             }
             throw e;
+        }
+    }
+
+    private void processCandidate(Document document, DocumentExtractionCandidate candidate) {
+        try {
+            if (candidate.getStatus() != ExtractionCandidateStatus.READY) {
+                extractionCandidateService.markProcessing(candidate.getId());
+                if (isLatexPaper(document)) {
+                    String latex = documentObjectStorage.readText(document.getFileUrl());
+                    if (latex.isBlank()) {
+                        throw new DocumentExtractionException("LaTeX paper is empty");
+                    }
+                    extractionCandidateService.prepare(
+                            candidate.getId(), "latex", latex, List.of(), List.of());
+                } else {
+                    String bundleKey = DocumentObjectStorage.extractionCandidateKey(candidate.getId());
+                    candidate.setBundleKey(bundleKey);
+                    AiModelClient.ExtractedDocument extracted = normalizeExtraction(
+                            extractCandidate(document, bundleKey));
+                    List<String> chunks = DocumentChunker.chunk(extracted.blocks());
+                    if (chunks.isEmpty()) {
+                        throw new DocumentExtractionException("Extraction produced zero chunks");
+                    }
+                    List<List<Float>> dense = embed(chunks);
+                    List<SparseVector> sparse = chunks.stream()
+                            .map(sparseVectorGenerator::generate)
+                            .toList();
+                    List<ExtractionResultPayload.ChunkPayload> staged = new ArrayList<>();
+                    for (int index = 0; index < chunks.size(); index++) {
+                        staged.add(new ExtractionResultPayload.ChunkPayload(
+                                UUID.randomUUID(), index, chunks.get(index), dense.get(index), sparse.get(index)));
+                    }
+                    extractionCandidateService.prepare(
+                            candidate.getId(),
+                            extractionMethod(document.getOriginalFilename()),
+                            extracted.markdown(),
+                            extracted.blocks(),
+                            staged,
+                            bundleKey);
+                }
+            }
+            extractionCandidateService.activate(candidate.getId());
+            try {
+                materializeCandidateMedia(document, candidate);
+            } catch (RuntimeException mediaFailure) {
+                // The extraction is already live; media is an activation follow-up
+                // and can be repaired without rerunning or replacing the candidate.
+                log.warn("Candidate {} activated but media materialization failed for document {}",
+                        candidate.getId(), document.getId(), mediaFailure);
+            }
+            cleanupLiveCheckpoint(document);
+        } catch (RuntimeException failure) {
+            cleanupCandidateBundle(candidate.getId());
+            extractionCandidateService.markFailed(candidate.getId(), failure.getMessage());
+            log.warn("Extraction candidate {} failed for document {}", candidate.getId(), document.getId(), failure);
+        }
+    }
+
+    private void materializeCandidateMedia(
+            Document document, DocumentExtractionCandidate candidate) {
+        if (candidate.getBundleKey() == null
+                || document.getProject() == null
+                || !isPdf(document.getOriginalFilename())) {
+            cleanupCandidateBundle(candidate.getId());
+            return;
+        }
+        try (InputStream content = documentObjectStorage.getStream(candidate.getBundleKey());
+                ExtractionBundle bundle = ExtractionBundle.open(content)) {
+            for (String image : bundle.document().images()) {
+                try (InputStream imageContent = bundle.openImage(image)) {
+                    mediaAssetService.importExtractedImage(
+                            document,
+                            image,
+                            imageContent,
+                            bundle.imageSize(image),
+                            bundle.imageMediaType(image));
+                } catch (IOException e) {
+                    throw new DocumentExtractionException(
+                            "Failed to read candidate image " + image + ": " + e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            throw new DocumentExtractionException(
+                    "Failed to read candidate extraction bundle: " + e.getMessage());
+        } finally {
+            cleanupCandidateBundle(candidate.getId());
+        }
+    }
+
+    private void cleanupCandidateBundle(UUID candidateId) {
+        try {
+            documentObjectStorage.delete(DocumentObjectStorage.extractionCandidateKey(candidateId));
+        } catch (RuntimeException cleanupFailure) {
+            log.debug("Candidate extraction bundle cleanup was not available for {}", candidateId, cleanupFailure);
+        }
+    }
+
+    private void cleanupLiveCheckpoint(Document document) {
+        try {
+            documentObjectStorage.deleteExtractionCheckpoint(
+                    document.getId(), document.getFileHashSha256());
+        } catch (RuntimeException cleanupFailure) {
+            // Activation is already durable; a stale cache is safe to retry-clean later.
+            log.warn("Could not remove obsolete extraction checkpoint for document {}",
+                    document.getId(), cleanupFailure);
         }
     }
 
@@ -132,7 +245,23 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
     }
 
     private AiModelClient.ExtractedDocument extract(Document document) {
-        String cacheKey = extractionCacheKey(document);
+        return extract(document, true);
+    }
+
+    private AiModelClient.ExtractedDocument extractCandidate(
+            Document document, String bundleKey) {
+        String downloadUrl = baseUrl + "/api/documents/" + document.getId()
+                + "/download?token=" + document.getDownloadToken();
+        try (ExtractionBundle bundle = aiModelClient.extractDocument(
+                document.getOriginalFilename(), downloadUrl, document.getDocType() == DocumentType.PAPER)) {
+            AiModelClient.ExtractedDocument extracted = requireValid(bundle.document());
+            writeExtractionCache(bundleKey, bundle);
+            return materialize(document, bundle, extracted, false);
+        }
+    }
+
+    private AiModelClient.ExtractedDocument extract(Document document, boolean useCache) {
+        String cacheKey = useCache ? extractionCacheKey(document) : null;
         if (cacheKey != null && documentObjectStorage.exists(cacheKey)) {
             try (InputStream content = documentObjectStorage.getStream(cacheKey);
                     ExtractionBundle bundle = ExtractionBundle.open(content)) {
@@ -163,20 +292,30 @@ public class DocumentExtractionWorkerImpl implements DocumentExtractionWorker {
             Document document,
             ExtractionBundle bundle,
             AiModelClient.ExtractedDocument extracted) {
+        return materialize(document, bundle, extracted, true);
+    }
+
+    private AiModelClient.ExtractedDocument materialize(
+            Document document,
+            ExtractionBundle bundle,
+            AiModelClient.ExtractedDocument extracted,
+            boolean importImages) {
         if (document.getProject() == null || !isPdf(document.getOriginalFilename())) {
             return extracted;
         }
-        for (String image : extracted.images()) {
-            try (InputStream content = bundle.openImage(image)) {
-                mediaAssetService.importExtractedImage(
-                        document,
-                        image,
-                        content,
-                        bundle.imageSize(image),
-                        bundle.imageMediaType(image));
-            } catch (IOException e) {
-                throw new DocumentExtractionException(
-                        "Failed to read extracted image " + image + ": " + e.getMessage());
+        if (importImages) {
+            for (String image : extracted.images()) {
+                try (InputStream content = bundle.openImage(image)) {
+                    mediaAssetService.importExtractedImage(
+                            document,
+                            image,
+                            content,
+                            bundle.imageSize(image),
+                            bundle.imageMediaType(image));
+                } catch (IOException e) {
+                    throw new DocumentExtractionException(
+                            "Failed to read extracted image " + image + ": " + e.getMessage());
+                }
             }
         }
         if (extracted.images().isEmpty()) {

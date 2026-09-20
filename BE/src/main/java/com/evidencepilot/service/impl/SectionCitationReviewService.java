@@ -12,6 +12,7 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ReviewSnapshot;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.service.PromptTemplateService;
 import com.evidencepilot.service.PromptTemplateService.ResolvedPrompt;
@@ -103,7 +104,7 @@ public class SectionCitationReviewService {
                         reviewInputFingerprint)
                 .flatMap(this::readSnapshot)
                 .filter(SectionCitationReviewResponse::complete);
-        // ponytail: a partial final already holds every finished finding — serve it
+        // rationale: a partial final already holds every finished finding — serve it
         // directly so a refresh never blanks completed work.
         Optional<SectionCitationReviewResponse> partialFinal = cached.isPresent() ? Optional.empty()
                 : reviewSnapshotRepository
@@ -181,7 +182,7 @@ public class SectionCitationReviewService {
                 List.copyOf(limitations));
     }
 
-    // ponytail: no @Transactional — the AI loop below outlives any sane DB transaction.
+    // rationale: no @Transactional — the AI loop below outlives any sane DB transaction.
     // Reads ride per-call repository transactions; writes go through ReviewPersistenceService.
     public SectionCitationReviewResponse run(
             UUID documentId,
@@ -198,7 +199,7 @@ public class SectionCitationReviewService {
                 (current, total) -> {});
     }
 
-    // ponytail: see above — transactionless orchestration over short-lived persistence calls.
+    // rationale: see above — transactionless orchestration over short-lived persistence calls.
     public SectionCitationReviewResponse run(
             UUID documentId,
             UUID projectId,
@@ -210,7 +211,7 @@ public class SectionCitationReviewService {
                 requestedByUserId, onProgress, checkpoint -> {});
     }
 
-    // ponytail: see above — transactionless orchestration over short-lived persistence calls.
+    // rationale: see above — transactionless orchestration over short-lived persistence calls.
     public SectionCitationReviewResponse run(
             UUID documentId, UUID projectId, UUID sectionId, String expectedReviewInputFingerprint,
             UUID requestedByUserId, BiConsumer<Integer, Integer> onProgress,
@@ -222,7 +223,7 @@ public class SectionCitationReviewService {
         }
         ResolvedPrompt prompt = promptTemplateService.resolve("CITATION_REVIEW");
         String normalizedTitle = paperStandardService.normalizeSectionTitle(section.getSectionTitle());
-        AiModelClient.GenerationSelection selection = isPolicyExempt(normalizedTitle)
+        AiModelClient.GenerationSelection selection = isPolicyExempt(section, normalizedTitle)
                 ? null : aiModelClient.generationSelection();
         String generationFingerprint = selection == null ? NOT_APPLICABLE : selection.fingerprint();
         String reviewInputFingerprint = reviewInputFingerprint(section, prompt, generationFingerprint);
@@ -242,9 +243,9 @@ public class SectionCitationReviewService {
         }
 
         SectionCitationReviewResponse review;
-        if (isPolicyExempt(normalizedTitle)) {
+        if (isPolicyExempt(section, normalizedTitle)) {
             review = notApplicable(
-                    section, reviewInputFingerprint, generationFingerprint, exemptionSummary(normalizedTitle));
+                    section, reviewInputFingerprint, generationFingerprint, exemptionSummary(section, normalizedTitle));
         } else {
             // Resume: batches finished by an earlier interrupted run are skipped, not repaid.
             Map<Integer, SectionCitationReviewResponse> resumeBatches =
@@ -321,7 +322,7 @@ public class SectionCitationReviewService {
 
     public String prepareReview(PaperSection section) {
         String normalizedTitle = paperStandardService.normalizeSectionTitle(section.getSectionTitle());
-        if (isPolicyExempt(normalizedTitle)) {
+        if (isPolicyExempt(section, normalizedTitle)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "CITATION_REVIEW_NOT_APPLICABLE");
         }
@@ -332,7 +333,7 @@ public class SectionCitationReviewService {
 
     private String generationIdentity(PaperSection section) {
         String normalizedTitle = paperStandardService.normalizeSectionTitle(section.getSectionTitle());
-        if (isPolicyExempt(normalizedTitle)) return NOT_APPLICABLE;
+        if (isPolicyExempt(section, normalizedTitle)) return NOT_APPLICABLE;
         return generationConfigService.current().map(AiModelClient.GenerationSelection::fingerprint)
                 .orElse(NO_GENERATION_SELECTION);
     }
@@ -404,7 +405,7 @@ public class SectionCitationReviewService {
             java.util.function.Consumer<SectionCitationReviewResponse> onCheckpoint, ResolvedPrompt prompt,
             AiModelClient.GenerationSelection selection,
             Map<Integer, SectionCitationReviewResponse> resumeBatches) {
-        // ponytail: section/document/project ride findByIdWithDocument's join fetch,
+        // rationale: section/document/project ride findByIdWithDocument's join fetch,
         // so basics stay readable here with no ambient transaction. Keep it that way.
         Project project = section.getDocument().getProject();
         UUID paperId = section.getDocument().getId();
@@ -928,8 +929,8 @@ public class SectionCitationReviewService {
                 List.of());
     }
 
-    private static String exemptionSummary(String title) {
-        return "Abstract".equals(title)
+    private static String exemptionSummary(PaperSection section, String title) {
+        return "Abstract".equals(title) && section.getSectionType() != PaperSectionType.REFERENCE
                 ? "The abstract is exempt from citation critique."
                 : "Citation critique is not applicable to the references section.";
     }
@@ -988,8 +989,8 @@ public class SectionCitationReviewService {
         return response.substring(start, end + 1);
     }
 
-    private static boolean isPolicyExempt(String title) {
-        return "Abstract".equals(title) || "References".equals(title) || "Works Cited".equals(title);
+    private static boolean isPolicyExempt(PaperSection section, String title) {
+        return "Abstract".equals(title) || section.getSectionType() == PaperSectionType.REFERENCE;
     }
 
     private record ClaimCandidate(int id, String text, int startOffset, int endOffset) {

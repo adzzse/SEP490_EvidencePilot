@@ -25,5 +25,24 @@ public interface PaperReferenceRepository extends JpaRepository<PaperReference, 
     List<PaperReference> findByPaperIdOrderByAddedAtAsc(@Param("paperId") UUID paperId);
     Optional<PaperReference> findByPaperIdAndSourceId(UUID paperId, UUID sourceId);
     boolean existsByPaperIdAndSourceId(UUID paperId, UUID sourceId);
+    @Query("""
+            SELECT CASE WHEN COUNT(r) > 0 THEN true ELSE false END
+            FROM PaperReference r
+            WHERE r.source.id = :sourceId
+              AND r.paper.project.id = :projectId
+              AND r.paper.active = true
+              AND r.paper.docType = com.evidencepilot.model.enums.DocumentType.PAPER
+            """)
+    boolean existsActiveForProject(@Param("projectId") UUID projectId, @Param("sourceId") UUID sourceId);
+
+    @Query("""
+            SELECT CASE WHEN COUNT(r) > 0 THEN true ELSE false END
+            FROM PaperReference r
+            WHERE r.source.id = :sourceId
+              AND r.paper.active = true
+              AND r.paper.docType = com.evidencepilot.model.enums.DocumentType.PAPER
+            """)
+    boolean existsActiveForSource(@Param("sourceId") UUID sourceId);
+
     void deleteByPaperIdAndSourceId(UUID paperId, UUID sourceId);
 }

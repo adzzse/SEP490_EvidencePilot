@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
-// ponytail: xlsx (~400KB) loads on first use, not with the admin bundle.
+// rationale: xlsx (~400KB) loads on first use, not with the admin bundle.
 const loadXlsx = () => import('xlsx');
 
 const HEADERS = ['First Name', 'Last Name', 'Student Code', 'Email', 'Role'];
@@ -98,7 +98,7 @@ export default function UserImportModal({ api, onClose, onDone }) {
   const doImport = async () => {
     setPhase('importing'); setError(''); setServerResult(null);
     try {
-      // ponytail: BE accepts one role per batch — group client-side, one call each.
+      // rationale: BE accepts one role per batch — group client-side, one call each.
       const groups = {};
       validRows.forEach((r) => { (groups[r.role] = groups[r.role] || []).push(r); });
       const merged = { created: 0, updated: 0, errors: [] };
@@ -134,7 +134,7 @@ export default function UserImportModal({ api, onClose, onDone }) {
     setServerResult(null); setError('');
   };
 
-  // ponytail: portaled to document.body so fixed inset-0 always covers the
+  // rationale: portaled to document.body so fixed inset-0 always covers the
   // viewport — immune to ancestor transform/filter capture and scroll containers
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-xs" onClick={onClose}>
@@ -150,7 +150,7 @@ export default function UserImportModal({ api, onClose, onDone }) {
           {t('admin.downloadTemplate')}
         </button>
 
-        {/* ponytail: dev-only bypass — stripped from production builds by Vite */}
+        {/* rationale: dev-only bypass — stripped from production builds by Vite */}
         {import.meta.env.DEV && (
         <label className="mt-3 flex items-start gap-2.5 rounded-xl border border-(--border) bg-(--surface-secondary) p-3 cursor-pointer">
           <input

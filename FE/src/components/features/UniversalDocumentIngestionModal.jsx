@@ -98,7 +98,7 @@ export default function UniversalDocumentIngestionModal({
       const targetProjId = String(entityId);
       if (String(doc.projectId) === targetProjId) return true;
       if (Array.isArray(doc.projectIds) && doc.projectIds.some(pid => String(pid) === targetProjId)) return true;
-      // ponytail: library DTO uses projects:[{id}] instead of projectIds
+      // rationale: library DTO uses projects:[{id}] instead of projectIds
       if (Array.isArray(doc.projects) && doc.projects.some(p => String(p?.id) === targetProjId)) return true;
     }
 
@@ -107,7 +107,7 @@ export default function UniversalDocumentIngestionModal({
       const targetColId = String(entityId);
       if (String(doc.collectionId) === targetColId) return true;
       if (Array.isArray(doc.collectionIds) && doc.collectionIds.some(cid => String(cid) === targetColId)) return true;
-      // ponytail: library DTO uses collections:[{id}]
+      // rationale: library DTO uses collections:[{id}]
       if (Array.isArray(doc.collections) && doc.collections.some(c => String(c?.id) === targetColId)) return true;
     }
 
@@ -332,7 +332,7 @@ export default function UniversalDocumentIngestionModal({
       return;
     }
 
-    // ponytail: block non-ready docs before POST so a 409 never looks like success
+    // rationale: block non-ready docs before POST so a 409 never looks like success
     const notReady = sourceIdsToShare
       .map(sid => collectionSources.find(s => String(s.id) === String(sid)))
       .filter(doc => doc && !['READY', 'COMPLETED'].includes(doc.processingStatus));
@@ -361,7 +361,7 @@ export default function UniversalDocumentIngestionModal({
       if (failed.length < sourceIdsToShare.length && onSuccess) await onSuccess();
       return;
     }
-    // ponytail: library list caches projects[] — force refetch so new share shows checked there
+    // rationale: library list caches projects[] — force refetch so new share shows checked there
     setLibrarySources([]);
     setSelectedCollectionSourceIds(new Set());
     if (onSuccess) await onSuccess();
@@ -430,7 +430,7 @@ export default function UniversalDocumentIngestionModal({
       if (failed.length < sourceIdsToAdd.length && onSuccess) await onSuccess();
       return;
     }
-    // ponytail: collection tab caches projectIds — stale checked state until refetch
+    // rationale: collection tab caches projectIds — stale checked state until refetch
     setCollectionSources([]);
     setSelectedLibraryIds(new Set());
     if (onSuccess) await onSuccess();

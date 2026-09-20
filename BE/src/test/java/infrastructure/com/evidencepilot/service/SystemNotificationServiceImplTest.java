@@ -62,6 +62,16 @@ class SystemNotificationServiceImplTest {
     }
 
     @Test
+    void markAllCurrentUserNotificationsReadUsesOneOwnedBulkUpdate() {
+        UUID currentUserId = UUID.randomUUID();
+        when(currentUserService.requireCurrentUser()).thenReturn(user(currentUserId));
+        when(systemNotificationRepository.markAllUnreadByUserId(currentUserId)).thenReturn(3);
+
+        assertThat(service.markAllCurrentUserNotificationsRead()).isEqualTo(3L);
+        verify(systemNotificationRepository).markAllUnreadByUserId(currentUserId);
+    }
+
+    @Test
     void createNotificationPersistsAndPushesToUserQueue() {
         UUID recipientId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();

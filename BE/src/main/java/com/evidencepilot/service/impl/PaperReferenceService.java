@@ -9,6 +9,7 @@ import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
@@ -56,9 +57,6 @@ public class PaperReferenceService {
             "(?m)(?=^[ \\t]*(?:-[ \\t]*)?(?:\\[\\d+]|\\d+[.)])[ \\t]+)");
     private static final Pattern REFERENCE_NUMBER_PATTERN = Pattern.compile(
             "^[ \\t]*(?:-[ \\t]*)?(?:\\[(\\d+)]|(\\d+)[.)])[ \\t]+");
-    private static final Set<String> REFERENCE_TITLES = Set.of(
-            "references", "reference", "bibliography", "works cited");
-
     private record ParsedEntry(
             String rawText, String citationKey, String doi, Integer year, Integer number) {
     }
@@ -85,7 +83,7 @@ public class PaperReferenceService {
         List<PaperSection> referenceSections = paperSectionRepository
                 .findByDocumentIdOrderBySectionOrderAsc(paperId).stream()
                 .filter(PaperSection::isActive)
-                .filter(section -> isReferenceTitle(section.getSectionTitle()))
+                .filter(PaperReferenceService::isReferenceSection)
                 .toList();
         if (referenceSections.isEmpty()) {
             return emptyCheck(false);
@@ -108,8 +106,8 @@ public class PaperReferenceService {
         return response(true, items);
     }
 
-    private static boolean isReferenceTitle(String title) {
-        return REFERENCE_TITLES.contains(normalizeText(title));
+    private static boolean isReferenceSection(PaperSection section) {
+        return section != null && section.getSectionType() == PaperSectionType.REFERENCE;
     }
 
     private static List<ParsedEntry> parseEntries(List<PaperSection> sections) {
@@ -332,7 +330,7 @@ public class PaperReferenceService {
         List<PaperSection> sections = paperSectionRepository
                 .findByDocumentIdOrderBySectionOrderAsc(paperId).stream()
                 .filter(PaperSection::isActive)
-                .filter(section -> isReferenceTitle(section.getSectionTitle()))
+                .filter(PaperReferenceService::isReferenceSection)
                 .toList();
         List<Document> visibleSources = sourceMatchingService.activeSources(paper.getProject().getId());
         Map<UUID, Integer> citationNumbers = referenceNumbers(sections, visibleSources);
@@ -364,7 +362,7 @@ public class PaperReferenceService {
         List<PaperSection> sections = paperSectionRepository
                 .findByDocumentIdOrderBySectionOrderAsc(paperId).stream()
                 .filter(PaperSection::isActive)
-                .filter(section -> isReferenceTitle(section.getSectionTitle()))
+                .filter(PaperReferenceService::isReferenceSection)
                 .toList();
         return referenceNumbers(sections, visibleSources);
     }
@@ -397,6 +395,7 @@ public class PaperReferenceService {
         PaperSection section = new PaperSection();
         section.setActive(true);
         section.setSectionTitle("References");
+        section.setSectionType(PaperSectionType.REFERENCE);
         section.setContentTex(content == null ? "" : content);
         return section;
     }

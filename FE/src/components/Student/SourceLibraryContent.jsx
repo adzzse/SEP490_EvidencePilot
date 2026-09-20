@@ -5,7 +5,7 @@ import { prepareProjectDoiImport } from '../../utils/student/doiImport.js';
 import { getSourceDownloadUrl } from '../../utils/student/sourceDownload.js';
 import PaperReferencesPanel from './PaperReferencesPanel.jsx';
 
-// ponytail: Sources body extracted from ContextPanel so the Instructor review left
+// rationale: Sources body extracted from ContextPanel so the Instructor review left
 // column can reuse it without duplicating logic. Owns its own UI state.
 export default function SourceLibraryContent({
   sources, project, isLocked, setViewerFile, fetchSources, onOpenSourceMap,
@@ -104,13 +104,13 @@ export default function SourceLibraryContent({
   const visibleSources = (sources || []).filter(src => (src.originalFilename || '').toLowerCase().includes(sourceSearchQuery.trim().toLowerCase()));
 
   return (
-    // ponytail: review (compact) lives inside the FilePanel scroll container, so the root
+    // rationale: review (compact) lives inside the FilePanel scroll container, so the root
     // stays bare — padding/scroll come from the parent and no overflow-* may trap sticky.
     // Student keeps its original classes untouched.
     <div className={compact
       ? 'flex min-w-0 flex-col gap-4'
       : 'p-5 gap-6 flex flex-col min-w-0 max-w-full overflow-x-hidden animate-in fade-in duration-300'}>
-      {/* ponytail: review-only sticky band mirrors the Media Asset search bar (FilePanel.jsx); student tab keeps the plain row. */}
+      {/* rationale: review-only sticky band mirrors the Media Asset search bar (FilePanel.jsx); student tab keeps the plain row. */}
       <div className={compact
         ? 'sticky top-0 z-10 -mx-3 flex items-center gap-2 border-b border-(--border) bg-(--surface-secondary) px-3 py-2'
         : 'flex items-center gap-2'}>

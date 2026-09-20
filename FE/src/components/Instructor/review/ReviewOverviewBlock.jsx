@@ -1,10 +1,9 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDate, formatDateTime } from '../../../utils/formatters/date.js';
-import { isReferenceSectionTitle } from '../../../utils/formatters/latexHtml.js';
 
 function confirmationFor(section) {
-  if (isReferenceSectionTitle(section?.sectionTitle || section?.title)) {
+  if (section?.sectionType === 'REFERENCE') {
     return { state: 'NOT_REQUIRED', confirmedBy: null, confirmedAt: null };
   }
   const confirmedBy = section?.confirmedByName ?? section?.handoffConfirmedByName ?? null;

@@ -13,7 +13,7 @@ export default function Modal({ open, onClose, title, children, wide, className,
 
   if (!open) return null;
 
-  // ponytail: portal to body — ancestors with backdrop-filter/filter/transform
+  // rationale: portal to body — ancestors with backdrop-filter/filter/transform
   // (e.g. WorkspaceHeader's backdrop-blur-md) otherwise become the containing
   // block for `fixed` and pin the overlay to the header strip.
   return createPortal(

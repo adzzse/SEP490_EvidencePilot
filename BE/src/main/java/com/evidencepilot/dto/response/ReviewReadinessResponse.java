@@ -1,5 +1,7 @@
 package com.evidencepilot.dto.response;
 
+import com.evidencepilot.model.enums.PaperSectionType;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -32,6 +34,7 @@ public record ReviewReadinessResponse(
             UUID id,
             UUID paperId,
             String title,
+            PaperSectionType sectionType,
             Integer order,
             Integer contentVersion,
             Long revision,

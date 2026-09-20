@@ -8,7 +8,7 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
   const { t } = useTranslation();
   const [mediaSearchQuery, setMediaSearchQuery] = useState('');
   const [hoveredMedia, setHoveredMedia] = useState(null);
-  // ponytail: review left column groups; Paper open by default, selection lives in the parent so it survives collapse
+  // rationale: review left column groups; Paper open by default, selection lives in the parent so it survives collapse
   const [openGroups, setOpenGroups] = useState({ paper: true, sources: false, media: false });
   const toggleGroup = key => setOpenGroups(previous => ({ ...previous, [key]: !previous[key] }));
 

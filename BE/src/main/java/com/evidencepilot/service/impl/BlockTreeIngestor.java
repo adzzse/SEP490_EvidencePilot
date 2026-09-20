@@ -3,6 +3,7 @@ package com.evidencepilot.service.impl;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentMetadata;
 import com.evidencepilot.model.PaperSection;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.service.AiModelClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -80,6 +81,8 @@ public class BlockTreeIngestor {
             section.setSectionOrder(order);
             order += ORDER_STEP;
             section.setSectionTitle(seed.title);
+            section.setSectionType(isReferencesHeader(seed.title)
+                    ? PaperSectionType.REFERENCE : PaperSectionType.STANDARD);
             section.setHeadingLevel(2);
             section.setSourceBlockStart(seed.blockStart);
             section.setSourceBlockEnd(seed.blockEnd);

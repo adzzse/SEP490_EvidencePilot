@@ -1,6 +1,6 @@
 export default function UserDetailCard({ user }) {
   if (!user) return null;
-  // ponytail: prop-driven, falls back to spec example values so the card renders standalone
+  // rationale: prop-driven, falls back to spec example values so the card renders standalone
   const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.name || 'Test Student';
   const initials =
     `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase() ||

@@ -60,7 +60,7 @@ export default function InstructorDashboard() {
   }, []);
 
   const startTour = async () => {
-    // ponytail: driver.js (+css) loads on first tour click, not with the page.
+    // rationale: driver.js (+css) loads on first tour click, not with the page.
     const [{ driver }, _css] = await Promise.all([
       import('driver.js'),
       import('driver.js/dist/driver.css'),

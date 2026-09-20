@@ -48,6 +48,13 @@ public class SystemNotificationController {
                 systemNotificationService.countCurrentUserUnreadNotifications());
     }
 
+    @Operation(summary = "Mark all current user's notifications as read")
+    @PatchMapping("/read-all")
+    public SystemNotificationUnreadCountResponse markAllRead() {
+        return new SystemNotificationUnreadCountResponse(
+                systemNotificationService.markAllCurrentUserNotificationsRead());
+    }
+
     @Operation(summary = "Mark one notification as read")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Notification marked read"),

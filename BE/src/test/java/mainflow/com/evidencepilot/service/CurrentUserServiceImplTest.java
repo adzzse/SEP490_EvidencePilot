@@ -5,6 +5,7 @@ import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
@@ -84,7 +85,7 @@ class CurrentUserServiceImplTest {
     }
 
     @Test
-    void sectionContentWriteFollowsAssignmentAndRejectsInstructor() {
+    void sectionContentWriteAllowsProjectInstructorAndKeepsStudentAssignmentRules() {
         User assigned = user(UserRole.STUDENT);
         User otherStudent = user(UserRole.STUDENT);
         User instructor = user(UserRole.INSTRUCTOR);
@@ -104,10 +105,8 @@ class CurrentUserServiceImplTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode())
                         .isEqualTo(HttpStatus.FORBIDDEN));
-        assertThatThrownBy(() -> service().requireSectionContentWriteAccess(instructor, section))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode())
-                        .isEqualTo(HttpStatus.FORBIDDEN));
+        assertThatCode(() -> service().requireSectionContentWriteAccess(instructor, section))
+                .doesNotThrowAnyException();
 
         section.setAssignedUser(null);
         assertThatThrownBy(() -> service().requireSectionContentWriteAccess(otherStudent, section))
@@ -117,7 +116,7 @@ class CurrentUserServiceImplTest {
     }
 
     @Test
-    void activeStudentMembersCanEditUnassignedReferencesButNotOtherStudentsSections() {
+    void activeStudentMembersCanEditUnassignedReferencesAndInstructorsCanEditProjectSections() {
         User leader = user(UserRole.STUDENT);
         User member = user(UserRole.STUDENT);
         User nonMember = user(UserRole.STUDENT);
@@ -131,11 +130,11 @@ class CurrentUserServiceImplTest {
         PaperSection references = new PaperSection();
         references.setDocument(document);
         references.setSectionTitle("References");
+        references.setSectionType(PaperSectionType.REFERENCE);
         PaperSection introduction = new PaperSection();
         introduction.setDocument(document);
         introduction.setSectionTitle("Introduction");
         introduction.setAssignedUser(leader);
-        when(paperStandardService.isReferenceSectionTitle("References")).thenReturn(true);
 
         assertThatCode(() -> service().requireSectionContentWriteAccess(member, references))
                 .doesNotThrowAnyException();
@@ -143,8 +142,8 @@ class CurrentUserServiceImplTest {
                 .isInstanceOf(ResponseStatusException.class);
         assertThatThrownBy(() -> service().requireSectionContentWriteAccess(nonMember, references))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> service().requireSectionContentWriteAccess(instructor, references))
-                .isInstanceOf(ResponseStatusException.class);
+        assertThatCode(() -> service().requireSectionContentWriteAccess(instructor, references))
+                .doesNotThrowAnyException();
 
         project.setStatus(ProjectStatus.SUBMITTED_FOR_REVIEW);
         assertThatThrownBy(() -> service().requireSectionContentWriteAccess(member, references))

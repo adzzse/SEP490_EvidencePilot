@@ -6,6 +6,7 @@ import com.evidencepilot.dto.response.ComparisonSourceDto;
 import com.evidencepilot.dto.response.FeedbackAttachmentResponseDto;
 import com.evidencepilot.dto.response.FeedbackReplyResponseDto;
 import com.evidencepilot.dto.response.FeedbackRequestResponseDto;
+import com.evidencepilot.dto.response.FeedbackRequestPageResponse;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
 import com.evidencepilot.dto.response.ReviewSubmissionSnapshotResponse;
 import com.evidencepilot.dto.response.ReviewSectionSnapshotDto;
@@ -39,12 +40,17 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -58,6 +64,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class FeedbackServiceImpl {
+
+    private static final ZoneId INSTRUCTOR_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final FeedbackRequestRepository feedbackRequestRepository;
     private final InstructorFeedbackRepository instructorFeedbackRepository;
@@ -79,13 +87,46 @@ public class FeedbackServiceImpl {
         User currentUser = currentUserService.requireCurrentUser();
         List<FeedbackRequest> requests;
         if (isAdmin(currentUser)) {
-            requests = feedbackRequestRepository.findAll(Sort.by(Sort.Direction.DESC, "requestedAt"));
+            requests = feedbackRequestRepository.findAll(Sort.by(
+                    Sort.Order.desc("requestedAt"), Sort.Order.desc("id")));
         } else if (isInstructor(currentUser)) {
             requests = feedbackRequestRepository.findByInstructorIdOrderByRequestedAtDesc(currentUser.getId());
         } else {
             requests = feedbackRequestRepository.findVisibleToStudent(currentUser.getId());
         }
         return requests.stream().map(FeedbackRequestResponseDto::fromEntity).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public FeedbackRequestPageResponse findQueueForCurrentUser(
+            int page,
+            int size,
+            UUID projectId,
+            FeedbackStatus status,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            String search) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw badRequest("page must be >= 0 and size must be between 1 and 100.");
+        }
+        if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
+            throw badRequest("dateFrom must be on or before dateTo.");
+        }
+        User currentUser = currentUserService.requireCurrentUser();
+        if (!isAdmin(currentUser) && !isInstructor(currentUser)) {
+            throw forbidden("Only instructors can view the review queue.");
+        }
+        String normalizedSearch = search == null || search.isBlank() ? null : search.trim();
+        LocalDateTime fromTime = utcStart(dateFrom);
+        LocalDateTime toTimeExclusive = dateTo == null
+                ? null
+                : utcStart(dateTo.plusDays(1));
+        Page<FeedbackRequest> result = isAdmin(currentUser)
+                ? feedbackRequestRepository.findCurrentForAll(projectId, status, fromTime,
+                        toTimeExclusive, normalizedSearch, PageRequest.of(page, size))
+                : feedbackRequestRepository.findCurrentForInstructor(currentUser.getId(), projectId, status,
+                        fromTime, toTimeExclusive, normalizedSearch, PageRequest.of(page, size));
+        return FeedbackRequestPageResponse.from(result);
     }
 
     @Transactional(readOnly = true)
@@ -352,7 +393,7 @@ public class FeedbackServiceImpl {
         return switch (next) {
             case RETURNED -> returnReview(feedbackRequestId, currentUser);
             case REVIEWED -> approveReview(feedbackRequestId, currentUser);
-            // ponytail: request-Reject is retired from the active workflow
+            // rationale: request-Reject is retired from the active workflow
             // (Return covers revision). FeedbackStatus.REJECTED still exists
             // for legacy rows — reads, history, and comparison-skip honor it.
             case REJECTED -> throw conflict("Review rejection is retired; use Return for Revision.");
@@ -386,6 +427,7 @@ public class FeedbackServiceImpl {
         }
 
         transition(request, project, FeedbackStatus.RETURNED, ProjectStatus.RETURNED, now);
+        request.setReturnedAt(now);
         writeSnapshots(request,
                 paperSectionRepository.findByDocument_Project_IdOrderByDocument_IdAscSectionOrderAsc(project.getId()),
                 SnapshotType.BASELINE, now);
@@ -398,7 +440,7 @@ public class FeedbackServiceImpl {
         FeedbackRequest request = requireFeedbackAccessForUpdate(id, currentUser, true);
         Project project = lockProject(request);
         requireLatestRequest(request, project);
-        if (request.getStatus() != FeedbackStatus.PENDING && request.getStatus() != FeedbackStatus.RETURNED) {
+        if (request.getStatus() != FeedbackStatus.PENDING) {
             throw conflict("Approve requires the latest submitted review request.");
         }
         if (project.getStatus().isReadOnly()) throw conflict("Project is read-only.");
@@ -413,6 +455,7 @@ public class FeedbackServiceImpl {
             instructorFeedbackRepository.save(root);
         }
         transition(request, project, FeedbackStatus.REVIEWED, ProjectStatus.APPROVED, now);
+        request.setReviewedAt(now);
         checkpointService.capture(project.getId(), "REVIEW_STATUS:REVIEWED");
         return FeedbackRequestResponseDto.fromEntity(request);
     }
@@ -681,6 +724,11 @@ public class FeedbackServiceImpl {
 
     private boolean isInstructor(User user) {
         return user != null && (user.getRole() == UserRole.INSTRUCTOR || currentUserService.isInstructor(user));
+    }
+
+    private static LocalDateTime utcStart(LocalDate date) {
+        return date == null ? null
+                : date.atStartOfDay(INSTRUCTOR_ZONE).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
     }
 
     private static boolean hasSnapshot(FeedbackRequest request) {

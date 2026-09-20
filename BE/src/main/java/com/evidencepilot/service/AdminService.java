@@ -37,6 +37,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
@@ -58,6 +59,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import jakarta.persistence.criteria.Predicate;
 
 @Service
 @RequiredArgsConstructor
@@ -466,15 +468,23 @@ public class AdminService {
     }
 
     private List<Map<String, Object>> queueRows(ProcessingStatus status, LocalDate from, LocalDate to) {
-        // ponytail: date filtering happens in memory — the four status lists are
+        // rationale: date filtering happens in memory — the four status lists are
         // small by design (50 live / 500 history cap), so no extra query needed.
-        var stream = documents.findByProcessingStatusAndActiveTrue(status).stream()
-                .filter(d -> from == null
-                        || (d.getCreatedAt() != null && !d.getCreatedAt().toLocalDate().isBefore(from)))
-                .filter(d -> to == null
-                        || (d.getCreatedAt() != null && !d.getCreatedAt().toLocalDate().isAfter(to)));
         long limit = (from != null || to != null) ? 500 : 50;
-        return stream.limit(limit).map(d -> {
+        Specification<Document> filter = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("processingStatus"), status));
+            predicates.add(cb.isTrue(root.get("active")));
+            if (from != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), from.atStartOfDay()));
+            }
+            if (to != null) {
+                predicates.add(cb.lessThan(root.get("createdAt"), to.plusDays(1).atStartOfDay()));
+            }
+            query.orderBy(cb.desc(root.get("createdAt")), cb.desc(root.get("id")));
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+        return documents.findAll(filter, PageRequest.of(0, (int) limit)).getContent().stream().map(d -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", d.getId());
             m.put("originalFilename", d.getOriginalFilename());
@@ -572,7 +582,7 @@ public class AdminService {
 
     @Transactional
     public ProjectResponse adminArchiveProject(UUID id) {
-        // ponytail: admins are restricted to un-archive only — they cannot archive
+        // rationale: admins are restricted to un-archive only — they cannot archive
         // a project. The archive path lives on the instructor endpoint and the
         // existing per-membership guard. The admin endpoint stays wired so the
         // FE doesn't 404, but every call is rejected with 403.

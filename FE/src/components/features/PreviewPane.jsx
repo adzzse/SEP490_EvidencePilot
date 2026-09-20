@@ -25,7 +25,7 @@ function MissingImage({ alt }) {
   return <span className="text-red-500 text-xs">{t('student.workspace.missingImage', { alt: alt || t('student.workspace.defaultImageAlt') })}</span>;
 }
 
-// ponytail: injected <ins>/<del> diff tags can split a math block and make the
+// rationale: injected <ins>/<del> diff tags can split a math block and make the
 // KaTeX AST parser throw. Fall back to a raw preformatted string, never crash.
 class PreviewDiffBoundary extends Component {
   constructor(props) {
@@ -82,18 +82,18 @@ export default function PreviewPane({
   onScroll,
   scrollRef,
   zoom = 100,
-  // ponytail: shared changeRanges from useInstructorReview — same model as the LaTeX editor.
+  // rationale: shared changeRanges from useInstructorReview — same model as the LaTeX editor.
   changeRanges = [],
   onPreviewSelect,
 }) {
   const { t } = useTranslation();
-  // ponytail: shared hook — concurrent mounts reuse one in-flight /api/media/urls.
+  // rationale: shared hook — concurrent mounts reuse one in-flight /api/media/urls.
   const mediaUrlMap = useMediaUrlMap(mediaAssets);
 
-  // ponytail: keystrokes stay at 60fps — the full remark+KaTeX parse runs
+  // rationale: keystrokes stay at 60fps — the full remark+KaTeX parse runs
   // against the deferred value while the editor updates instantly.
   const deferredLatex = useDeferredValue(latex);
-  // ponytail: normalize once so the parser, the source-offset serializer, and
+  // rationale: normalize once so the parser, the source-offset serializer, and
   // the anchor contract all measure the same canonical source (raw \r\n
   // lengths would drift every from/to).
   const source = useMemo(() => normalizeSource(deferredLatex), [deferredLatex]);
@@ -120,7 +120,7 @@ export default function PreviewPane({
   );
   const components = useMemo(
     () => ({
-      // ponytail: hast data-* props arrive verbatim; no node handling needed
+      // rationale: hast data-* props arrive verbatim; no node handling needed
       // (top-level scroll anchors come from rehypeAnchors).
       'asset-toggle': ({ children, ...props }) => (
         <AssetToggle

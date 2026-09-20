@@ -5,7 +5,25 @@ function toDate(dateInput) {
     && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(dateInput)
     ? `${dateInput}Z`
     : dateInput;
-  return new Date(normalized);
+return new Date(normalized);
+}
+
+const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+
+function vietnamParts(dateInput, includeSeconds = false) {
+  const date = toDate(dateInput);
+  if (isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: VIETNAM_TIME_ZONE,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(includeSeconds ? { second: '2-digit' } : {}),
+  }).formatToParts(date);
+  return Object.fromEntries(parts.filter(({ type }) => type !== 'literal').map(({ type, value }) => [type, value]));
 }
 
 /**
@@ -16,11 +34,10 @@ function toDate(dateInput) {
  */
 export function formatDate(dateInput, lang = 'vi') {
   if (!dateInput) return '—';
-  const d = toDate(dateInput);
-  if (isNaN(d.getTime())) return '—';
+  const parts = vietnamParts(dateInput);
+  if (!parts) return '—';
   void lang;
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+  return `${parts.day}-${parts.month}-${parts.year}`;
 }
 
 /**
@@ -31,9 +48,16 @@ export function formatDate(dateInput, lang = 'vi') {
  */
 export function formatDateTime(dateInput, lang = 'vi') {
   if (!dateInput) return '—';
-  const d = toDate(dateInput);
-  if (isNaN(d.getTime())) return '—';
+  const parts = vietnamParts(dateInput);
+  if (!parts) return '—';
   void lang;
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+  return `${parts.hour}:${parts.minute} ${parts.day}-${parts.month}-${parts.year}`;
+}
+
+export function formatDateTimeSeconds(dateInput, lang = 'vi') {
+  if (!dateInput) return '—';
+  const parts = vietnamParts(dateInput, true);
+  if (!parts) return '—';
+  void lang;
+  return `${parts.hour}:${parts.minute}:${parts.second} ${parts.day}-${parts.month}-${parts.year}`;
 }

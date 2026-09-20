@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-// ponytail: driver.js (+css) loads on first tour start, not with the bundle.
+// rationale: driver.js (+css) loads on first tour start, not with the bundle.
 const loadDriver = () => Promise.all([
   import('driver.js'),
   import('driver.js/dist/driver.css'),

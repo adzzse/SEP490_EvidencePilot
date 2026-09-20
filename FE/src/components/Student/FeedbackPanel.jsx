@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { roundNumberFor } from '../../utils/reviewRounds.js';
+import { formatDateTime } from '../../utils/formatters/date.js';
 
 const control = 'min-w-0 rounded-md border border-(--border) bg-(--surface) px-2 py-1.5 text-xs text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)';
 const FEEDBACK_REQUEST_STATUSES = new Set(['PENDING', 'RETURNED', 'REVIEWED', 'REJECTED']);
 
-// ponytail: plain stacked cards in normal flow — no anchor-mirrored absolute
+// rationale: plain stacked cards in normal flow — no anchor-mirrored absolute
 // layout (it left giant gaps when anchors sat far apart), no connector line,
 // no Go-to dropdown. Card click + editor-highlight click still select.
 export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect, onClose, visible,
@@ -34,7 +35,7 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
   }, [activeId, visible, filtered.length]);
 
   const select = item => onSelect(item);
-  const date = value => value ? new Date(value).toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US') : '';
+  const date = value => value ? formatDateTime(value, i18n.language) : '';
   return <section aria-label={t('studentFeedback.title')} className="flex h-full min-h-0 flex-col text-(--text-primary)"
     onKeyDown={event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
     <div className="shrink-0 border-b border-(--border) bg-(--surface) px-3 py-2 space-y-2">

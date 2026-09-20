@@ -14,6 +14,8 @@ export const API_ROUTES = Object.freeze({
   PROJECTS: Object.freeze({
     BASE: '/api/projects',
     BY_ID: (id) => `/api/projects/${id}`,
+    RESTORE: (id) => `/api/projects/${id}/restore`,
+    UNASSIGN_ALL: (projectId, userId) => `/api/projects/${projectId}/members/${userId}/unassign-all`,
     SOURCE_MAP: (id) => `/api/projects/${id}/source-map`,
   }),
   PAPERS: Object.freeze({

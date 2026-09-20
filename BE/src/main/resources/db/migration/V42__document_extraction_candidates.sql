@@ -1,0 +1,22 @@
+CREATE TABLE document_extraction_candidates (
+    id BINARY(16) NOT NULL PRIMARY KEY,
+    document_id BINARY(16) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    previous_processing_status VARCHAR(50) NOT NULL,
+    previous_chunk_count INT,
+    previous_processed_at DATETIME,
+    previous_processing_error TEXT,
+    source_file_url VARCHAR(500) NOT NULL,
+    source_file_hash_sha256 VARCHAR(64),
+    extraction_method VARCHAR(50),
+    extracted_markdown LONGTEXT,
+    blocks_json LONGTEXT,
+    chunks_json LONGTEXT,
+    bundle_key VARCHAR(500),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    prepared_at DATETIME,
+    failed_at DATETIME,
+    failure_message TEXT,
+    INDEX idx_extraction_candidates_document_status (document_id, status),
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);

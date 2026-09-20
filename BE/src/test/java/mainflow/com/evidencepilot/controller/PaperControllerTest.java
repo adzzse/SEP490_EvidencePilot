@@ -15,6 +15,7 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.PaperStandard;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
@@ -582,6 +583,7 @@ class PaperControllerTest {
                 null,
                 1,
                 "Section",
+                PaperSectionType.STANDARD,
                 null,
                 2,
                 content,

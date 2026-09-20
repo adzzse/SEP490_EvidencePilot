@@ -90,6 +90,10 @@ export function AuthProvider({ children }) {
         logout();
       }
     };
+    const onAuthRevoked = () => {
+      sessionStorage.setItem('auth_expired_notice', 'Your account is no longer active.');
+      onAuthExpired();
+    };
     const onAuthRefreshed = (e) => {
       setToken(e.detail?.token ?? null);
       setUser(e.detail?.user ?? null);
@@ -112,10 +116,12 @@ export function AuthProvider({ children }) {
       }
     };
     window.addEventListener('auth:expired', onAuthExpired);
+    window.addEventListener('auth:revoked', onAuthRevoked);
     window.addEventListener('auth:refreshed', onAuthRefreshed);
     window.addEventListener('storage', onStorage);
     return () => {
       window.removeEventListener('auth:expired', onAuthExpired);
+      window.removeEventListener('auth:revoked', onAuthRevoked);
       window.removeEventListener('auth:refreshed', onAuthRefreshed);
       window.removeEventListener('storage', onStorage);
     };

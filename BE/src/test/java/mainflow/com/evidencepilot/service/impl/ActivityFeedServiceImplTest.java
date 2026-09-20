@@ -163,7 +163,7 @@ class ActivityFeedServiceImplTest {
 
         assertThat(resp.role()).isEqualTo(UserRole.STUDENT);
         assertThat(resp.items()).hasSize(1);
-        // ponytail: student "section" rows link to the project root only.
+        // rationale: student "section" rows link to the project root only.
         assertThat(resp.items().get(0).type()).isEqualTo("project-section");
         assertThat(resp.items().get(0).entityId()).isEqualTo(sectionId);
         assertThat(resp.items().get(0).projectId()).isEqualTo(projectId);

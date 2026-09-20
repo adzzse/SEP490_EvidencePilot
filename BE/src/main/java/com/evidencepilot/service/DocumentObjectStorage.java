@@ -152,6 +152,10 @@ public class DocumentObjectStorage {
                 : prefix + fileHashSha256 + "/extraction.json";
     }
 
+    public static String extractionCandidateKey(UUID candidateId) {
+        return "documents/processed/candidates/" + candidateId + "/extraction.zip";
+    }
+
     public static String extractionCacheKey(String fileHashSha256, boolean enrichHierarchy) {
         if (fileHashSha256 == null
                 || fileHashSha256.length() != 64

@@ -11,6 +11,7 @@ import com.evidencepilot.model.ReviewSnapshot;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.PaperStandard;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.prompt.SectionCitationReviewPrompt;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ReviewSnapshotRepository;
@@ -816,7 +817,7 @@ class SectionCitationReviewServiceTest {
                 new AiModelClient.GenerationResult(
                         "provider", "model", review(sectionId, 0, okVerdict(0))));
 
-        // ponytail: partial finals are served (refresh never blanks finished work),
+        // rationale: partial finals are served (refresh never blanks finished work),
         // but run() still repays fully — findings can't be mapped back to batches.
         assertThat(service.cached(documentId, sectionId))
                 .isPresent()
@@ -1004,7 +1005,7 @@ class SectionCitationReviewServiceTest {
         assertThat(result.limitations()).singleElement().asString().contains("Batch 2/2");
         assertThat(progress).containsExactly("0/2", "1/2", "2/2");
         verify(aiModelClient, times(2)).generateForReview(anyString(), anyString());
-        // ponytail: partial finals persist now — a re-click resumes instead of repaying batch 1.
+        // rationale: partial finals persist now — a re-click resumes instead of repaying batch 1.
         verify(reviewPersistence).saveFinalSnapshot(any(), anyString(),
                 argThat(review -> !review.complete() && review.findings().isEmpty()));
         verify(reviewPersistence).saveBatchSnapshot(any(), anyString(), eq(0), any());
@@ -1377,7 +1378,7 @@ class SectionCitationReviewServiceTest {
         assertThatThrownBy(() -> service.run(document, project, id, expected, UUID.randomUUID()))
                 .isInstanceOf(ResponseStatusException.class).hasMessageContaining("SECTION_REVIEW_INPUT_CHANGED");
         verify(aiModelClient, times(2)).generateForReview(eq(before.systemText()), anyString());
-        // ponytail: the 409 aborts before the final write, but batch 1's snapshot survives it.
+        // rationale: the 409 aborts before the final write, but batch 1's snapshot survives it.
         verify(reviewPersistence, never()).saveFinalSnapshot(any(), anyString(), any());
         verify(reviewPersistence).saveBatchSnapshot(any(), anyString(), eq(0), any());
     }
@@ -1456,6 +1457,9 @@ class SectionCitationReviewServiceTest {
         section.setId(sectionId);
         section.setDocument(document);
         section.setSectionTitle(title);
+        if ("References".equals(title) || "Bibliography".equals(title) || "Works Cited".equals(title)) {
+            section.setSectionType(PaperSectionType.REFERENCE);
+        }
         section.setContentTex(content);
         section.setVersion(2);
         section.setActive(true);

@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.mail.MailException;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -175,6 +176,17 @@ public class EmailOtpServiceImpl {
         claim.setConsumedAt(LocalDateTime.now());
         otpClaimRepository.save(claim);
         return true;
+    }
+
+    @Scheduled(cron = "${app.email-otp.cleanup-cron:0 0 * * * *}")
+    @Transactional
+    public void cleanupExpiredData() {
+        LocalDateTime cutoff = LocalDateTime.now().minusHours(24);
+        int tokens = otpTokenRepository.deleteOlderThan(cutoff);
+        int claims = otpClaimRepository.deleteOlderThan(cutoff);
+        if (tokens > 0 || claims > 0) {
+            log.info("Removed {} old email OTP tokens and {} old email OTP claims", tokens, claims);
+        }
     }
 
     private void sendOtpEmail(String to, String code) {

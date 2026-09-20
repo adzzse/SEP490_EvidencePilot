@@ -5,6 +5,7 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
@@ -203,7 +204,10 @@ public class CurrentUserServiceImpl {
                     org.springframework.http.HttpStatus.CONFLICT,
                     "Section is inactive.");
         }
-        if (paperStandardService.isReferenceSectionTitle(section.getSectionTitle())
+        if (isAdmin(currentUser) || isInstructor(currentUser)) {
+            return;
+        }
+        if (section.getSectionType() == PaperSectionType.REFERENCE
                 && currentUser.getRole() == UserRole.STUDENT
                 && currentUser.getAccountStatus() == AccountStatus.ACTIVE
                 && hasProjectRole(currentUser, section.getDocument().getProject(),

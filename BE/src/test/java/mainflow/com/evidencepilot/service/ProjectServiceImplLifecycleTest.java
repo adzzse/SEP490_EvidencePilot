@@ -100,6 +100,20 @@ class ProjectServiceImplLifecycleTest {
     }
 
     @Test
+    void completeRejectsReturnedProjectUntilStudentResubmits() {
+        User user = user();
+        Project project = project(ProjectStatus.RETURNED);
+
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+
+        assertThatThrownBy(() -> service().completeProject(project.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Project cannot be completed in its current state.");
+        verify(projectRepository, never()).save(project);
+    }
+
+    @Test
     void archiveCompletedProjectMarksArchived() {
         User user = user();
         Project project = project(ProjectStatus.APPROVED);
@@ -308,6 +322,68 @@ class ProjectServiceImplLifecycleTest {
     }
 
     @Test
+    void projectServiceExposesARecoverableRestoreOperation() throws NoSuchMethodException {
+        assertThat(ProjectServiceImpl.class.getMethod("restoreProject", UUID.class)).isNotNull();
+    }
+
+    @Test
+    void restoreProjectReactivatesTrashWithoutChangingLifecycleStatus() {
+        User user = user();
+        Project project = project(ProjectStatus.ARCHIVED);
+        project.setActive(false);
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(projectRepository.save(project)).thenReturn(project);
+
+        var response = service().restoreProject(project.getId());
+
+        assertThat(project.isActive()).isTrue();
+        assertThat(response.status()).isEqualTo(ProjectStatus.ARCHIVED);
+        verify(currentUserService).requireProjectManageAccess(user, project);
+        verify(auditService).record("PROJECT_RESTORED", "PROJECT", project.getId(), user, null, null);
+    }
+
+    @Test
+    void restoreActiveProjectRejectsWithoutSaving() {
+        User user = user();
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+
+        assertThatThrownBy(() -> service().restoreProject(project.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Project is not in trash.");
+        verify(projectRepository, never()).save(project);
+    }
+
+    @Test
+    void paperSectionRepositoryExposesProjectScopedAssignmentClear() throws NoSuchMethodException {
+        assertThat(PaperSectionRepository.class.getMethod(
+                "clearAssignmentsForProjectAndUser", UUID.class, UUID.class)).isNotNull();
+    }
+
+    @Test
+    void projectServiceExposesAtomicUnassignAllOperation() throws NoSuchMethodException {
+        assertThat(ProjectServiceImpl.class.getMethod(
+                "unassignAllSections", UUID.class, UUID.class)).isNotNull();
+    }
+
+    @Test
+    void unassignAllSectionsClearsOnlyTheSelectedProjectStudentAndAuditsOnce() {
+        User user = user();
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        UUID studentId = UUID.randomUUID();
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(paperSectionRepository.clearAssignmentsForProjectAndUser(project.getId(), studentId)).thenReturn(3);
+
+        assertThat(service().unassignAllSections(project.getId(), studentId)).isEqualTo(3);
+
+        verify(paperSectionRepository).clearAssignmentsForProjectAndUser(project.getId(), studentId);
+        verify(auditService).record("PROJECT_SECTIONS_UNASSIGNED", "PROJECT", project.getId(), user, studentId, 3);
+    }
+
+    @Test
     void removeMemberRefusesRemovingInstructor() {
         User user = user();
         Project project = project(ProjectStatus.IN_PROGRESS);
@@ -356,6 +432,8 @@ class ProjectServiceImplLifecycleTest {
 
         service().removeMember(project.getId(), plainMember.getUser().getId());
 
+        verify(paperSectionRepository).clearAssignmentsForProjectAndUser(
+                project.getId(), plainMember.getUser().getId());
         verify(projectMemberRepository).deleteAll(List.of(plainMember));
     }
 

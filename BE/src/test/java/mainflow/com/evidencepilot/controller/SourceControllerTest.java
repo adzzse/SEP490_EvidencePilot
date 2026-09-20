@@ -5,17 +5,21 @@ import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.impl.DocumentServiceImpl;
+import com.evidencepilot.service.impl.ProjectSourceUnshareService;
+import com.evidencepilot.dto.response.ProjectSourceUnshareResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
 
@@ -25,14 +29,50 @@ class SourceControllerTest {
     private final ProjectDocumentRepository projectDocumentRepository = mock(ProjectDocumentRepository.class);
     private final CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
     private final ProjectRepository projectRepository = mock(ProjectRepository.class);
+    private final ProjectSourceUnshareService projectSourceUnshareService = mock(ProjectSourceUnshareService.class);
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         mockMvc = standaloneSetup(new SourceController(service,
-                        projectDocumentRepository, currentUserService, projectRepository))
+                        projectDocumentRepository, currentUserService, projectRepository, projectSourceUnshareService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void bulkUnshareReturnsRemovedIds() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
+        when(projectSourceUnshareService.unshare(projectId, List.of(sourceId)))
+                .thenReturn(new ProjectSourceUnshareResponse(List.of(sourceId), List.of()));
+
+        mockMvc.perform(post("/api/sources/projects/{projectId}/unshare", projectId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sourceIds\":[\"" + sourceId + "\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.removedSourceIds[0]").value(sourceId.toString()))
+                .andExpect(jsonPath("$.blocked").isEmpty());
+
+        verify(projectSourceUnshareService).unshare(projectId, List.of(sourceId));
+    }
+
+    @Test
+    void bulkUnshareUsesConflictWhenAnySourceIsBlocked() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
+        when(projectSourceUnshareService.unshare(projectId, List.of(sourceId)))
+                .thenReturn(new ProjectSourceUnshareResponse(
+                        List.of(),
+                        List.of(new ProjectSourceUnshareResponse.BlockedSource(
+                                sourceId, "PAPER_REFERENCE", 1))));
+
+        mockMvc.perform(post("/api/sources/projects/{projectId}/unshare", projectId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sourceIds\":[\"" + sourceId + "\"]}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.blocked[0].sourceId").value(sourceId.toString()))
+                .andExpect(jsonPath("$.blocked[0].reason").value("PAPER_REFERENCE"));
     }
 
     @Test

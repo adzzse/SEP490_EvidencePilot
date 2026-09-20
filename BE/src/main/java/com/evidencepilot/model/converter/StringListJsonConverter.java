@@ -11,7 +11,7 @@ import java.util.List;
 @Converter(autoApply = false)
 public class StringListJsonConverter implements AttributeConverter<List<String>, String> {
 
-    // ponytail: shared static mapper is fine — converters are stateless and one per entity field.
+    // rationale: shared static mapper is fine — converters are stateless and one per entity field.
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final TypeReference<List<String>> TYPE = new TypeReference<>() {};
 

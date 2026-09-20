@@ -1,4 +1,4 @@
-// ponytail: one definition of review rounds for both roles. Requests arrive
+// rationale: one definition of review rounds for both roles. Requests arrive
 // newest-first; round numbers count from the oldest. updatedAt never orders.
 
 export function roundNumberFor(requests, requestId) {

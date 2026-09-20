@@ -1,4 +1,4 @@
-// ponytail: Preview DOM selection → canonical LF source offsets. Every mapped
+// rationale: Preview DOM selection → canonical LF source offsets. Every mapped
 // text run carries data-ss/data-se (emitted by the renderers); generated
 // output (KaTeX, tables, pills) carries none and refuses honestly. This module
 // is dependency-free so Playwright can import it straight from the dev server.

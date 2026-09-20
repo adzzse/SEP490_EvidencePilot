@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-// ponytail: crop UI (~60KB) loads only when the avatar modal opens.
+// rationale: crop UI (~60KB) loads only when the avatar modal opens.
 const ReactCrop = lazy(() => Promise.all([
   import('react-image-crop'),
   import('react-image-crop/dist/ReactCrop.css'),
@@ -22,7 +22,7 @@ function formatActivityTime(value, language) {
   }
 }
 
-// ponytail: student rows always land on the project root — no /sections/... suffix.
+// rationale: student rows always land on the project root — no /sections/... suffix.
 function studentProjectLink(item) {
   if (item?.projectId) return `/student/projects/${item.projectId}`;
   const m = typeof item?.link === 'string' ? item.link.match(/^\/student\/projects\/[^/]+/) : null;
@@ -30,7 +30,7 @@ function studentProjectLink(item) {
   return item?.link || '/student/projects';
 }
 
-// ponytail: single call-site polymorphic row — role + type decide the template.
+// rationale: single call-site polymorphic row — role + type decide the template.
 // Instructor: collection / project / source. Student: project root only.
 function ActivityLogItem({ item, role, language, translate }) {
   if (!item) return null;
@@ -104,7 +104,7 @@ function ActivityLogItem({ item, role, language, translate }) {
   }
 
   // Student — Workspace: [Project Name] [Section Name] [Timestamp]
-  // ponytail: link targets the project root only, never /sections/...
+  // rationale: link targets the project root only, never /sections/...
   if (item.type === 'project-section' && isStudent) {
     return (
       <Link
@@ -219,7 +219,7 @@ export function ProfileContent({ embedded = false }) {
     setAvatarUploading(true);
     setAvatarError('');
     try {
-      // ponytail: react-image-crop may hand back percent or pixel crops
+      // rationale: react-image-crop may hand back percent or pixel crops
       // depending on version — normalize to natural pixels either way.
       const toPixels = (c) => {
         if (!c || !c.width || !c.height) return null;
@@ -332,7 +332,7 @@ export function ProfileContent({ embedded = false }) {
       .finally(() => setActivityLoading(false));
   }, [currentTab, language]);
 
-  // ponytail: client-side search + sort + 4-per-page over the fetched feed.
+  // rationale: client-side search + sort + 4-per-page over the fetched feed.
   const visibleActivity = useMemo(() => {
     const q = activityQuery.trim().toLowerCase();
     const filtered = q
@@ -398,7 +398,7 @@ export function ProfileContent({ embedded = false }) {
       const status = err.response?.status;
       const msg = err.response?.data?.message || err.message;
       if (status === 429) {
-        // ponytail: server tells us when the next OTP is allowed. Mirror the cooldown
+        // rationale: server tells us when the next OTP is allowed. Mirror the cooldown
         // for the FE timer so the resend button reflects the real wait time.
         setOtpCooldownUntil(new Date(Date.now() + 60_000).toISOString());
       }

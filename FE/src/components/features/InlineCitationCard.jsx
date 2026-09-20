@@ -53,7 +53,7 @@ export default function InlineCitationCard({
 }) {
   const { t, i18n } = useTranslation();
   const cardRef = useRef(null);
-  // ponytail: Next/Prev re-anchors + scrolls the editor; ignore the resulting scroll
+  // rationale: Next/Prev re-anchors + scrolls the editor; ignore the resulting scroll
   // burst or the card closes the instant it opens on off-screen findings.
   const findingChangeRef = useRef(0);
   useEffect(() => { findingChangeRef.current = Date.now(); }, [findingIndex]);
@@ -106,7 +106,7 @@ export default function InlineCitationCard({
     const width = Math.min(CARD_W, Math.max(0, viewportWidth - 24));
     const maxHeight = Math.min(CARD_MAX_H, Math.max(0, viewportHeight - 24));
     if (!anchor) {
-      // ponytail: no anchor (unrendered line, stale excerpt) — center top
+      // rationale: no anchor (unrendered line, stale excerpt) — center top
       // instead of rendering nothing; the badge click must always open.
       return {
         left: Math.max(12, (viewportWidth - width) / 2),

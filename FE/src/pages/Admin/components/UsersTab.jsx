@@ -97,7 +97,7 @@ function UsersSection({ api }) {
 
   const doCreate = async (e) => {
     e.preventDefault(); setCreateErr('');
-    // ponytail: no admin-set passwords — BE always issues a set-password
+    // rationale: no admin-set passwords — BE always issues a set-password
     // invitation, except the quarantined dev bypass (BE-gated, 403 otherwise).
     setCreating(true);
     try {
@@ -244,7 +244,7 @@ function UsersSection({ api }) {
                   <input name="studentCode" maxLength={50} placeholder="SE170608" value={createForm.studentCode} onChange={e => setCreateForm(p => ({ ...p, studentCode: e.target.value }))} required className="w-full border border-gray-300 rounded-xl px-3.5 py-2 text-xs uppercase focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                 </div>
               )}
-              {/* ponytail: dev-only bypass — stripped from production builds by Vite */}
+              {/* rationale: dev-only bypass — stripped from production builds by Vite */}
               {import.meta.env.DEV && (
               <label data-guide="create-verify" className="flex items-start gap-2.5 rounded-xl border border-(--border) bg-(--surface-secondary) p-3 cursor-pointer">
                 <input type="checkbox" checked={createForm.devBypass} onChange={e => setCreateForm(p => ({ ...p, devBypass: e.target.checked }))} className="mt-0.5 accent-[#1e3a8a]" />

@@ -34,4 +34,22 @@ public interface EvidenceRevisionTraceRepository extends JpaRepository<EvidenceR
             """)
     List<EvidenceRevisionTrace> findByProjectIdAndOutcomeInOrderByCreatedAtDesc(
             @Param("projectId") UUID projectId, @Param("outcomes") List<TraceOutcome> outcomes);
+
+    @Query("""
+            SELECT CASE WHEN COUNT(t) > 0 THEN true ELSE false END
+            FROM EvidenceRevisionTrace t
+            WHERE t.source.id = :sourceId
+              AND t.round.project.id = :projectId
+              AND (t.sourceReplaced = false OR t.sourceReplaced IS NULL)
+            """)
+    boolean existsActiveForProjectAndSource(
+            @Param("projectId") UUID projectId, @Param("sourceId") UUID sourceId);
+
+    @Query("""
+            SELECT CASE WHEN COUNT(t) > 0 THEN true ELSE false END
+            FROM EvidenceRevisionTrace t
+            WHERE t.source.id = :sourceId
+              AND (t.sourceReplaced = false OR t.sourceReplaced IS NULL)
+            """)
+    boolean existsActiveForSource(@Param("sourceId") UUID sourceId);
 }

@@ -31,6 +31,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
@@ -115,6 +116,25 @@ class ProjectControllerTest {
         UUID id = UUID.randomUUID();
         mockMvc.perform(delete("/api/projects/{id}", id)).andExpect(status().isNoContent());
         verify(projectService).deleteProject(id);
+    }
+
+    @Test
+    void restoreProject_delegatesId() throws Exception {
+        UUID id = UUID.randomUUID();
+        mockMvc.perform(patch("/api/projects/{id}/restore", id)).andExpect(status().isOk());
+        verify(projectService).restoreProject(id);
+    }
+
+    @Test
+    void unassignAllSections_delegatesProjectAndUser() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(projectService.unassignAllSections(projectId, userId)).thenReturn(2);
+
+        mockMvc.perform(patch("/api/projects/{id}/members/{userId}/unassign-all", projectId, userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cleared").value(2));
+        verify(projectService).unassignAllSections(projectId, userId);
     }
 
     @Test

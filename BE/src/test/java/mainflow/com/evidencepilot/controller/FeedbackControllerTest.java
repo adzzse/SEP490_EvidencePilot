@@ -4,12 +4,15 @@ import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.service.impl.FeedbackServiceImpl;
 import com.evidencepilot.service.SubmissionReadinessService;
+import com.evidencepilot.model.FeedbackStatus;
+import com.evidencepilot.dto.response.FeedbackRequestPageResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
+import java.time.LocalDate;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -32,6 +35,27 @@ class FeedbackControllerTest {
     void findAll_delegatesToCurrentUserScope() throws Exception {
         mockMvc.perform(get("/api/feedback-requests")).andExpect(status().isOk());
         verify(service).findAllForCurrentUser();
+    }
+
+    @Test
+    void queueBindsServerSideFiltersAndPagination() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        when(service.findQueueForCurrentUser(2, 15, projectId, FeedbackStatus.PENDING,
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 21), "capstone"))
+                .thenReturn(new FeedbackRequestPageResponse(java.util.List.of(), 2, 15, 0, 0));
+
+        mockMvc.perform(get("/api/feedback-requests/queue")
+                        .param("page", "2")
+                        .param("size", "15")
+                        .param("projectId", projectId.toString())
+                        .param("status", "PENDING")
+                        .param("dateFrom", "2026-09-01")
+                        .param("dateTo", "2026-09-21")
+                        .param("search", "capstone"))
+                .andExpect(status().isOk());
+
+        verify(service).findQueueForCurrentUser(2, 15, projectId, FeedbackStatus.PENDING,
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 21), "capstone");
     }
 
     @Test

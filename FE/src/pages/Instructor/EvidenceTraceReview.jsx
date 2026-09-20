@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { AppHeader, LoadingSkeleton, Modal, Breadcrumb } from '../../components';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
+import { formatDateTimeSeconds } from '../../utils/formatters/date.js';
 
 const JUDGMENTS = ['EFFECTIVE', 'PARTIAL', 'INEFFECTIVE'];
 const STUDENT_ACTIONS = ['ADD_CITATION', 'PARAPHRASE', 'QUALIFY', 'SYNTHESIZE', 'QUOTE', 'REMOVE', 'DISMISS_WITH_REASON'];
@@ -142,7 +143,7 @@ export default function EvidenceTraceReview() {
               <option value="">{t('instructor.evidenceTrace.allRounds')}</option>
               {(telemetry?.rounds || []).filter(round => !sectionFilter || String(round.sectionId) === sectionFilter).map(round => (
                 <option key={round.roundId} value={round.roundId}>
-                  {round.sectionTitle} · {new Date(round.runAt).toLocaleString(i18n.language)} · Δ {round.findingDelta ?? '—'}
+                  {round.sectionTitle} · {formatDateTimeSeconds(round.runAt, i18n.language)} · Δ {round.findingDelta ?? '—'}
                 </option>
               ))}
             </select>
@@ -182,7 +183,7 @@ export default function EvidenceTraceReview() {
                       <td className="px-4 py-3 min-w-[150px]">
                         <p className="font-bold text-[var(--text-primary)]">{trace.sectionTitle || '—'}</p>
                         <p className="mt-1 font-mono text-[9px] text-[var(--text-tertiary)]">{String(trace.roundId).slice(0, 8)}</p>
-                        <p className="mt-0.5 text-[9px] text-[var(--text-tertiary)]">{trace.createdAt ? new Date(trace.createdAt).toLocaleString(i18n.language) : ''}</p>
+                        <p className="mt-0.5 text-[9px] text-[var(--text-tertiary)]">{trace.createdAt ? formatDateTimeSeconds(trace.createdAt, i18n.language) : ''}</p>
                       </td>
                       <td className="px-4 py-3 max-w-[260px]">
                         <p className="text-[9px] font-bold text-[var(--text-tertiary)]">#{trace.findingIndex + 1}</p>

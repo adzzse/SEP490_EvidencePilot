@@ -63,6 +63,17 @@ class SystemNotificationControllerTest {
     }
 
     @Test
+    void markAllReadReturnsUpdatedCount() throws Exception {
+        when(systemNotificationService.markAllCurrentUserNotificationsRead()).thenReturn(3L);
+
+        mockMvc.perform(patch("/api/notifications/read-all"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count", is(3)));
+
+        verify(systemNotificationService).markAllCurrentUserNotificationsRead();
+    }
+
+    @Test
     void markReadReturnsNotFoundWhenNotificationIsNotOwnedByCurrentUser() throws Exception {
         UUID notificationId = UUID.randomUUID();
         when(systemNotificationService.markCurrentUserNotificationRead(notificationId))

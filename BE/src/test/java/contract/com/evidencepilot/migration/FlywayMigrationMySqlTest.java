@@ -68,7 +68,7 @@ class FlywayMigrationMySqlTest {
         Integer successfulMigrations = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
                 Integer.class);
-        assertThat(successfulMigrations).isEqualTo(39);
+        assertThat(successfulMigrations).isEqualTo(43);
 
         assertThat(jdbcTemplate.queryForList("""
                         SELECT constraint_name
@@ -380,7 +380,7 @@ class FlywayMigrationMySqlTest {
                 .migrate()
                 .migrationsExecuted;
 
-        assertThat(migrationsThroughV38).isEqualTo(37);
+        assertThat(migrationsThroughV38).isEqualTo(38);
         String referencesSectionId = UUID.randomUUID().toString();
         String introductionSectionId = UUID.randomUUID().toString();
         rehearsalJdbcTemplate.update("""
@@ -404,10 +404,10 @@ class FlywayMigrationMySqlTest {
                 .migrate()
                 .migrationsExecuted;
 
-        assertThat(migrationsExecuted).isEqualTo(1);
+        assertThat(migrationsExecuted).isEqualTo(4);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1",
-                Integer.class)).isEqualTo(39);
+                Integer.class)).isEqualTo(43);
         assertThat(rehearsalJdbcTemplate.queryForObject(
                 "SELECT type FROM flyway_schema_history WHERE installed_rank = 1",
                 String.class)).isEqualTo("BASELINE");

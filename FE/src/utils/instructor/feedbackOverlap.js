@@ -1,4 +1,4 @@
-// ponytail: overlapping passages are valid — this only reports them so the
+// rationale: overlapping passages are valid — this only reports them so the
 // composer can warn, never to block. Half-open [from, to) intersection.
 
 export function isOverlappable(item, activeRequestId, sectionId) {

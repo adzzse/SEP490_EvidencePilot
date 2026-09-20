@@ -16,7 +16,7 @@ function statusColor(status) {
   return STATUS_COLOR_MAP[status] || STATUS_COLOR_MAP.DEFAULT;
 }
 
-// ponytail: library cards want 8/page; the shared PAGINATION_LIMIT (6) drives other pages
+// rationale: library cards want 8/page; the shared PAGINATION_LIMIT (6) drives other pages
 const LIBRARY_PAGE_SIZE = 8;
 
 function formatSize(bytes) {
@@ -326,7 +326,7 @@ export default function SourceLibraryPanel() {
   return (
     <section aria-label={t('instructor.sourceLibrary.sourceLibrary')} className="space-y-6">
       {/* Master Action Header */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center w-full mb-6 gap-4 border-b border-(--border) pb-6">
+      <div className="sticky top-16 z-20 flex flex-col lg:flex-row justify-between items-start lg:items-center w-full mb-6 gap-4 border-b border-(--border) bg-(--page-bg) pb-6 pt-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t('instructor.sourceLibrary.sourceLibrary')}</h1>
           <p className="text-xs text-(--text-tertiary) mt-1">{t('instructor.sourceLibrary.sourceLibraryDesc')}</p>
@@ -445,7 +445,7 @@ export default function SourceLibraryPanel() {
 
                 <div className="border-t border-(--border-light) pt-3 mt-4">
                   <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                    {/* ponytail: unconditional like Project/Collection detail — FileViewerModal already handles unloadable files */}
+                    {/* rationale: unconditional like Project/Collection detail — FileViewerModal already handles unloadable files */}
                     <button
                       type="button"
                       onClick={() => setViewerFile({

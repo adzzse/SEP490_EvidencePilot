@@ -4,6 +4,7 @@ import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.dto.response.ComparisonSourceDto;
 import com.evidencepilot.dto.response.FeedbackRequestResponseDto;
+import com.evidencepilot.dto.response.FeedbackRequestPageResponse;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
 import com.evidencepilot.service.impl.FeedbackServiceImpl;
 import com.evidencepilot.dto.response.ReviewReadinessResponse;
@@ -28,7 +29,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.format.annotation.DateTimeFormat;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -51,6 +54,20 @@ public class FeedbackController {
     @GetMapping("/feedback-requests")
     public List<FeedbackRequestResponseDto> findAll() {
         return feedbackService.findAllForCurrentUser();
+    }
+
+    @Operation(summary = "List the current instructor review queue",
+            description = "Returns one latest/current request per project with server-side filters and stable pagination.")
+    @GetMapping("/feedback-requests/queue")
+    public FeedbackRequestPageResponse findQueue(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) UUID projectId,
+            @RequestParam(required = false) com.evidencepilot.model.FeedbackStatus status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @RequestParam(required = false) String search) {
+        return feedbackService.findQueueForCurrentUser(page, size, projectId, status, dateFrom, dateTo, search);
     }
 
     @Operation(summary = "Submit project for review",

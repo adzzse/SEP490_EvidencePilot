@@ -49,7 +49,7 @@ class UserAvatarServiceImplTest {
         String url = service.uploadAvatar(u.getId(), file);
 
         assertThat(url).isEqualTo("https://cdn.example/avatars/x.jpg");
-        // ponytail: key only in DB — never a URL.
+        // rationale: key only in DB — never a URL.
         assertThat(u.getAvatarKey()).isEqualTo("avatars/" + u.getId() + ".jpg");
         verify(users).save(u);
     }

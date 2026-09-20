@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.LocalDateTime;
 
 public interface EmailOtpTokenRepository extends JpaRepository<EmailOtpToken, UUID> {
 
@@ -19,4 +20,8 @@ public interface EmailOtpTokenRepository extends JpaRepository<EmailOtpToken, UU
     @Modifying
     @Query("delete from EmailOtpToken t where t.user.id = :userId and t.verifiedAt is null")
     void deleteUnverifiedByUserId(@Param("userId") UUID userId);
+
+    @Modifying
+    @Query("delete from EmailOtpToken t where t.createdAt < :cutoff")
+    int deleteOlderThan(@Param("cutoff") LocalDateTime cutoff);
 }

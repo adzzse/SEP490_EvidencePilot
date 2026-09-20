@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  // ponytail: dedupe core peers only — Vite auto-discovers rest.
+  // rationale: dedupe core peers only — Vite auto-discovers rest.
   resolve: {
     dedupe: ['codemirror', '@codemirror/state', '@codemirror/view'],
   },

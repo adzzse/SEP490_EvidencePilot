@@ -3,7 +3,6 @@ import { formatDateTime } from '../../utils/formatters/date.js';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api.js';
-import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
 
 const VERDICT_STYLE = {
   MET: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200',
@@ -136,7 +135,7 @@ export default function SectionRequirementsPanel({
   const requirements = evaluation?.requirements || [];
   const items = evaluation?.result?.items || [];
   const completed = evaluation?.status === 'COMPLETED' && !evaluation?.stale && !isDirty;
-  const sharedReferences = isReferenceSectionTitle(selectedSection.sectionTitle);
+  const sharedReferences = selectedSection.sectionType === 'REFERENCE';
   const confirmed = sharedReferences || readinessSection?.handoffState === 'CONFIRMED';
   const canAct = isAssigned && !isLocked && !isDirty;
   const handoffBlocked = readinessSection?.blockers?.some(code => code !== 'SECTION_CONFIRMED');

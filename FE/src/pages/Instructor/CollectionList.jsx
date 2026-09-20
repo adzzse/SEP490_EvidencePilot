@@ -90,7 +90,7 @@ export default function CollectionList() {
           ]}
         />
 
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6 border-b border-(--border) pb-6">
+        <div className="sticky top-16 z-20 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6 border-b border-(--border) bg-(--page-bg) pb-6 pt-3">
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t('instructor.collections.collections')}</h1>
             <p className="text-xs text-(--text-tertiary) mt-1">{t('instructor.collections.collectionsManagerDesc')}</p>

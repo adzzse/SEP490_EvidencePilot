@@ -23,8 +23,8 @@ import {
   ENTITY_TYPES,
   DEFAULT_COLLECTION_INGESTION_TABS,
   API_ROUTES,
-  DATE_FORMATS,
 } from '../../constants';
+import { formatDateTime } from '../../utils/formatters/date.js';
 
 const TABS = COLLECTION_DETAIL_TAB_KEYS;
 const TAB_IDS = COLLECTION_DETAIL_TAB_IDS;
@@ -382,7 +382,7 @@ export default function CollectionDetail() {
   };
 
   const renderDocuments = () => {
-    // ponytail: client-side filter + 5/page pager over the fetched list (mirrors Connected Map tab)
+    // rationale: client-side filter + 5/page pager over the fetched list (mirrors Connected Map tab)
     const DOCS_PAGE_SIZE = 5;
     const filteredDocs = sources.filter(s => {
       if (!docSearch.trim()) return true;
@@ -516,7 +516,7 @@ export default function CollectionDetail() {
                 { label: t('instructor.collectionDetail.sourceStatus'), value: statusLabel(selectedSource.processingStatus), badge: statusColor(selectedSource.processingStatus) },
                 { label: t('instructor.collectionDetail.sourceSize'), value: selectedSource.fileSizeBytes ? `${(selectedSource.fileSizeBytes / 1024).toFixed(1)} KB` : '-' },
                 { label: t('instructor.collectionDetail.sourceType'), value: selectedSource.contentType || '-' },
-                { label: t('instructor.collectionDetail.sourceCreated'), value: selectedSource.createdAt ? new Date(selectedSource.createdAt).toLocaleString(i18n.language.startsWith('vi') ? DATE_FORMATS.LOCALE_VI : DATE_FORMATS.LOCALE_EN) : '-' },
+                { label: t('instructor.collectionDetail.sourceCreated'), value: selectedSource.createdAt ? formatDateTime(selectedSource.createdAt, i18n.language) : '-' },
               ].map(s => (
                 <div key={s.label} className="p-3 bg-(--surface-secondary) rounded-xl border border-(--border-light)">
                   <p className="text-[10px] font-black text-(--text-tertiary) uppercase tracking-wider">{s.label}</p>

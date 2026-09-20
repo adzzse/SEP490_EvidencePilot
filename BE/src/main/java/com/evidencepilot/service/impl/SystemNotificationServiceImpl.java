@@ -43,6 +43,13 @@ public class SystemNotificationServiceImpl implements SystemNotificationService 
 
     @Override
     @Transactional
+    public long markAllCurrentUserNotificationsRead() {
+        User currentUser = currentUserService.requireCurrentUser();
+        return systemNotificationRepository.markAllUnreadByUserId(currentUser.getId());
+    }
+
+    @Override
+    @Transactional
     public Optional<SystemNotificationResponse> markCurrentUserNotificationRead(UUID notificationId) {
         User currentUser = currentUserService.requireCurrentUser();
         return systemNotificationRepository.findByIdAndUserId(notificationId, currentUser.getId())

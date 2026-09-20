@@ -10,6 +10,7 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
@@ -100,8 +101,7 @@ class PaperReferenceServiceTest {
         Document unavailable = source(ProcessingStatus.FAILED, "failed.pdf");
         unavailable.setDoi("10.1000/failed");
 
-        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperId))
-                .thenReturn(List.of(referenceSection("""
+        PaperSection references = referenceSection("""
                         A. Author. Reliable Evidence Retrieval for Research Writing. 2024. https://doi.org/10.1000/READY.
 
                         \\bibitem{%s} Metadata-only work.
@@ -109,7 +109,10 @@ class PaperReferenceServiceTest {
                         \\bibitem{processing} B. Author. Structured Citation Checking in Collaborative Editors. 2025.
 
                         \\bibitem{failed} C. Author. Failed extraction work. https://doi.org/10.1000/failed.
-                        """.formatted(SourceMatchingService.citationKey(missingFile.getId())))));
+                        """.formatted(SourceMatchingService.citationKey(missingFile.getId())));
+        references.setSectionTitle("Sources");
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperId))
+                .thenReturn(List.of(references));
         when(sourceMatchingService.activeSources(projectId))
                 .thenReturn(List.of(ready, missingFile, processing, unavailable));
         when(sourceMatchingService.referenceSources(paperId)).thenReturn(List.of(ready));
@@ -466,6 +469,7 @@ class PaperReferenceServiceTest {
     private PaperSection referenceSection(String tex) {
         PaperSection section = section(tex);
         section.setSectionTitle("References");
+        section.setSectionType(PaperSectionType.REFERENCE);
         return section;
     }
 

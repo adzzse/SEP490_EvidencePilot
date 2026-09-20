@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-// ponytail: header-drawer body — the AI Suggestion UI moved out of the review
+// rationale: header-drawer body — the AI Suggestion UI moved out of the review
 // panel tabs so instructors can read it side-by-side with the editor.
 export default function AiSuggestionDrawer({ review }) {
   const { t } = useTranslation();

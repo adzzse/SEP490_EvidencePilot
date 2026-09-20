@@ -1,4 +1,4 @@
-// ponytail: History shows ALL published root cards of the immediately
+// rationale: History shows ALL published root cards of the immediately
 // previous round for this section — never a single latest, never older
 // rounds. Previous round = array position after active in the canonical desc
 // list (no second timestamp sort). createdAt ASC matches the threads tab.

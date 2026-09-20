@@ -76,6 +76,7 @@ public class DocumentServiceImpl {
     private final PaperSectionRepository paperSectionRepository;
     private final CurrentUserServiceImpl currentUserService;
     private final DocumentPersistenceService documentPersistenceService;
+    private final ExtractionCandidateService extractionCandidateService;
     private final DocumentObjectStorage documentObjectStorage;
     private final MediaAssetService mediaAssetService;
     private final QdrantServiceImpl qdrantService;
@@ -670,20 +671,17 @@ public class DocumentServiceImpl {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "No file in storage for this document");
         }
-        ProcessingStatus status = doc.getProcessingStatus();
-        // DEBT-07: only re-process documents in a terminal state; refuse while a
-        // processing round is already in flight to avoid queue spam.
-        if (status != ProcessingStatus.READY && status != ProcessingStatus.FAILED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Document is currently " + status + " and cannot be re-extracted");
+        var candidate = extractionCandidateService.request(documentId);
+        try {
+            return DocumentResponse.from(
+                    documentPersistenceService.markDocumentAsUploaded(
+                            documentId, doc.getFileUrl(), doc.getFileHashSha256()));
+        } catch (RuntimeException failure) {
+            if (candidate.getId() != null) {
+                extractionCandidateService.markFailed(candidate.getId(), failure.getMessage());
+            }
+            throw failure;
         }
-        documentObjectStorage.deleteExtractionCheckpoint(
-                documentId, doc.getFileHashSha256());
-        mediaAssetService.deleteExtractedForDocument(doc);
-        qdrantService.deleteVectors(documentId);
-        return DocumentResponse.from(
-                documentPersistenceService.markDocumentAsUploaded(
-                        documentId, doc.getFileUrl(), doc.getFileHashSha256()));
     }
 
     @Transactional
@@ -798,7 +796,7 @@ public class DocumentServiceImpl {
                 .orElseThrow(() -> new ResourceNotFoundException(id, "Document"));
     }
 
-    // ponytail: try every project avenue before denying — a doc owned by project P1
+    // rationale: try every project avenue before denying — a doc owned by project P1
     // but shared to project P2 must open for P2 members (the list endpoints already
     // assume that grant). Only membership (403) denials fall through; project-state
     // errors (read-only/locked) are authoritative. First denial is rethrown so
@@ -871,7 +869,7 @@ public class DocumentServiceImpl {
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Project access denied");
     }
 
-    // ponytail: same trap as read — a P2 leader must be able to act on a doc
+    // rationale: same trap as read — a P2 leader must be able to act on a doc
     // owned by P1 but shared to P2. Collection/owner branches keep their rules.
     private void requireDocumentWriteAccess(User currentUser, Document doc) {
         List<Project> candidates = new ArrayList<>();

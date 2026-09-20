@@ -1,8 +1,10 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.request.SourceUpdateRequest;
+import com.evidencepilot.dto.request.ProjectSourceUnshareRequest;
 import com.evidencepilot.dto.response.DocumentResponse;
 import com.evidencepilot.dto.response.PagedResponse;
+import com.evidencepilot.dto.response.ProjectSourceUnshareResponse;
 import com.evidencepilot.dto.response.SourceLibraryItemResponse;
 import com.evidencepilot.model.ProjectDocument;
 import com.evidencepilot.model.enums.DocumentType;
@@ -10,6 +12,7 @@ import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.impl.DocumentServiceImpl;
+import com.evidencepilot.service.impl.ProjectSourceUnshareService;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.repository.ProjectRepository;
@@ -50,6 +53,7 @@ public class SourceController {
     private final ProjectDocumentRepository projectDocumentRepository;
     private final CurrentUserServiceImpl currentUserService;
     private final ProjectRepository projectRepository;
+    private final ProjectSourceUnshareService projectSourceUnshareService;
 
     @Operation(summary = "List the current user's source library",
             description = "Returns active source documents uploaded by the current user, including collection and project usage.")
@@ -137,8 +141,8 @@ public class SourceController {
     }
 
     @Operation(summary = "Remove shared source from project",
-            description = "Removes a manual share. A source inherited from a linked collection remains visible "
-                    + "but is no longer pinned. Blocked with 409 when the project or its paper sections are not mutable.")
+            description = "Removes only this project's source association; the source/library document is retained. "
+                    + "Blocked with 409 when active paper or review dependencies still use the source.")
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Shared source removed"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
@@ -151,7 +155,30 @@ public class SourceController {
     public void removeSharedSource(
             @Parameter(description = "Project UUID") @PathVariable UUID projectId,
             @Parameter(description = "Source document UUID") @PathVariable UUID sourceId) {
-        documentService.removeSharedDocument(projectId, sourceId);
+        ProjectSourceUnshareResponse response = projectSourceUnshareService.unshare(projectId, List.of(sourceId));
+        if (response.hasBlockedSources()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Source cannot be removed: " + response.blocked().getFirst().reason());
+        }
+    }
+
+    @Operation(summary = "Bulk remove sources from a project",
+            description = "Atomically removes selected project associations while retaining source/library documents. "
+                    + "If any selected source is referenced by active paper or review evidence, no source is removed.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Selected project associations removed"),
+            @ApiResponse(responseCode = "400", description = "No source IDs were supplied"),
+            @ApiResponse(responseCode = "403", description = "Insufficient permissions"),
+            @ApiResponse(responseCode = "409", description = "One or more sources are blocked by active work")
+    })
+    @PostMapping(value = "/projects/{projectId}/unshare", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ProjectSourceUnshareResponse> unshareSources(
+            @Parameter(description = "Project UUID") @PathVariable UUID projectId,
+            @Valid @RequestBody ProjectSourceUnshareRequest request) {
+        ProjectSourceUnshareResponse response = projectSourceUnshareService
+                .unshare(projectId, request.sourceIds());
+        return ResponseEntity.status(response.hasBlockedSources() ? HttpStatus.CONFLICT : HttpStatus.OK)
+                .body(response);
     }
 
     @Operation(summary = "Upload a source file",

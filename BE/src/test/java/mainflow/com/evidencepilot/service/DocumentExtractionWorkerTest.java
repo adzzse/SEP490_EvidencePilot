@@ -7,14 +7,18 @@ import com.evidencepilot.dto.ExtractionResultPayload;
 import com.evidencepilot.dto.SparseVector;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentChunk;
+import com.evidencepilot.model.DocumentExtractionCandidate;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.ExtractionCandidateStatus;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.service.impl.DocumentExtractionWorkerImpl;
 import com.evidencepilot.service.impl.DocumentPersistenceService;
+import com.evidencepilot.service.impl.ExtractionCandidateService;
 import com.evidencepilot.service.impl.SparseVectorGenerator;
+import com.evidencepilot.service.DocumentExtractionWorker.DocumentExtractionException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -77,6 +81,8 @@ class DocumentExtractionWorkerTest {
     private MediaAssetService mediaAssetService;
     @Mock
     private PaperProcessingServiceImpl paperProcessingService;
+    @Mock
+    private ExtractionCandidateService extractionCandidateService;
 
     @BeforeEach
     void allowQueuedClaim() {
@@ -91,6 +97,48 @@ class DocumentExtractionWorkerTest {
         worker().process(documentId);
 
         verify(documentRepository, never()).findById(documentId);
+        verify(aiModelClient, never()).extractDocument(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void failedCandidateLeavesLiveExtractionUntouched() {
+        UUID documentId = UUID.randomUUID();
+        Document document = document(documentId);
+        DocumentExtractionCandidate candidate = new DocumentExtractionCandidate();
+        candidate.setId(UUID.randomUUID());
+        candidate.setDocument(document);
+        candidate.setStatus(ExtractionCandidateStatus.REQUESTED);
+
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(extractionCandidateService.findPending(documentId)).thenReturn(Optional.of(candidate));
+        when(aiModelClient.extractDocument(eq("source.pdf"), anyString(), eq(false)))
+                .thenThrow(new DocumentExtractionException("candidate failed"));
+
+        worker().process(documentId);
+
+        verify(extractionCandidateService).markProcessing(candidate.getId());
+        verify(extractionCandidateService).markFailed(candidate.getId(), "candidate failed");
+        verify(persistence, never()).saveExtraction(any(), anyString(), anyString(), any());
+        verify(qdrantService, never()).upsertVectors(any());
+    }
+
+    @Test
+    void activatedCandidateCleansObsoleteLiveCheckpointAfterActivation() {
+        UUID documentId = UUID.randomUUID();
+        Document document = document(documentId);
+        document.setFileHashSha256("a".repeat(64));
+        DocumentExtractionCandidate candidate = new DocumentExtractionCandidate();
+        candidate.setId(UUID.randomUUID());
+        candidate.setDocument(document);
+        candidate.setStatus(ExtractionCandidateStatus.READY);
+
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(extractionCandidateService.findPending(documentId)).thenReturn(Optional.of(candidate));
+
+        worker().process(documentId);
+
+        verify(extractionCandidateService).activate(candidate.getId());
+        verify(documentObjectStorage).deleteExtractionCheckpoint(documentId, "a".repeat(64));
         verify(aiModelClient, never()).extractDocument(any(), any(), anyBoolean());
     }
 
@@ -626,7 +674,8 @@ class DocumentExtractionWorkerTest {
                 persistence,
                 new ObjectMapper(),
                 mediaAssetService,
-                paperProcessingService);
+                paperProcessingService,
+                extractionCandidateService);
         ReflectionTestUtils.setField(w, "baseUrl", "http://localhost:8080");
         return w;
     }

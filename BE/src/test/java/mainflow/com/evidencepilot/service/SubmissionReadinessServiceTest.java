@@ -12,6 +12,7 @@ import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.ProcessingStatus;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
@@ -101,12 +102,11 @@ class SubmissionReadinessServiceTest {
         references.setDocument(fixture.paper());
         references.setSectionOrder(1);
         references.setSectionTitle("References");
+        references.setSectionType(PaperSectionType.REFERENCE);
         references.setContentTex("Saved references");
         references.setVersion(1);
         references.setOptVersion(0L);
         references.setActive(true);
-        when(paperStandardService.isReferenceSectionTitle(org.mockito.ArgumentMatchers.anyString()))
-                .thenAnswer(invocation -> "References".equals(invocation.getArgument(0)));
         when(documentRepository.findByProjectIdAndDocTypeAndActiveTrue(
                 fixture.project().getId(), DocumentType.PAPER)).thenReturn(List.of(fixture.paper()));
         when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(fixture.paper().getId()))
@@ -401,7 +401,7 @@ class SubmissionReadinessServiceTest {
                 .isEqualTo("Saved section text");
         assertThat(json.get("papers").get(0).get("sections").get(0).get("contentVersion").asInt())
                 .isEqualTo(3);
-        // ponytail: schema v2 binds the section to its evidence/standard context
+        // rationale: schema v2 binds the section to its evidence/standard context
         assertThat(json.get("schemaVersion").asInt()).isEqualTo(2);
         var section = json.get("papers").get(0).get("sections").get(0);
         assertThat(section.get("contentFingerprint").asText()).matches("[0-9a-f]{64}");

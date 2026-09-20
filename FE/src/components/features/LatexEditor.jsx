@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-// ponytail: diff-match-patch removed — single replace dispatch covers hydration; CM maps decorations.
+// rationale: diff-match-patch removed — single replace dispatch covers hydration; CM maps decorations.
 import { basicSetup } from 'codemirror';
 import { Annotation, EditorState, StateEffect, StateField } from '@codemirror/state';
 import { EditorView, Decoration, WidgetType, ViewPlugin } from '@codemirror/view';
@@ -73,7 +73,7 @@ const reviewRanges = StateField.define({
   provide: field => EditorView.decorations.from(field),
 });
 
-// ponytail: instructor "show changes" ranges — same changeRanges model the
+// rationale: instructor "show changes" ranges — same changeRanges model the
 // Preview consumes. Light-green mark only; no layout shift, no text change.
 const changeRangesField = StateField.define({
   create: () => Decoration.none,
@@ -728,7 +728,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
     }
   }, [findings]);
 
-  // ponytail: show-changes highlights follow the shared changeRanges prop
+  // rationale: show-changes highlights follow the shared changeRanges prop
   // (clamped to the doc; CM maps them through hydration edits).
   useEffect(() => {
     const v = viewRef.current;

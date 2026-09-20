@@ -134,7 +134,7 @@ export default function AdminDashboard() {
       || viT(`admin.${item.labelKey}`).toLowerCase().includes(q));
   }, [navQuery]);
 
-  // ponytail: entering the admin page always lands on the dashboard —
+  // rationale: entering the admin page always lands on the dashboard —
   // the last-visited tab is intentionally not restored.
   const [active, setActive] = useState('dashboard');
   const [collapsed, setCollapsed] = useState(false);

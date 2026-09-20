@@ -3,7 +3,7 @@ import { formatDateTime } from '../../../utils/formatters/date.js';
 
 const LOCATION_KEYS = new Set(['ATTACHED', 'MODIFIED', 'DETACHED', 'SECTION', 'UNLOCATED']);
 
-// ponytail: one card for both tabs — FeedbackThreadsTab passes actions,
+// rationale: one card for both tabs — FeedbackThreadsTab passes actions,
 // History renders it readOnly with none. No duplicate markup.
 // No ticket-state presentation: thread/pending/student statuses stay in
 // storage for legacy reads but never render as workflow UI.

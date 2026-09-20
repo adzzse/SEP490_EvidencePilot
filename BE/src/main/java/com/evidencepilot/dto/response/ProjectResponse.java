@@ -64,7 +64,7 @@ public record ProjectResponse(
         return from(project, role);
     }
 
-    // ponytail: read paths enrich counts via the service batch helper; write responses keep 0.
+    // rationale: read paths enrich counts via the service batch helper; write responses keep 0.
     public static ProjectResponse withCounts(ProjectResponse base, long sourceCount, long sectionCount) {
         return new ProjectResponse(
             base.id(),

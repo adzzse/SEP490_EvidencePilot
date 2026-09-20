@@ -14,6 +14,7 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.PaperStandard;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.repository.DocumentRepository;
@@ -157,6 +158,8 @@ public class PaperProcessingServiceImpl {
             section.setDocument(document);
             section.setSectionOrder((index + 1) * BlockTreeIngestor.ORDER_STEP);
             section.setSectionTitle(sectionName);
+            section.setSectionType(referenceTitle(sectionName)
+                    ? PaperSectionType.REFERENCE : PaperSectionType.STANDARD);
             section.setHeadingLevel(2);
             sections.add(section);
 
@@ -241,7 +244,7 @@ public class PaperProcessingServiceImpl {
             }
             return authors;
         } catch (Exception exception) {
-            // ponytail: metadata must never break the paper display; fall back to empty.
+            // rationale: metadata must never break the paper display; fall back to empty.
             return List.of();
         }
     }
@@ -401,7 +404,7 @@ public class PaperProcessingServiceImpl {
         Document document = requireInstructorDocumentWriteAccess(documentId);
         User currentUser = currentUserService.requireCurrentUser();
         PaperSection section = requireSectionInDocument(sectionId, documentId);
-        if (assignedUserId != null && paperStandardService.isReferenceSectionTitle(section.getSectionTitle())) {
+        if (assignedUserId != null && isReferenceSection(section)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Reference sections are shared and cannot be assigned.");
@@ -521,6 +524,8 @@ public class PaperProcessingServiceImpl {
         PaperSection section = new PaperSection();
         section.setDocument(document);
         section.setSectionTitle(title != null ? title : "New Section");
+        section.setSectionType(referenceTitle(section.getSectionTitle())
+                ? PaperSectionType.REFERENCE : PaperSectionType.STANDARD);
         section.setSectionOrder(maxOrder + BlockTreeIngestor.ORDER_STEP);
         PaperStandard standard = document.getProject().getTargetStandard();
         section.setContentTex(paperStandardService.getSectionTemplate(
@@ -562,6 +567,8 @@ public class PaperProcessingServiceImpl {
             PaperSection section = new PaperSection();
             section.setDocument(document);
             section.setSectionTitle(requiredSections.get(i));
+            section.setSectionType(referenceTitle(section.getSectionTitle())
+                    ? PaperSectionType.REFERENCE : PaperSectionType.STANDARD);
             section.setSectionOrder(startOrder + i * BlockTreeIngestor.ORDER_STEP);
             section.setContentTex(
                     paperStandardService.getSectionTemplate(
@@ -734,7 +741,7 @@ public class PaperProcessingServiceImpl {
             String beforeContent, String afterContent) {
         if (project == null || Objects.equals(beforeContent, afterContent)) return;
         ContentWordDelta delta = contentWordDelta(beforeContent, afterContent);
-        // ponytail: write the section as the entity (not the project) so the activity
+        // rationale: write the section as the entity (not the project) so the activity
         // feed can resolve the section directly via PaperSection and render a
         // student-friendly "Section: X in Project Y" row.
         auditService.record(
@@ -807,19 +814,44 @@ public class PaperProcessingServiceImpl {
     }
 
     private void requireSectionStructureUnlocked(List<PaperSection> sections) {
-        if (sections.stream().anyMatch(
-                section -> section.isActive() && section.getAssignedUser() != null)) {
+        if (sections.stream().anyMatch(section -> section.isActive() && hasMeaningfulWork(section))) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Section structure is locked while one or more sections are assigned. "
-                    + "Unassign all sections before making structural changes.");
+                    "SECTION_STRUCTURE_LOCKED: one or more sections contain current work or history. "
+                    + "Structural changes are only available for setup-only sections.");
         }
+    }
+
+    private boolean hasMeaningfulWork(PaperSection section) {
+        if (section.getAssignedUser() != null) return true;
+        if (paperStandardService.hasStudentContent(section.getContentTex())) return true;
+        if (section.getPreviousContentTex() != null && !section.getPreviousContentTex().isBlank()) return true;
+        if (section.getVersion() != null && section.getVersion() > 1) return true;
+        if (section.getDocument() != null && section.getDocument().getProject() != null
+                && section.getId() != null
+                && assignmentSectionBaselineRepository.existsByProjectIdAndSectionId(
+                        section.getDocument().getProject().getId(), section.getId())) {
+            return true;
+        }
+        if (section.getId() != null
+                && sectionStandardEvaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId()).isPresent()) {
+            return true;
+        }
+        return hasFeedback(section);
     }
 
     private boolean hasFeedback(PaperSection section) {
         return instructorFeedbackRepository.findByRequestProjectId(
                         section.getDocument().getProject().getId()).stream()
                 .anyMatch(feedback -> section.getId().equals(feedback.getSection().getId()));
+    }
+
+    private static boolean isReferenceSection(PaperSection section) {
+        return section != null && section.getSectionType() == PaperSectionType.REFERENCE;
+    }
+
+    private boolean referenceTitle(String title) {
+        return paperStandardService.isReferenceSectionTitle(title);
     }
 
     private Document requireDocumentAccess(UUID documentId) {
@@ -898,7 +930,8 @@ public class PaperProcessingServiceImpl {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Section title must contain 1 to 255 characters");
             }
-            if (paperStandardService.isReferenceSectionTitle(item.sectionTitle())
+            PaperSection persistedSection = persistedById.get(item.id());
+            if (isReferenceSection(persistedSection)
                     && item.assignedUserId() != null) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
@@ -925,13 +958,7 @@ public class PaperProcessingServiceImpl {
         }
         if (hasStructuralChange) {
             requireInstructorDocumentWriteAccess(documentId);
-            boolean currentlyLocked = persisted.stream().anyMatch(s -> s.getAssignedUser() != null);
-            boolean remainsLocked = items.stream().anyMatch(item -> item.assignedUserId() != null);
-            if (currentlyLocked && remainsLocked) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Section structure is locked while one or more sections are assigned. "
-                                + "Unassign all sections before making structural changes.");
-            }
+            requireSectionStructureUnlocked(persisted);
         } else if (hasAssignChange) {
             requireInstructorDocumentWriteAccess(documentId);
         } else {

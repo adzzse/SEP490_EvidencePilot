@@ -1,4 +1,4 @@
-// ponytail: word-level diff for submitted-vs-baseline compare. No dependency; capped changed window, truncates safely.
+// rationale: word-level diff for submitted-vs-baseline compare. No dependency; capped changed window, truncates safely.
 const MAX_TOKENS = 2000;
 
 function tokenize(text) {
@@ -65,7 +65,7 @@ export function wordDiff(before, after) {
   const aChanged = aTokens.slice(start, aEnd);
   const bChanged = bTokens.slice(start, bEnd);
   if (aChanged.length > MAX_TOKENS || bChanged.length > MAX_TOKENS) {
-    // ponytail: a whole-document range would mislead — report truncation with
+    // rationale: a whole-document range would mislead — report truncation with
     // no ranges and let the UI say so honestly instead of lighting everything.
     return { ops: [[-1, a], [1, b]], truncated: true, ranges: [] };
   }
@@ -77,7 +77,7 @@ export function wordDiff(before, after) {
   return { ops, truncated: false, ranges: rangesFromOps(ops) };
 }
 
-// ponytail: shared change model — the LaTeX editor, Preview, and the
+// rationale: shared change model — the LaTeX editor, Preview, and the
 // right-side diff all consume these ranges (offsets into the AFTER text,
 // i.e. the submitted section content). One diff, three views.
 export function rangesFromOps(ops) {
@@ -101,7 +101,7 @@ export function rangesFromOps(ops) {
   return ranges;
 }
 
-// ponytail: Preview blocks carry [start, end) source anchors; a block is
+// rationale: Preview blocks carry [start, end) source anchors; a block is
 // highlighted when it overlaps any added/modified range.
 export function blockOverlapsRanges(start, end, ranges) {
   if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) return false;

@@ -185,7 +185,7 @@ export default function SetPassword() {
           await api.post('/api/users/avatar', fd, {
             headers: { 'Content-Type': 'multipart/form-data' },
           });
-          // ponytail: silent re-fetch of /me so the global user.avatarUrl is fresh
+          // rationale: silent re-fetch of /me so the global user.avatarUrl is fresh
           // before the dashboard mounts. No window.location.reload().
           await verifySession().catch(() => {});
         } catch {

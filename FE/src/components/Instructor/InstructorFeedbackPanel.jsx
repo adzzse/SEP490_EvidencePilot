@@ -86,7 +86,7 @@ export default function InstructorFeedbackPanel({ review, selectedSection, proje
         )}
 
         {panelTab === 'history' && (() => {
-          // ponytail: every published root card of the immediately previous
+          // rationale: every published root card of the immediately previous
           // round for this section. Same component as the Feedback tab,
           // read-only. updatedAt never orders.
           const previous = selectPreviousCards(

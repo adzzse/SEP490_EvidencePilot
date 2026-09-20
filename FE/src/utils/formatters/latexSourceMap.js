@@ -1,4 +1,4 @@
-// ponytail: offset-preserving scanner for LaTeX inline constructs — returns
+// rationale: offset-preserving scanner for LaTeX inline constructs — returns
 // exact canonical spans, never rendered text. The legacy renderer
 // (renderLatexToHtml) emits plain HTML with no positions, so B5 maps a
 // Preview DOM range by matching its text against these spans; escaped
@@ -23,7 +23,7 @@ const PATTERNS = [
 const TEXT_TYPES = new Set(['textbf', 'textit', 'emph', 'bold']);
 const CITE_TYPES = new Set(['cite']);
 
-// ponytail: pure structural core — the DOM adapter feeds one flag object per
+// rationale: pure structural core — the DOM adapter feeds one flag object per
 // rendered inline element in document order; no text, no nodes, no search.
 // kind 'text' pairs with textbf/textit/emph/bold spans, 'cite' with cite
 // spans. Duplicate constructs map by POSITION (nth flag ↔ nth span) —

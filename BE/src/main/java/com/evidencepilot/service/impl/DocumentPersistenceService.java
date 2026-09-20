@@ -80,7 +80,7 @@ public class DocumentPersistenceService {
         eventPublisher.publishEvent(new EntityChangedEvent(
                 "DOCUMENT", saved.getId(), "CREATED",
                 saved.getProject() != null ? saved.getProject().getId() : null));
-        // ponytail: write a "DOCUMENT_UPLOADED" row so the instructor's "My Activity"
+        // rationale: write a "DOCUMENT_UPLOADED" row so the instructor's "My Activity"
         // tab can render a Source Library entry. Failure here must not roll back the
         // upload — wrap in try/catch to keep the primary write durable.
         try {
@@ -97,7 +97,7 @@ public class DocumentPersistenceService {
                     null,
                     meta);
         } catch (RuntimeException ex) {
-            // ponytail: audit is best-effort; don't break the upload on a logging failure.
+            // rationale: audit is best-effort; don't break the upload on a logging failure.
             org.slf4j.LoggerFactory.getLogger(DocumentPersistenceService.class)
                     .warn("Failed to record DOCUMENT_UPLOADED audit for {}", saved.getId(), ex);
         }

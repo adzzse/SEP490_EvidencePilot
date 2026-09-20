@@ -13,7 +13,7 @@ import PreviewSection from './PreviewSection';
 import CtaSection from './CtaSection';
 import FooterSection from './FooterSection';
 
-// ponytail: mirrors loginOrigin.js defaultWorkspace — Home owns the post-auth
+// rationale: mirrors loginOrigin.js defaultWorkspace — Home owns the post-auth
 // forward so onboarding can route to '/' without knowing role destinations.
 const WORKSPACE_BY_ROLE = {
   ADMIN: '/admin/dashboard',
@@ -32,7 +32,7 @@ export default function Home() {
     setShowSplash(false);
   }, []);
 
-  // ponytail: root traffic controller — hold on a spinner while the session is
+  // rationale: root traffic controller — hold on a spinner while the session is
   // being verified (JWT validity unknown); invalid tokens resolve to the public
   // landing via AuthContext's 401/403 cleanup, valid ones forward by role.
   if (loading) {

@@ -74,7 +74,7 @@ class DocumentPersistenceServiceTest {
         assertThat(saved.getFileUrl()).isEqualTo("sources/raw/file.pdf");
         assertThat(saved.getFileHashSha256()).isEqualTo("abc123");
         verify(events).publishEvent(new DocumentUploadedEvent(id));
-        // ponytail: the upload also writes a DOCUMENT_UPLOADED audit row so the
+        // rationale: the upload also writes a DOCUMENT_UPLOADED audit row so the
         // instructor's "My Activity" feed can render a Source Library entry.
         verify(audit).record(eq("DOCUMENT_UPLOADED"), eq("DOCUMENT"), eq(id), eq(uploader),
                 isNull(), any());

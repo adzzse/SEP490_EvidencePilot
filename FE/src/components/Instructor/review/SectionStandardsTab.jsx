@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../../../services/api.js';
+import { formatDateTime } from '../../../utils/formatters/date.js';
 
-// ponytail: standards viewer reusing embedded v2 snapshot data first, live GET latest as fallback.
+// rationale: standards viewer reusing embedded v2 snapshot data first, live GET latest as fallback.
 // Embedded = historical truth; live = current (labeled, never presented as historical).
 export default function SectionStandardsTab({ review, selectedSection }) {
   const { t } = useTranslation();
@@ -51,7 +52,7 @@ export default function SectionStandardsTab({ review, selectedSection }) {
         <span className={`rounded px-2 py-1 text-[10px] font-bold ${shown.stale || shown.status === 'STALE' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
           {shown.stale || shown.status === 'STALE' ? t('instructor.review.standardStale') : shown.status}
         </span>
-        {shown.updatedAt && <span className="text-[10px] text-(--text-tertiary)">{new Date(shown.updatedAt).toLocaleString()}</span>}
+        {shown.updatedAt && <span className="text-[10px] text-(--text-tertiary)">{formatDateTime(shown.updatedAt)}</span>}
       </div>
       <p className="text-[10px] italic text-(--text-tertiary)">
         {shown.historical ? t('instructor.review.standardCapturedAtSubmission') : t('instructor.review.standardCurrentNotice')}

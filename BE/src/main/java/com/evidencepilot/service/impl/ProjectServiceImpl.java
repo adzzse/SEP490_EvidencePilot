@@ -97,7 +97,7 @@ public class ProjectServiceImpl {
         return ProjectResponse.withCounts(base, sources, sections);
     }
 
-    // ponytail: one batch query per count type (same shape as the memberCounts query) —
+    // rationale: one batch query per count type (same shape as the memberCounts query) —
     // no per-project N+1, no FE-side fan-out for the Metadata badges.
     private List<ProjectResponse> toResponses(List<Project> projects) {
         List<UUID> projectIds = idsOf(projects);
@@ -216,9 +216,7 @@ public class ProjectServiceImpl {
         Project project = findActiveProject(id);
         currentUserService.requireRole(currentUser, UserRole.INSTRUCTOR);
         currentUserService.requireProjectAccess(currentUser, project);
-        if (project.getStatus() != ProjectStatus.IN_PROGRESS
-                && project.getStatus() != ProjectStatus.SUBMITTED_FOR_REVIEW
-                && project.getStatus() != ProjectStatus.RETURNED) {
+        if (!project.getStatus().canTransitionTo(ProjectStatus.APPROVED)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Project cannot be completed in its current state.");
         }
         ProjectStatus oldStatus = project.getStatus();
@@ -242,7 +240,7 @@ public class ProjectServiceImpl {
         User currentUser = currentUserService.requireCurrentUser();
         Project project = findActiveProject(id);
         currentUserService.requireProjectManageAccess(currentUser, project);
-        if (project.getStatus() != ProjectStatus.APPROVED) {
+        if (!project.getStatus().canTransitionTo(ProjectStatus.ARCHIVED)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only APPROVED projects can be archived.");
         }
         project.setStatus(ProjectStatus.ARCHIVED);
@@ -260,7 +258,7 @@ public class ProjectServiceImpl {
         User currentUser = currentUserService.requireCurrentUser();
         Project project = findActiveProject(id);
         currentUserService.requireProjectManageAccess(currentUser, project);
-        if (project.getStatus() != ProjectStatus.ARCHIVED) {
+        if (!project.getStatus().canTransitionTo(ProjectStatus.APPROVED)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only ARCHIVED projects can be unarchived.");
         }
         project.setStatus(ProjectStatus.APPROVED);
@@ -283,6 +281,35 @@ public class ProjectServiceImpl {
         projectRepository.save(project);
         auditService.record("PROJECT_DELETED", "PROJECT", project.getId(), currentUser, null, null);
         events.publishEvent(new EntityChangedEvent("PROJECT", project.getId(), "STATUS_CHANGED", null));
+    }
+
+    @Transactional
+    public ProjectResponse restoreProject(UUID id) {
+        User currentUser = currentUserService.requireCurrentUser();
+        Project project = projectRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(id, "Project"));
+        currentUserService.requireProjectManageAccess(currentUser, project);
+        if (project.isActive()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Project is not in trash.");
+        }
+        project.setActive(true);
+        project.setUpdatedAt(LocalDateTime.now());
+        Project saved = projectRepository.save(project);
+        auditService.record("PROJECT_RESTORED", "PROJECT", saved.getId(), currentUser, null, null);
+        events.publishEvent(new EntityChangedEvent("PROJECT", saved.getId(), "STATUS_CHANGED", null));
+        return ProjectResponse.from(saved);
+    }
+
+    @Transactional
+    public int unassignAllSections(UUID projectId, UUID userId) {
+        User currentUser = currentUserService.requireCurrentUser();
+        Project project = findActiveProject(projectId);
+        currentUserService.requireProjectManageAccess(currentUser, project);
+        currentUserService.requireProjectWriteAccess(currentUser, project);
+        int cleared = paperSectionRepository.clearAssignmentsForProjectAndUser(projectId, userId);
+        auditService.record("PROJECT_SECTIONS_UNASSIGNED", "PROJECT", projectId, currentUser, userId, cleared);
+        events.publishEvent(new EntityChangedEvent("PROJECT", projectId, "STATUS_CHANGED", null));
+        return cleared;
     }
 
     public List<ProjectMember> getProjectMembers(UUID projectId) {
@@ -390,6 +417,7 @@ public class ProjectServiceImpl {
         if (target.getRole() == ProjectRole.LEADER) {
             requireAnotherLeader(projectId);
         }
+        paperSectionRepository.clearAssignmentsForProjectAndUser(projectId, userId);
         members.forEach(member -> systemNotificationService.createNotification(
                 member.getUser(),
                 currentUser,

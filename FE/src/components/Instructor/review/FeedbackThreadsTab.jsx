@@ -17,7 +17,7 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
   } = review;
   const [pendingAttachments, setPendingAttachments] = useState({});
   const [busyId] = useState(null);
-  // ponytail: explicit adjust mode — incidental editor selections never
+  // rationale: explicit adjust mode — incidental editor selections never
   // retarget an edit; only the floating FAB confirmation commits a new
   // passage. The flag lives in the review workflow so EditorPanel's FAB can
   // see it; Escape exits adjust mode, Change passage toggles it.
@@ -31,9 +31,9 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
   useEffect(() => {
     if (composerFocusToken > 0) composerRef.current?.focus();
   }, [composerFocusToken]);
-  // ponytail: picker picks keyed by message so composer/reply drafts never mix.
+  // rationale: picker picks keyed by message so composer/reply drafts never mix.
   const pendingKey = editingFeedbackId || 'new';
-  // ponytail: human line target, never raw offsets. Create mode arms
+  // rationale: human line target, never raw offsets. Create mode arms
   // automatically (see autoCaptureSelection); edit mode keeps the explicit
   // button so reviewing never clobbers a seeded passage.
   const passageLines = useMemo(() => {
@@ -58,7 +58,7 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
     .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || ''))),
     [feedbackItems, activeRequestId, selectedSection?.id]);
 
-  // ponytail: overlap is valid — warn only, never block. The item under edit
+  // rationale: overlap is valid — warn only, never block. The item under edit
   // is excluded so its own passage is not reported as a duplicate.
   const overlap = useMemo(() => {
     if (!selectedAnchor) return { count: 0, exactDuplicate: false, ids: [] };
@@ -78,7 +78,7 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
     if (ok) setPendingAttachments(prev => ({ ...prev, [pendingKey]: [] }));
   };
 
-  // ponytail: one form, two homes — top composer is create-only, the editing
+  // rationale: one form, two homes — top composer is create-only, the editing
   // card renders this same form inline. Called as a plain function (not a
   // component) so focus and DOM identity survive re-renders.
   const composerForm = mode => (

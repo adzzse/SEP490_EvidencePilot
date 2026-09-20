@@ -1,6 +1,5 @@
 import DeleteConfirm from '../../ui/DeleteConfirm.jsx';
 import { studentDisplayName } from '../../../utils/instructor/studentSearch.js';
-import { isReferenceSectionTitle } from '../../../utils/formatters/latexHtml.js';
 
 export default function SectionRow({
   section: s,
@@ -15,6 +14,7 @@ export default function SectionRow({
   onSaveRename,
   onCancelRename,
   onEditingChange,
+  onEditContent,
   onDelete,
   onAssign,
   onReloadConflict,
@@ -28,7 +28,7 @@ export default function SectionRow({
   onDragOver,
   onDrop,
   }) {
-  const isReferenceSection = isReferenceSectionTitle(s.sectionTitle);
+  const isReferenceSection = s.sectionType === 'REFERENCE';
   return (
     <div
       draggable={!isLocked && !isSaving}
@@ -95,6 +95,16 @@ export default function SectionRow({
           )}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={() => onEditContent(s)}
+              disabled={isSaving}
+              className="rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] font-bold text-[var(--text-secondary)] hover:text-[var(--brand-foreground)] disabled:opacity-50"
+            >
+              {t.editContent}
+            </button>
+          )}
           {!isLocked && (
             <button
               type="button"

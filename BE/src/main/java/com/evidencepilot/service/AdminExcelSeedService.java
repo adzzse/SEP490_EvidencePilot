@@ -95,16 +95,16 @@ import java.util.zip.ZipInputStream;
 public class AdminExcelSeedService {
 
     private static final int MAX_ROWS_DEFAULT = 200;
-    // ponytail: member rows are cheap single inserts; 3-5 students per project
+    // rationale: member rows are cheap single inserts; 3-5 students per project
     // across 60+ projects exceeds the default cap, so members get headroom
     private static final int MAX_ROWS_MEMBERS = 500;
     private static final long MAX_XLSX_BYTES = 10L * 1024 * 1024;
-    // ponytail: no "sections" sheet — file-backed papers get sections from extraction,
+    // rationale: no "sections" sheet — file-backed papers get sections from extraction,
     // standard papers from createSectionsFromStandard; a legacy sheet is ignored by parse
     private static final List<String> SHEETS = List.of("users", "projects", "members", "sources", "papers", "collections");
     private static final Set<String> INVITE_TRUE_TOKENS = Set.of("TRUE", "1", "YES", "Y");
     private static final Set<String> INVITE_FALSE_TOKENS = Set.of("FALSE", "0", "NO", "N");
-    // ponytail: mirrors OpenAlexIngestionServiceImpl — per-PDF cap + header scan
+    // rationale: mirrors OpenAlexIngestionServiceImpl — per-PDF cap + header scan
     private static final long MAX_SEED_PDF_BYTES = 50L * 1024 * 1024;
     private static final byte[] PDF_SIGNATURE = {'%', 'P', 'D', 'F', '-'};
 
@@ -279,7 +279,7 @@ public class AdminExcelSeedService {
      */
     public byte[] buildTemplateBundle() throws IOException {
         byte[] xlsx = buildTemplate();
-        // ponytail: .tex example — passes PAPER validation and takes the latex
+        // rationale: .tex example — passes PAPER validation and takes the latex
         // fast-path extraction (no model call), unlike .txt which is rejected
         String paper = "\\section{Introduction}\n"
                 + "Our method improves recall by 34\\% over prior work.\n\n"
@@ -288,7 +288,7 @@ public class AdminExcelSeedService {
         String imgReadme = "Put figures for this paper here (png/jpg/jpeg/gif/pdf).\n"
                 + "Reference from .tex as images/<name>.\n"
                 + "You may delete this README once you've added figures — it is never uploaded as media.\n";
-        // ponytail: instructions-only file — sits directly in the paper folder (not
+        // rationale: instructions-only file — sits directly in the paper folder (not
         // images/), so validation ignores it and it is never imported
         String folderGuide = "# How to add a paper to this folder (manual)\n"
                 + "\n"
@@ -667,7 +667,7 @@ public class AdminExcelSeedService {
         SeedJob job = new SeedJob();
         job.total = parsed.sheets().values().stream().mapToInt(List::size).sum();
         jobs.put(job.getId(), job);
-        // ponytail: worker thread has no SecurityContext — capture the requesting
+        // rationale: worker thread has no SecurityContext — capture the requesting
         // ADMIN auth so uploadDocument/media/importUsers don't 401 (ADMIN bypasses
         // project write checks in CurrentUserServiceImpl).
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -760,7 +760,7 @@ public class AdminExcelSeedService {
                 String expected = parts[1] + ".";
                 String fname = parts[2].toLowerCase(Locale.ROOT);
                 if (!fname.startsWith(expected) || !fname.matches(".+\\.(pdf|docx|tex)")) {
-                    // ponytail: same wording as DocumentServiceImpl.validateFile (415 path)
+                    // rationale: same wording as DocumentServiceImpl.validateFile (415 path)
                     if (fname.matches(".+\\.(pdf|docx|tex|txt|md|markdown|doc)")) {
                         errors.add("papers row " + r.get("_row")
                                 + ": folder main file must be named " + parts[1] + ".{pdf,docx,tex} after its folder"
@@ -771,7 +771,7 @@ public class AdminExcelSeedService {
                     }
                 }
                 if (!zipFiles.containsKey(norm) && !zipFiles.containsKey(parts[0] + "/" + parts[1] + "/" + parts[2])) {
-                    // ponytail: tailored guidance — HOW-TO-ADD-only (paywalled) and
+                    // rationale: tailored guidance — HOW-TO-ADD-only (paywalled) and
                     // missing/empty folders get actionable messages instead of a bare path
                     String prefix = parts[0] + "/" + parts[1] + "/";
                     boolean hasHowTo = zipFiles.keySet().stream()
@@ -954,7 +954,7 @@ public class AdminExcelSeedService {
             if (resolved == null) {
                 OpenAlexWorkResponse work;
                 if (isDataCiteArxivDoi(doi)) {
-                    // ponytail: 10.48550/arXiv.* are DataCite location DOIs —
+                    // rationale: 10.48550/arXiv.* are DataCite location DOIs —
                     // /works/doi: always 404s, so skip the doomed lookup and go
                     // straight to title match / sheet metadata.
                     log.info("Skipping direct OpenAlex lookup for DataCite DOI {}", doi);
@@ -974,7 +974,7 @@ public class AdminExcelSeedService {
                 String downloadNote = null;
                 String oaUrl = work.oaUrl();
                 if ((oaUrl == null || oaUrl.isBlank()) && arxivId(doi) != null) {
-                    // ponytail: title-matched works often lack an OA PDF URL even
+                    // rationale: title-matched works often lack an OA PDF URL even
                     // though the arXiv e-print is freely downloadable
                     oaUrl = "https://arxiv.org/pdf/" + arxivId(doi);
                 }
@@ -1012,7 +1012,7 @@ public class AdminExcelSeedService {
             d.setPublicationYear(work.publicationYear());
             d.setPublisher(work.publisher());
             d.setCitedByCount(work.citedByCount());
-            // ponytail: non-null before the first save — leaving it unset crashed
+            // rationale: non-null before the first save — leaving it unset crashed
             // MySQL NOT NULL inserts (mirrors OpenAlexIngestionServiceImpl)
             d.setProcessingStatus(ProcessingStatus.METADATA_FETCHED);
             if (work.primaryTopic() != null) {
@@ -1052,7 +1052,7 @@ public class AdminExcelSeedService {
                 }
             }
             projectCollectionService.syncSource(d);
-            // ponytail: the visual/citation maps read saved DocumentReference rows —
+            // rationale: the visual/citation maps read saved DocumentReference rows —
             // without this, seeded sources render as isolated nodes with no edges
             try {
                 openAlexIngestionService.persistCitationGraph(d, resolved.work());
@@ -1159,7 +1159,7 @@ public class AdminExcelSeedService {
     private static String arxivId(String doi) {
         if (doi == null) return null;
         String suffix = doi.contains("/") ? doi.substring(doi.lastIndexOf('/') + 1) : doi;
-        // ponytail: DataCite arXiv DOIs look like 10.48550/arXiv.1706.03762
+        // rationale: DataCite arXiv DOIs look like 10.48550/arXiv.1706.03762
         if (suffix.regionMatches(true, 0, "arXiv.", 0, 6)) return suffix.substring(6).trim();
         if (suffix.regionMatches(true, 0, "arXiv:", 0, 6)) return suffix.substring(6).trim();
         return null;
@@ -1220,7 +1220,7 @@ public class AdminExcelSeedService {
                     String filename = norm.substring(norm.lastIndexOf('/') + 1);
                     String contentType = filename.endsWith(".pdf") ? "application/pdf"
                             : filename.endsWith(".tex") ? "text/plain" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-                    // ponytail: reuse extraction pipeline — uploadDocument streams to MinIO + queues worker
+                    // rationale: reuse extraction pipeline — uploadDocument streams to MinIO + queues worker
                     var uploaded = documentService.uploadDocument(project.getId(), new PathMultipartFile(filename, filename, contentType, data), DocumentType.PAPER);
                     // attribute uploaded_by to the project instructor (mirrors Instructor-page upload)
                     var instructor = instructorOf(project);

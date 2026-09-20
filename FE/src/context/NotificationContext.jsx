@@ -14,12 +14,14 @@ export function NotificationProvider({ children }) {
   const [error, setError] = useState(null);
   const [restReadyToken, setRestReadyToken] = useState(null);
   const requestIdRef = useRef(0);
+  const notificationIdsRef = useRef(new Set());
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async ({ preserveSocket = false } = {}) => {
     const requestId = ++requestIdRef.current;
     setError(null);
-    setRestReadyToken(null);
+    if (!preserveSocket) setRestReadyToken(null);
     if (!token) {
+      notificationIdsRef.current.clear();
       setNotifications([]);
       setUnreadCount(0);
       return false;
@@ -30,7 +32,9 @@ export function NotificationProvider({ children }) {
         api.get('/api/notifications/unread-count'),
       ]);
       if (requestId !== requestIdRef.current) return false;
-      setNotifications(notifRes.data || []);
+      const nextNotifications = notifRes.data || [];
+      notificationIdsRef.current = new Set(nextNotifications.map(item => String(item.id)));
+      setNotifications(nextNotifications);
       setUnreadCount(unreadRes.data?.count || 0);
       setRestReadyToken(token);
       return true;
@@ -61,9 +65,12 @@ export function NotificationProvider({ children }) {
     let cancelled = false;
     const unsubscribe = subscribeToNotifications(token, incoming => {
       if (cancelled) return;
+      const incomingId = incoming?.id == null ? null : String(incoming.id);
+      if (!incomingId || notificationIdsRef.current.has(incomingId)) return;
+      notificationIdsRef.current.add(incomingId);
       setNotifications(current => [incoming, ...current]);
-      setUnreadCount(current => current + 1);
-    });
+      if (!incoming.read) setUnreadCount(current => current + 1);
+    }, { onConnected: () => { void reload({ preserveSocket: true }); } });
     return () => { cancelled = true; unsubscribe(); };
   }, [token, restReadyToken]);
 
@@ -107,8 +114,20 @@ export function NotificationProvider({ children }) {
     }
   }, []);
 
+  const markAllRead = useCallback(async () => {
+    try {
+      await api.patch('/api/notifications/read-all');
+      setNotifications(current => current.map(item => ({ ...item, read: true })));
+      setUnreadCount(0);
+      return true;
+    } catch {
+      console.warn('markAllNotificationsFailed');
+      return false;
+    }
+  }, []);
+
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, error, reload, markRead }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, error, reload, markRead, markAllRead }}>
       {children}
     </NotificationContext.Provider>
   );

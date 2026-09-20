@@ -203,9 +203,10 @@ class FeedbackRevisionMySqlTest {
         login(f.instructor());
         assertThatThrownBy(() -> feedback.updateFeedbackItem(root.id(),
                 new InstructorFeedbackRequest(f.first(), null, "Overwrite"))).hasMessageContaining("immutable");
-        // One-way review: approval needs no thread closure — the OPEN thread stays OPEN.
-        feedback.updateStatus(round.id(), "REVIEWED");
-        assertThat(projectStatus(f.project())).isEqualTo("APPROVED");
+        // A returned request cannot be approved without a fresh student submission.
+        assertThatThrownBy(() -> feedback.updateStatus(round.id(), "REVIEWED"))
+                .hasMessageContaining("Approve requires the latest submitted review request");
+        assertThat(projectStatus(f.project())).isEqualTo("RETURNED");
         assertThat(jdbc.queryForList(legacySql, root.id().toString())).isEqualTo(legacyRows);
         assertThat(jdbc.queryForMap(answerSql, root.id().toString())).isEqualTo(legacyAnswer);
         assertThat(feedback.getSubmissionSnapshot(round.id()).snapshot()).isEqualTo(snapshot);

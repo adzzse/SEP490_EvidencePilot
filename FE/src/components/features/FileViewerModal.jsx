@@ -24,7 +24,7 @@ export default function FileViewerModal({ fileUrl, fileName, documentId, chunkId
     setPassageLoading(hasPassage);
     if (!hasPassage) return () => { active = false; };
 
-    // ponytail: reuse the existing chunk-list endpoint; add a single-chunk route only if large sources make this slow.
+    // rationale: reuse the existing chunk-list endpoint; add a single-chunk route only if large sources make this slow.
     api.get(`/api/documents/${documentId}/chunks`)
       .then((response) => {
         if (!active) return;

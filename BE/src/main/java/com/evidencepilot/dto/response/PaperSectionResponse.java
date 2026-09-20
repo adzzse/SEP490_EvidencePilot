@@ -2,6 +2,7 @@ package com.evidencepilot.dto.response;
 
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.PaperSectionType;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -13,6 +14,7 @@ public record PaperSectionResponse(
         String assignedUserName,
         Integer sectionOrder,
         String sectionTitle,
+        PaperSectionType sectionType,
         UUID parentSectionId,
         Integer headingLevel,
         String contentTex,
@@ -41,6 +43,7 @@ public record PaperSectionResponse(
                 assignedUserName,
                 section.getSectionOrder(),
                 section.getSectionTitle(),
+                section.getSectionType() == null ? PaperSectionType.STANDARD : section.getSectionType(),
                 section.getParentSection() != null ? section.getParentSection().getId() : null,
                 section.getHeadingLevel(),
                 section.getContentTex(),

@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useRef, useState } from 'react'
 const ToastContext = createContext(null);
 let nextId = 1;
 
-// ponytail: global toasts replace the per-tab hand-rolled showToast states.
+// rationale: global toasts replace the per-tab hand-rolled showToast states.
 // Usage: const { toast } = useToast(); toast.success('Saved'); toast.error('Failed');
 export function ToastProvider({ children }) {
   const [items, setItems] = useState([]);

@@ -13,8 +13,8 @@ import {
 import { formatDate } from '../../utils/formatters/date.js';
 import StatusBadge from '../../components/ui/StatusBadge.jsx';
 import DeleteConfirm from '../../components/ui/DeleteConfirm.jsx';
-
-const PROJECT_ACTIONS = Object.freeze(['archive', 'unarchive', 'complete']);
+import ProjectEditModal from '../../components/Instructor/ProjectEditModal.jsx';
+import { getProjectActions, hasProjectAction } from '../../utils/projectActions.js';
 
 export default function ProjectManagement() {
   const navigate = useNavigate();
@@ -27,9 +27,10 @@ export default function ProjectManagement() {
   const [isGridView, setIsGridView] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
   const [newTitle, setNewTitle] = useState('');
-  const [editId, setEditId] = useState(null);
-  const [editTitle, setEditTitle] = useState('');
+  const [editingProject, setEditingProject] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [newDescription, setNewDescription] = useState('');
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -53,6 +54,7 @@ export default function ProjectManagement() {
         page,
         size: CARD_GRID_PAGE_SIZE,
         sort: 'createdAt,desc',
+        active: !showTrash,
       };
       if (debouncedSearch) {
         params.q = debouncedSearch;
@@ -75,7 +77,7 @@ export default function ProjectManagement() {
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [page, debouncedSearch, statusFilter]);
+  }, [page, debouncedSearch, statusFilter, showTrash]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -89,6 +91,8 @@ export default function ProjectManagement() {
       label: t(`status.${st}`),
     }))
   ), [t]);
+
+  const actionState = project => ({ ...project, active: project.active ?? !showTrash });
 
   const handleCreate = async () => {
     if (!newTitle.trim()) return;
@@ -106,15 +110,17 @@ export default function ProjectManagement() {
     }
   };
 
-  const handleUpdate = async (id) => {
-    if (!editTitle.trim()) return;
+  const handleUpdate = async ({ title, description }) => {
+    if (!editingProject || !title.trim() || savingEdit) return;
+    setSavingEdit(true);
     try {
-      await api.put(API_ROUTES.PROJECTS.BY_ID(id), { title: editTitle });
-      setEditId(null);
-      setEditTitle('');
-      fetchProjects();
+      await api.put(API_ROUTES.PROJECTS.BY_ID(editingProject.id), { title, description });
+      setEditingProject(null);
+      await fetchProjects();
     } catch {
       alert(t('instructor.projectManagement.updateProjectFailed'));
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -131,13 +137,22 @@ export default function ProjectManagement() {
     }
   };
 
+  const handleRestore = async (id) => {
+    try {
+      await api.patch(API_ROUTES.PROJECTS.RESTORE(id));
+      await fetchProjects();
+    } catch {
+      alert(t('instructor.projectManagement.restoreProjectFailed'));
+    }
+  };
+
   const handlePatch = async (id, action) => {
     try {
       await api.patch(`/api/projects/${id}/${action}`);
-      fetchProjects();
+      await fetchProjects();
     } catch {
       alert(t('instructor.projectManagement.projectActionFailed', {
-        action: t(`instructor.projectManagement.action.${PROJECT_ACTIONS.includes(action) ? action : 'UNKNOWN'}`),
+        action: t(`instructor.projectManagement.action.${['archive', 'unarchive', 'complete'].includes(action) ? action : 'UNKNOWN'}`),
       }));
     }
   };
@@ -156,7 +171,7 @@ export default function ProjectManagement() {
         />
 
         {/* Master Action Header */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center w-full mb-6 gap-4 border-b border-(--border) pb-6">
+        <div className="sticky top-16 z-20 flex flex-col lg:flex-row justify-between items-start lg:items-center w-full mb-6 gap-4 border-b border-(--border) bg-(--page-bg) pb-6 pt-3">
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t('instructor.projectManagement.projects')}</h1>
             <p className="text-xs text-(--text-tertiary) mt-1">{t('instructor.projectManagement.projectsManagementDesc')}</p>
@@ -185,6 +200,14 @@ export default function ProjectManagement() {
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
+
+            <button
+              type="button"
+              onClick={() => { setShowTrash(value => !value); setPage(0); setStatusFilter(''); }}
+              className="rounded-xl border border-(--border) bg-(--surface) px-3 py-2 text-xs font-bold text-(--text-secondary) transition-colors hover:border-(--brand) hover:text-(--brand-foreground)"
+            >
+              {showTrash ? t('instructor.projectManagement.showActive') : t('instructor.projectManagement.showTrash')}
+            </button>
 
             <div className="flex items-center bg-(--surface-secondary) border border-(--border) rounded-xl p-0.5">
               <button
@@ -233,8 +256,8 @@ export default function ProjectManagement() {
               <div
                 key={p.id}
                 data-testid={`project-card-${p.id}`}
-                onClick={() => navigate(`/instructor/projects/${p.id}`)}
-                className="bg-(--surface) border border-(--border) rounded-2xl p-5 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+                onClick={() => !showTrash && navigate(`/instructor/projects/${p.id}`)}
+                className={`bg-(--surface) border border-(--border) rounded-2xl p-5 shadow-sm transition-all duration-200 flex flex-col justify-between ${showTrash ? '' : 'hover:shadow-lg hover:-translate-y-1 cursor-pointer'}`}
               >
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-2">
@@ -254,9 +277,13 @@ export default function ProjectManagement() {
                   </div>
 
                   <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => navigate(`/instructor/projects/${p.id}`)} className="text-xs text-(--brand) hover:bg-(--brand-soft) font-bold px-2.5 py-1 rounded-lg transition-colors">{t('instructor.projectManagement.detail')}</button>
-                    <button onClick={() => { setEditId(p.id); setEditTitle(p.title); }} className="text-xs text-(--brand) hover:bg-(--brand-soft) font-bold px-2.5 py-1 rounded-lg transition-colors">{t('instructor.projectManagement.commonEdit')}</button>
-                    <DeleteConfirm
+                    {!showTrash && <button onClick={() => navigate(`/instructor/projects/${p.id}`)} className="text-xs text-(--brand) hover:bg-(--brand-soft) font-bold px-2.5 py-1 rounded-lg transition-colors">{t('instructor.projectManagement.detail')}</button>}
+                    {hasProjectAction(actionState(p), 'edit') && <button onClick={() => setEditingProject(p)} className="text-xs text-(--brand) hover:bg-(--brand-soft) font-bold px-2.5 py-1 rounded-lg transition-colors">{t('instructor.projectManagement.commonEdit')}</button>}
+                    {hasProjectAction(actionState(p), 'restore') && <button onClick={() => handleRestore(p.id)} className="text-xs text-emerald-600 hover:bg-emerald-50 font-bold px-2.5 py-1 rounded-lg transition-colors">{t('instructor.projectManagement.restore')}</button>}
+                    {hasProjectAction(actionState(p), 'archive') && <button onClick={() => handlePatch(p.id, 'archive')} className="text-xs text-amber-600 hover:bg-amber-50 font-bold px-2.5 py-1 rounded-lg transition-colors">{t('instructor.projectManagement.archive')}</button>}
+                    {hasProjectAction(actionState(p), 'unarchive') && <button onClick={() => handlePatch(p.id, 'unarchive')} className="text-xs text-(--brand) hover:bg-(--brand-soft) font-bold px-2.5 py-1 rounded-lg transition-colors">{t('instructor.projectManagement.unarchive')}</button>}
+                    {hasProjectAction(actionState(p), 'complete') && <button onClick={() => handlePatch(p.id, 'complete')} className="text-xs text-(--brand) hover:bg-(--brand-soft) font-bold px-2.5 py-1 rounded-lg transition-colors">{t('instructor.projectManagement.complete')}</button>}
+                    {hasProjectAction(actionState(p), 'delete') && <DeleteConfirm
                       message={t('instructor.projectManagement.deleteProjectConfirm')}
                       onConfirm={() => handleDelete(p.id)}
                       triggerLabel={t('delete')}
@@ -266,7 +293,7 @@ export default function ProjectManagement() {
                       className="text-xs text-rose-600 hover:bg-rose-50 font-bold px-2.5 py-1 rounded-lg transition-colors"
                     >
                       {deletingId === p.id ? t('saving') : t('delete')}
-                    </DeleteConfirm>
+                    </DeleteConfirm>}
                   </div>
                 </div>
               </div>
@@ -276,15 +303,8 @@ export default function ProjectManagement() {
           <div className="bg-(--surface) rounded-2xl border border-(--border) shadow-sm overflow-hidden divide-y divide-(--border-light)">
             {projects.map(p => (
               <div key={p.id} data-testid={`project-card-${p.id}`} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 hover:bg-(--surface-secondary) transition-colors">
-                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/instructor/projects/${p.id}`)}>
-                  {editId === p.id ? (
-                    <div className="flex gap-2 items-center" onClick={e => e.stopPropagation()}>
-                      <input value={editTitle} onChange={e => setEditTitle(e.target.value)} className="flex-1 min-w-0 border border-(--border) bg-(--surface) text-(--text-primary) rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-(--focus)" autoFocus />
-                      <button onClick={() => handleUpdate(p.id)} className="text-xs font-bold text-emerald-600 hover:text-emerald-800">{t('save')}</button>
-                      <button onClick={() => setEditId(null)} className="text-xs text-slate-400 hover:text-slate-600">{t('cancel')}</button>
-                    </div>
-                  ) : (
-                    <div>
+                <div className={`flex-1 min-w-0 ${showTrash ? '' : 'cursor-pointer'}`} onClick={() => !showTrash && navigate(`/instructor/projects/${p.id}`)}>
+                  <div>
                       <h3 className="font-bold text-(--text-primary) text-sm hover:text-(--brand) transition-colors">{p.title}</h3>
                       <div className="flex flex-wrap items-center gap-3 mt-1">
                         <p className="text-[10px] text-(--text-secondary) flex items-center gap-1">
@@ -295,17 +315,17 @@ export default function ProjectManagement() {
                           {t('instructor.projectManagement.lastUpdated')}: {formatDate(p.updatedAt || p.createdAt, i18n.language)}
                         </p>
                       </div>
-                    </div>
-                  )}
+                  </div>
                 </div>
                 <StatusBadge status={p.status} />
                 <div className="flex flex-wrap gap-1 sm:justify-end" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => navigate(`/instructor/projects/${p.id}`)} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t('instructor.projectManagement.detail')}</button>
-                  <button onClick={() => { setEditId(p.id); setEditTitle(p.title); }} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t('instructor.projectManagement.commonEdit')}</button>
-                  {p.status === 'ACTIVE' && <button onClick={() => handlePatch(p.id, 'archive')} className="text-xs text-amber-600 hover:text-amber-800 font-bold px-2 py-1.5">{t('instructor.projectManagement.archive')}</button>}
-                  {p.status === 'ARCHIVED' && <button onClick={() => handlePatch(p.id, 'unarchive')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t('instructor.projectManagement.unarchive')}</button>}
-                  {p.status === 'ACTIVE' && <button onClick={() => handlePatch(p.id, 'complete')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t('instructor.projectManagement.complete')}</button>}
-                  <DeleteConfirm
+                  {!showTrash && <button onClick={() => navigate(`/instructor/projects/${p.id}`)} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t('instructor.projectManagement.detail')}</button>}
+                  {hasProjectAction(actionState(p), 'edit') && <button onClick={() => setEditingProject(p)} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t('instructor.projectManagement.commonEdit')}</button>}
+                  {hasProjectAction(actionState(p), 'restore') && <button onClick={() => handleRestore(p.id)} className="text-xs text-emerald-600 hover:text-emerald-800 font-bold px-2 py-1.5">{t('instructor.projectManagement.restore')}</button>}
+                  {hasProjectAction(actionState(p), 'archive') && <button onClick={() => handlePatch(p.id, 'archive')} className="text-xs text-amber-600 hover:text-amber-800 font-bold px-2 py-1.5">{t('instructor.projectManagement.archive')}</button>}
+                  {hasProjectAction(actionState(p), 'unarchive') && <button onClick={() => handlePatch(p.id, 'unarchive')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t('instructor.projectManagement.unarchive')}</button>}
+                  {hasProjectAction(actionState(p), 'complete') && <button onClick={() => handlePatch(p.id, 'complete')} className="text-xs text-(--brand) hover:text-(--brand-hover) font-bold px-2 py-1.5">{t('instructor.projectManagement.complete')}</button>}
+                  {hasProjectAction(actionState(p), 'delete') && <DeleteConfirm
                     message={t('instructor.projectManagement.deleteProjectConfirm')}
                     onConfirm={() => handleDelete(p.id)}
                     triggerLabel={t('delete')}
@@ -315,7 +335,7 @@ export default function ProjectManagement() {
                     className="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1.5"
                   >
                     {deletingId === p.id ? t('saving') : t('delete')}
-                  </DeleteConfirm>
+                  </DeleteConfirm>}
                 </div>
               </div>
             ))}
@@ -349,6 +369,15 @@ export default function ProjectManagement() {
           </div>
         </div>
       )}
+
+      <ProjectEditModal
+        open={!!editingProject}
+        project={editingProject}
+        saving={savingEdit}
+        onClose={() => setEditingProject(null)}
+        onSave={handleUpdate}
+        t={t}
+      />
 
       <Modal open={showGuide} onClose={() => setShowGuide(false)} title={t('instructor.projectManagement.guideTitle')} closeLabel={t('close')}>
         <ol className="space-y-3 text-xs">

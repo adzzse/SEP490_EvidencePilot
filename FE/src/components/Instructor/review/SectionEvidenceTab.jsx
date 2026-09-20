@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-// ponytail: strict scoping — selected section AND rounds frozen in the v2 snapshot,
+// rationale: strict scoping — selected section AND rounds frozen in the v2 snapshot,
 // guarded by submitted content version. v1 snapshots carry no round linkage, so the
 // tab reports unavailability instead of implying latest findings belong to history.
 const FILTERS = ['ALL', 'NEEDS_ATTENTION', 'UNADDRESSED', 'DISMISSED', 'JUDGED'];

@@ -14,6 +14,8 @@ public record FeedbackRequestResponseDto(
     String instructorName,
     FeedbackStatus status,
     LocalDateTime requestedAt,
+    LocalDateTime returnedAt,
+    LocalDateTime reviewedAt,
     String sectionValidation
 ) {
     public static FeedbackRequestResponseDto fromEntity(FeedbackRequest request) {
@@ -36,6 +38,8 @@ public record FeedbackRequestResponseDto(
             instructorName,
             request.getStatus(),
             request.getRequestedAt(),
+            request.getReturnedAt(),
+            request.getReviewedAt(),
             request.getSectionValidation()
         );
     }

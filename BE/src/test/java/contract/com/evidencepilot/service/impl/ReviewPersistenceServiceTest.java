@@ -87,7 +87,7 @@ class ReviewPersistenceServiceTest {
         service.saveBatchSnapshot(project, fingerprint, 0, batch);
         service.saveFinalSnapshot(project, fingerprint, batch);
 
-        // ponytail: complete=false — batch rows must survive for resume/refresh.
+        // rationale: complete=false — batch rows must survive for resume/refresh.
         assertThat(service.loadBatchSnapshots(project.getId(), fingerprint))
                 .containsExactly(Map.entry(0, batch));
         verify(snapshots, org.mockito.Mockito.never())

@@ -11,7 +11,7 @@ import { previousRequest, selectFeedbackForRound } from '../../utils/reviewRound
 
 const getScrollAnchors = (container, editor) => {
   const origin = container.getBoundingClientRect().top + container.clientTop - container.scrollTop;
-  // ponytail: interpolate inside each block; add row anchors if tables need row-exact sync.
+  // rationale: interpolate inside each block; add row anchors if tables need row-exact sync.
   return Array.from(container.querySelectorAll('[data-src-start][data-src-end]')).flatMap(element => {
     const start = Number(element.dataset.srcStart);
     const end = Number(element.dataset.srcEnd);
@@ -58,7 +58,7 @@ export default function EditorPanel({
   const [availableWidth, setAvailableWidth] = useState(0);
   const [keepPreview, setKeepPreview] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  // ponytail: single-panel sync scroll — toggling modes maps the proportional
+  // rationale: single-panel sync scroll — toggling modes maps the proportional
   // position (fraction scrolled) between LaTeX source and rendered preview,
   // whose heights differ, instead of syncing two visible panes.
   const scrollFractionRef = useRef({ editor: 0, preview: 0 });
@@ -99,7 +99,7 @@ export default function EditorPanel({
   const previewVisible = (narrow ? showPreview : true) && (!feedbackOpen || threePanes);
   useEffect(() => { scrollFractionRef.current = { editor: 0, preview: 0 }; pendingRestoreRef.current = null; setShowPreview(false); }, [selectedSectionId, review?.activeFeedbackId]);
   useEffect(() => { if (feedbackOpen) setShowPreview(false); }, [feedbackOpen]);
-  // ponytail: highlights never flatten history. Instructor sees the active
+  // rationale: highlights never flatten history. Instructor sees the active
   // request (drafts included) plus the immediately previous returned round's
   // carry-over for this section — never N-2. Student sees the loaded round.
   const sectionFeedback = useMemo(() => {
@@ -126,7 +126,7 @@ export default function EditorPanel({
     const item = (review?.feedbackItems || feedback?.items || []).find(entry => entry.id === ids[0]);
     if (item) onSelectFeedback?.(item);
   }, [review, feedback?.items, onSelectFeedback]);
-  // ponytail: mapped Preview ranges arm the draft exactly like editor
+  // rationale: mapped Preview ranges arm the draft exactly like editor
   // selections (same canonical contract); unmappable content refuses with an
   // honest banner instead of string-matching (indexOf resolves recurring words
   // to their first occurrence: the phantom-duplicate bug).
@@ -160,7 +160,7 @@ export default function EditorPanel({
     setFab(null);
     setComposerFocusToken(token => token + 1);
   }, [review]);
-  // ponytail: the same floating affordance confirms a new passage while
+  // rationale: the same floating affordance confirms a new passage while
   // adjusting an edit (chat icon, draft-only) and creates from a fresh
   // selection (message-plus). Ordinary edit-mode selections raise nothing —
   // reviewing never clobbers a seeded passage.

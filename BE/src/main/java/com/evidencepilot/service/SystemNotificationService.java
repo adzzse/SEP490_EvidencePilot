@@ -10,6 +10,7 @@ import java.util.UUID;
 public interface SystemNotificationService {
     List<SystemNotificationResponse> getCurrentUserNotifications();
     long countCurrentUserUnreadNotifications();
+    long markAllCurrentUserNotificationsRead();
     Optional<SystemNotificationResponse> markCurrentUserNotificationRead(UUID notificationId);
     default SystemNotificationResponse createNotification(
             User recipient,

@@ -1,11 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useNotification } from '../../context/NotificationContext';
 import api from '../../services/api.js';
-import { NOTIFICATION_HOVER_DEBOUNCE_MS } from '../../constants';
 import { formatDateTime } from '../../utils/formatters/date';
 
 export default function NotificationBell({ onOpen }) {
@@ -13,17 +12,8 @@ export default function NotificationBell({ onOpen }) {
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { t } = useTranslation();
-  const { notifications, unreadCount, markRead } = useNotification();
+  const { notifications, unreadCount, markRead, markAllRead } = useNotification();
   const [open, setOpen] = useState(false);
-  const hoverTimersRef = useRef(new Map());
-
-  // Cleanup pending timers on unmount
-  useEffect(() => {
-    return () => {
-      hoverTimersRef.current.forEach(timerId => clearTimeout(timerId));
-      hoverTimersRef.current.clear();
-    };
-  }, []);
 
   if (!token) return null;
 
@@ -34,31 +24,8 @@ export default function NotificationBell({ onOpen }) {
     });
   };
 
-  const handleMouseEnter = (notification) => {
-    if (notification.read) return;
-    if (hoverTimersRef.current.has(notification.id)) return;
-
-    const timerId = setTimeout(() => {
-      markRead(notification.id);
-      hoverTimersRef.current.delete(notification.id);
-    }, NOTIFICATION_HOVER_DEBOUNCE_MS);
-
-    hoverTimersRef.current.set(notification.id, timerId);
-  };
-
-  const handleMouseLeave = (notificationId) => {
-    if (hoverTimersRef.current.has(notificationId)) {
-      clearTimeout(hoverTimersRef.current.get(notificationId));
-      hoverTimersRef.current.delete(notificationId);
-    }
-  };
-
   const handleClick = async (notification) => {
     if (!notification.read) {
-      if (hoverTimersRef.current.has(notification.id)) {
-        clearTimeout(hoverTimersRef.current.get(notification.id));
-        hoverTimersRef.current.delete(notification.id);
-      }
       markRead(notification.id);
     }
     const reviewAction = ['REVIEW_SUBMITTED', 'REVIEW_RETURNED', 'INSTRUCTOR_FEEDBACK_PUBLISHED', 'REVIEW_STATUS_CHANGED']
@@ -96,7 +63,12 @@ export default function NotificationBell({ onOpen }) {
         <div className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-2xl shadow-2xl z-[99999] max-h-96 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
           <div className="sticky top-0 bg-(--surface) border-b border-(--border-light) px-4 py-3 flex justify-between items-center z-10">
             <span className="text-xs font-bold text-(--text-primary)">{t('notifications')}</span>
-            <button type="button" onClick={() => setOpen(false)} className={iconButton} aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => { void markAllRead(); }} disabled={unreadCount === 0} className="px-2 py-1 text-[10px] font-bold text-(--brand) hover:underline disabled:opacity-40 disabled:no-underline" aria-label={t('markAllNotificationsRead')}>
+                {t('markAllNotificationsRead')}
+              </button>
+              <button type="button" onClick={() => setOpen(false)} className={iconButton} aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+            </div>
           </div>
           {notifications.length === 0 ? (
             <div className="text-xs text-(--text-tertiary) italic text-center py-8">{t('noNotifications')}</div>
@@ -105,8 +77,6 @@ export default function NotificationBell({ onOpen }) {
               type="button"
               key={notification.id}
               onClick={() => handleClick(notification)}
-              onMouseEnter={() => handleMouseEnter(notification)}
-              onMouseLeave={() => handleMouseLeave(notification.id)}
               className={`block w-full text-left px-4 py-3 border-b border-(--border-light) hover:bg-(--surface-secondary) transition-colors cursor-pointer ${notification.read ? 'opacity-60' : 'bg-(--brand-soft)'}`}
             >
               <p className="text-xs font-semibold text-(--text-primary)">{notification.message || notification.title || t('notifications')}</p>

@@ -1,6 +1,7 @@
 package com.evidencepilot.service.impl;
 
 import com.evidencepilot.service.AiModelClient;
+import com.evidencepilot.service.PaperStandardService;
 import com.evidencepilot.service.QdrantClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,8 @@ class PaperReferenceIntegrationMySqlTest {
     }
     @MockBean AiModelClient model;
     @MockBean QdrantClient qdrant;
+    @MockBean PaperStandardService paperStandardService;
+    @MockBean PaperProcessingServiceImpl paperProcessingService;
     @Autowired JdbcTemplate jdbc;
     @Autowired PaperReferenceService service;
     @Autowired SourceMatchingService matching;

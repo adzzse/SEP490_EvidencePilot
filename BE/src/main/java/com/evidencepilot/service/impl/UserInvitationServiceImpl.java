@@ -144,7 +144,7 @@ public class UserInvitationServiceImpl implements UserInvitationService {
 
         audit.record("INVITATION_ACCEPTED", "USER", user.getId(), user, null, null);
 
-        // ponytail: mint JWT on the spot so the FE can auto-login without a second round-trip.
+        // rationale: mint JWT on the spot so the FE can auto-login without a second round-trip.
         // tokenVersion was bumped above, invalidating any prior tokens.
         String token = jwtUtils.generateToken(user);
         sessionRegistry.register(jwtUtils.extractJti(token));

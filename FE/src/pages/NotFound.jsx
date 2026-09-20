@@ -4,7 +4,7 @@ import Error404 from '../components/ui/Error404.jsx';
 
 export default function NotFound() {
   const { t, i18n } = useTranslation();
-  // ponytail: brand marks stay literal (no locale keys) so a missing key can
+  // rationale: brand marks stay literal (no locale keys) so a missing key can
   // never render as raw text on the page.
   const curvedTop = 'Evidence Pilot';
   const curvedBottom = i18n.language === 'vi' ? 'Không gian nghiên cứu' : 'Research Workspace';

@@ -1,7 +1,7 @@
 import { SKIP, visit } from 'unist-util-visit';
 import { blockOverlapsRanges } from '../instructor/wordDiff.js';
 
-// ponytail: content from the AST ingestor is markdown (headings, | tables |,
+// rationale: content from the AST ingestor is markdown (headings, | tables |,
 // $$ math); legacy student/LaTeX docs stay on renderLatexToHtml.
 export function isLatexDialect(src) {
   const s = String(src || '');

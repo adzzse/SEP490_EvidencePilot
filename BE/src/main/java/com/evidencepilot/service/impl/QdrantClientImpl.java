@@ -216,7 +216,7 @@ public class QdrantClientImpl implements QdrantClient {
         Map<String, Object> info = new LinkedHashMap<>();
         long start = System.currentTimeMillis();
         try {
-            // ponytail: hit the server-level healthz endpoint rather than the
+            // rationale: hit the server-level healthz endpoint rather than the
             // collection-level GET /collections/{name} — a missing collection
             // should not flip the system health strip to DOWN. Collection
             // existence is checked separately at the call site (search/upsert

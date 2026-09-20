@@ -70,7 +70,7 @@ test('shared References UI keeps Save/history access, no handoff, and section ac
         import SectionRow from '/src/components/Instructor/sections/SectionRow.jsx';
         import ReviewOverviewBlock from '/src/components/Instructor/review/ReviewOverviewBlock.jsx';
 
-        const reference = { id: 'section-ref', sectionTitle: 'References', contentTex: 'References', version: 1, revision: 1 };
+        const reference = { id: 'section-ref', sectionTitle: 'References', sectionType: 'REFERENCE', contentTex: 'References', version: 1, revision: 1 };
         const introduction = { id: 'section-intro', sectionTitle: 'Introduction', contentTex: 'Introduction', assignedUserId: 'student-1', version: 1, revision: 1 };
         const rowText = {
           unassignToReorder: 'Unassign to reorder', dragToReorder: 'Drag to reorder', configStandard: 'Configure standard',

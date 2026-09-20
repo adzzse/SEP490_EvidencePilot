@@ -79,7 +79,7 @@ export default function useInstructorReview({ projectId, enabled }) {
   const [snapshotRetry, setSnapshotRetry] = useState(0);
   const suggestionRequestRef = useRef(0);
   const [feedbackFocusToken, setFeedbackFocusToken] = useState(0);
-  // ponytail: project evidence traces shared by Evidence tab + overview (single fetch, client-side scoping)
+  // rationale: project evidence traces shared by Evidence tab + overview (single fetch, client-side scoping)
   const [evidenceTraces, setEvidenceTraces] = useState([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
 
@@ -184,7 +184,7 @@ export default function useInstructorReview({ projectId, enabled }) {
       .then(response => {
         if (cancelled) return;
         const candidate = response.data?.snapshot;
-        // ponytail: accept snapshot schema v1 (sections only) and v2 (+evidence/standard refs)
+        // rationale: accept snapshot schema v1 (sections only) and v2 (+evidence/standard refs)
         const schemaOk = candidate?.schemaVersion === 1 || candidate?.schemaVersion === 2;
         const available = response.data?.state === 'AVAILABLE' && schemaOk
           && String(candidate.projectId) === String(projectId) && Array.isArray(candidate.papers)
@@ -257,7 +257,7 @@ export default function useInstructorReview({ projectId, enabled }) {
     setBaselineSectionId(null);
     setBaselineUnavailable(false);
     let cancelled = false;
-    // ponytail: comparison source is server-resolved (latest earlier RETURNED
+    // rationale: comparison source is server-resolved (latest earlier RETURNED
     // BASELINE, else initial assignment baseline, else null) — never compare
     // rows within the single active request.
     api.get(`/api/feedback-requests/${activeRequest.id}/comparison-source`, {
@@ -294,7 +294,7 @@ export default function useInstructorReview({ projectId, enabled }) {
     return contained || guides.find(g => normalizeKey(g.sectionType) === 'default') || null;
   }, [guides, selectedSection]);
 
-  // ponytail: word-level BASELINE-vs-SUBMITTED diff (was checkpoint-vs-live).
+  // rationale: word-level BASELINE-vs-SUBMITTED diff (was checkpoint-vs-live).
   // Normalized first so change offsets line up with displayContent (what the
   // LaTeX editor and Preview both render); all three views share diffResult.
   const diffResult = useMemo(() => {
@@ -314,7 +314,7 @@ export default function useInstructorReview({ projectId, enabled }) {
       return;
     }
     try {
-      // ponytail: the workspace only ever renders the active request plus the
+      // rationale: the workspace only ever renders the active request plus the
       // immediately previous returned one (cards, carry-over, History) — load
       // those two rounds instead of flattening the whole history.
       const ids = [activeRequestId];
@@ -331,7 +331,7 @@ export default function useInstructorReview({ projectId, enabled }) {
 
   useEffect(() => { if (!enabled) return; loadFeedback(); return () => { feedbackLoadRef.current += 1; }; }, [loadFeedback, enabled]);
 
-  // ponytail: mutations return the full post-commit thread DTO — merge it
+  // rationale: mutations return the full post-commit thread DTO — merge it
   // surgically instead of invalidating/refetching (a fast refetch would race
   // the slow commit and ghost the change). Full reloads stay for mount,
   // round switches, transitions (many rows change), and explicit refresh.
@@ -379,7 +379,7 @@ export default function useInstructorReview({ projectId, enabled }) {
   const captureSourceSelection = async () => {
     if (!enabled || !canCreateRoot || !selectedSection) return;
     const range = sourceEditorRef.current?.getSelectionRange?.();
-    // ponytail: CodeMirror's doc is LF — normalize the DB text BEFORE measuring,
+    // rationale: CodeMirror's doc is LF — normalize the DB text BEFORE measuring,
     // or raw \r\n lengths drift from/to (line-10 highlight bug).
     const source = normalizeSource(selectedSection.contentTex || '');
     if (!range || range.to <= range.from || range.to > source.length || !Number.isInteger(selectedSection.version)) {
@@ -400,7 +400,7 @@ export default function useInstructorReview({ projectId, enabled }) {
     }
   };
 
-  // ponytail: create-mode auto-arm — every non-empty editor selection becomes
+  // rationale: create-mode auto-arm — every non-empty editor selection becomes
   // the draft target without a confirmation click. Silent on empty/collapsed
   // (that must NOT clear an armed passage — stickiness lives in the draft
   // store), skipped entirely while editing (seeded passages are explicit).
@@ -424,7 +424,7 @@ export default function useInstructorReview({ projectId, enabled }) {
     }
   }, [enabled, canCreateRoot, selectedSection, editingFeedbackId]);
 
-  // ponytail: Preview-armed passages share the editor's anchor contract —
+  // rationale: Preview-armed passages share the editor's anchor contract —
   // offsets are validated against the same normalized source + version, so a
   // mapped Preview range is indistinguishable from an editor selection.
   // Anything unmappable never reaches here (the banner refuses it instead).
@@ -448,7 +448,7 @@ export default function useInstructorReview({ projectId, enabled }) {
     }
   }, [enabled, canCreateRoot, selectedSection]);
 
-  // ponytail: passage-adjust intent shared by the edit card (which starts it)
+  // rationale: passage-adjust intent shared by the edit card (which starts it)
   // and the EditorPanel FAB (which confirms it). Confirming writes the draft
   // only — Update persists, Cancel discards. No auto-remap anywhere.
   const [passageAdjust, setPassageAdjust] = useState(null);
@@ -482,7 +482,7 @@ export default function useInstructorReview({ projectId, enabled }) {
   const handleEditFeedback = (item) => {
     selectFeedback(item);
     const key = JSON.stringify([projectId, activeRequestId, item.sectionId]);
-    // ponytail: seed the draft from the stored original passage (immutable
+    // rationale: seed the draft from the stored original passage (immutable
     // review-time Target) — never from the live-resolved current, which may be
     // remapped or DETACHED after later section edits.
     const original = item.anchor?.original;
@@ -688,7 +688,7 @@ export default function useInstructorReview({ projectId, enabled }) {
     }
   };
 
-  // ponytail: historical rounds are read-only; only the latest PENDING/RETURNED request accepts input
+  // rationale: historical rounds are read-only; only the latest PENDING/RETURNED request accepts input
   const isHistoricalRound = !!activeRequest && !!latestRequest && String(activeRequest.id) !== String(latestRequest.id);
 
   const selectedPaper = papers.find(paper => String(paper.id) === String(selectedPaperId)) || null;

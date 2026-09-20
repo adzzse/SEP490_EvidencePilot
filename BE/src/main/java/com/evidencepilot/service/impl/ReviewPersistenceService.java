@@ -37,7 +37,7 @@ public class ReviewPersistenceService {
             Project project, String fingerprint, SectionCitationReviewResponse review) {
         saveSnapshot(project, SectionCitationReviewService.REVIEW_VERSION, fingerprint, review);
         if (!review.complete()) {
-            // ponytail: a partial final must NOT wipe batch rows — they are the
+            // rationale: a partial final must NOT wipe batch rows — they are the
             // resume source for re-clicks and the merge source for cached().
             return;
         }
@@ -74,7 +74,7 @@ public class ReviewPersistenceService {
                 int batchIndex = Integer.parseInt(row.getStyle().substring(prefix.length()));
                 readSnapshot(row).ifPresent(response -> batches.put(batchIndex, response));
             } catch (NumberFormatException | NullPointerException ignored) {
-                // ponytail: skip malformed batch rows — worst case the batch re-runs.
+                // rationale: skip malformed batch rows — worst case the batch re-runs.
             }
         }
         return batches;

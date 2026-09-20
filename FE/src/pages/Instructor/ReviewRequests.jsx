@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
-import { StatusBadge, LoadingSkeleton, EmptyState, TourLauncher, AppHeader, Breadcrumb, EntityCard } from '../../components';
+import { StatusBadge, LoadingSkeleton, EmptyState, Modal, AppHeader, Breadcrumb, EntityCard } from '../../components';
 import { useTranslation } from 'react-i18next';
 import { formatDateTime } from '../../utils/formatters/date';
 import { CARD_GRID_PAGE_SIZE } from '../../constants';
@@ -9,8 +9,10 @@ import api from '../../services/api.js';
 export default function ReviewRequests() {
   const [searchParams] = useSearchParams();
   const { t, i18n } = useTranslation();
+  const reviewLink = searchParams.get('review');
 
   const [requests, setRequests] = useState([]);
+  const [deepLinkedRequest, setDeepLinkedRequest] = useState(null);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -18,28 +20,49 @@ export default function ReviewRequests() {
   const [projectFilter, setProjectFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [viewMode, setViewMode] = useState('list');
   const [page, setPage] = useState(0);
-
-  const tourSteps = [
-    { element: '#review-table', popover: { title: t('instructor.reviewRequests.reviewQueue'), description: t('instructor.reviewRequests.reviewQueueDesc'), side: 'top', align: 'start' } },
-  ];
+  const [pagination, setPagination] = useState({ totalPages: 0, totalElements: 0 });
+  const [showGuide, setShowGuide] = useState(false);
 
   const fetchReviewRequests = async () => {
     setLoading(true); setErrorMessage('');
     try {
+      const params = new URLSearchParams({ page: String(page), size: String(CARD_GRID_PAGE_SIZE) });
+      if (searchQuery.trim()) params.set('search', searchQuery.trim());
+      if (projectFilter) params.set('projectId', projectFilter);
+      if (statusFilter) params.set('status', statusFilter);
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
       const [res, proj] = await Promise.all([
-        api.get('/api/feedback-requests'),
+        api.get(`/api/feedback-requests/queue?${params.toString()}`),
         api.get('/api/projects?page=0&size=100').catch(() => null),
       ]);
-      setRequests(res.data);
+      const result = res.data || {};
+      setRequests(result.content || []);
+      if (reviewLink) {
+        const linked = (result.content || []).find(req => String(req.id) === String(reviewLink))
+          || (result.content || []).find(req => String(req.projectId) === String(reviewLink));
+        if (linked) {
+          setDeepLinkedRequest(linked);
+        } else {
+          const allRequests = await api.get('/api/feedback-requests');
+          setDeepLinkedRequest((allRequests.data || []).find(req => String(req.id) === String(reviewLink))
+            || (allRequests.data || []).find(req => String(req.projectId) === String(reviewLink))
+            || null);
+        }
+      } else {
+        setDeepLinkedRequest(null);
+      }
+      setPagination({ totalPages: result.totalPages || 0, totalElements: result.totalElements || 0 });
       setProjects(proj?.data?.content || []);
     }
     catch { setErrorMessage(t('instructor.reviewRequests.loadReviewRequestsFailed')); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchReviewRequests(); }, []);
+  useEffect(() => { fetchReviewRequests(); }, [page, searchQuery, projectFilter, statusFilter, dateFrom, dateTo, reviewLink]);
 
   const projectById = useMemo(() => {
     const m = new Map();
@@ -47,45 +70,23 @@ export default function ReviewRequests() {
     return m;
   }, [projects]);
 
-  const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return requests.filter((req) => {
-      const proj = projectById.get(String(req.projectId));
-      const title = proj?.title || '';
-      if (q && !title.toLowerCase().includes(q)) return false;
-      if (projectFilter && String(req.projectId) !== String(projectFilter)) return false;
-      if (dateFrom && req.requestedAt) {
-        const d = new Date(req.requestedAt);
-        if (!isNaN(d) && d < new Date(dateFrom)) return false;
-      }
-      if (dateTo && req.requestedAt) {
-        const d = new Date(req.requestedAt);
-        const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
-        if (!isNaN(d) && d > end) return false;
-      }
-      return true;
-    });
-  }, [requests, projectById, searchQuery, projectFilter, dateFrom, dateTo]);
-
   const clearFilters = () => {
     setSearchQuery('');
     setProjectFilter('');
+    setStatusFilter('');
     setDateFrom('');
     setDateTo('');
     setPage(0);
   };
 
-  useEffect(() => { setPage(0); }, [searchQuery, projectFilter, dateFrom, dateTo]);
+  useEffect(() => { setPage(0); }, [searchQuery, projectFilter, statusFilter, dateFrom, dateTo]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / CARD_GRID_PAGE_SIZE));
-  const safePage = Math.min(page, totalPages - 1);
-  const paged = filtered.slice(safePage * CARD_GRID_PAGE_SIZE, (safePage + 1) * CARD_GRID_PAGE_SIZE);
+  const totalPages = pagination.totalPages;
+  const safePage = Math.min(page, Math.max(0, totalPages - 1));
 
-  const reviewLink = searchParams.get('review');
-  const linkedRequest = requests.find(req => req.id === reviewLink)
-    || requests.filter(req => req.projectId === reviewLink)
-      .sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0))[0];
+  const linkedRequest = deepLinkedRequest
+    || requests.find(req => String(req.id) === String(reviewLink))
+    || requests.find(req => String(req.projectId) === String(reviewLink));
   if (linkedRequest) {
     const search = new URLSearchParams(searchParams);
     search.set('review', linkedRequest.id);
@@ -102,17 +103,13 @@ export default function ReviewRequests() {
             { label: t('instructor.reviewRequests.reviewRequests') }
           ]}
         />
-        <div className="mb-6 border-b border-(--border) pb-6">
-          <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t('instructor.reviewRequests.reviewRequests')}</h1>
-          <p className="text-xs text-(--text-tertiary) mt-1">{t('instructor.reviewRequests.pendingRequests')}</p>
-        </div>
+        <div className="sticky top-16 z-20 flex flex-col lg:flex-row justify-between items-start lg:items-center w-full mb-6 gap-4 border-b border-(--border) bg-(--page-bg) pb-6 pt-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl sm:text-3xl font-black text-(--brand-foreground) tracking-tight">{t('instructor.reviewRequests.reviewRequests')}</h1>
+            <p className="text-xs text-(--text-tertiary) mt-1">{t('instructor.reviewRequests.pendingRequests')}</p>
+          </div>
 
-        {errorMessage && (
-          <div className="p-4 mb-6 rounded-xl bg-rose-50 border border-rose-100 text-rose-700 text-xs font-bold">{errorMessage}</div>
-        )}
-
-        {/* Control Toolbar */}
-        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
           <input
             type="search"
             value={searchQuery}
@@ -130,6 +127,17 @@ export default function ReviewRequests() {
             <option value="">{t('instructor.reviewRequests.allProjects')}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>{p.title || `#${String(p.id).slice(0, 8)}`}</option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            aria-label={t('instructor.reviewRequests.filterByStatus')}
+            className="w-full sm:w-40 rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-medium text-(--text-primary) transition-colors focus:outline-none focus:ring-2 focus:ring-(--focus)"
+          >
+            <option value="">{t('instructor.reviewRequests.allStatuses')}</option>
+            {['PENDING', 'RETURNED', 'REVIEWED'].map((status) => (
+              <option key={status} value={status}>{t(status)}</option>
             ))}
           </select>
           <label className="flex items-center gap-1 text-[10px] font-bold uppercase text-(--text-tertiary)">
@@ -150,7 +158,7 @@ export default function ReviewRequests() {
               className="rounded-xl border border-(--border) bg-(--surface-secondary) px-2 py-1.5 text-xs font-medium text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)"
             />
           </label>
-          {(searchQuery || projectFilter || dateFrom || dateTo) && (
+          {(searchQuery || projectFilter || statusFilter || dateFrom || dateTo) && (
             <button
               type="button"
               onClick={clearFilters}
@@ -160,7 +168,15 @@ export default function ReviewRequests() {
             </button>
           )}
 
-          <div className="flex items-center bg-(--surface-secondary) border border-(--border) rounded-xl p-0.5 ml-auto">
+          <button
+            type="button"
+            onClick={() => setShowGuide(true)}
+            className="rounded-xl border border-(--border) bg-(--surface-secondary) px-3 py-2 text-xs font-bold text-(--text-secondary) hover:bg-(--surface) focus:outline-none focus:ring-2 focus:ring-(--focus)"
+          >
+            {t('instructor.reviewRequests.userGuide')}
+          </button>
+
+          <div className="flex items-center bg-(--surface-secondary) border border-(--border) rounded-xl p-0.5">
             <button
               type="button"
               onClick={() => setViewMode('list')}
@@ -182,6 +198,12 @@ export default function ReviewRequests() {
           </div>
         </div>
 
+        </div>
+
+        {errorMessage && (
+          <div className="p-4 mb-6 rounded-xl bg-rose-50 border border-rose-100 text-rose-700 text-xs font-bold">{errorMessage}</div>
+        )}
+
         {loading ? (
           viewMode === 'list' ? (
             <div id="review-table" className="bg-(--surface) rounded-2xl border border-(--border) shadow-sm overflow-hidden">
@@ -192,7 +214,7 @@ export default function ReviewRequests() {
               {Array.from({ length: CARD_GRID_PAGE_SIZE }).map((_, i) => <div key={i} className="h-36 bg-(--surface-tertiary) rounded-2xl animate-pulse" />)}
             </div>
           )
-        ) : filtered.length === 0 ? (
+        ) : requests.length === 0 ? (
           <div id="review-table" className="bg-(--surface) rounded-2xl border border-(--border) shadow-sm">
             <EmptyState title={t('instructor.reviewRequests.noRequests')} />
           </div>
@@ -211,7 +233,7 @@ export default function ReviewRequests() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-(--border-light) text-xs text-(--text-secondary)">
-                  {paged.map((req) => {
+                  {requests.map((req) => {
                     const proj = projectById.get(String(req.projectId));
                     const projectTitle = proj?.title || `${t('instructor.reviewRequests.project')} #${String(req.projectId).slice(0, 8)}`;
                     return (
@@ -255,7 +277,7 @@ export default function ReviewRequests() {
           </div>
         ) : (
           <div id="review-table" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {paged.map((req) => {
+            {requests.map((req) => {
               const proj = projectById.get(String(req.projectId));
               const projectTitle = proj?.title || `${t('instructor.reviewRequests.project')} #${String(req.projectId).slice(0, 8)}`;
               return (
@@ -295,7 +317,14 @@ export default function ReviewRequests() {
           </div>
         )}
       </main>
-      <TourLauncher steps={tourSteps} tourKey="instructor-requests" />
+      <Modal open={showGuide} onClose={() => setShowGuide(false)} title={t('instructor.reviewRequests.guideTitle')}>
+        <p className="text-sm leading-relaxed text-(--text-secondary)">{t('instructor.reviewRequests.guideBody')}</p>
+        <ul className="mt-4 space-y-2 text-sm text-(--text-secondary) list-disc pl-5">
+          <li>{t('instructor.reviewRequests.guideLatest')}</li>
+          <li>{t('instructor.reviewRequests.guideFilters')}</li>
+          <li>{t('instructor.reviewRequests.guideHistory')}</li>
+        </ul>
+      </Modal>
     </div>
   );
 }

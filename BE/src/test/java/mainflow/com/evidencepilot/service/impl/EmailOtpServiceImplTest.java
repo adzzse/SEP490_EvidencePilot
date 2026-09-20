@@ -233,6 +233,14 @@ class EmailOtpServiceImplTest {
         assertThat(service.consumeClaim(u.getId(), "different@example.com", raw)).isFalse();
     }
 
+    @Test
+    void cleanupExpiredDataRemovesOldOtpTokensAndClaims() {
+        service.cleanupExpiredData();
+
+        verify(tokenRepository).deleteOlderThan(any(LocalDateTime.class));
+        verify(claimRepository).deleteOlderThan(any(LocalDateTime.class));
+    }
+
     private static String hash(String value) {
         try {
             var d = java.security.MessageDigest.getInstance("SHA-256");

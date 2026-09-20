@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { isAccountRevokedError } from '../utils/authz.js';
 
 export const baseURL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/+$/, '');
 
@@ -37,7 +38,11 @@ function notifyAuthExpired() {
   window.dispatchEvent(new CustomEvent('auth:expired'));
 }
 
-// ponytail: proactive LEAD/NEAR timers + focus/visibility listeners removed — lazy 401 retry covers expiry.
+function notifyAccountRevoked() {
+  window.dispatchEvent(new CustomEvent('auth:revoked'));
+}
+
+// rationale: proactive LEAD/NEAR timers + focus/visibility listeners removed — lazy 401 retry covers expiry.
 // Keep export for compat; callers (AuthContext) still import it.
 export function armProactiveRefresh() {}
 
@@ -47,7 +52,10 @@ api.interceptors.response.use(
     const { config, response } = error;
     const isAuthCall = config?.url?.startsWith('/api/auth/');
     const onLoginPage = window.location.pathname.startsWith('/login');
-    if (response?.status === 403 && !isAuthCall) return Promise.reject(error);
+    if (response?.status === 403 && !isAuthCall) {
+      if (isAccountRevokedError(error)) notifyAccountRevoked();
+      return Promise.reject(error);
+    }
     if (response?.status === 401 && !config._retried && !isAuthCall && !onLoginPage) {
       config._retried = true;
       const currentToken = localStorage.getItem('token');

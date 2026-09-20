@@ -11,14 +11,14 @@ import SectionStandardsTab from '../Instructor/review/SectionStandardsTab.jsx';
 import AiSuggestionDrawer from '../Instructor/review/AiSuggestionDrawer.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
 
-export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, reviewAction = null, reviewRound = null, reviewGuide = null, review = null, reviewSection = null }) {
+export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onMarkAllNotificationsRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, reviewAction = null, reviewRound = null, reviewGuide = null, review = null, reviewSection = null }) {
   const { user } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
   const { t } = useTranslation();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  // ponytail: review-only header menus share the hook-owned round state (no duplicate source)
+  // rationale: review-only header menus share the hook-owned round state (no duplicate source)
   const [showRoundMenu, setShowRoundMenu] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [showStandards, setShowStandards] = useState(false);
@@ -87,14 +87,17 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
             <div className="absolute right-0 top-full mt-2 w-[min(20rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] max-h-96 overflow-y-auto">
               <div className="sticky top-0 bg-(--surface) border-b border-(--border-light) px-4 py-2.5 flex justify-between items-center">
                 <span className="text-xs font-bold text-(--text-primary)">{t('notifications')}</span>
-                <button onClick={() => setShowNotifications(false)} className={iconButton} aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => { void onMarkAllNotificationsRead?.(); }} disabled={unreadCount === 0} className="px-2 py-1 text-[10px] font-bold text-(--brand) hover:underline disabled:opacity-40 disabled:no-underline" aria-label={t('markAllNotificationsRead')}>{t('markAllNotificationsRead')}</button>
+                  <button onClick={() => setShowNotifications(false)} className={iconButton} aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                </div>
               </div>
               {notifications.length === 0 ? (
                 <div className="text-xs text-(--text-tertiary) italic text-center py-8">{t('noNotifications')}</div>
               ) : notifications.map((notification) => (
                 <button key={notification.id} onClick={() => { if (!notification.read) onMarkNotificationRead(notification.id); onOpenNotification?.(notification); }} className={`block w-full text-left px-4 py-3 border-b border-(--border-light) hover:bg-(--surface-secondary) transition-colors ${notification.read ? 'opacity-60' : 'bg-(--brand-soft)'}`}>
                   <p className="text-xs font-semibold text-(--text-primary)">{notification.message || notification.title || t('notifications')}</p>
-                  <p className="text-[10px] text-(--text-tertiary) mt-0.5">{notification.createdAt ? new Date(notification.createdAt).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US') : ''}</p>
+                  <p className="text-[10px] text-(--text-tertiary) mt-0.5">{notification.createdAt ? formatDateTime(notification.createdAt, language) : ''}</p>
                 </button>
               ))}
             </div>

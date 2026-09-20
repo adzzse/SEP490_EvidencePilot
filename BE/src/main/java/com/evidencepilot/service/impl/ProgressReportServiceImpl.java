@@ -10,6 +10,7 @@ import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.FeedbackThreadState;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.AuditLogRepository;
 import com.evidencepilot.repository.DocumentRepository;
@@ -67,7 +68,10 @@ public class ProgressReportServiceImpl {
         for (Document paper : documentRepository
                 .findByProjectIdAndDocTypeAndActiveTrue(projectId, DocumentType.PAPER)) {
             allSections.addAll(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paper.getId())
-                    .stream().filter(PaperSection::isActive).toList());
+                    .stream()
+                    .filter(PaperSection::isActive)
+                    .filter(section -> section.getSectionType() != PaperSectionType.REFERENCE)
+                    .toList());
         }
         UUID filterUserId = memberFilter == null || memberFilter.isBlank()
                 || "ALL".equalsIgnoreCase(memberFilter) ? null : parseUuid(memberFilter);
