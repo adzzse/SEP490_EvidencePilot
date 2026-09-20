@@ -17,20 +17,7 @@ export function referenceStatusOf(reference) {
 export function buildCitationNumbers(references = []) {
   const numbers = {};
   references.forEach((reference, index) => {
-    if (reference?.citationKey) numbers[reference.citationKey] = index + 1;
+    if (reference?.citationKey) numbers[reference.citationKey] = reference.citationNumber || index + 1;
   });
   return numbers;
-}
-
-export function buildReferenceEntries(references = []) {
-  return references.filter(reference => reference?.citationKey).map((reference, index) => ({
-    key: reference.citationKey,
-    number: index + 1,
-    reference: [
-      reference.authors && `${reference.authors}.`,
-      `${reference.title || reference.citationKey}.`,
-      reference.publicationYear && `${reference.publicationYear}.`,
-      reference.doi && `https://doi.org/${reference.doi.replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')}`,
-    ].filter(Boolean).join(' '),
-  }));
 }

@@ -8,11 +8,30 @@ import { wordDiff, rangesFromOps, blockOverlapsRanges } from '../wordDiff.js';
 import { applyChangeHighlights, renderLatexToHtml } from '../../formatters/latexHtml.js';
 import { rehypeChangeRanges } from '../../formatters/markdownBlocks.js';
 
-test('oversized inputs truncate honestly without ranges', () => {
-  const big = Array.from({ length: 2100 }, (_, i) => `w${i}`).join(' ');
-  const result = wordDiff(big, `${big} tail`);
+test('oversized changed window truncates honestly without ranges', () => {
+  const before = Array.from({ length: 2100 }, (_, i) => `before${i}`).join(' ');
+  const after = Array.from({ length: 2100 }, (_, i) => `after${i}`).join(' ');
+  const result = wordDiff(before, after);
   assert.equal(result.truncated, true);
   assert.deepEqual(result.ranges, []);
+});
+
+test('oversized section still locates one inserted sentence', () => {
+  const prefix = Array.from({ length: 1050 }, (_, i) => `before${i}`).join(' ');
+  const suffix = Array.from({ length: 1050 }, (_, i) => `after${i}`).join(' ');
+  const inserted = 'This is a test feedback. ';
+  const before = `${prefix} ${suffix}`;
+  const after = `${prefix} ${inserted}${suffix}`;
+  const result = wordDiff(before, after);
+
+  assert.equal(result.truncated, false);
+  assert.equal(result.ranges.length, 1);
+  assert.equal(result.ranges[0].type, 'added');
+  assert.equal(after.slice(result.ranges[0].sourceStart, result.ranges[0].sourceEnd), inserted);
+  assert.match(
+    applyChangeHighlights(renderLatexToHtml(after), result.ranges, after),
+    /<span class="preview-change-added">This is a test feedback\.<\/span>/,
+  );
 });
 
 test('identical texts produce no change ranges', () => {

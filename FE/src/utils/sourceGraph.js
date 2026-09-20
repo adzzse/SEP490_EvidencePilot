@@ -21,15 +21,39 @@ function displayNode(node, kind) {
   };
 }
 
-export function collectionGraph(data, labels) {
+function resolveDetail(node, labels) {
+  if (node.citedByCount != null) {
+    if (typeof labels === 'function') {
+      return labels('instructor.collectionDetail.citedTimes', { count: node.citedByCount });
+    }
+    const template = labels?.citedTimes || 'Cited {{count}} times';
+    return typeof template === 'string' ? template.replace('{{count}}', String(node.citedByCount)) : `Cited ${node.citedByCount} times`;
+  }
+  if (!node.title && !node.doi) {
+    if (typeof labels === 'function') {
+      return labels('instructor.collectionDetail.unresolvedReference');
+    }
+    return labels?.unresolvedReference || 'Unresolved reference';
+  }
+  if (!node.hasDoi) {
+    if (typeof labels === 'function') {
+      return labels('instructor.collectionDetail.noCitationData');
+    }
+    return labels?.noCitationData || 'No DOI — no citation data available';
+  }
+  return '';
+}
+
+export function collectionGraph(data, labels = {}) {
+  const rawNodes = Array.isArray(data?.nodes) ? data.nodes : [];
+  const rawEdges = Array.isArray(data?.edges) ? data.edges : [];
   return {
-    nodes: data.nodes.map(node => {
+    nodes: rawNodes.map(node => {
       const display = displayNode(node, !node.title && !node.doi ? 'unresolved' : node.inCollection ? 'source' : 'external');
-      const detail = node.citedByCount != null ? labels.citedTimes.replace('{{count}}', node.citedByCount)
-        : !node.title && !node.doi ? labels.unresolvedReference : !node.hasDoi ? labels.noCitationData : '';
+      const detail = resolveDetail(node, labels);
       return { ...display, tooltip: [display.tooltip, detail].filter(Boolean).join(' · ') };
     }),
-    edges: data.edges.map((edge, index) => ({
+    edges: rawEdges.map((edge, index) => ({
       id: `citation:${index}`, kind: 'citation',
       from: String(edge.type === 'CITED_BY' ? edge.targetId : edge.sourceId),
       to: String(edge.type === 'CITED_BY' ? edge.sourceId : edge.targetId),
@@ -38,9 +62,11 @@ export function collectionGraph(data, labels) {
 }
 
 export function projectGraph(data) {
+  const rawNodes = Array.isArray(data?.nodes) ? data.nodes : [];
+  const rawEdges = Array.isArray(data?.edges) ? data.edges : [];
   return {
-    nodes: data.nodes.map(node => displayNode(node, node.type === 'PROJECT' ? 'project' : 'source')),
-    edges: data.edges.map((edge, index) => ({
+    nodes: rawNodes.map(node => displayNode(node, node.type === 'PROJECT' ? 'project' : 'source')),
+    edges: rawEdges.map((edge, index) => ({
       id: `relation:${index}`, from: edge.sourceId, to: edge.targetId,
       kind: edge.type === 'PROJECT_SOURCE' ? 'membership' : 'citation',
     })),

@@ -6,7 +6,7 @@ import { createServer } from 'vite';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 
-test('References editor shows generated bibliography as read-only', async (t) => {
+test('References editor keeps appended sources inside the editable section', async (t) => {
   const server = await createServer({
     root: projectRoot,
     appType: 'custom',
@@ -31,8 +31,8 @@ test('References editor shows generated bibliography as read-only', async (t) =>
             selectedSectionId: 'references-1',
             assignedSections: [],
             canEditCurrentSection: true,
-            currentSection: { id: 'references-1', sectionTitle: 'References', contentTex: 'Manual bibliography text retained.', version: 1 },
-            displayContent: 'Manual bibliography text retained.',
+            currentSection: { id: 'references-1', sectionTitle: 'References', contentTex: '- [60] Imported reference.\\n- [61] Appended source.', version: 1 },
+            displayContent: '- [60] Imported reference.\\n- [61] Appended source.',
             updateCode: () => {},
             editorWidth: 50,
             onEditorResizeStart: () => {},
@@ -77,11 +77,8 @@ test('References editor shows generated bibliography as read-only', async (t) =>
   await page.locator('body[data-ready], body[data-error]').waitFor();
   assert.equal(await page.locator('body').getAttribute('data-error'), null);
 
-  const references = page.getByRole('region', { name: 'Generated references' });
-  await references.waitFor({ timeout: 5000 });
-  assert.match(await page.locator('.cm-content').textContent(), /Manual bibliography text retained\./);
-  assert.equal(await references.getAttribute('data-read-only'), 'true');
-  assert.equal(await references.getByRole('listitem').count(), 2);
-  assert.match(await references.textContent(), /\[1\].*Writer\. First paper\. 2026\./s);
-  assert.equal(await references.locator('input, textarea, button, [contenteditable="true"]').count(), 0);
+  const content = await page.locator('.cm-content').textContent();
+  assert.match(content, /\[60\] Imported reference\./);
+  assert.match(content, /\[61\] Appended source\./);
+  assert.equal(await page.getByRole('region', { name: 'Generated references' }).count(), 0);
 });

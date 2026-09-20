@@ -827,16 +827,46 @@ public class DocumentServiceImpl {
                 }
             }
         }
-        if (!candidates.isEmpty()) {
+        if (!candidates.isEmpty() && doc.getDocType() != DocumentType.SOURCE) {
             throw denial;
         }
+        List<Collection> collections = new ArrayList<>();
         if (doc.getCollection() != null) {
-            currentUserService.requireCollectionAccess(currentUser, doc.getCollection());
-            return;
+            collections.add(doc.getCollection());
+        }
+        for (CollectionDocument link : collectionDocumentRepository.findByDocumentId(doc.getId())) {
+            if (link.getCollection() != null && !collections.contains(link.getCollection())) {
+                collections.add(link.getCollection());
+            }
+        }
+        for (Collection collection : collections) {
+            try {
+                currentUserService.requireCollectionAccess(currentUser, collection);
+                return;
+            } catch (ResponseStatusException e) {
+                if (e.getStatusCode().value() != 403) {
+                    throw e;
+                }
+                if (denial == null) {
+                    denial = e;
+                }
+            }
         }
         if (doc.getUploadedBy() != null) {
-            currentUserService.requireUserIdOrAdmin(currentUser, doc.getUploadedBy().getId());
-            return;
+            try {
+                currentUserService.requireUserIdOrAdmin(currentUser, doc.getUploadedBy().getId());
+                return;
+            } catch (ResponseStatusException e) {
+                if (e.getStatusCode().value() != 403) {
+                    throw e;
+                }
+                if (denial == null) {
+                    denial = e;
+                }
+            }
+        }
+        if (denial != null) {
+            throw denial;
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Project access denied");
     }

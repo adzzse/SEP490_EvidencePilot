@@ -495,8 +495,6 @@
   "pdfAttached": "Đã đính kèm PDF. Đã xếp hàng trích xuất.",
   "attachPdfFailed": "Không thể đính kèm PDF.",
   "references": "Tài liệu tham khảo",
-  "generatedReferences": "Tài liệu tham khảo được tạo tự động",
-  "generatedReferencesReadOnly": "Chỉ đọc; được quản lý từ danh sách References của bài.",
   "noReferences": "Chưa chọn tài liệu tham khảo nào cho bài này.",
   "addToReferences": "Thêm vào References",
   "removeReference": "Gỡ khỏi References",

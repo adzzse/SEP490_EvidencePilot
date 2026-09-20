@@ -60,7 +60,7 @@ export default forwardRef(function SourceGraph({
     }));
     const hasProject = baseNodes.some(node => node.kind === 'project');
     const nodes = new DataSet(baseNodes.map((node, index) => {
-      const tone = palette[node.kind];
+      const tone = palette[node.kind] || palette.source;
       const tooltip = document.createElement('div');
       tooltip.textContent = node.tooltip; // vis-network string titles are HTML; source metadata must stay text.
       return {
@@ -76,11 +76,11 @@ export default forwardRef(function SourceGraph({
         size: node.size, borderWidth: node.primary ? 2 : 1, borderWidthSelected: 3,
       };
     }));
-    const edges = new DataSet(data.edges.map(edge => ({
+    const edges = new DataSet((data.edges || []).map(edge => ({
       ...edge, dashes: edge.kind === 'membership',
       arrows: { to: { enabled: edge.kind === 'citation', scaleFactor: 0.32 } },
     })));
-    const initial = current.current.settings;
+    const initial = current.current?.settings || DEFAULT_GRAPH_SETTINGS;
     const network = new Network(containerRef.current, { nodes, edges }, {
       layout: { improvedLayout: !hasProject && !reducedMotion, randomSeed: 42 },
       physics: { enabled: !reducedMotion, solver: 'forceAtlas2Based', stabilization: { enabled: false },
@@ -96,7 +96,8 @@ export default forwardRef(function SourceGraph({
     let labelMode = null;
 
     const refreshLabels = () => {
-      const mode = focusIds ? 'focus' : network.getScale() >= current.current.settings.textFade ? 'all' : 'overview';
+      const options = current.current?.settings || DEFAULT_GRAPH_SETTINGS;
+      const mode = focusIds ? 'focus' : network.getScale() >= options.textFade ? 'all' : 'overview';
       if (mode === labelMode) return;
       labelMode = mode;
       nodes.update(baseNodes.map(node => ({
@@ -106,17 +107,17 @@ export default forwardRef(function SourceGraph({
       })));
     };
     const refresh = () => {
-      const { settings: options, search: query, searchMode: mode, selectedId: selected } = current.current;
-      const normalized = query.trim().toLowerCase();
+      const { settings: options = DEFAULT_GRAPH_SETTINGS, search: query = '', searchMode: mode = 'filter', selectedId: selected = null } = current.current || {};
+      const normalized = (query || '').trim().toLowerCase();
       const matches = new Set(baseNodes.filter(node => node.searchText.includes(normalized)).map(node => node.id));
       visible = new Set(baseNodes.filter(node => (options.showUnresolved || node.kind !== 'unresolved')
         && (mode !== 'filter' || !normalized || matches.has(node.id))).map(node => node.id));
       const focused = hoverId || selected;
-      focusIds = focused && visible.has(focused) ? new Set([focused, ...neighborMap.get(focused)])
-        : mode === 'highlight' && normalized ? new Set([...matches].flatMap(nodeId => [nodeId, ...neighborMap.get(nodeId)])) : null;
+      focusIds = focused && visible.has(focused) ? new Set([focused, ...(neighborMap.get(focused) || [])])
+        : mode === 'highlight' && normalized ? new Set([...matches].flatMap(nodeId => [nodeId, ...(neighborMap.get(nodeId) || [])])) : null;
       nodes.update(baseNodes.map(node => ({ id: node.id, hidden: !visible.has(node.id),
         opacity: !focusIds || focusIds.has(node.id) ? 1 : 0.12, size: node.size * options.nodeSize })));
-      edges.update(data.edges.map(edge => {
+      edges.update((data.edges || []).map(edge => {
         const active = focusIds && (focused ? edge.from === focused || edge.to === focused : matches.has(edge.from) || matches.has(edge.to));
         const color = edge.kind === 'membership' ? (isDark ? '#71717a' : '#94a3b8') : (isDark ? '#a78bfa' : '#7c3aed');
         return { id: edge.id, hidden: !visible.has(edge.from) || !visible.has(edge.to),
@@ -129,7 +130,7 @@ export default forwardRef(function SourceGraph({
       refreshLabels();
     };
     const applySettings = () => {
-      const options = current.current.settings;
+      const options = current.current?.settings || DEFAULT_GRAPH_SETTINGS;
       network.setOptions({ physics: { forceAtlas2Based: { gravitationalConstant: -options.repelForce,
         centralGravity: options.centerForce, springLength: options.linkDistance, springConstant: options.linkForce } } });
       refresh();
@@ -156,7 +157,7 @@ export default forwardRef(function SourceGraph({
   useEffect(() => { runtimeRef.current?.refresh(); }, [search, searchMode, selectedId]);
   useEffect(() => {
     if (searchMode !== 'highlight' || !search.trim()) return;
-    const matches = data.nodes.filter(node => node.searchText.includes(search.trim().toLowerCase())).map(node => node.id);
+    const matches = (data?.nodes || []).filter(node => node.searchText?.includes(search.trim().toLowerCase())).map(node => node.id);
     if (matches.length) runtimeRef.current?.network.fit({ nodes: matches, maxZoomLevel: 1,
       animation: reducedMotion ? false : { duration: 250 } });
   }, [data, search, searchMode, reducedMotion]);

@@ -1,11 +1,11 @@
-// ponytail: word-level diff for submitted-vs-baseline compare. No dependency; capped input, truncates safely.
+// ponytail: word-level diff for submitted-vs-baseline compare. No dependency; capped changed window, truncates safely.
 const MAX_TOKENS = 2000;
 
 function tokenize(text) {
   return text.split(/(\s+)/).filter(t => t.length > 0);
 }
 
-// Full LCS table (Uint16 rows; capped inputs keep it to ~8MB transient), then backtrack.
+// Full LCS table (Uint16 rows; capped changed inputs keep it to ~8MB transient), then backtrack.
 function lcsOps(a, b) {
   const n = a.length;
   const m = b.length;
@@ -55,12 +55,25 @@ export function wordDiff(before, after) {
   if (a === b) return { ops: [[0, b]], truncated: false, ranges: [] };
   const aTokens = tokenize(a);
   const bTokens = tokenize(b);
-  if (aTokens.length > MAX_TOKENS || bTokens.length > MAX_TOKENS) {
+  let start = 0;
+  let aEnd = aTokens.length;
+  let bEnd = bTokens.length;
+  if (aEnd > MAX_TOKENS || bEnd > MAX_TOKENS) {
+    while (start < aEnd && start < bEnd && aTokens[start] === bTokens[start]) start += 1;
+    while (aEnd > start && bEnd > start && aTokens[aEnd - 1] === bTokens[bEnd - 1]) { aEnd -= 1; bEnd -= 1; }
+  }
+  const aChanged = aTokens.slice(start, aEnd);
+  const bChanged = bTokens.slice(start, bEnd);
+  if (aChanged.length > MAX_TOKENS || bChanged.length > MAX_TOKENS) {
     // ponytail: a whole-document range would mislead — report truncation with
     // no ranges and let the UI say so honestly instead of lighting everything.
     return { ops: [[-1, a], [1, b]], truncated: true, ranges: [] };
   }
-  const ops = merge(lcsOps(aTokens, bTokens));
+  const ops = merge([
+    ...(start ? [[0, aTokens.slice(0, start).join('')]] : []),
+    ...lcsOps(aChanged, bChanged),
+    ...(aEnd < aTokens.length ? [[0, aTokens.slice(aEnd).join('')]] : []),
+  ]);
   return { ops, truncated: false, ranges: rangesFromOps(ops) };
 }
 

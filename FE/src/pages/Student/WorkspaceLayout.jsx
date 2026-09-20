@@ -872,7 +872,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     (paperReferences || []).forEach((reference, index) => {
       if (!reference?.citationKey) return;
       map[reference.citationKey] = {
-        number: index + 1,
+        number: reference.citationNumber || index + 1,
         authors: reference.authors || '',
         publicationYear: reference.publicationYear || null,
       };
@@ -983,13 +983,6 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     try { setSources(await loadAllProjectSources(project.id)); } catch { console.warn('Failed to refresh sources'); }
   }, [project, paperRefs.clearCheck]);
 
-  const handleAddReference = useCallback(async (sourceId) => {
-    try {
-      await paperRefs.addReference(sourceId);
-    } catch (error) {
-      showToast(t('failedToAddSource'));
-    }
-  }, [paperRefs, showToast, t]);
   const handleRemoveReference = useCallback(async (sourceId) => {
     try {
       await paperRefs.removeReference(sourceId);
@@ -1357,6 +1350,24 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       aiReviewJobRef.current = null;
       setLoadingAiReview(false);
       setAiReviewProgress(null);
+    }
+  };
+
+  const handleAddReference = async (sourceId) => {
+    const selected = sections.find(section => String(section.id) === String(selectedSectionIdRef.current));
+    if (selected && isReferenceSectionTitle(selected.sectionTitle)
+      && dirtySectionsRef.current.has(String(selected.id))
+      && !await handleSaveDraft()) return;
+    try {
+      await paperRefs.addReference(sourceId);
+      const response = await api.get(`/api/papers/${selectedPaper.id}/sections`);
+      const refreshed = response.data || [];
+      setSections(refreshed);
+      const current = refreshed.find(section => String(section.id) === String(selectedSectionIdRef.current));
+      if (current && isReferenceSectionTitle(current.sectionTitle)
+        && !dirtySectionsRef.current.has(String(current.id))) loadCode(current.contentTex || '');
+    } catch (error) {
+      showToast(t('failedToAddSource'));
     }
   };
 

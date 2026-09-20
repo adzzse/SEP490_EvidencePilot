@@ -606,7 +606,7 @@ class PaperControllerTest {
         user.setId(userId);
         when(currentUserService.requireCurrentUser()).thenReturn(user);
         com.evidencepilot.dto.response.PaperReferenceResponse response =
-                new com.evidencepilot.dto.response.PaperReferenceResponse(sourceId, "epkey", "Title",
+                new com.evidencepilot.dto.response.PaperReferenceResponse(sourceId, "epkey", 61, "Title",
                         "Author", 2026, null, com.evidencepilot.model.enums.ProcessingStatus.READY,
                         null, true, true, false, null, userId);
         when(paperReferenceService.list(paperId, userId)).thenReturn(List.of(response));

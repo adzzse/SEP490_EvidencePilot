@@ -74,7 +74,7 @@ public final class CitationBibliography {
         return keys;
     }
 
-    private static String referenceText(Document source) {
+    public static String referenceText(Document source) {
         StringBuilder content = new StringBuilder();
         appendReference(source, content, false);
         return content.toString();

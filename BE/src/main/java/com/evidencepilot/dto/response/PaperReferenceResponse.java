@@ -12,6 +12,7 @@ import java.util.UUID;
 public record PaperReferenceResponse(
         UUID sourceId,
         String citationKey,
+        Integer citationNumber,
         String title,
         String authors,
         Integer publicationYear,
@@ -23,11 +24,13 @@ public record PaperReferenceResponse(
         boolean canAttachFile,
         LocalDateTime addedAt,
         UUID addedBy) {
-    public static PaperReferenceResponse from(PaperReference reference, boolean canAttachFile) {
+    public static PaperReferenceResponse from(
+            PaperReference reference, boolean canAttachFile, Integer citationNumber) {
         Document source = reference.getSource();
         return new PaperReferenceResponse(
                 source.getId(),
                 SourceMatchingService.citationKey(source.getId()),
+                citationNumber,
                 source.getTitle(),
                 source.getAuthors(),
                 source.getPublicationYear(),

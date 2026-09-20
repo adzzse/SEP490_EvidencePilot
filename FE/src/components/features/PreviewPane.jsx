@@ -19,7 +19,6 @@ import { resolvePreviewRange } from '../../utils/previewSelection.js';
 import { resolveLatexRange } from '../../utils/formatters/latexSourceMap.js';
 import { normalizeSource } from '../../utils/student/feedbackAnchors.js';
 import AssetToggle from './AssetToggle.jsx';
-import GeneratedReferences from './GeneratedReferences.jsx';
 
 function MissingImage({ alt }) {
   const { t } = useTranslation();
@@ -80,8 +79,6 @@ export default function PreviewPane({
   latex,
   mediaAssets,
   citationNumbers,
-  generatedReferences = [],
-  referencesTitle,
   onScroll,
   scrollRef,
   zoom = 100,
@@ -102,10 +99,8 @@ export default function PreviewPane({
   const source = useMemo(() => normalizeSource(deferredLatex), [deferredLatex]);
   const useLegacy = isLatexDialect(source);
   const html = useMemo(
-    () => applyChangeHighlights((useLegacy && (!source && generatedReferences.length > 0
-      ? ''
-      : renderLatexToHtml(source, mediaUrlMap, citationNumbers))), changeRanges, source),
-    [changeRanges, citationNumbers, generatedReferences.length, source, mediaUrlMap, useLegacy],
+    () => applyChangeHighlights((useLegacy && renderLatexToHtml(source, mediaUrlMap, citationNumbers)), changeRanges, source),
+    [changeRanges, citationNumbers, source, mediaUrlMap, useLegacy],
   );
   const markdown = useMemo(() => (!useLegacy ? String(source || '') : ''), [source, useLegacy]);
   const rehypePlugins = useMemo(
@@ -145,7 +140,7 @@ export default function PreviewPane({
     }),
     [mediaUrlMap],
   );
-  const heading = sectionTitle || (generatedReferences.length > 0 ? referencesTitle || t('references') : '');
+  const heading = sectionTitle || '';
 
   return (
     <div
@@ -173,10 +168,9 @@ export default function PreviewPane({
             </div>
           )
         )}
-        {(!source && generatedReferences.length === 0 && !useLegacy && markdown.trim() === '') && (
+        {(!source && !useLegacy && markdown.trim() === '') && (
           <p className="max-w-prose mx-auto text-slate-400 italic">{t('student.workspace.emptyPreview')}</p>
         )}
-        <GeneratedReferences references={generatedReferences} className="max-w-prose mx-auto text-slate-700" />
       </div>
     </div>
   );

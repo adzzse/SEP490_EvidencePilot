@@ -3,10 +3,8 @@ import { createPortal } from 'react-dom';
 import LatexEditor from '../features/LatexEditor';
 import FeedbackPanel from './FeedbackPanel.jsx';
 import PreviewPane from '../features/PreviewPane';
-import GeneratedReferences from '../features/GeneratedReferences.jsx';
 import InstructorFeedbackPanel from '../Instructor/InstructorFeedbackPanel.jsx';
-import { buildCitationNumbers, buildReferenceEntries } from '../../utils/paperReferences.js';
-import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
+import { buildCitationNumbers } from '../../utils/paperReferences.js';
 import { useTranslation } from 'react-i18next';
 import { mapScrollPosition } from '../../utils/student/scrollSync.js';
 import { previousRequest, selectFeedbackForRound } from '../../utils/reviewRounds.js';
@@ -55,8 +53,6 @@ export default function EditorPanel({
   const readOnlyLabel = review ? t('instructor.review.paperReadOnly') : isLocked ? t('projectLocked') : !isOwnSection ? t('readOnly') : '';
   const saveTitle = saveStatus === 'saving' ? t('saving') : isLocked ? t('saveReadOnly') : !isOwnSection ? t('noAssignedSection') : t('saveSectionHelp');
   const [previewZoom, setPreviewZoom] = useState(100);
-  const generatedReferences = useMemo(() => isReferenceSectionTitle(currentSection?.sectionTitle || '')
-    ? buildReferenceEntries(paperReferences) : [], [currentSection?.sectionTitle, paperReferences]);
   const previewPaneRef = useRef(null);
   const containerRef = useRef(null);
   const [availableWidth, setAvailableWidth] = useState(0);
@@ -440,12 +436,6 @@ export default function EditorPanel({
             feedbackItems={sectionFeedback} activeFeedbackId={review?.activeFeedbackId || activeFeedbackId} feedbackVisible={Boolean(review) || feedbackOpen} onFeedbackClick={handleFeedbackClick}
             onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onSelection={review ? handleEditorSelection : undefined} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} mediaAssets={mediaAssets} changeRanges={review?.changeRanges || []} />
         </div>
-        <GeneratedReferences
-          references={generatedReferences}
-          label={t('generatedReferences')}
-          description={t('generatedReferencesReadOnly')}
-          className="shrink-0 max-h-52 overflow-y-auto border-t border-(--border) bg-(--surface-secondary)/70 p-3 text-(--text-secondary)"
-        />
       </div>
       <div onMouseDown={onEditorResizeStart} className={`${review || narrow || threePanes ? 'hidden' : 'flex'} w-1.5 hover:bg-indigo-500 cursor-col-resize self-stretch transition-all shrink-0 z-10 relative group items-center justify-center border-l border-r border-(--border)`} title={t('dragToResize')}>
         <div className="h-6 w-0.5 bg-(--border) group-hover:bg-indigo-500 rounded"></div>
@@ -506,9 +496,7 @@ export default function EditorPanel({
             sectionTitle={currentSection?.sectionTitle}
             latex={displayContent}
             mediaAssets={mediaAssets}
-            generatedReferences={generatedReferences}
             citationNumbers={citationNumbers}
-            referencesTitle={currentSection?.sectionTitle || t('references')}
             changeRanges={review?.changeRanges || []}
             onPreviewSelect={review ? handlePreviewSelect : undefined}
           />

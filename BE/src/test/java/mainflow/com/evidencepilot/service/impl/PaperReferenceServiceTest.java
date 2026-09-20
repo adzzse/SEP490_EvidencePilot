@@ -22,6 +22,7 @@ import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -32,6 +33,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -48,6 +51,7 @@ class PaperReferenceServiceTest {
     private final SourceMatchingService sourceMatchingService = mock(SourceMatchingService.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
+    private final PaperProcessingServiceImpl paperProcessingService = mock(PaperProcessingServiceImpl.class);
 
     private PaperReferenceService service;
     private Project project;
@@ -61,7 +65,7 @@ class PaperReferenceServiceTest {
     void setUp() {
         service = new PaperReferenceService(documentRepository, paperReferenceRepository,
                 paperSectionRepository, projectDocumentRepository, projectMemberRepository,
-                sourceMatchingService, userRepository, currentUserService);
+                sourceMatchingService, userRepository, currentUserService, paperProcessingService);
         projectId = UUID.randomUUID();
         paperId = UUID.randomUUID();
         leaderId = UUID.randomUUID();
@@ -244,6 +248,36 @@ class PaperReferenceServiceTest {
         assertThat(response.retrievable()).isTrue();
         assertThat(response.addedBy()).isEqualTo(leaderId);
         verify(paperReferenceRepository).save(any());
+    }
+
+    @Test
+    void addAppendsSourceAfterExistingImportedReferences() {
+        PaperSection references = referenceSection(numberedReferences(1, 60));
+        references.setId(UUID.randomUUID());
+        references.setDocument(paper);
+        references.setOptVersion(7L);
+        Document source = source(ProcessingStatus.READY, "file.pdf");
+        source.setAuthors("A. Researcher");
+        source.setTitle("Direct reference insertion");
+        source.setPublicationYear(2026);
+        source.setDoi("10.1000/direct");
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+        when(paperReferenceRepository.findByPaperIdAndSourceId(paperId, source.getId()))
+                .thenReturn(Optional.empty());
+        when(paperReferenceRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperId))
+                .thenReturn(List.of(references));
+        when(sourceMatchingService.activeSources(projectId)).thenReturn(List.of(source));
+
+        PaperReferenceResponse response = service.add(paperId, source.getId(), leaderId);
+
+        ArgumentCaptor<String> content = ArgumentCaptor.forClass(String.class);
+        verify(paperProcessingService).updateSection(
+                eq(paperId), eq(references.getId()), isNull(), isNull(), isNull(),
+                content.capture(), eq(7L));
+        assertThat(content.getValue()).endsWith(
+                "- [61] A. Researcher. Direct reference insertion. 2026. https://doi.org/10.1000/direct.");
+        assertThat(response.citationNumber()).isEqualTo(61);
     }
 
     @Test

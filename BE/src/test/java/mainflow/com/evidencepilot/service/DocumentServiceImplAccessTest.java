@@ -118,6 +118,50 @@ class DocumentServiceImplAccessTest {
     }
 
     @Test
+    void collectionOwnerCanDownloadSourceLinkedToDeniedProject() {
+        User instructor = user();
+        Project inaccessibleProject = project();
+        com.evidencepilot.model.Collection ownedCollection = collection();
+        Document source = document(inaccessibleProject);
+        source.setDocType(DocumentType.SOURCE);
+        CollectionDocument collectionLink = new CollectionDocument();
+        collectionLink.setCollection(ownedCollection);
+        collectionLink.setDocument(source);
+
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+        when(projectDocumentRepository.findByDocumentId(source.getId())).thenReturn(List.of());
+        when(collectionDocumentRepository.findByDocumentId(source.getId()))
+                .thenReturn(List.of(collectionLink));
+        doThrow(new ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Instructor access denied to project"))
+                .when(currentUserService).requireProjectAccess(instructor, inaccessibleProject);
+
+        assertThat(service().getDocumentById(source.getId()).id()).isEqualTo(source.getId());
+        verify(currentUserService).requireCollectionAccess(instructor, ownedCollection);
+    }
+
+    @Test
+    void paperUploaderCannotBypassDeniedProject() {
+        User uploader = user();
+        Project inaccessibleProject = project();
+        Document paper = document(inaccessibleProject);
+        paper.setUploadedBy(uploader);
+
+        when(currentUserService.requireCurrentUser()).thenReturn(uploader);
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+        when(projectDocumentRepository.findByDocumentId(paper.getId())).thenReturn(List.of());
+        doThrow(new ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Project access denied"))
+                .when(currentUserService).requireProjectAccess(uploader, inaccessibleProject);
+
+        assertThatThrownBy(() -> service().getDocumentById(paper.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Project access denied");
+        verify(currentUserService, never()).requireUserIdOrAdmin(uploader, uploader.getId());
+    }
+
+    @Test
     void getDocumentChunksRequiresProjectAccess() {
         User user = user();
         Project project = project();
@@ -1050,11 +1094,12 @@ class DocumentServiceImplAccessTest {
         when(currentUserService.requireCurrentUser()).thenReturn(stranger);
         when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
         when(projectDocumentRepository.findByDocumentId(source.getId())).thenReturn(List.of());
-        // ponytail: owning project exists, so collection/owner branches are out of
-        // scope — only the owning-project denial surfaces.
         doThrow(new ResponseStatusException(
                 org.springframework.http.HttpStatus.FORBIDDEN, "Project access denied"))
                 .when(currentUserService).requireProjectAccess(stranger, owning);
+        doThrow(new ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Access denied: not your resource"))
+                .when(currentUserService).requireUserIdOrAdmin(stranger, source.getUploadedBy().getId());
 
         assertThatThrownBy(() -> service().getSourceById(source.getId()))
                 .isInstanceOf(ResponseStatusException.class)
@@ -1118,6 +1163,9 @@ class DocumentServiceImplAccessTest {
         doThrow(new ResponseStatusException(
                 org.springframework.http.HttpStatus.FORBIDDEN, "Students cannot access collections"))
                 .when(currentUserService).requireCollectionAccess(student, collection);
+        doThrow(new ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Access denied: not your resource"))
+                .when(currentUserService).requireUserIdOrAdmin(student, source.getUploadedBy().getId());
 
         assertThatThrownBy(() -> service().getSourceById(source.getId()))
                 .isInstanceOf(ResponseStatusException.class)

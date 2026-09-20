@@ -2,8 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api.js';
 import PreviewPane from '../features/PreviewPane';
-import { isReferenceSectionTitle } from '../../utils/formatters/latexHtml.js';
-import { buildCitationNumbers, buildReferenceEntries } from '../../utils/paperReferences.js';
+import { buildCitationNumbers } from '../../utils/paperReferences.js';
 import { mergePaperMetadata, parsePaperInfoSection } from '../../utils/formatters/paperInfo.js';
 
 // Allowlist mini-renderer: only <sup>/<sub> become elements, everything else
@@ -33,10 +32,7 @@ export default function FullPaperPreview({ sections, paperId, paperTitle, mediaA
   const dialogRef = useRef(null);
   const sectionRefs = useRef({});
   const [metadata, setMetadata] = useState(null);
-  const generatedReferences = useMemo(() => buildReferenceEntries(paperReferences), [paperReferences]);
   const citationNumbers = useMemo(() => buildCitationNumbers(paperReferences), [paperReferences]);
-  const hasReferenceSection = sections.some(section =>
-    isReferenceSectionTitle(section.sectionTitle));
   // Paper Info section edits win; extraction metadata fills gaps; the
   // filename-derived prettification is a last resort for untitled papers.
   const paperMeta = useMemo(() => {
@@ -134,30 +130,17 @@ export default function FullPaperPreview({ sections, paperId, paperTitle, mediaA
             <p className="text-sm text-slate-400 italic text-center py-16">{t('noSections')}</p>
           ) : (
             <>
-              {sections.map((sec, i) => {
-                const referenceSection = isReferenceSectionTitle(sec.sectionTitle);
-                return (
+              {sections.map((sec, i) => (
                     <div id={`paper-section-${sec.id}`} key={sec.id} ref={el => { sectionRefs.current[sec.id] = el; }} className="[content-visibility:auto] [contain-intrinsic-size:auto_400px]">
                     {onAnnotateSection && <button type="button" onClick={() => onAnnotateSection(sec.id)} className="mb-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">{t('feedbackAnnotatePassage')} · {sec.sectionTitle}</button>}
                     <PreviewPane
                       sectionTitle={sec.sectionTitle}
                       latex={sec.contentTex || ''}
                       mediaAssets={mediaAssets} citationNumbers={citationNumbers}
-                      generatedReferences={referenceSection ? generatedReferences : []}
-                      referencesTitle={sec.sectionTitle || t('references')}
                     />
-                    {(i < sections.length - 1 || (!hasReferenceSection && generatedReferences.length > 0))
-                      && <hr className="my-8 border-(--border)" />}
+                    {i < sections.length - 1 && <hr className="my-8 border-(--border)" />}
                   </div>
-                );
-              })}
-              {!hasReferenceSection && generatedReferences.length > 0 && (
-                <PreviewPane
-                  latex=""
-                  mediaAssets={mediaAssets} citationNumbers={citationNumbers}
-                  generatedReferences={generatedReferences}
-                />
-              )}
+              ))}
             </>
           )}
         </div>

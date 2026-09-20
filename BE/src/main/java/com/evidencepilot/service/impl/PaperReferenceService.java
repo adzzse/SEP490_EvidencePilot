@@ -29,8 +29,11 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -51,10 +54,13 @@ public class PaperReferenceService {
             "(?s)\\\\bibitem(?:\\[[^]]*])?\\{([^}]+)}(.*?)(?=\\\\bibitem|\\z)");
     private static final Pattern NUMBERED_ENTRY_PATTERN = Pattern.compile(
             "(?m)(?=^[ \\t]*(?:-[ \\t]*)?(?:\\[\\d+]|\\d+[.)])[ \\t]+)");
+    private static final Pattern REFERENCE_NUMBER_PATTERN = Pattern.compile(
+            "^[ \\t]*(?:-[ \\t]*)?(?:\\[(\\d+)]|(\\d+)[.)])[ \\t]+");
     private static final Set<String> REFERENCE_TITLES = Set.of(
             "references", "reference", "bibliography", "works cited");
 
-    private record ParsedEntry(String rawText, String citationKey, String doi, Integer year) {
+    private record ParsedEntry(
+            String rawText, String citationKey, String doi, Integer year, Integer number) {
     }
 
     private record Match(Document source, PaperReferenceCheckResponse.MatchReason reason, boolean ambiguous) {
@@ -68,6 +74,7 @@ public class PaperReferenceService {
     private final SourceMatchingService sourceMatchingService;
     private final UserRepository userRepository;
     private final CurrentUserServiceImpl currentUserService;
+    private final PaperProcessingServiceImpl paperProcessingService;
 
     @Transactional(readOnly = true)
     public PaperReferenceCheckResponse check(UUID paperId, UUID requesterId) {
@@ -152,7 +159,13 @@ public class PaperReferenceService {
         return new ParsedEntry(rawText,
                 citationKey == null && keyMatcher.find() ? keyMatcher.group() : citationKey,
                 doiMatcher.find() ? normalizeDoi(doiMatcher.group()) : null,
-                extractYear(rawText));
+                extractYear(rawText), extractReferenceNumber(rawText));
+    }
+
+    private static Integer extractReferenceNumber(String value) {
+        Matcher matcher = REFERENCE_NUMBER_PATTERN.matcher(value == null ? "" : value);
+        if (!matcher.find()) return null;
+        return Integer.valueOf(matcher.group(1) != null ? matcher.group(1) : matcher.group(2));
     }
 
     private static String cleanEntry(String rawText) {
@@ -296,11 +309,14 @@ public class PaperReferenceService {
         User requester = requireUser(requesterId);
         Document paper = requirePaper(paperId);
         currentUserService.requireProjectAccess(requester, paper.getProject());
+        List<Document> visibleSources = sourceMatchingService.activeSources(paper.getProject().getId());
+        Map<UUID, Integer> citationNumbers = referenceNumbers(paperId, visibleSources);
         return paperReferenceRepository.findByPaperIdOrderByAddedAtAsc(paperId).stream()
                 .filter(reference -> reference.getSource() != null
                         && reference.getSource().isActive()
                         && reference.getSource().getDocType() == DocumentType.SOURCE)
-                .map(reference -> response(reference, requester, paper.getProject()))
+                .map(reference -> response(reference, requester, paper.getProject(),
+                        citationNumbers.get(reference.getSource().getId())))
                 .toList();
     }
 
@@ -313,16 +329,83 @@ public class PaperReferenceService {
         User requester = requireUser(requesterId);
         requireStudentWriter(requester, paper.getProject());
         Document source = requireVisibleSource(paper.getProject(), sourceId);
+        List<PaperSection> sections = paperSectionRepository
+                .findByDocumentIdOrderBySectionOrderAsc(paperId).stream()
+                .filter(PaperSection::isActive)
+                .filter(section -> isReferenceTitle(section.getSectionTitle()))
+                .toList();
+        List<Document> visibleSources = sourceMatchingService.activeSources(paper.getProject().getId());
+        Map<UUID, Integer> citationNumbers = referenceNumbers(sections, visibleSources);
         return paperReferenceRepository.findByPaperIdAndSourceId(paperId, sourceId)
-                .map(reference -> response(reference, requester, paper.getProject()))
+                .map(reference -> response(reference, requester, paper.getProject(),
+                        citationNumbers.get(sourceId)))
                 .orElseGet(() -> {
+                    Integer citationNumber = citationNumbers.get(sourceId);
+                    if (citationNumber == null && !sections.isEmpty()) {
+                        PaperSection referenceSection = sections.getFirst();
+                        citationNumber = nextReferenceNumber(referenceSection.getContentTex());
+                        String content = appendReference(
+                                referenceSection.getContentTex(), citationNumber, source);
+                        paperProcessingService.updateSection(
+                                paperId, referenceSection.getId(), null, null, null,
+                                content, referenceSection.getOptVersion());
+                    }
                     PaperReference reference = new PaperReference();
                     reference.setPaper(paper);
                     reference.setSource(source);
                     reference.setAddedBy(requester);
                     reference.setAddedAt(LocalDateTime.now());
-                    return response(paperReferenceRepository.save(reference), requester, paper.getProject());
+                    return response(paperReferenceRepository.save(reference), requester,
+                            paper.getProject(), citationNumber);
                 });
+    }
+
+    private Map<UUID, Integer> referenceNumbers(UUID paperId, List<Document> visibleSources) {
+        List<PaperSection> sections = paperSectionRepository
+                .findByDocumentIdOrderBySectionOrderAsc(paperId).stream()
+                .filter(PaperSection::isActive)
+                .filter(section -> isReferenceTitle(section.getSectionTitle()))
+                .toList();
+        return referenceNumbers(sections, visibleSources);
+    }
+
+    private static Map<UUID, Integer> referenceNumbers(
+            List<PaperSection> sections, List<Document> visibleSources) {
+        Map<UUID, Integer> numbers = new LinkedHashMap<>();
+        List<ParsedEntry> entries = parseEntries(sections);
+        for (int index = 0; index < entries.size(); index++) {
+            ParsedEntry entry = entries.get(index);
+            Match matched = match(entry, visibleSources);
+            if (matched.source() != null) {
+                numbers.putIfAbsent(matched.source().getId(),
+                        entry.number() != null ? entry.number() : index + 1);
+            }
+        }
+        return numbers;
+    }
+
+    private static int nextReferenceNumber(String content) {
+        OptionalInt maximum = parseEntries(List.of(referenceSection(content))).stream()
+                .filter(entry -> entry.number() != null)
+                .mapToInt(ParsedEntry::number)
+                .max();
+        if (maximum.isPresent()) return maximum.getAsInt() + 1;
+        return parseEntries(List.of(referenceSection(content))).size() + 1;
+    }
+
+    private static PaperSection referenceSection(String content) {
+        PaperSection section = new PaperSection();
+        section.setActive(true);
+        section.setSectionTitle("References");
+        section.setContentTex(content == null ? "" : content);
+        return section;
+    }
+
+    private static String appendReference(String content, int number, Document source) {
+        String current = content == null ? "" : content.stripTrailing();
+        String separator = current.isBlank() ? "" : "\n";
+        return current + separator + "- [" + number + "] "
+                + CitationBibliography.referenceText(source);
     }
 
     @Transactional
@@ -372,7 +455,8 @@ public class PaperReferenceService {
         }
     }
 
-    private PaperReferenceResponse response(PaperReference reference, User requester, Project project) {
+    private PaperReferenceResponse response(
+            PaperReference reference, User requester, Project project, Integer citationNumber) {
         Document source = reference.getSource();
         boolean canAttach = false;
         if (source.getProcessingStatus() == ProcessingStatus.METADATA_FETCHED) {
@@ -391,7 +475,7 @@ public class PaperReferenceService {
                 canAttach = false;
             }
         }
-        return PaperReferenceResponse.from(reference, canAttach);
+        return PaperReferenceResponse.from(reference, canAttach, citationNumber);
     }
 
     private void requireStudentWriter(User requester, Project project) {

@@ -6,7 +6,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useCollectionSources } from '../../hooks/useCollections';
 import api from '../../services/api';
 import SourceGraph from '../../components/features/SourceGraph.jsx';
-import { collectionGraph } from '../../utils/sourceGraph.js';
+import { collectionGraph, sourceAuthors } from '../../utils/sourceGraph.js';
 import useUndoDelete, { UndoToast } from '../../components/ui/UndoDelete.jsx';
 import DeleteConfirm from '../../components/ui/DeleteConfirm.jsx';
 
@@ -78,7 +78,7 @@ function VisualizeMapPanel({ collectionId, isDark, t }) {
           <div className="flex-1 flex items-center justify-center p-6">
             <LoadingSkeleton count={6} height="h-12" />
           </div>
-        ) : !graphData || graphData.nodes.length === 0 ? (
+        ) : !graphData || !Array.isArray(graphData.nodes) || graphData.nodes.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-(--text-tertiary)">
             <svg className="w-10 h-10 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10 13a5 5 0 007.54.54l2-2a5 5 0 00-7.07-7.07l-1.15 1.15m2.68 5.38a5 5 0 00-7.54-.54l-2 2a5 5 0 007.07 7.07l1.15-1.15" /></svg>
             <p className="text-xs font-semibold">{t('instructor.collectionDetail.citationGraphEmpty')}</p>
@@ -88,7 +88,7 @@ function VisualizeMapPanel({ collectionId, isDark, t }) {
           <div className="flex-1 relative overflow-hidden bg-(--surface-secondary)">
             <SourceGraph ref={graphRef} data={graph} isDark={isDark} settings={graphSettings}
               search={graphSearch} selectedId={selectedGraphNode?.id}
-              onSelect={nodeId => setSelectedGraphNode(graphData.nodes.find(node => String(node.id) === nodeId) || null)}
+              onSelect={nodeId => setSelectedGraphNode(nodeId && graphData?.nodes ? (graphData.nodes.find(node => String(node.id) === nodeId) || null) : null)}
               id="visual-map-container" label={t('instructor.collectionDetail.visualizeDesc')} describedBy="visual-map-help" />
 
             <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
@@ -203,7 +203,7 @@ function VisualizeMapPanel({ collectionId, isDark, t }) {
             {selectedGraphNode.authors && (
               <div>
                 <p className="text-[10px] font-black text-(--text-tertiary) uppercase tracking-wider">{t('instructor.collectionDetail.authors')}</p>
-                <p className="text-xs text-(--text-secondary)">{selectedGraphNode.authors}</p>
+                <p className="text-xs text-(--text-secondary)">{sourceAuthors(selectedGraphNode.authors)}</p>
               </div>
             )}
             {selectedGraphNode.publicationYear && (
