@@ -28,7 +28,7 @@ export function StandardConfigEditor({ open = true, initialRequirements = [], is
   };
   const handleSave = async () => {
     if (isLocked) { onClose(); return; }
-    if (requirements.length === 0 || requirements.length > 15) return;
+    if (requirements.length > 15) return;
     setSaving(true);
     try {
       await onSave({ requirements });
@@ -60,7 +60,7 @@ export function StandardConfigEditor({ open = true, initialRequirements = [], is
       </div>
       <div className="flex justify-end gap-2">
         <button type="button" onClick={onClose} disabled={saving} className="rounded bg-slate-100 px-3 py-1.5 font-semibold disabled:opacity-50">{ct?.cancel || 'Cancel'}</button>
-        {!isLocked && <button type="button" onClick={handleSave} disabled={saving || requirements.length === 0} className="rounded bg-indigo-600 px-3 py-1.5 font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{saving ? ct?.saving : ct?.save}</button>}
+        {!isLocked && <button type="button" onClick={handleSave} disabled={saving} className="rounded bg-indigo-600 px-3 py-1.5 font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{saving ? ct?.saving : ct?.save}</button>}
       </div>
     </div>
   );

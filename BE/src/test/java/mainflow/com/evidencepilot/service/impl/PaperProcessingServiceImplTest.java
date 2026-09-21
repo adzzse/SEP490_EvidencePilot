@@ -95,7 +95,6 @@ class PaperProcessingServiceImplTest {
                 .thenReturn(List.of(section));
         when(assignmentSectionBaselineRepository.existsByProjectIdAndSectionId(
                 project.getId(), section.getId())).thenReturn(true);
-        when(paperStandardService.hasStudentContent("")).thenReturn(false);
 
         assertThatThrownBy(() -> service().updateSection(
                 document.getId(), section.getId(), "Renamed", null, null, null, 0L))
@@ -772,6 +771,56 @@ class PaperProcessingServiceImplTest {
     }
 
     @Test
+    void batchUpdateAllowsRenamingAnUnassignedImportedSection() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paperDoc = paper(project);
+        PaperSection section = section(paperDoc);
+        section.setSectionOrder(1024);
+        section.setContentTex("Imported paper content");
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(documentRepository.findById(paperDoc.getId())).thenReturn(Optional.of(paperDoc));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperDoc.getId()))
+                .thenReturn(List.of(section));
+
+        var result = service().batchUpdateSections(paperDoc.getId(), List.of(
+                new SectionBatchItem(section.getId(), 1024, "Renamed", null,
+                        "Imported paper content", 0L)));
+
+        assertThat(result).singleElement().extracting("sectionTitle").isEqualTo("Renamed");
+        verify(paperSectionRepository).saveAll(anyList());
+        verify(paperSectionRepository).flush();
+    }
+
+    @Test
+    void configuredInstructorStandardsDoNotLockSetupStructure() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paperDoc = paper(project);
+        PaperSection section = section(paperDoc);
+        section.setSectionOrder(1024);
+        section.setContentTex("Imported paper content");
+        SectionStandardEvaluation evaluation = new SectionStandardEvaluation();
+        evaluation.setRequirements(List.of("Use evidence"));
+        org.mockito.Mockito.lenient()
+                .when(sectionStandardEvaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId()))
+                .thenReturn(Optional.of(evaluation));
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(documentRepository.findById(paperDoc.getId())).thenReturn(Optional.of(paperDoc));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperDoc.getId()))
+                .thenReturn(List.of(section));
+
+        var result = service().batchUpdateSections(paperDoc.getId(), List.of(
+                new SectionBatchItem(section.getId(), 1024, "Renamed", null,
+                        "Imported paper content", 0L)));
+
+        assertThat(result).singleElement().extracting("sectionTitle").isEqualTo("Renamed");
+        verify(paperSectionRepository).saveAll(anyList());
+    }
+
+    @Test
     void createSectionUsesGapStep() {
         User instructor = user(UserRole.INSTRUCTOR);
         Project project = project(ProjectStatus.IN_PROGRESS);
@@ -790,6 +839,49 @@ class PaperProcessingServiceImplTest {
         var response = service().createSection(paperDoc.getId(), "Extra", null);
 
         assertThat(response.sectionOrder()).isEqualTo(2048);
+    }
+
+    @Test
+    void createSectionAllowsAnUnassignedPaperWithImportedContent() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paperDoc = paper(project);
+        PaperSection existingSection = section(paperDoc);
+        existingSection.setSectionOrder(1024);
+        existingSection.setContentTex("Imported paper content");
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(documentRepository.findById(paperDoc.getId())).thenReturn(Optional.of(paperDoc));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperDoc.getId()))
+                .thenReturn(List.of(existingSection));
+        when(paperSectionRepository.save(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service().createSection(paperDoc.getId(), "Extra", null);
+
+        assertThat(response.sectionTitle()).isEqualTo("Extra");
+        verify(paperSectionRepository).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void deleteSectionAllowsRemovingAnUnassignedImportedSection() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paperDoc = paper(project);
+        PaperSection section = section(paperDoc);
+        section.setContentTex("Imported paper content");
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(documentRepository.findById(paperDoc.getId())).thenReturn(Optional.of(paperDoc));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperDoc.getId()))
+                .thenReturn(List.of(section));
+        when(paperSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
+        when(paperSectionRepository.save(section)).thenReturn(section);
+
+        service().deleteSection(paperDoc.getId(), section.getId());
+
+        assertThat(section.isActive()).isFalse();
+        verify(paperSectionRepository).save(section);
     }
 
     @Test
@@ -1190,6 +1282,30 @@ class PaperProcessingServiceImplTest {
         verify(paperSectionRepository, never()).saveAll(anyList());
         verify(paperSectionRepository, never()).flush();
         verifyNoInteractions(sectionStandardEvaluationRepository);
+    }
+
+    @Test
+    void batchUnassignOnlyPreservesGapOrderForSectionsWithCurrentWork() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document paper = paper(project);
+        PaperSection section = section(paper);
+        section.setSectionOrder(1024);
+        section.setContentTex("Draft");
+        section.setAssignedUser(student);
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paper.getId()))
+                .thenReturn(List.of(section));
+
+        service().batchUpdateSections(paper.getId(), List.of(
+                new SectionBatchItem(section.getId(), 1024, "Intro", null, "Draft", 0L)));
+
+        assertThat(section.getAssignedUser()).isNull();
+        verify(paperSectionRepository).saveAll(anyList());
+        verify(paperSectionRepository).flush();
     }
 
     @Test

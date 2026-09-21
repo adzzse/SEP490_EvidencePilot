@@ -211,6 +211,46 @@ class SectionStandardServiceTest {
     }
 
     @Test
+    void instructorCanClearAllStandardRequirements() {
+        PaperSection section = section();
+        User instructor = user(UserRole.INSTRUCTOR);
+        SectionStandardEvaluation evaluation = configured(section);
+        when(paperSectionRepository.findByIdWithDocument(section.getId())).thenReturn(Optional.of(section));
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(evaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId()))
+                .thenReturn(Optional.of(evaluation));
+        when(evaluationRepository.save(any(SectionStandardEvaluation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = service.saveConfig(
+                section.getDocument().getId(), section.getId(), List.of());
+
+        assertThat(response.requirements()).isEmpty();
+        assertThat(evaluation.getRequirements()).isEmpty();
+        assertThat(evaluation.getStatus()).isEqualTo(SectionStandardEvaluation.STATUS_CONFIGURED);
+        verify(evaluationRepository).save(evaluation);
+    }
+
+    @Test
+    void clearedStandardsCannotBeEvaluated() {
+        PaperSection section = section();
+        User instructor = user(UserRole.INSTRUCTOR);
+        SectionStandardEvaluation evaluation = configured(section);
+        evaluation.setRequirements(List.of());
+        when(paperSectionRepository.findByIdWithDocument(section.getId())).thenReturn(Optional.of(section));
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(evaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId()))
+                .thenReturn(Optional.of(evaluation));
+
+        assertThatThrownBy(() -> service.evaluate(section.getDocument().getId(), section.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("STANDARD_NOT_CONFIGURED");
+        verifyNoInteractions(aiModelClient);
+    }
+
+    @Test
     void latestRequiresProjectAccessBeforeReadingEvaluation() {
         PaperSection section = section();
         User outsider = user(UserRole.STUDENT);

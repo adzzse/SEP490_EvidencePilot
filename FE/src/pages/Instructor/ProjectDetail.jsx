@@ -729,9 +729,9 @@ export default function ProjectDetail() {
     setConflictSectionId(null);
     try {
       const payload = {
-        sections: draftSections.map((s, idx) => ({
+        sections: draftSections.map(s => ({
           id: s.id,
-          sectionOrder: idx,
+          sectionOrder: s.sectionOrder,
           sectionTitle: s.sectionTitle,
           assignedUserId: s.assignedUserId || null,
           contentTex: s.contentTex,

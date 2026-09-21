@@ -144,6 +144,9 @@ public class SectionStandardService {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "STANDARD_CONFIG_INVALID: " + exception.getMessage());
         }
+        if (requirements.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "STANDARD_NOT_CONFIGURED");
+        }
 
         String inputFingerprint = fingerprint(requirements, section);
         if (expectedInputFingerprint != null && !expectedInputFingerprint.equals(inputFingerprint)) {
@@ -396,8 +399,8 @@ public class SectionStandardService {
     }
 
     private static List<String> normalizeRequirements(List<String> requirements) {
-        if (requirements == null || requirements.isEmpty() || requirements.size() > 15) {
-            throw new IllegalArgumentException("Provide between 1 and 15 requirements");
+        if (requirements == null || requirements.size() > 15) {
+            throw new IllegalArgumentException("Provide at most 15 requirements");
         }
         List<String> normalized = new ArrayList<>(requirements.size());
         Set<String> unique = new HashSet<>();

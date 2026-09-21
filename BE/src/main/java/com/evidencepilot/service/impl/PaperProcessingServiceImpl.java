@@ -491,11 +491,6 @@ public class PaperProcessingServiceImpl {
         Document document = requireInstructorDocumentWriteAccess(documentId);
         requireSectionStructureUnlocked(documentId);
         PaperSection section = requireSectionInDocument(sectionId, documentId);
-        if (paperStandardService.hasStudentContent(section.getContentTex())) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Section contains student work.");
-        }
         if (hasFeedback(section)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
@@ -823,18 +818,14 @@ public class PaperProcessingServiceImpl {
     }
 
     private boolean hasMeaningfulWork(PaperSection section) {
+        // Imported paper/template text is setup data; student ownership and history are tracked separately.
         if (section.getAssignedUser() != null) return true;
-        if (paperStandardService.hasStudentContent(section.getContentTex())) return true;
         if (section.getPreviousContentTex() != null && !section.getPreviousContentTex().isBlank()) return true;
         if (section.getVersion() != null && section.getVersion() > 1) return true;
         if (section.getDocument() != null && section.getDocument().getProject() != null
                 && section.getId() != null
                 && assignmentSectionBaselineRepository.existsByProjectIdAndSectionId(
                         section.getDocument().getProject().getId(), section.getId())) {
-            return true;
-        }
-        if (section.getId() != null
-                && sectionStandardEvaluationRepository.findTopBySectionIdOrderByUpdatedAtDesc(section.getId()).isPresent()) {
             return true;
         }
         return hasFeedback(section);

@@ -10,6 +10,7 @@ import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.SectionStandardService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -17,6 +18,7 @@ import java.util.UUID;
 
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class SectionStandardControllerTest {
@@ -52,5 +54,23 @@ class SectionStandardControllerTest {
                 .thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN));
         mvc.perform(post(path)).andExpect(status().isForbidden());
         verifyNoInteractions(jobs);
+    }
+
+    @Test
+    void acceptsAnEmptyStandardConfigurationForClearingRequirements() throws Exception {
+        var standards = mock(SectionStandardService.class);
+        var jobs = mock(AiEvaluationService.class);
+        var users = mock(CurrentUserServiceImpl.class);
+        var mvc = MockMvcBuilders.standaloneSetup(new SectionStandardController(standards, jobs, users)).build();
+        UUID documentId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        String path = "/api/papers/" + documentId + "/sections/" + sectionId + "/standard-evaluation/config";
+
+        mvc.perform(put(path)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requirements\":[]}"))
+                .andExpect(status().isOk());
+
+        verify(standards).saveConfig(documentId, sectionId, java.util.List.of());
     }
 }
