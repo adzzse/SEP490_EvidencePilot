@@ -5,6 +5,7 @@ import com.evidencepilot.dto.request.SectionReviewSourceMatchRequest;
 import com.evidencepilot.dto.response.JobResponse;
 import com.evidencepilot.dto.response.JobSubmitResponse;
 import com.evidencepilot.dto.response.SectionCitationReviewResponse;
+import com.evidencepilot.dto.response.SectionCitationReviewStateResponse;
 import com.evidencepilot.dto.response.SectionSuggestionDto;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.AiEvaluationJob;
@@ -36,6 +37,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -73,9 +75,7 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
         job.setPayloadJson(payloadJson);
         job.setStatus(AiEvaluationJob.STATUS_PENDING);
         job.setCreatedAt(LocalDateTime.now());
-        jobRepository.save(job);
-        publish(job);
-        return new JobSubmitResponse(job.getId());
+        return saveAndPublish(job);
     }
 
     @Override
@@ -85,16 +85,22 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
             UUID sectionId,
             String reviewInputFingerprint,
             UUID requestedByUserId) {
-        for (AiEvaluationJob job : jobRepository
-                .findByProjectIdAndKindAndStatusInOrderByCreatedAtDesc(
-                        projectId,
-                        AiEvaluationJob.KIND_SECTION_CITATION_REVIEW,
-                        List.of(AiEvaluationJob.STATUS_PENDING, AiEvaluationJob.STATUS_PROCESSING))) {
-            if (sameSectionCitationReview(
-                    job, documentId, sectionId, reviewInputFingerprint)) {
-                return new JobSubmitResponse(job.getId());
-            }
+        Optional<AiEvaluationJob> existing = jobRepository
+                .findFirstByProjectIdAndKindAndDocumentIdAndSectionIdAndInputFingerprintOrderByCreatedAtDesc(
+                        projectId, AiEvaluationJob.KIND_SECTION_CITATION_REVIEW,
+                        documentId, sectionId, reviewInputFingerprint)
+                .filter(job -> AiEvaluationJob.STATUS_PENDING.equals(job.getStatus())
+                        || AiEvaluationJob.STATUS_PROCESSING.equals(job.getStatus()));
+        if (existing.isEmpty()) {
+            existing = jobRepository.findByProjectIdAndKindAndStatusInOrderByCreatedAtDesc(
+                            projectId, AiEvaluationJob.KIND_SECTION_CITATION_REVIEW,
+                            List.of(AiEvaluationJob.STATUS_PENDING, AiEvaluationJob.STATUS_PROCESSING))
+                    .stream()
+                    .filter(job -> sameSectionCitationReview(
+                            job, documentId, sectionId, reviewInputFingerprint))
+                    .findFirst();
         }
+        if (existing.isPresent()) return new JobSubmitResponse(existing.get().getId());
         try {
             String payload = objectMapper.writeValueAsString(Map.of(
                     "documentId", documentId,
@@ -102,10 +108,44 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
                     "sectionId", sectionId,
                     "reviewInputFingerprint", reviewInputFingerprint,
                     "requestedByUserId", requestedByUserId));
-            return submit(projectId, AiEvaluationJob.KIND_SECTION_CITATION_REVIEW, payload);
+            AiEvaluationJob job = new AiEvaluationJob();
+            job.setProjectId(projectId);
+            job.setDocumentId(documentId);
+            job.setSectionId(sectionId);
+            job.setInputFingerprint(reviewInputFingerprint);
+            job.setKind(AiEvaluationJob.KIND_SECTION_CITATION_REVIEW);
+            job.setPayloadJson(payload);
+            job.setStatus(AiEvaluationJob.STATUS_PENDING);
+            job.setCreatedAt(LocalDateTime.now());
+            return saveAndPublish(job);
         } catch (Exception exception) {
             throw new IllegalStateException("Could not serialize section citation review job", exception);
         }
+    }
+
+    @Override
+    public Optional<SectionCitationReviewStateResponse> findSectionCitationReviewState(
+            UUID projectId, UUID documentId, UUID sectionId, String inputFingerprint) {
+        Optional<AiEvaluationJob> job = jobRepository
+                .findFirstByProjectIdAndKindAndDocumentIdAndSectionIdAndInputFingerprintOrderByCreatedAtDesc(
+                        projectId, AiEvaluationJob.KIND_SECTION_CITATION_REVIEW,
+                        documentId, sectionId, inputFingerprint);
+        if (job.isPresent()) {
+            AiEvaluationJob value = job.get();
+            SectionCitationReviewResponse review = readCitationReview(value.getResultJson())
+                    .or(() -> sectionCitationReviewService.cached(documentId, sectionId))
+                    .orElse(null);
+            boolean failed = AiEvaluationJob.STATUS_FAILED.equals(value.getStatus());
+            return Optional.of(new SectionCitationReviewStateResponse(
+                    value.getId(), citationReviewStatus(value.getStatus()),
+                    value.getProgressCurrent(), value.getProgressTotal(),
+                    review != null && review.complete(), review,
+                    failed ? "CITATION_REVIEW_FAILED" : null,
+                    failed ? value.getErrorMessage() : null));
+        }
+        return sectionCitationReviewService.cached(documentId, sectionId)
+                .map(review -> new SectionCitationReviewStateResponse(
+                        null, "COMPLETE", 0, 0, review.complete(), review, null, null));
     }
 
     @Override
@@ -531,6 +571,24 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
                 : fingerprint;
     }
 
+    private Optional<SectionCitationReviewResponse> readCitationReview(String resultJson) {
+        if (resultJson == null || resultJson.isBlank()) return Optional.empty();
+        try {
+            return Optional.of(objectMapper.readValue(resultJson, SectionCitationReviewResponse.class));
+        } catch (Exception exception) {
+            log.warn("Citation review job result is not valid JSON", exception);
+            return Optional.empty();
+        }
+    }
+
+    private static String citationReviewStatus(String status) {
+        return switch (status) {
+            case AiEvaluationJob.STATUS_PENDING, AiEvaluationJob.STATUS_PROCESSING -> "RUNNING";
+            case AiEvaluationJob.STATUS_SUCCESS -> "COMPLETE";
+            default -> "FAILED";
+        };
+    }
+
     private void publish(AiEvaluationJob job) {
         try {
             rabbitTemplate.convertAndSend(
@@ -538,5 +596,11 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
         } catch (Exception e) {
             log.error("Failed to publish AI evaluation job {}; retry scheduled: {}", job.getId(), e.getMessage());
         }
+    }
+
+    private JobSubmitResponse saveAndPublish(AiEvaluationJob job) {
+        jobRepository.save(job);
+        publish(job);
+        return new JobSubmitResponse(job.getId());
     }
 }

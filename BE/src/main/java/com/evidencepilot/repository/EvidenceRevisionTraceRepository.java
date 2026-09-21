@@ -15,6 +15,8 @@ public interface EvidenceRevisionTraceRepository extends JpaRepository<EvidenceR
 
     List<EvidenceRevisionTrace> findBySectionIdOrderByCreatedAtDesc(UUID sectionId);
 
+    boolean existsBySectionId(UUID sectionId);
+
     List<EvidenceRevisionTrace> findByRoundIdOrderByFindingIndex(UUID roundId);
 
     @Query("""

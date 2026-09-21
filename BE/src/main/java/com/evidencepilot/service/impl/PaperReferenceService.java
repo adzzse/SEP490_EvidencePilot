@@ -320,22 +320,30 @@ public class PaperReferenceService {
 
     @Transactional
     public PaperReferenceResponse add(UUID paperId, UUID sourceId, UUID requesterId) {
-        // Lock before the first consistent read: duplicate adds see the committed link.
-        Document paper = documentRepository.findByIdForUpdate(paperId)
+        // Lock the paper and its project before any consistent read. This keeps
+        // the same project -> source order as project-source unshare without
+        // creating a pre-lock MySQL snapshot.
+        Document paper = documentRepository.findByIdWithProjectForUpdate(paperId)
                 .orElseThrow(() -> new ResourceNotFoundException(paperId, "Paper"));
         validatePaper(paper);
+        Project project = paper.getProject();
         User requester = requireUser(requesterId);
-        requireStudentWriter(requester, paper.getProject());
-        Document source = requireVisibleSource(paper.getProject(), sourceId);
+        // Lock the source before any ordinary visibility/membership reads so
+        // an unshare cannot be observed through a stale MySQL snapshot.
+        Document source = documentRepository.findByIdForUpdate(sourceId)
+                .or(() -> documentRepository.findById(sourceId))
+                .orElseThrow(() -> new ResourceNotFoundException(sourceId, "Source"));
+        requireStudentWriter(requester, project);
+        requireVisibleSource(project, source);
         List<PaperSection> sections = paperSectionRepository
                 .findByDocumentIdOrderBySectionOrderAsc(paperId).stream()
                 .filter(PaperSection::isActive)
                 .filter(PaperReferenceService::isReferenceSection)
                 .toList();
-        List<Document> visibleSources = sourceMatchingService.activeSources(paper.getProject().getId());
+        List<Document> visibleSources = sourceMatchingService.activeSources(project.getId());
         Map<UUID, Integer> citationNumbers = referenceNumbers(sections, visibleSources);
         return paperReferenceRepository.findByPaperIdAndSourceId(paperId, sourceId)
-                .map(reference -> response(reference, requester, paper.getProject(),
+                .map(reference -> response(reference, requester, project,
                         citationNumbers.get(sourceId)))
                 .orElseGet(() -> {
                     Integer citationNumber = citationNumbers.get(sourceId);
@@ -354,7 +362,7 @@ public class PaperReferenceService {
                     reference.setAddedBy(requester);
                     reference.setAddedAt(LocalDateTime.now());
                     return response(paperReferenceRepository.save(reference), requester,
-                            paper.getProject(), citationNumber);
+                            project, citationNumber);
                 });
     }
 
@@ -499,14 +507,18 @@ public class PaperReferenceService {
     private Document requireVisibleSource(Project project, UUID sourceId) {
         Document source = documentRepository.findById(sourceId)
                 .orElseThrow(() -> new ResourceNotFoundException(sourceId, "Source"));
+        return requireVisibleSource(project, source);
+    }
+
+    private Document requireVisibleSource(Project project, Document source) {
         if (!source.isActive() || source.getDocType() != DocumentType.SOURCE) {
-            throw new ResourceNotFoundException(sourceId, "Source");
+            throw new ResourceNotFoundException(source.getId(), "Source");
         }
         boolean direct = source.getProject() != null && project.getId().equals(source.getProject().getId());
         boolean shared = projectDocumentRepository
-                .findByProjectIdAndDocumentId(project.getId(), sourceId).isPresent();
+                .findByProjectIdAndDocumentIdForUpdate(project.getId(), source.getId()).isPresent();
         if (!direct && !shared) {
-            throw new ResourceNotFoundException(sourceId, "Source");
+            throw new ResourceNotFoundException(source.getId(), "Source");
         }
         return source;
     }

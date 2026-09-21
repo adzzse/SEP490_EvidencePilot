@@ -40,6 +40,17 @@ public class AiEvaluationJob {
     @JdbcTypeCode(java.sql.Types.BINARY)
     private UUID projectId;
 
+    @Column(name = "document_id", columnDefinition = "BINARY(16)")
+    @JdbcTypeCode(java.sql.Types.BINARY)
+    private UUID documentId;
+
+    @Column(name = "section_id", columnDefinition = "BINARY(16)")
+    @JdbcTypeCode(java.sql.Types.BINARY)
+    private UUID sectionId;
+
+    @Column(name = "input_fingerprint", length = 64)
+    private String inputFingerprint;
+
     @Column(name = "kind", nullable = false, length = 50)
     private String kind;
 

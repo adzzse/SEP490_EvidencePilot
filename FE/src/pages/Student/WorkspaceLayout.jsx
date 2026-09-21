@@ -1331,24 +1331,47 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       setSectionTraces([]);
       setUpdatingTraceIds([]);
       setTraceError('');
-      // rationale: unchanged re-clicks resolve from snapshot — skip the queue entirely.
+      // The server owns job discovery; storage only helps older jobs created before lookup fields existed.
       try {
-        const cachedRes = await api.get(
+        const stateRes = await api.get(
           `/api/papers/${saved.paperId}/sections/${sectionId}/review`);
         if (aiReviewRequestRef.current !== requestId) return;
-        if (cachedRes.status === 200 && cachedRes.data) {
-          setAiReviewResult(cachedRes.data);
+        const serverState = stateRes.status === 204 ? null : stateRes.data;
+        if (serverState?.status === 'COMPLETE' && serverState.review) {
+          setAiReviewResult(serverState.review);
           setAiReviewedContent(reviewedContent);
-          showToast(cachedRes.data.complete
+          showToast(serverState.review.complete
             ? t('aiReviewComplete')
             : t('aiReviewPartial', {
-              failedBatches: cachedRes.data.limitations?.length || 0,
+              failedBatches: serverState.review.limitations?.length || 0,
             }));
           setLoadingAiReview(false);
-          fetchAiReviewSources(cachedRes.data, requestId);
+          fetchAiReviewSources(serverState.review, requestId);
           return;
         }
-      } catch { /* 204/404 -> queue a fresh review below */ }
+        if (serverState?.status === 'RUNNING' && serverState.jobId) {
+          aiReviewJobRef.current = serverState.jobId;
+          storeReviewJob(sectionId, serverState.jobId);
+          if (serverState.review) {
+            setAiReviewResult(serverState.review);
+            setAiReviewedContent(reviewedContent);
+          }
+          updateAiReviewProgress({
+            current: Math.max(0, Number(serverState.finishedCount) || 0),
+            total: Math.max(0, Number(serverState.totalCount) || 0),
+          });
+          const shownFindings = { current: serverState.review?.findings?.length || 0 };
+          const job = await pollAiJob(
+            serverState.jobId,
+            () => aiReviewRequestRef.current !== requestId,
+            trackReviewProgress(requestId, shownFindings),
+          );
+          await finishReviewPoll(job, requestId, reviewedContent);
+          return;
+        }
+      } catch (error) {
+        if (error?.response?.status !== 404) throw error;
+      }
       const { data: submit } = await api.post(
         `/api/papers/${saved.paperId}/sections/${sectionId}/review`);
       if (aiReviewRequestRef.current !== requestId) return;
@@ -1501,22 +1524,16 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     api.get(`/api/papers/${selectedPaper.id}/sections/${selectedSectionId}/review`)
       .then(async response => {
         if (aiReviewRequestRef.current !== requestId) return;
-        // rationale: refresh-while-running — the job outlives FE state, reattach
-        // to it even when the cache already contains partial findings.
-        const cachedReview = response.status === 204 ? null : response.data;
+        const serverState = response.status === 204 ? null : response.data;
         const storedJobId = readReviewJob(selectedSectionId);
-        if (!storedJobId) {
-          if (cachedReview) {
-            setAiReviewResult(cachedReview);
-            setAiReviewedContent(codeContentRef.current);
-            fetchAiReviewSources(cachedReview, requestId);
-          }
-          return;
-        }
+        let storedJob = null;
         try {
-          const { data: job } = await api.get(`/api/jobs/${storedJobId}`);
+          if (!serverState && storedJobId) {
+            const { data: job } = await api.get(`/api/jobs/${storedJobId}`);
+            storedJob = job;
+          }
           if (aiReviewRequestRef.current !== requestId) return;
-          const reload = normalizeCitationReviewReload({ cachedReview, storedJob: job });
+          const reload = normalizeCitationReviewReload({ serverState, storedJob });
           if (reload.shouldClearJob) {
             clearReviewJob(selectedSectionId);
           }
@@ -1524,28 +1541,34 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
             setAiReviewResult(reload.review);
             setAiReviewedContent(codeContentRef.current);
           }
+          if (reload.errorCode || reload.errorMessage) {
+            setAiReviewError({
+              code: reload.errorCode,
+              message: reload.errorMessage || t('cachedReviewFailed'),
+            });
+          }
           if (!reload.shouldPoll) {
+            aiReviewJobRef.current = null;
+            setLoadingAiReview(false);
             if (reload.review) fetchAiReviewSources(reload.review, requestId);
             return;
           }
-          aiReviewJobRef.current = job.id;
+          aiReviewJobRef.current = reload.jobId;
+          storeReviewJob(selectedSectionId, reload.jobId);
           setLoadingAiReview(true);
-          setAiReviewProgress({
-            current: Math.max(0, Number(job.progressCurrent) || 0),
-            total: Math.max(0, Number(job.progressTotal) || 0),
-          });
-          const shownFindings = { current: 0 };
+          setAiReviewProgress(reload.progress);
+          const shownFindings = { current: reload.review?.findings?.length || 0 };
           const polled = await pollAiJob(
-            job.id,
+            reload.jobId,
             () => aiReviewRequestRef.current !== requestId,
             trackReviewProgress(requestId, shownFindings),
           );
           await finishReviewPoll(polled, requestId, codeContentRef.current);
         } catch {
           if (aiReviewRequestRef.current !== requestId) return;
-          clearReviewJob(selectedSectionId);
           aiReviewJobRef.current = null;
           setLoadingAiReview(false);
+          setAiReviewError({ message: t('cachedReviewFailed') });
         }
       })
       .catch(() => {

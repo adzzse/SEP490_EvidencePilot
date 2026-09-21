@@ -3,15 +3,21 @@ package com.evidencepilot.repository;
 import com.evidencepilot.model.ProjectDocument;
 import com.evidencepilot.model.enums.DocumentType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 
 public interface ProjectDocumentRepository extends JpaRepository<ProjectDocument, UUID> {
     List<ProjectDocument> findByProjectId(UUID projectId);
     Optional<ProjectDocument> findByProjectIdAndDocumentId(UUID projectId, UUID documentId);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select pd from ProjectDocument pd where pd.project.id = :projectId and pd.document.id = :documentId")
+    Optional<ProjectDocument> findByProjectIdAndDocumentIdForUpdate(
+            @Param("projectId") UUID projectId, @Param("documentId") UUID documentId);
     boolean existsByDocumentId(UUID documentId);
     List<ProjectDocument> findByDocumentId(UUID documentId);
     List<ProjectDocument> findByDocumentIdIn(List<UUID> documentIds);

@@ -15,6 +15,7 @@ import com.evidencepilot.repository.EvidenceRevisionTraceRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperReferenceRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
+import com.evidencepilot.repository.AssignmentSectionBaselineRepository;
 import com.evidencepilot.service.AiModelClient;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JavaType;
@@ -23,6 +24,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -49,6 +52,7 @@ public class ExtractionCandidateService {
     private final DocumentExtractionCandidateRepository candidateRepository;
     private final DocumentRepository documentRepository;
     private final PaperSectionRepository paperSectionRepository;
+    private final AssignmentSectionBaselineRepository assignmentSectionBaselineRepository;
     private final InstructorFeedbackRepository instructorFeedbackRepository;
     private final PaperReferenceRepository paperReferenceRepository;
     private final EvidenceRevisionTraceRepository evidenceRevisionTraceRepository;
@@ -56,6 +60,7 @@ public class ExtractionCandidateService {
     private final QdrantServiceImpl qdrantService;
     private final PaperProcessingServiceImpl paperProcessingService;
     private final ObjectMapper objectMapper;
+    private final SectionWorkHistoryService sectionWorkHistoryService;
 
     @Transactional
     public DocumentExtractionCandidate request(UUID documentId) {
@@ -84,7 +89,7 @@ public class ExtractionCandidateService {
         return candidateRepository.save(candidate);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public Optional<DocumentExtractionCandidate> findPending(UUID documentId) {
         return candidateRepository.findLatestForDocumentWithLock(documentId, ACTIVE_STATUSES);
     }
@@ -170,22 +175,21 @@ public class ExtractionCandidateService {
         List<String> texts = stagedChunks.stream()
                 .map(ExtractionResultPayload.ChunkPayload::text)
                 .toList();
-        List<DocumentChunk> savedChunks = documentPersistenceService.saveExtraction(
+        DocumentPersistenceService.ExtractionReplacement replacement = documentPersistenceService.replaceExtraction(
                 document.getId(), candidate.getExtractionMethod(), candidate.getExtractedMarkdown(), texts);
+        List<DocumentChunk> savedChunks = replacement.currentChunks();
         if (savedChunks.size() != stagedChunks.size()) {
             throw new IllegalStateException("Failed to persist every candidate document chunk");
         }
 
         List<ExtractionResultPayload.ChunkPayload> livePayload = remapChunkIds(stagedChunks, savedChunks);
-        qdrantService.upsertVectors(new ExtractionResultPayload(document.getId(), livePayload));
+        List<UUID> newIds = savedChunks.stream().map(DocumentChunk::getId).toList();
+        registerVectorCleanup(replacement.obsoleteChunkIds(), newIds);
+        qdrantService.stageVectors(new ExtractionResultPayload(document.getId(), livePayload));
 
         List<AiModelClient.ExtractionBlock> blocks = readBlocks(candidate.getBlocksJson());
         if (document.getDocType() == DocumentType.PAPER) {
-            if (blocks.isEmpty()) {
-                paperProcessingService.detectAndPersistSections(document.getId());
-            } else {
-                paperProcessingService.detectAndPersistSections(document.getId(), blocks);
-            }
+            paperProcessingService.replaceSectionsFromExtraction(document.getId(), blocks);
         }
         documentPersistenceService.markReady(document.getId(), livePayload.size());
         candidate.setStatus(ExtractionCandidateStatus.ACTIVATED);
@@ -210,13 +214,48 @@ public class ExtractionCandidateService {
 
     private boolean hasMeaningfulSectionWork(PaperSection section) {
         if (section.getAssignedUser() != null
-                || hasText(section.getContentTex())
                 || hasText(section.getPreviousContentTex())
                 || (section.getVersion() != null && section.getVersion() > 1)) {
             return true;
         }
+        UUID projectId = section.getDocument() == null || section.getDocument().getProject() == null
+                ? null : section.getDocument().getProject().getId();
+        if (projectId != null && section.getId() != null
+                && assignmentSectionBaselineRepository
+                        .existsByProjectIdAndSectionId(projectId, section.getId())) {
+            return true;
+        }
         return !instructorFeedbackRepository.findBySectionId(section.getId()).isEmpty()
-                || !evidenceRevisionTraceRepository.findBySectionIdOrderByCreatedAtDesc(section.getId()).isEmpty();
+                || sectionWorkHistoryService.hasPersistedHistory(section.getId());
+    }
+
+    private void registerVectorCleanup(List<UUID> obsoleteChunkIds, List<UUID> newIds) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    qdrantService.deleteChunkVectors(obsoleteChunkIds);
+                } catch (RuntimeException failure) {
+                    org.slf4j.LoggerFactory.getLogger(ExtractionCandidateService.class)
+                            .warn("Obsolete candidate vectors remain harmless and need retry cleanup", failure);
+                }
+            }
+
+            @Override
+            public void afterCompletion(int status) {
+                if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                    try {
+                        qdrantService.deleteChunkVectors(newIds);
+                    } catch (RuntimeException failure) {
+                        org.slf4j.LoggerFactory.getLogger(ExtractionCandidateService.class)
+                                .warn("Rolled-back candidate vectors need retry cleanup", failure);
+                    }
+                }
+            }
+        });
     }
 
     private DocumentExtractionCandidate requireCandidate(UUID candidateId) {

@@ -255,6 +255,24 @@ test('Projects card view opens the project edit modal and saves metadata', async
   expect(state.unhandled).toEqual([]);
 });
 
+test('Approved and archived project cards omit Delete while retaining their lifecycle action', async ({ page }) => {
+  const state = await setup(page);
+  await page.goto(`${baseUrl}/instructor/projects`);
+  const card = page.getByTestId(`project-card-${projectId}`);
+
+  state.project.status = 'APPROVED';
+  await page.reload();
+  await expect(card.getByRole('button', { name: 'Archive', exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Delete', exact: true })).toHaveCount(0);
+
+  state.project.status = 'ARCHIVED';
+  await page.reload();
+  await expect(card.getByRole('button', { name: 'Unarchive', exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Delete', exact: true })).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+  expect(state.unhandled).toEqual([]);
+});
+
 test('Project Detail exposes the project edit modal and saves metadata', async ({ page }) => {
   const state = await setup(page);
   await page.goto(`${baseUrl}/instructor/projects/${projectId}`);

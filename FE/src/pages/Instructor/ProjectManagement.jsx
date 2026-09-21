@@ -154,6 +154,7 @@ export default function ProjectManagement() {
       alert(t('instructor.projectManagement.projectActionFailed', {
         action: t(`instructor.projectManagement.action.${['archive', 'unarchive', 'complete'].includes(action) ? action : 'UNKNOWN'}`),
       }));
+      await fetchProjects();
     }
   };
 

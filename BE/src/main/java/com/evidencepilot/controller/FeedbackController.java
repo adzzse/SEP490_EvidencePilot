@@ -56,6 +56,11 @@ public class FeedbackController {
         return feedbackService.findAllForCurrentUser();
     }
 
+    @GetMapping("/feedback-requests/{id}")
+    public FeedbackRequestResponseDto findOne(@PathVariable UUID id) {
+        return feedbackService.findOneForCurrentUser(id);
+    }
+
     @Operation(summary = "List the current instructor review queue",
             description = "Returns one latest/current request per project with server-side filters and stable pagination.")
     @GetMapping("/feedback-requests/queue")

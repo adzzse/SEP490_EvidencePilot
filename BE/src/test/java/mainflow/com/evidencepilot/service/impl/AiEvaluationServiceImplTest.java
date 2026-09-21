@@ -181,6 +181,8 @@ class AiEvaluationServiceImplTest {
     @Test
     void submitSectionCitationReview_publishes() {
         UUID projectId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
         when(jobRepository.findByProjectIdAndKindAndStatusInOrderByCreatedAtDesc(
                 eq(projectId),
                 eq(AiEvaluationJob.KIND_SECTION_CITATION_REVIEW),
@@ -192,11 +194,14 @@ class AiEvaluationServiceImplTest {
         });
 
         var response = service().submitSectionCitationReview(
-                projectId, UUID.randomUUID(), UUID.randomUUID(), "fingerprint", UUID.randomUUID());
+                projectId, documentId, sectionId, "fingerprint", UUID.randomUUID());
 
         assertThat(response.jobId()).isNotNull();
         verify(jobRepository).save(argThat(job ->
-                job.getPayloadJson().contains("\"reviewInputFingerprint\":\"fingerprint\"")));
+                documentId.equals(job.getDocumentId())
+                        && sectionId.equals(job.getSectionId())
+                        && "fingerprint".equals(job.getInputFingerprint())
+                        && job.getPayloadJson().contains("\"reviewInputFingerprint\":\"fingerprint\"")));
         verify(rabbitTemplate).convertAndSend(
                 eq(com.evidencepilot.config.infrastructure.RabbitMQConfig.AI_EVALUATION_QUEUE),
                 any(Map.class));

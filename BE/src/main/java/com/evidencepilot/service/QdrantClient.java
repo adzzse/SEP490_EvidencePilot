@@ -3,6 +3,7 @@ package com.evidencepilot.service;
 import com.evidencepilot.dto.QdrantSearchResult;
 import com.evidencepilot.dto.SparseVector;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -15,6 +16,8 @@ public interface QdrantClient {
             Map<String, Object> payload);
 
     void deleteByDocumentId(String documentId);
+
+    void deleteByChunkIds(Collection<String> chunkIds);
 
     List<QdrantSearchResult> findClosestChunks(
             List<Float> denseQueryVector,

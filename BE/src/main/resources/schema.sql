@@ -59,6 +59,9 @@ CREATE TABLE projects (
 CREATE TABLE project_members (
     id BINARY(16) NOT NULL PRIMARY KEY,
     project_id BINARY(16) NOT NULL,
+    document_id BINARY(16),
+    section_id BINARY(16),
+    input_fingerprint VARCHAR(64),
     user_id BINARY(16) NOT NULL,
     role VARCHAR(50) NOT NULL,
     joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -437,6 +440,7 @@ CREATE TABLE ai_evaluation_jobs (
     INDEX idx_ai_eval_project (project_id),
     INDEX idx_ai_eval_status (status),
     INDEX idx_ai_jobs_progress_timeout (status, last_progress_at),
+    INDEX idx_ai_jobs_section_review_lookup (project_id, kind, document_id, section_id, input_fingerprint, created_at),
     CONSTRAINT chk_ai_evaluation_jobs_status CHECK (status IN ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED')),
     CONSTRAINT chk_ai_evaluation_jobs_kind CHECK (kind IN ('SECTION_CITATION_REVIEW', 'SECTION_SUGGESTION', 'SOURCE_MATCHES', 'TRACE_RECHECK', 'SECTION_SELF_CHECK')),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE

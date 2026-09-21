@@ -7,6 +7,7 @@ import com.evidencepilot.dto.response.PagedResponse;
 import com.evidencepilot.dto.response.ProjectMemberResponse;
 import com.evidencepilot.dto.response.ProjectResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
+import com.evidencepilot.exception.ApiException;
 import com.evidencepilot.model.enums.PaperStandard;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.Project;
@@ -217,7 +218,8 @@ public class ProjectServiceImpl {
         currentUserService.requireRole(currentUser, UserRole.INSTRUCTOR);
         currentUserService.requireProjectAccess(currentUser, project);
         if (!project.getStatus().canTransitionTo(ProjectStatus.APPROVED)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Project cannot be completed in its current state.");
+            throw new ApiException(HttpStatus.CONFLICT, ApiException.PROJECT_TRANSITION_INVALID,
+                    "Project cannot be completed in its current state.");
         }
         ProjectStatus oldStatus = project.getStatus();
         project.setStatus(ProjectStatus.APPROVED);
@@ -241,7 +243,8 @@ public class ProjectServiceImpl {
         Project project = findActiveProject(id);
         currentUserService.requireProjectManageAccess(currentUser, project);
         if (!project.getStatus().canTransitionTo(ProjectStatus.ARCHIVED)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only APPROVED projects can be archived.");
+            throw new ApiException(HttpStatus.CONFLICT, ApiException.PROJECT_TRANSITION_INVALID,
+                    "Only APPROVED projects can be archived.");
         }
         project.setStatus(ProjectStatus.ARCHIVED);
         project.setUpdatedAt(LocalDateTime.now());
@@ -259,7 +262,8 @@ public class ProjectServiceImpl {
         Project project = findActiveProject(id);
         currentUserService.requireProjectManageAccess(currentUser, project);
         if (!project.getStatus().canTransitionTo(ProjectStatus.APPROVED)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only ARCHIVED projects can be unarchived.");
+            throw new ApiException(HttpStatus.CONFLICT, ApiException.PROJECT_TRANSITION_INVALID,
+                    "Only ARCHIVED projects can be unarchived.");
         }
         project.setStatus(ProjectStatus.APPROVED);
         project.setUpdatedAt(LocalDateTime.now());

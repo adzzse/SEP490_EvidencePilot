@@ -33,6 +33,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -48,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -77,7 +79,7 @@ class FeedbackServiceImplTest {
         LocalDate to = LocalDate.of(2026, 9, 21);
         var pageable = PageRequest.of(1, 20);
         when(currentUserService.requireCurrentUser()).thenReturn(instructor);
-        when(feedbackRequestRepository.findCurrentForInstructor(
+        when(feedbackRequestRepository.findCurrent(
                 eq(instructor.getId()), eq(project.getId()), eq(FeedbackStatus.PENDING),
                 any(), any(), eq("capstone"), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of(item), pageable, 21));
@@ -90,9 +92,26 @@ class FeedbackServiceImplTest {
         assertThat(response.size()).isEqualTo(20);
         assertThat(response.totalElements()).isEqualTo(21);
         assertThat(response.totalPages()).isEqualTo(2);
-        verify(feedbackRequestRepository).findCurrentForInstructor(
+        verify(feedbackRequestRepository).findCurrent(
                 eq(instructor.getId()), eq(project.getId()), eq(FeedbackStatus.PENDING),
                 any(), any(), eq("capstone"), eq(pageable));
+    }
+
+    @Test
+    void adminQueueUsesTheSameCurrentQueryWithoutInstructorScope() {
+        User admin = user(UserRole.ADMIN);
+        var pageable = PageRequest.of(0, 10);
+        when(currentUserService.requireCurrentUser()).thenReturn(admin);
+        when(feedbackRequestRepository.findCurrent(
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(pageable)))
+                .thenReturn(Page.empty(pageable));
+
+        FeedbackRequestPageResponse response = service().findQueueForCurrentUser(
+                0, 10, null, null, null, null, null);
+
+        assertThat(response.content()).isEmpty();
+        verify(feedbackRequestRepository).findCurrent(
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(pageable));
     }
 
     @Test

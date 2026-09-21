@@ -27,7 +27,7 @@ function vietnamParts(dateInput, includeSeconds = false) {
 }
 
 /**
- * Formats an ISO string or Date object to DD-MM-YYYY.
+ * Formats an ISO string or Date object to DD/MM/YYYY.
  * @param {string|number|Date|null|undefined} dateInput
  * @param {string} [lang='vi']
  * @returns {string} Formatted date string or '—'
@@ -37,11 +37,11 @@ export function formatDate(dateInput, lang = 'vi') {
   const parts = vietnamParts(dateInput);
   if (!parts) return '—';
   void lang;
-  return `${parts.day}-${parts.month}-${parts.year}`;
+  return `${parts.day}/${parts.month}/${parts.year}`;
 }
 
 /**
- * Formats an ISO string or Date object to HH:mm DD-MM-YYYY.
+ * Formats an ISO string or Date object to HH:mm DD/MM/YYYY.
  * @param {string|number|Date|null|undefined} dateInput
  * @param {string} [lang='vi']
  * @returns {string} Formatted datetime string or '—'
@@ -51,7 +51,7 @@ export function formatDateTime(dateInput, lang = 'vi') {
   const parts = vietnamParts(dateInput);
   if (!parts) return '—';
   void lang;
-  return `${parts.hour}:${parts.minute} ${parts.day}-${parts.month}-${parts.year}`;
+  return `${parts.hour}:${parts.minute} ${parts.day}/${parts.month}/${parts.year}`;
 }
 
 export function formatDateTimeSeconds(dateInput, lang = 'vi') {
@@ -59,5 +59,5 @@ export function formatDateTimeSeconds(dateInput, lang = 'vi') {
   const parts = vietnamParts(dateInput, true);
   if (!parts) return '—';
   void lang;
-  return `${parts.hour}:${parts.minute}:${parts.second} ${parts.day}-${parts.month}-${parts.year}`;
+  return `${parts.hour}:${parts.minute}:${parts.second} ${parts.day}/${parts.month}/${parts.year}`;
 }

@@ -3,8 +3,10 @@ package com.evidencepilot.service;
 import com.evidencepilot.dto.request.SectionReviewSourceMatchRequest;
 import com.evidencepilot.dto.response.JobResponse;
 import com.evidencepilot.dto.response.JobSubmitResponse;
+import com.evidencepilot.dto.response.SectionCitationReviewStateResponse;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface AiEvaluationService {
@@ -16,6 +18,9 @@ public interface AiEvaluationService {
             UUID sectionId,
             String reviewInputFingerprint,
             UUID requestedByUserId);
+
+    Optional<SectionCitationReviewStateResponse> findSectionCitationReviewState(
+            UUID projectId, UUID documentId, UUID sectionId, String inputFingerprint);
 
     JobSubmitResponse submitSectionSuggestion(
             UUID projectId,

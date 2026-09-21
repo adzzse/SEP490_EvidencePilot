@@ -22,8 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -48,14 +50,23 @@ public class ProjectSourceUnshareService {
 
     @Transactional
     public ProjectSourceUnshareResponse unshare(UUID projectId, List<UUID> requestedSourceIds) {
-        List<UUID> sourceIds = normalize(requestedSourceIds);
+        List<UUID> sourceIds = normalize(requestedSourceIds).stream().sorted().toList();
         if (sourceIds.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one source is required");
         }
 
         User currentUser = currentUserService.requireCurrentUser();
-        Project project = projectRepository.findById(projectId)
+        // Lock the project before any dependency reads so MySQL does not pin a
+        // stale consistent-read snapshot while waiting on a source-row lock.
+        Project project = projectRepository.findByIdForUpdate(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException(projectId, "Project"));
+        // Acquire every source lock before membership/dependency reads. The
+        // latter are ordinary MySQL reads and must start after the lock wait,
+        // otherwise REPEATABLE READ can retain a pre-race snapshot.
+        Map<UUID, Document> lockedSources = new LinkedHashMap<>();
+        for (UUID sourceId : sourceIds) {
+            lockedSources.put(sourceId, documentRepository.findByIdForUpdate(sourceId).orElse(null));
+        }
         requireProjectWriteAccess(currentUser, project);
         if (CORPUS_LOCKED_STATUSES.contains(project.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -65,12 +76,15 @@ public class ProjectSourceUnshareService {
         List<Candidate> candidates = new ArrayList<>();
         List<ProjectSourceUnshareResponse.BlockedSource> blocked = new ArrayList<>();
         for (UUID sourceId : sourceIds) {
+            Document source = lockedSources.get(sourceId);
             ProjectDocument link = projectDocumentRepository
-                    .findByProjectIdAndDocumentId(projectId, sourceId)
+                    .findByProjectIdAndDocumentIdForUpdate(projectId, sourceId)
                     .orElse(null);
-            Document source = link == null
-                    ? documentRepository.findById(sourceId).orElse(null)
-                    : link.getDocument();
+            if (source == null) {
+                source = link == null
+                        ? documentRepository.findById(sourceId).orElse(null)
+                        : link.getDocument();
+            }
             boolean directOwnership = link == null;
 
             String relationshipBlock = relationshipBlock(projectId, source, directOwnership);
@@ -130,7 +144,7 @@ public class ProjectSourceUnshareService {
         if (!SAFE_EXTRACTION_STATUSES.contains(source.getProcessingStatus())) {
             return "SOURCE_NOT_READY";
         }
-        if (paperReferenceRepository.existsActiveForProject(projectId, source.getId())) {
+        if (!paperReferenceRepository.findActiveForProjectForUpdate(projectId, source.getId()).isEmpty()) {
             return "PAPER_REFERENCE";
         }
         if (evidenceRevisionTraceRepository.existsActiveForProjectAndSource(projectId, source.getId())) {

@@ -14,7 +14,7 @@ import com.evidencepilot.dto.request.SectionContentUpdateRequest;
 import com.evidencepilot.dto.request.SectionHandoffRequest;
 import com.evidencepilot.dto.request.SectionReviewSourceMatchRequest;
 import com.evidencepilot.dto.request.SectionSuggestionRequest;
-import com.evidencepilot.dto.response.SectionCitationReviewResponse;
+import com.evidencepilot.dto.response.SectionCitationReviewStateResponse;
 import com.evidencepilot.dto.response.SectionHandoffResponse;
 
 import com.evidencepilot.dto.response.EvidenceTraceResponse;
@@ -458,15 +458,17 @@ public class PaperController {
                 currentUser.getId()));
     }
 
-    @Operation(summary = "Get the current cached section citation review")
+    @Operation(summary = "Discover the current authoritative section citation review state")
     @GetMapping("/papers/{documentId}/sections/{sectionId}/review")
-    public ResponseEntity<SectionCitationReviewResponse> getSectionReview(
+    public ResponseEntity<SectionCitationReviewStateResponse> getSectionReview(
             @PathVariable UUID documentId,
             @PathVariable UUID sectionId) {
         User currentUser = currentUserService.requireCurrentUser();
         PaperSection section = requireReviewSection(documentId, sectionId);
         currentUserService.requireProjectAccess(currentUser, section.getDocument().getProject());
-        return sectionCitationReviewService.cached(documentId, sectionId)
+        String fingerprint = sectionCitationReviewService.reviewInputFingerprint(section);
+        return aiEvaluationService.findSectionCitationReviewState(
+                        section.getDocument().getProject().getId(), documentId, sectionId, fingerprint)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }

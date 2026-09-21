@@ -3,6 +3,7 @@ package com.evidencepilot.service.impl;
 import com.evidencepilot.dto.request.SectionBatchItem;
 import com.evidencepilot.dto.response.PaperSectionResponse;
 import com.evidencepilot.model.Document;
+import com.evidencepilot.model.DocumentMetadata;
 import com.evidencepilot.model.DocumentText;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
@@ -13,6 +14,7 @@ import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.DocumentRepository;
+import com.evidencepilot.repository.DocumentMetadataRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
@@ -51,6 +53,8 @@ class PaperProcessingServiceImplTest {
 
     @Mock
     private DocumentRepository documentRepository;
+    @Mock
+    private DocumentMetadataRepository documentMetadataRepository;
     @Mock
     private PaperSectionRepository paperSectionRepository;
     @Mock
@@ -509,7 +513,8 @@ class PaperProcessingServiceImplTest {
                 sectionStandardEvaluationRepository,
                 feedbackAnchorService,
                 assignmentSectionBaselineRepository,
-                new com.fasterxml.jackson.databind.ObjectMapper());
+                new com.fasterxml.jackson.databind.ObjectMapper(),
+                mock(SectionWorkHistoryService.class));
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId)).thenReturn(List.of());
         List<PaperSection> saved = new ArrayList<>();
@@ -658,7 +663,8 @@ class PaperProcessingServiceImplTest {
                 sectionStandardEvaluationRepository,
                 feedbackAnchorService,
                 mock(com.evidencepilot.repository.AssignmentSectionBaselineRepository.class),
-                new com.fasterxml.jackson.databind.ObjectMapper());
+                new com.fasterxml.jackson.databind.ObjectMapper(),
+                mock(SectionWorkHistoryService.class));
 
         Project project = project(ProjectStatus.IN_PROGRESS);
         Document paperDoc = paper(project);
@@ -723,7 +729,8 @@ class PaperProcessingServiceImplTest {
                 sectionStandardEvaluationRepository,
                 feedbackAnchorService,
                 mock(com.evidencepilot.repository.AssignmentSectionBaselineRepository.class),
-                new com.fasterxml.jackson.databind.ObjectMapper());
+                new com.fasterxml.jackson.databind.ObjectMapper(),
+                mock(SectionWorkHistoryService.class));
 
         Project project = project(ProjectStatus.IN_PROGRESS);
         project.setTargetStandard(com.evidencepilot.model.enums.PaperStandard.IEEE);
@@ -919,6 +926,38 @@ class PaperProcessingServiceImplTest {
         service().detectAndPersistSections(documentId, List.of(heading("Abstract", 2)));
 
         verify(paperSectionRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void replacementDeactivatesSetupSectionsAndPersistsCandidateStructure() {
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Document document = paper(project);
+        DocumentText text = new DocumentText();
+        text.setDocument(document);
+        text.setExtractedText("Abstract body\n\nReferences body");
+        document.setDocumentText(text);
+        PaperSection existing = section(document);
+        existing.setContentTex("Imported partial text");
+        DocumentMetadata existingMetadata = new DocumentMetadata();
+        existingMetadata.setDocument(document);
+        when(documentRepository.findById(document.getId())).thenReturn(Optional.of(document));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(document.getId()))
+                .thenReturn(List.of(existing));
+        when(documentMetadataRepository.findByDocumentId(document.getId()))
+                .thenReturn(Optional.of(existingMetadata));
+        when(paperSectionRepository.saveAll(anyList()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<PaperSectionResponse> replaced = service().replaceSectionsFromExtraction(document.getId(), List.of(
+                heading("Abstract", 2), para("Abstract body"),
+                heading("References", 2), para("References body")));
+
+        assertThat(existing.isActive()).isFalse();
+        assertThat(replaced).extracting(PaperSectionResponse::sectionTitle)
+                .containsExactly("Abstract", "References");
+        assertThat(replaced).extracting(PaperSectionResponse::sectionType)
+                .containsExactly(PaperSectionType.STANDARD, PaperSectionType.REFERENCE);
+        verify(documentMetadataRepository).save(existingMetadata);
     }
 
     @Test
@@ -1363,7 +1402,7 @@ class PaperProcessingServiceImplTest {
     private PaperProcessingServiceImpl service() {
         return new PaperProcessingServiceImpl(
                 paperSectionRepository,
-                mock(com.evidencepilot.repository.DocumentMetadataRepository.class),
+                documentMetadataRepository,
                 new BlockTreeIngestor(new com.fasterxml.jackson.databind.ObjectMapper()),
                 mock(InstructorFeedbackRepository.class),
                 documentRepository,
@@ -1378,7 +1417,8 @@ class PaperProcessingServiceImplTest {
                 sectionStandardEvaluationRepository,
                 feedbackAnchorService,
                 assignmentSectionBaselineRepository,
-                new com.fasterxml.jackson.databind.ObjectMapper());
+                new com.fasterxml.jackson.databind.ObjectMapper(),
+                mock(SectionWorkHistoryService.class));
     }
 
     private User user(UserRole role) {

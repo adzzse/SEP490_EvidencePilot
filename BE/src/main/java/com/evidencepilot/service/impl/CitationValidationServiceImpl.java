@@ -4,6 +4,7 @@ import com.evidencepilot.dto.response.CitationValidationResponse;
 import com.evidencepilot.dto.response.PaperValidationResponse;
 import com.evidencepilot.model.*;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.model.enums.PaperStandard;
 import com.evidencepilot.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -203,9 +204,7 @@ public class CitationValidationServiceImpl {
     private String extractReferenceSection(List<PaperSection> sections) {
         for (PaperSection section : sections) {
             if (section.getContentTex() == null) continue;
-            String title = section.getSectionTitle() != null ? section.getSectionTitle().toLowerCase() : "";
-            if (title.contains("reference") || title.contains("bibliography")
-                    || title.contains("works cited")) {
+            if (section.getSectionType() == PaperSectionType.REFERENCE) {
                 return section.getContentTex();
             }
         }

@@ -122,7 +122,7 @@ public class ProjectController {
     }
 
     @Operation(summary = "Complete a project",
-            description = "Marks an ACTIVE project as COMPLETED.")
+            description = "Marks an IN_PROGRESS or SUBMITTED_FOR_REVIEW project as APPROVED.")
     @PatchMapping("/{id}/complete")
     public ProjectResponse completeProject(
             @Parameter(description = "Project UUID") @PathVariable UUID id) {

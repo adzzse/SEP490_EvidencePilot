@@ -2,6 +2,7 @@ package com.evidencepilot.service;
 
 import com.evidencepilot.service.impl.CheckpointServiceImpl;
 import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
+import com.evidencepilot.service.impl.SectionWorkHistoryService;
 import com.evidencepilot.service.impl.BlockTreeIngestor;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
@@ -52,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Import({FeedbackServiceImpl.class, FeedbackAnchorService.class, CurrentUserServiceImpl.class,
         SubmissionReadinessService.class, SectionStandardService.class, ProjectCollectionService.class,
         PaperProcessingServiceImpl.class, BlockTreeIngestor.class,
+        SectionWorkHistoryService.class,
         com.evidencepilot.service.FeedbackAttachmentService.class,
         FeedbackRevisionMySqlTest.JsonConfig.class})
 class FeedbackRevisionMySqlTest {

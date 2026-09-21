@@ -35,6 +35,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DocumentPersistenceService {
 
+    public record ExtractionReplacement(
+            List<DocumentChunk> currentChunks,
+            List<UUID> obsoleteChunkIds) {
+    }
+
     private final DocumentRepository documentRepository;
     private final DocumentTextRepository documentTextRepository;
     private final DocumentChunkRepository documentChunkRepository;
@@ -123,14 +128,7 @@ public class DocumentPersistenceService {
             String markdown,
             List<String> chunks) {
         Document document = requireDocument(documentId);
-        DocumentText text = documentTextRepository.findByDocumentId(documentId);
-        if (text == null) {
-            text = new DocumentText();
-            text.setDocument(document);
-        }
-        text.setExtractionMethod(method);
-        text.setExtractedText(markdown);
-        documentTextRepository.save(text);
+        saveDocumentText(document, method, markdown);
 
         List<DocumentChunk> existing = documentChunkRepository.findByDocumentIdOrderByChunkIndexAsc(documentId);
         Map<Integer, DocumentChunk> byIndex = new HashMap<>();
@@ -157,7 +155,43 @@ public class DocumentPersistenceService {
         return documentChunkRepository.saveAll(changed).stream()
                 .filter(DocumentChunk::isActive)
                 .sorted(Comparator.comparing(DocumentChunk::getChunkIndex))
-                .toList();
+                  .toList();
+    }
+
+    @Transactional
+    public ExtractionReplacement replaceExtraction(
+            UUID documentId, String method, String markdown, List<String> chunks) {
+        Document document = requireDocument(documentId);
+        List<DocumentChunk> previous = documentChunkRepository
+                .findByDocumentIdOrderByChunkIndexAsc(documentId);
+        List<UUID> obsoleteChunkIds = previous.stream().map(DocumentChunk::getId).toList();
+        documentChunkRepository.deleteAllInBatch(previous);
+        documentChunkRepository.flush();
+
+        List<DocumentChunk> current = new ArrayList<>();
+        for (int index = 0; index < chunks.size(); index++) {
+            DocumentChunk chunk = new DocumentChunk();
+            chunk.setDocument(document);
+            chunk.setChunkIndex(index);
+            chunk.setText(chunks.get(index));
+            chunk.setActive(true);
+            current.add(chunk);
+        }
+        saveDocumentText(document, method, markdown);
+        return new ExtractionReplacement(
+                List.copyOf(documentChunkRepository.saveAllAndFlush(current)), obsoleteChunkIds);
+    }
+
+    private void saveDocumentText(Document document, String method, String markdown) {
+        DocumentText text = documentTextRepository.findByDocumentId(document.getId());
+        if (text == null) {
+            text = new DocumentText();
+            text.setDocument(document);
+        }
+        text.setExtractionMethod(method);
+        text.setExtractedText(markdown);
+        documentTextRepository.save(text);
+        document.setDocumentText(text);
     }
 
     @Transactional

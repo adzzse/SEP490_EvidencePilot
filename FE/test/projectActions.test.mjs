@@ -6,7 +6,6 @@ test('only approved projects expose archive', () => {
   assert.deepEqual(getProjectActions({ status: 'APPROVED', active: true }), [
     'archive',
     'export',
-    'delete',
   ]);
 });
 
@@ -14,7 +13,6 @@ test('only archived projects expose unarchive', () => {
   assert.deepEqual(getProjectActions({ status: 'ARCHIVED', active: true }), [
     'unarchive',
     'export',
-    'delete',
   ]);
 });
 
@@ -43,6 +41,7 @@ test('completion follows the backend transition contract', () => {
   assert.ok(getProjectActions({ status: 'IN_PROGRESS', active: true }).includes('complete'));
   assert.ok(getProjectActions({ status: 'SUBMITTED_FOR_REVIEW', active: true }).includes('complete'));
   assert.ok(!getProjectActions({ status: 'RETURNED', active: true }).includes('complete'));
+  assert.ok(!getProjectActions({ status: 'SUBMITTED_FOR_REVIEW', active: true }).includes('delete'));
 });
 
 test('trash exposes only restore', () => {

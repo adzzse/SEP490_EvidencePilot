@@ -21,7 +21,7 @@ export function getProjectActions(project = {}) {
   if (EXPORTABLE_STATUSES.has(status) && project.hasAuthoritativeData !== false) {
     actions.push('export');
   }
-  actions.push('delete');
+  if (EDITABLE_STATUSES.has(status)) actions.push('delete');
   return actions;
 }
 

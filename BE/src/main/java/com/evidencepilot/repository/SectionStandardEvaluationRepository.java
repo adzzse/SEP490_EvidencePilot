@@ -8,6 +8,7 @@ import java.util.UUID;
 
 public interface SectionStandardEvaluationRepository extends JpaRepository<SectionStandardEvaluation, UUID> {
     Optional<SectionStandardEvaluation> findTopBySectionIdOrderByUpdatedAtDesc(UUID sectionId);
+    boolean existsBySectionId(UUID sectionId);
     List<SectionStandardEvaluation> findByDocumentId(UUID documentId);
     List<SectionStandardEvaluation> findByProjectId(UUID projectId);
     List<SectionStandardEvaluation> findBySectionIdIn(List<UUID> sectionIds);

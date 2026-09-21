@@ -15,5 +15,7 @@ public interface ReviewSectionSnapshotRepository extends JpaRepository<ReviewSec
 
     List<ReviewSectionSnapshot> findByRequestIdAndSectionId(UUID requestId, UUID sectionId);
 
+    boolean existsBySectionId(UUID sectionId);
+
     boolean existsByRequestIdAndSectionIdAndSnapshotType(UUID requestId, UUID sectionId, SnapshotType snapshotType);
 }

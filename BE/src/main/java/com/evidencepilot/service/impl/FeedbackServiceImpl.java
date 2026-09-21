@@ -98,6 +98,12 @@ public class FeedbackServiceImpl {
     }
 
     @Transactional(readOnly = true)
+    public FeedbackRequestResponseDto findOneForCurrentUser(UUID id) {
+        User currentUser = currentUserService.requireCurrentUser();
+        return FeedbackRequestResponseDto.fromEntity(requireFeedbackAccess(id, currentUser, false));
+    }
+
+    @Transactional(readOnly = true)
     public FeedbackRequestPageResponse findQueueForCurrentUser(
             int page,
             int size,
@@ -121,11 +127,9 @@ public class FeedbackServiceImpl {
         LocalDateTime toTimeExclusive = dateTo == null
                 ? null
                 : utcStart(dateTo.plusDays(1));
-        Page<FeedbackRequest> result = isAdmin(currentUser)
-                ? feedbackRequestRepository.findCurrentForAll(projectId, status, fromTime,
-                        toTimeExclusive, normalizedSearch, PageRequest.of(page, size))
-                : feedbackRequestRepository.findCurrentForInstructor(currentUser.getId(), projectId, status,
-                        fromTime, toTimeExclusive, normalizedSearch, PageRequest.of(page, size));
+        Page<FeedbackRequest> result = feedbackRequestRepository.findCurrent(
+                isAdmin(currentUser) ? null : currentUser.getId(), projectId, status, fromTime,
+                toTimeExclusive, normalizedSearch, PageRequest.of(page, size));
         return FeedbackRequestPageResponse.from(result);
     }
 

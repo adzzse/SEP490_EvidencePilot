@@ -21,6 +21,7 @@ import org.springframework.web.client.RestClientException;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -119,6 +120,34 @@ public class QdrantClientImpl implements QdrantClient {
             throw e;
         } catch (RestClientException e) {
             throw new QdrantException("Failed to delete document vectors from Qdrant", e);
+        }
+    }
+
+    @Override
+    public void deleteByChunkIds(Collection<String> chunkIds) {
+        if (chunkIds == null || chunkIds.isEmpty()) {
+            return;
+        }
+        String url = baseUrl + "/collections/" + COLLECTION + "/points/delete?wait=true";
+        try {
+            restClient.post()
+                    .uri(url)
+                    .body(Map.of("points", List.copyOf(chunkIds)))
+                    .retrieve()
+                    .onStatus(status -> status.value() == 404, (req, res) -> {
+                        throw new CollectionNotFoundException();
+                    })
+                    .onStatus(HttpStatusCode::isError, (req, res) -> {
+                        throw new QdrantException("POST delete points", res.getStatusCode().value());
+                    })
+                    .toBodilessEntity();
+            log.debug("Deleted {} Qdrant points by chunk ID", chunkIds.size());
+        } catch (CollectionNotFoundException e) {
+            log.debug("Qdrant collection '{}' does not exist; nothing to delete", COLLECTION);
+        } catch (QdrantException e) {
+            throw e;
+        } catch (RestClientException e) {
+            throw new QdrantException("Failed to delete chunk vectors from Qdrant", e);
         }
     }
 

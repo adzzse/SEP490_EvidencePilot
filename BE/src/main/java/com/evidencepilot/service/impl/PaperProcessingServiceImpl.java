@@ -82,6 +82,7 @@ public class PaperProcessingServiceImpl {
     private final FeedbackAnchorService feedbackAnchorService;
     private final AssignmentSectionBaselineRepository assignmentSectionBaselineRepository;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    private final SectionWorkHistoryService sectionWorkHistoryService;
 
     public List<PaperSectionResponse> getPaperSections(UUID documentId) {
         requireDocumentAccess(documentId);
@@ -105,13 +106,33 @@ public class PaperProcessingServiceImpl {
         serializeProjectWrite(document.getProject());
         List<PaperSection> existing = paperSectionRepository
                 .findByDocumentIdOrderBySectionOrderAsc(documentId);
-        if (!existing.isEmpty()) {
-            return existing.stream()
-                    .map(PaperSectionResponse::from)
-                    .toList();
-        }
-        String text = document.getDocumentText() != null
-                ? document.getDocumentText().getExtractedText() : null;
+          if (!existing.isEmpty()) {
+              return existing.stream()
+                      .map(PaperSectionResponse::from)
+                      .toList();
+          }
+        return persistExtractedSections(document, blocks);
+    }
+
+    @Transactional
+    public List<PaperSectionResponse> replaceSectionsFromExtraction(
+            UUID documentId, List<AiModelClient.ExtractionBlock> blocks) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException(documentId, "Document"));
+        serializeProjectWrite(document.getProject());
+        List<PaperSection> existing = paperSectionRepository
+                .findByDocumentIdOrderBySectionOrderAsc(documentId);
+        requireSectionStructureUnlocked(existing);
+        existing.forEach(section -> section.setActive(false));
+        paperSectionRepository.saveAll(existing);
+        return persistExtractedSections(document, blocks);
+    }
+
+    private List<PaperSectionResponse> persistExtractedSections(
+            Document document, List<AiModelClient.ExtractionBlock> blocks) {
+        UUID documentId = document.getId();
+          String text = document.getDocumentText() != null
+                  ? document.getDocumentText().getExtractedText() : null;
         if (text == null || text.isBlank()) {
             return List.of();
         }
@@ -122,7 +143,17 @@ public class PaperProcessingServiceImpl {
             sections = parseLatexSections(text, document);
         } else {
             BlockTreeIngestor.IngestionResult result = blockTreeIngestor.ingest(document, blocks);
-            documentMetadataRepository.save(result.metadata());
+            DocumentMetadata extractedMetadata = result.metadata();
+            DocumentMetadata metadata = documentMetadataRepository.findByDocumentId(documentId)
+                    .orElse(extractedMetadata);
+            if (metadata != extractedMetadata) {
+                metadata.setTitle(extractedMetadata.getTitle());
+                metadata.setAuthorsJson(extractedMetadata.getAuthorsJson());
+                metadata.setKeywords(extractedMetadata.getKeywords());
+                metadata.setExtractionSource(extractedMetadata.getExtractionSource());
+                metadata.setUpdatedAt(extractedMetadata.getUpdatedAt());
+            }
+            documentMetadataRepository.save(metadata);
             sections = result.sections();
             if (sections.isEmpty()) {
                 PaperSection section = new PaperSection();
@@ -134,9 +165,9 @@ public class PaperProcessingServiceImpl {
                 sections.add(section);
             }
         }
-        return paperSectionRepository.saveAll(sections).stream()
-                .map(PaperSectionResponse::from)
-                .toList();
+          return paperSectionRepository.saveAll(sections).stream()
+                  .map(PaperSectionResponse::from)
+                  .toList();
     }
 
     private List<PaperSection> parseLatexSections(String text, Document document) {
@@ -828,7 +859,7 @@ public class PaperProcessingServiceImpl {
                         section.getDocument().getProject().getId(), section.getId())) {
             return true;
         }
-        return hasFeedback(section);
+        return hasFeedback(section) || sectionWorkHistoryService.hasPersistedHistory(section.getId());
     }
 
     private boolean hasFeedback(PaperSection section) {

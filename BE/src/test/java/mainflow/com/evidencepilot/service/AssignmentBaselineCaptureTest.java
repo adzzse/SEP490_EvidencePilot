@@ -19,6 +19,7 @@ import com.evidencepilot.service.impl.BlockTreeIngestor;
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.impl.EvidenceTraceService;
 import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
+import com.evidencepilot.service.impl.SectionWorkHistoryService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -202,7 +203,8 @@ class AssignmentBaselineCaptureTest {
                 sectionStandardEvaluationRepository,
                 feedbackAnchorService,
                 baselineRepository,
-                new com.fasterxml.jackson.databind.ObjectMapper());
+                new com.fasterxml.jackson.databind.ObjectMapper(),
+                mock(SectionWorkHistoryService.class));
     }
 
     private User user(UserRole role) {

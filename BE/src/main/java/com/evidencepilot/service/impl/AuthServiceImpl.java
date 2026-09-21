@@ -3,6 +3,7 @@ package com.evidencepilot.service.impl;
 import com.evidencepilot.config.security.JwtSessionRegistry;
 import com.evidencepilot.config.security.JwtUtils;
 import com.evidencepilot.dto.request.LoginRequest;
+import com.evidencepilot.exception.ApiException;
 import com.evidencepilot.dto.request.UpdatePasswordRequest;
 import com.evidencepilot.dto.response.AuthResponse;
 import com.evidencepilot.dto.response.UserResponse;
@@ -45,7 +46,7 @@ public class AuthServiceImpl {
         }
 
         if (user.getAccountStatus() != AccountStatus.ACTIVE) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is not active");
+            throw new ApiException(HttpStatus.FORBIDDEN, ApiException.ACCOUNT_BANNED, "Account is not active");
         }
 
         boolean passwordChangeNotice = userRepository.consumePasswordChangeNotice(user.getId()) == 1;
@@ -62,7 +63,7 @@ public class AuthServiceImpl {
         User user = userRepository.findById(jwtUtils.extractUserId(token))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User no longer exists"));
         if (user.getAccountStatus() != AccountStatus.ACTIVE) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is not active");
+            throw new ApiException(HttpStatus.FORBIDDEN, ApiException.ACCOUNT_BANNED, "Account is not active");
         }
 
         String newToken = jwtUtils.generateToken(user);

@@ -5,6 +5,7 @@ import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.AiGenerationConfigService;
 import com.evidencepilot.dto.response.ApiErrorResponse;
 import com.evidencepilot.exception.AiValidationException;
+import com.evidencepilot.exception.ApiException;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.exception.SubmissionReadinessException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,6 +27,14 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ApiException.class)
+    public ResponseEntity<ApiErrorResponse> handleApiException(
+            ApiException exception, HttpServletRequest request) {
+        HttpStatus status = HttpStatus.valueOf(exception.getStatusCode().value());
+        String message = exception.getReason() == null ? status.getReasonPhrase() : exception.getReason();
+        return build(status, message, exception.code(), request);
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(
@@ -201,6 +210,13 @@ public class GlobalExceptionHandler {
                 message,
                 request.getRequestURI()
         );
+        return ResponseEntity.status(status).body(body);
+    }
+
+    private ResponseEntity<ApiErrorResponse> build(HttpStatus status, String message, String code,
+                                                   HttpServletRequest request) {
+        ApiErrorResponse body = ApiErrorResponse.of(
+                status.value(), status.getReasonPhrase(), message, code, request.getRequestURI());
         return ResponseEntity.status(status).body(body);
     }
 

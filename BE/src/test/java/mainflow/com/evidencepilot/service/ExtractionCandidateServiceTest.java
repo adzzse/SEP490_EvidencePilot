@@ -11,6 +11,7 @@ import com.evidencepilot.model.enums.ExtractionCandidateStatus;
 import com.evidencepilot.model.enums.ProcessingStatus;
 import com.evidencepilot.repository.DocumentExtractionCandidateRepository;
 import com.evidencepilot.repository.DocumentRepository;
+import com.evidencepilot.repository.AssignmentSectionBaselineRepository;
 import com.evidencepilot.repository.EvidenceRevisionTraceRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperReferenceRepository;
@@ -19,6 +20,7 @@ import com.evidencepilot.service.impl.DocumentPersistenceService;
 import com.evidencepilot.service.impl.ExtractionCandidateService;
 import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
 import com.evidencepilot.service.impl.QdrantServiceImpl;
+import com.evidencepilot.service.impl.SectionWorkHistoryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,6 +52,8 @@ class ExtractionCandidateServiceTest {
     @Mock
     private PaperSectionRepository paperSectionRepository;
     @Mock
+    private AssignmentSectionBaselineRepository assignmentSectionBaselineRepository;
+    @Mock
     private InstructorFeedbackRepository instructorFeedbackRepository;
     @Mock
     private PaperReferenceRepository paperReferenceRepository;
@@ -61,14 +65,16 @@ class ExtractionCandidateServiceTest {
     private QdrantServiceImpl qdrantService;
     @Mock
     private PaperProcessingServiceImpl paperProcessingService;
+    @Mock
+    private SectionWorkHistoryService sectionWorkHistoryService;
 
     @Test
-    void requestRejectsMeaningfulPaperWorkBeforeCreatingCandidate() {
+    void requestAllowsImportedPaperTextWithoutWorkHistory() {
         Document document = document(DocumentType.PAPER);
         PaperSection section = new PaperSection();
         section.setId(UUID.randomUUID());
         section.setDocument(document);
-        section.setContentTex("student work");
+        section.setContentTex("imported setup text");
         section.setVersion(1);
 
         when(documentRepository.findByIdForUpdate(document.getId())).thenReturn(Optional.of(document));
@@ -76,11 +82,10 @@ class ExtractionCandidateServiceTest {
         when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(document.getId()))
                 .thenReturn(List.of(section));
 
-        assertThatThrownBy(() -> service().request(document.getId()))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("meaningful work");
+        when(candidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        verify(candidateRepository, never()).save(any());
+        assertThat(service().request(document.getId()).getStatus())
+                .isEqualTo(ExtractionCandidateStatus.REQUESTED);
     }
 
     @Test
@@ -161,7 +166,7 @@ class ExtractionCandidateServiceTest {
         PaperSection section = new PaperSection();
         section.setId(UUID.randomUUID());
         section.setDocument(document);
-        section.setContentTex("work added while extraction ran");
+        section.setPreviousContentTex("work added while extraction ran");
         when(candidateRepository.findById(candidate.getId())).thenReturn(Optional.of(candidate));
         when(documentRepository.findByIdForUpdate(document.getId())).thenReturn(Optional.of(document));
         when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(document.getId()))
@@ -171,8 +176,27 @@ class ExtractionCandidateServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("meaningful work");
 
-        verify(documentPersistenceService, never()).saveExtraction(any(), any(), any(), any());
-        verify(qdrantService, never()).upsertVectors(any());
+        verify(documentPersistenceService, never()).replaceExtraction(any(), any(), any(), any());
+        verify(qdrantService, never()).stageVectors(any());
+    }
+
+    @Test
+    void requestRejectsPersistedSectionHistory() {
+        Document document = document(DocumentType.PAPER);
+        PaperSection section = new PaperSection();
+        section.setId(UUID.randomUUID());
+        section.setDocument(document);
+
+        when(documentRepository.findByIdForUpdate(document.getId())).thenReturn(Optional.of(document));
+        when(candidateRepository.existsActiveForDocument(document.getId())).thenReturn(false);
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(document.getId()))
+                .thenReturn(List.of(section));
+        when(sectionWorkHistoryService.hasPersistedHistory(section.getId())).thenReturn(true);
+
+        assertThatThrownBy(() -> service().request(document.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("meaningful work");
+        verify(candidateRepository, never()).save(any());
     }
 
     @Test
@@ -196,15 +220,15 @@ class ExtractionCandidateServiceTest {
         saved.setActive(true);
         when(candidateRepository.findById(candidate.getId())).thenReturn(Optional.of(candidate));
         when(documentRepository.findByIdForUpdate(document.getId())).thenReturn(Optional.of(document));
-        when(documentPersistenceService.saveExtraction(
+        when(documentPersistenceService.replaceExtraction(
                 document.getId(), "mineru", "new markdown", List.of("new text")))
-                .thenReturn(List.of(saved));
+                .thenReturn(new DocumentPersistenceService.ExtractionReplacement(List.of(saved), List.of()));
         when(candidateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         service().activate(candidate.getId());
 
         ArgumentCaptor<ExtractionResultPayload> payload = ArgumentCaptor.forClass(ExtractionResultPayload.class);
-        verify(qdrantService).upsertVectors(payload.capture());
+        verify(qdrantService).stageVectors(payload.capture());
         assertThat(payload.getValue().chunks()).singleElement()
                 .extracting(ExtractionResultPayload.ChunkPayload::chunkId)
                 .isEqualTo(saved.getId());
@@ -217,13 +241,15 @@ class ExtractionCandidateServiceTest {
                 candidateRepository,
                 documentRepository,
                 paperSectionRepository,
+                assignmentSectionBaselineRepository,
                 instructorFeedbackRepository,
                 paperReferenceRepository,
                 evidenceRevisionTraceRepository,
                 documentPersistenceService,
                 qdrantService,
                 paperProcessingService,
-                new ObjectMapper());
+                new ObjectMapper(),
+                sectionWorkHistoryService);
     }
 
     private static Document document(DocumentType type) {

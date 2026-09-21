@@ -12,5 +12,7 @@ public interface CitationReviewRoundRepository extends JpaRepository<CitationRev
 
     List<CitationReviewRound> findBySectionIdOrderByCreatedAtDesc(UUID sectionId);
 
+    boolean existsBySectionId(UUID sectionId);
+
     List<CitationReviewRound> findByProjectIdOrderByCreatedAtDesc(UUID projectId);
 }

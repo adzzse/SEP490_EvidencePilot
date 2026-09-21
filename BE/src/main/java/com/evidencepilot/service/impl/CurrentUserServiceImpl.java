@@ -1,5 +1,6 @@
 package com.evidencepilot.service.impl;
 
+import com.evidencepilot.exception.ApiException;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
@@ -60,8 +61,9 @@ public class CurrentUserServiceImpl {
 
     public void requireRole(User currentUser, UserRole role) {
         if (currentUser.getRole() != role && currentUser.getRole() != UserRole.ADMIN) {
-            throw new ResponseStatusException(
+            throw new ApiException(
                     org.springframework.http.HttpStatus.FORBIDDEN,
+                    ApiException.PROJECT_ROLE_REQUIRED,
                     "Requires role: " + role);
         }
     }
@@ -85,34 +87,43 @@ public class CurrentUserServiceImpl {
                             project.getId(), currentUser.getId())) {
                 return;
             }
-            throw new ResponseStatusException(
+            throw new ApiException(
                     org.springframework.http.HttpStatus.FORBIDDEN,
+                    ApiException.PROJECT_MEMBERSHIP_REQUIRED,
                     "Instructor access denied to project");
         }
         if (!isProjectMember(currentUser, project)) {
-            throw new ResponseStatusException(
+            throw new ApiException(
                     org.springframework.http.HttpStatus.FORBIDDEN,
+                    ApiException.PROJECT_MEMBERSHIP_REQUIRED,
                     "Project access denied");
         }
     }
 
     public void requireProjectWriteAccess(User currentUser, Project project) {
         if (project.getStatus().isReadOnly()) {
-            throw new ResponseStatusException(
+            throw new ApiException(
                     org.springframework.http.HttpStatus.CONFLICT,
+                    ApiException.PROJECT_TRANSITION_INVALID,
                     "Project is read-only.");
         }
         if (isAdmin(currentUser))
             return;
         if (project.getStatus() == ProjectStatus.SUBMITTED_FOR_REVIEW) {
-            throw new ResponseStatusException(
+            throw new ApiException(
                     org.springframework.http.HttpStatus.CONFLICT,
+                    ApiException.PROJECT_TRANSITION_INVALID,
                     "Project is locked and cannot be modified.");
+        }
+        if (!isProjectMember(currentUser, project)) {
+            throw new ApiException(org.springframework.http.HttpStatus.FORBIDDEN,
+                    ApiException.PROJECT_MEMBERSHIP_REQUIRED, "Project access denied");
         }
         if (!hasProjectRole(currentUser, project, Set.of(
                 ProjectRole.LEADER, ProjectRole.MEMBER, ProjectRole.INSTRUCTOR))) {
-            throw new ResponseStatusException(
+            throw new ApiException(
                     org.springframework.http.HttpStatus.FORBIDDEN,
+                    ApiException.PROJECT_ROLE_REQUIRED,
                     "Write access denied to project");
         }
     }
@@ -120,9 +131,14 @@ public class CurrentUserServiceImpl {
     public void requireProjectManageAccess(User currentUser, Project project) {
         if (isAdmin(currentUser))
             return;
+        if (!isProjectMember(currentUser, project)) {
+            throw new ApiException(org.springframework.http.HttpStatus.FORBIDDEN,
+                    ApiException.PROJECT_MEMBERSHIP_REQUIRED, "Project access denied");
+        }
         if (!hasProjectRole(currentUser, project, Set.of(ProjectRole.INSTRUCTOR, ProjectRole.LEADER))) {
-            throw new ResponseStatusException(
+            throw new ApiException(
                     org.springframework.http.HttpStatus.FORBIDDEN,
+                    ApiException.PROJECT_ROLE_REQUIRED,
                     "Project management access denied");
         }
     }
@@ -147,8 +163,9 @@ public class CurrentUserServiceImpl {
                         project.getId(), currentUser.getId())) {
             return;
         }
-        throw new ResponseStatusException(
+        throw new ApiException(
                 org.springframework.http.HttpStatus.FORBIDDEN,
+                ApiException.PROJECT_MEMBERSHIP_REQUIRED,
                 "Instructor access denied to project");
     }
 

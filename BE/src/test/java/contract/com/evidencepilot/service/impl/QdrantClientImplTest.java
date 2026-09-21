@@ -107,6 +107,32 @@ class QdrantClientImplTest {
         }
     }
 
+    @Test
+    void deleteByChunkIdsUsesPointIdsAndWaitsForCompletion() throws Exception {
+        AtomicReference<String> deleteBody = new AtomicReference<>();
+        AtomicReference<String> query = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        server.createContext("/collections/source_chunks/points/delete", exchange -> {
+            query.set(exchange.getRequestURI().getQuery());
+            deleteBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            send(exchange, 200, "{\"status\":\"ok\"}");
+        });
+        server.start();
+        try {
+            QdrantClientImpl client = new QdrantClientImpl(
+                    "http://localhost:" + server.getAddress().getPort(), "");
+
+            client.deleteByChunkIds(List.of("chunk-1", "chunk-2"));
+
+            assertThat(query.get()).isEqualTo("wait=true");
+            assertThat(new ObjectMapper().readTree(deleteBody.get()).path("points"))
+                    .extracting(JsonNode::asText)
+                    .containsExactly("chunk-1", "chunk-2");
+        } finally {
+            server.stop(0);
+        }
+    }
+
     private static void send(com.sun.net.httpserver.HttpExchange exchange, int status, String body)
             throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);

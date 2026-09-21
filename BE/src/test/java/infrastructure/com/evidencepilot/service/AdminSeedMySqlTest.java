@@ -12,6 +12,7 @@ import com.evidencepilot.service.impl.BlockTreeIngestor;
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.impl.EvidenceTraceService;
 import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
+import com.evidencepilot.service.impl.SectionWorkHistoryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.AfterEach;
@@ -55,7 +56,8 @@ import static org.mockito.Mockito.mock;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({AdminExcelSeedService.class, PaperProcessingServiceImpl.class, BlockTreeIngestor.class,
-        CurrentUserServiceImpl.class, PaperStandardService.class, AdminSeedMySqlTest.Config.class})
+        CurrentUserServiceImpl.class, PaperStandardService.class, SectionWorkHistoryService.class,
+        AdminSeedMySqlTest.Config.class})
 class AdminSeedMySqlTest {
     @Container static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46");
     @DynamicPropertySource static void database(DynamicPropertyRegistry registry) {

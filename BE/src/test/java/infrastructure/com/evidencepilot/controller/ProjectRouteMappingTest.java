@@ -154,6 +154,7 @@ class ProjectRouteMappingTest {
                 "POST /api/admin/notifications/broadcast",
                 "GET /api/feedback-requests",
                 "GET /api/feedback-requests/queue",
+                "GET /api/feedback-requests/{id}",
                 "GET /api/feedback-requests/{id}/feedback",
                 "GET /api/feedback-requests/{id}/submission-snapshot",
                 "GET /api/feedback-requests/{id}/section-snapshots",

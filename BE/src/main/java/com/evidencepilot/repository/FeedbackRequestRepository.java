@@ -55,7 +55,7 @@ public interface FeedbackRequestRepository extends JpaRepository<FeedbackRequest
     @EntityGraph(attributePaths = {"project", "student", "instructor"})
     @Query(value = """
             select r from FeedbackRequest r
-            where r.instructor.id = :instructorId
+            where (:instructorId is null or r.instructor.id = :instructorId)
               and (:projectId is null or r.project.id = :projectId)
               and (:status is null or r.status = :status)
               and (:fromTime is null or r.requestedAt >= :fromTime)
@@ -84,46 +84,8 @@ public interface FeedbackRequestRepository extends JpaRepository<FeedbackRequest
                          or (newer.requestedAt = r.requestedAt and newer.id > r.id))
               )
             """)
-    Page<FeedbackRequest> findCurrentForInstructor(
+    Page<FeedbackRequest> findCurrent(
             @Param("instructorId") UUID instructorId,
-            @Param("projectId") UUID projectId,
-            @Param("status") FeedbackStatus status,
-            @Param("fromTime") LocalDateTime fromTime,
-            @Param("toTimeExclusive") LocalDateTime toTimeExclusive,
-            @Param("search") String search,
-            Pageable pageable);
-
-    @EntityGraph(attributePaths = {"project", "student", "instructor"})
-    @Query(value = """
-            select r from FeedbackRequest r
-            where (:projectId is null or r.project.id = :projectId)
-              and (:status is null or r.status = :status)
-              and (:fromTime is null or r.requestedAt >= :fromTime)
-              and (:toTimeExclusive is null or r.requestedAt < :toTimeExclusive)
-              and (:search is null or lower(r.project.title) like lower(concat('%', :search, '%')))
-              and not exists (
-                  select newer.id from FeedbackRequest newer
-                  where newer.project.id = r.project.id
-                    and (newer.requestedAt > r.requestedAt
-                         or (newer.requestedAt = r.requestedAt and newer.id > r.id))
-              )
-            order by r.requestedAt desc, r.id desc
-            """,
-            countQuery = """
-            select count(r) from FeedbackRequest r
-            where (:projectId is null or r.project.id = :projectId)
-              and (:status is null or r.status = :status)
-              and (:fromTime is null or r.requestedAt >= :fromTime)
-              and (:toTimeExclusive is null or r.requestedAt < :toTimeExclusive)
-              and (:search is null or lower(r.project.title) like lower(concat('%', :search, '%')))
-              and not exists (
-                  select newer.id from FeedbackRequest newer
-                  where newer.project.id = r.project.id
-                    and (newer.requestedAt > r.requestedAt
-                         or (newer.requestedAt = r.requestedAt and newer.id > r.id))
-              )
-            """)
-    Page<FeedbackRequest> findCurrentForAll(
             @Param("projectId") UUID projectId,
             @Param("status") FeedbackStatus status,
             @Param("fromTime") LocalDateTime fromTime,

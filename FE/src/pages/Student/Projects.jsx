@@ -77,7 +77,7 @@ export default function Projects() {
       const list = Array.isArray(res.data?.content) ? res.data.content : [];
       const total = list.length;
       const inProg = list.filter(p => ['CREATED', 'ASSIGNED', 'IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'RETURNED'].includes(p.status)).length;
-      const comp = list.filter(p => ['APPROVED', 'ARCHIVED', 'COMPLETED'].includes(p.status)).length;
+      const comp = list.filter(p => ['APPROVED', 'ARCHIVED'].includes(p.status)).length;
       setStats({ total, inProgress: inProg, completed: comp });
     } catch {
       /* silent stats fetch */
@@ -128,7 +128,7 @@ export default function Projects() {
   };
 
   const getCtaText = (status) => {
-    if (['APPROVED', 'ARCHIVED', 'COMPLETED'].includes(status)) {
+    if (['APPROVED', 'ARCHIVED'].includes(status)) {
       return t('student.projects.viewWorkspace');
     }
     if (['ASSIGNED', 'CREATED'].includes(status)) {

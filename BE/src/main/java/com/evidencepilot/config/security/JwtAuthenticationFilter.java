@@ -1,6 +1,7 @@
 package com.evidencepilot.config.security;
 
 import com.evidencepilot.dto.response.ApiErrorResponse;
+import com.evidencepilot.exception.ApiException;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.repository.UserRepository;
@@ -71,14 +72,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
             if (user.getAccountStatus() != AccountStatus.ACTIVE) {
-                writeError(request, response, HttpServletResponse.SC_FORBIDDEN, "Account is not active");
+                writeError(request, response, HttpServletResponse.SC_FORBIDDEN,
+                        ApiException.ACCOUNT_BANNED, "Account is not active");
                 return;
             }
 
             Integer currentVersion = user.getTokenVersion();
             Integer tokenVersion = jwtUtils.extractTokenVersion(token);
             if (tokenVersion == null || !tokenVersion.equals(currentVersion)) {
-                writeError(request, response, HttpServletResponse.SC_UNAUTHORIZED, "Token is stale");
+                writeError(request, response, HttpServletResponse.SC_UNAUTHORIZED, null, "Token is stale");
                 return;
             }
 
@@ -99,7 +101,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private void writeError(HttpServletRequest request, HttpServletResponse response,
-                            int status, String message) throws IOException {
+                            int status, String code, String message) throws IOException {
         response.setStatus(status);
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
@@ -107,6 +109,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 status,
                 status == HttpServletResponse.SC_UNAUTHORIZED ? "Unauthorized" : "Forbidden",
                 message,
+                code,
                 request.getRequestURI()));
     }
 }

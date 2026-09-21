@@ -5,6 +5,7 @@ import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.model.enums.PaperStandard;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.DocumentMetadataRepository;
@@ -97,7 +98,7 @@ public class TexArchiveBuilder {
                     }
                     String content = translateSupSub(
                             section.getContentTex() == null ? "" : section.getContentTex());
-                    boolean referenceSection = isReferenceSection(section.getSectionTitle());
+                    boolean referenceSection = section.getSectionType() == PaperSectionType.REFERENCE;
                     if (referenceSection && content.isBlank() && !bibliography.entries().isEmpty()) {
                         continue;
                     }
@@ -216,13 +217,6 @@ public class TexArchiveBuilder {
         }
         matcher.appendTail(out);
         return out.toString();
-    }
-
-    private static boolean isReferenceSection(String title) {        String normalized = normalizedTitle(title);
-        return normalized.equals("references")
-                || normalized.equals("reference")
-                || normalized.equals("bibliography")
-                || normalized.equals("works cited");
     }
 
     private static String normalizedTitle(String title) {

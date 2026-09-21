@@ -14,6 +14,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 
 class QdrantServiceImplTest {
 
@@ -45,6 +46,20 @@ class QdrantServiceImplTest {
                 .upsertVectors(new ExtractionResultPayload(UUID.randomUUID(), List.of()));
 
         verifyNoInteractions(client);
+    }
+
+    @Test
+    void stageVectorsNeverDeletesTheLiveDocumentGeneration() {
+        QdrantClient client = mock(QdrantClient.class);
+        var payload = new ExtractionResultPayload(UUID.randomUUID(), List.of(
+                new ExtractionResultPayload.ChunkPayload(
+                        UUID.randomUUID(), 0, "text", List.of(0.2f), null)));
+
+        new QdrantServiceImpl(client).stageVectors(payload);
+
+        verify(client, never()).deleteByDocumentId(payload.documentId().toString());
+        verify(client).upsertVector(eq(payload.chunks().getFirst().chunkId().toString()),
+                eq(List.of(0.2f)), isNull(), org.mockito.ArgumentMatchers.anyMap());
     }
 
     @Test

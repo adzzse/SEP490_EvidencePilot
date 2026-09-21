@@ -27,6 +27,10 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     @Query("SELECT d FROM Document d WHERE d.id = :id")
     Optional<Document> findByIdForUpdate(@Param("id") UUID id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT d FROM Document d JOIN FETCH d.project WHERE d.id = :id")
+    Optional<Document> findByIdWithProjectForUpdate(@Param("id") UUID id);
+
     long countByActiveTrueAndDocType(DocumentType docType);
     // Direct sources uploaded to each project — batch twin of the memberCounts pattern.
     @Query("SELECT d.project.id, COUNT(d) FROM Document d WHERE d.project.id IN :projectIds AND d.docType = :docType AND d.active = true GROUP BY d.project.id")

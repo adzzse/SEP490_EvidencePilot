@@ -47,10 +47,16 @@ export default function ReviewRequests() {
         if (linked) {
           setDeepLinkedRequest(linked);
         } else {
-          const allRequests = await api.get('/api/feedback-requests');
-          setDeepLinkedRequest((allRequests.data || []).find(req => String(req.id) === String(reviewLink))
-            || (allRequests.data || []).find(req => String(req.projectId) === String(reviewLink))
-            || null);
+          try {
+            const { data } = await api.get(
+              `/api/feedback-requests/${encodeURIComponent(reviewLink)}`);
+            setDeepLinkedRequest(data || null);
+          } catch (error) {
+            if (error?.response?.status !== 404) throw error;
+            const { data } = await api.get(
+              `/api/feedback-requests/queue?page=0&size=1&projectId=${encodeURIComponent(reviewLink)}`);
+            setDeepLinkedRequest(data?.content?.[0] || null);
+          }
         }
       } else {
         setDeepLinkedRequest(null);
