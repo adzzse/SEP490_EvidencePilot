@@ -1,6 +1,6 @@
 -- EvidencePilot consolidated MySQL schema snapshot.
 --
--- Runtime source of truth: db/migration/V1__baseline_schema.sql through V39__*.sql
+-- Runtime source of truth: db/migration/V1__baseline_schema.sql through V43__*.sql
 -- (plus V37_1__SeedReviewSnapshots.java for data-only backfill). This file is a
 -- DDL snapshot for inspection, local bootstrap, and diagram generation; it does
 -- not replay migration backfills or seed data.
@@ -59,9 +59,6 @@ CREATE TABLE projects (
 CREATE TABLE project_members (
     id BINARY(16) NOT NULL PRIMARY KEY,
     project_id BINARY(16) NOT NULL,
-    document_id BINARY(16),
-    section_id BINARY(16),
-    input_fingerprint VARCHAR(64),
     user_id BINARY(16) NOT NULL,
     role VARCHAR(50) NOT NULL,
     joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -143,6 +140,29 @@ CREATE TABLE document_texts (
     FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
 );
 
+CREATE TABLE document_extraction_candidates (
+    id BINARY(16) NOT NULL PRIMARY KEY,
+    document_id BINARY(16) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    previous_processing_status VARCHAR(50) NOT NULL,
+    previous_chunk_count INT,
+    previous_processed_at DATETIME,
+    previous_processing_error TEXT,
+    source_file_url VARCHAR(500) NOT NULL,
+    source_file_hash_sha256 VARCHAR(64),
+    extraction_method VARCHAR(50),
+    extracted_markdown LONGTEXT,
+    blocks_json LONGTEXT,
+    chunks_json LONGTEXT,
+    bundle_key VARCHAR(500),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    prepared_at DATETIME,
+    failed_at DATETIME,
+    failure_message TEXT,
+    INDEX idx_extraction_candidates_document_status (document_id, status),
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+
 CREATE TABLE document_chunks (
     id BINARY(16) NOT NULL PRIMARY KEY,
     document_id BINARY(16) NOT NULL,
@@ -175,6 +195,7 @@ CREATE TABLE paper_sections (
     assigned_user_id BINARY(16),
     section_order INT NOT NULL,
     section_title VARCHAR(255) NOT NULL,
+    section_kind VARCHAR(20) NOT NULL DEFAULT 'STANDARD',
     heading_level INT NOT NULL DEFAULT 2,
     source_block_start INT,
     source_block_end INT,
@@ -266,6 +287,8 @@ CREATE TABLE feedback_requests (
     submission_snapshot_json LONGTEXT,
     requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME,
+    returned_at DATETIME(6),
+    reviewed_at DATETIME(6),
     CONSTRAINT chk_feedback_requests_status CHECK (status IN ('PENDING', 'RETURNED', 'REVIEWED', 'REJECTED')),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -426,6 +449,9 @@ CREATE TABLE review_snapshots (
 CREATE TABLE ai_evaluation_jobs (
     id BINARY(16) NOT NULL PRIMARY KEY,
     project_id BINARY(16) NOT NULL,
+    document_id BINARY(16),
+    section_id BINARY(16),
+    input_fingerprint VARCHAR(64),
     kind VARCHAR(50) NOT NULL,
     payload_json LONGTEXT NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
