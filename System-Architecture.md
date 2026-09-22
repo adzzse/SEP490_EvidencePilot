@@ -198,7 +198,7 @@ Search candidates are not persisted. Persistence begins after the selected candi
 4. The Instructor reviews sections, evidence, and progress, then returns, reviews, or rejects the request.
 5. Returned feedback can be answered by the assigned Student; completed review moves the project into its next lifecycle state.
 
-Project lifecycle values currently include `CREATED`, `ASSIGNED`, `IN_PROGRESS`, `SUBMITTED_FOR_REVIEW`, `RETURNED`, `APPROVED`, and `ARCHIVED`.
+Project lifecycle values currently include `CREATED`, `ASSIGNED`, `IN_PROGRESS`, `SUBMITTED_FOR_REVIEW`, `RETURNED`, `APPROVED`, `ARCHIVED`, and `PENDING_DELETE` (set when deletion is scheduled; revoke restores the stored pre-deletion status).
 
 ### 5.4 Traceability and export
 

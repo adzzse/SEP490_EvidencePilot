@@ -309,8 +309,6 @@ export default function ProjectManagement() {
                     <div className="mb-4" onClick={e => e.stopPropagation()}>
                       <ProjectDeletionNotice
                         deadline={p.deletionScheduledAt}
-                        canRevoke={hasProjectAction(actionState(p), 'revokeDeletion')}
-                        onRevoke={() => handleRevokeDeletion(p.id)}
                       />
                     </div>
                   )}

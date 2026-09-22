@@ -55,6 +55,10 @@ public class Project {
     @Column(name = "deletion_scheduled_at")
     private LocalDateTime deletionScheduledAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status_before_deletion", length = 50)
+    private ProjectStatus statusBeforeDeletion;
+
     @OneToMany(mappedBy = "project")
     private List<ProjectMember> projectMembers;
 

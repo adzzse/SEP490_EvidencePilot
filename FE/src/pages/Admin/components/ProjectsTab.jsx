@@ -150,7 +150,8 @@ function ProjectsSection({ api }) {
       SUBMITTED_FOR_REVIEW: 'bg-amber-100 text-amber-700',
       RETURNED: 'bg-orange-100 text-orange-700',
       APPROVED: 'bg-emerald-100 text-emerald-700',
-      ARCHIVED: 'bg-(--surface-secondary) text-(--text-secondary)'
+      ARCHIVED: 'bg-(--surface-secondary) text-(--text-secondary)',
+      PENDING_DELETE: 'bg-rose-100 text-rose-700'
     };
     const labels = {
       CREATED: t('admin.statusCreated'),
@@ -159,7 +160,8 @@ function ProjectsSection({ api }) {
       SUBMITTED_FOR_REVIEW: t('admin.statusUnderReview'),
       RETURNED: t('admin.statusReturned'),
       APPROVED: t('admin.statusApproved'),
-      ARCHIVED: t('admin.statusArchived')
+      ARCHIVED: t('admin.statusArchived'),
+      PENDING_DELETE: t('admin.statusPendingDelete')
     };
     return (
       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${styles[status] || 'bg-(--surface-tertiary) text-(--text-primary)'}`}>
@@ -232,6 +234,7 @@ function ProjectsSection({ api }) {
             <option value="RETURNED">{t('admin.statusReturned')}</option>
             <option value="APPROVED">{t('admin.statusApproved')}</option>
             <option value="ARCHIVED">{t('admin.statusArchived')}</option>
+            <option value="PENDING_DELETE">{t('admin.statusPendingDelete')}</option>
           </select>
         </div>
 

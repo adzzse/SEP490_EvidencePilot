@@ -325,6 +325,9 @@ class ProjectServiceImplLifecycleTest {
         ProjectResponse response = service().deleteProject(project.getId());
 
         assertThat(project.isActive()).isTrue();
+        assertThat(project.getStatus()).isEqualTo(ProjectStatus.PENDING_DELETE);
+        assertThat(project.getStatusBeforeDeletion()).isEqualTo(ProjectStatus.RETURNED);
+        assertThat(response.status()).isEqualTo(ProjectStatus.PENDING_DELETE);
         assertThat(response.deletionScheduledAt()).isBetween(before.minusSeconds(2), before.plusSeconds(2));
         verify(auditService).record("PROJECT_DELETION_SCHEDULED", "PROJECT", project.getId(), actor, null, response.deletionScheduledAt());
     }
@@ -345,8 +348,9 @@ class ProjectServiceImplLifecycleTest {
     @Test
     void cancelProjectDeletionClearsSchedule() {
         User actor = user();
-        Project project = project(ProjectStatus.RETURNED);
+        Project project = project(ProjectStatus.PENDING_DELETE);
         LocalDateTime deadline = LocalDateTime.now().plusDays(20);
+        project.setStatusBeforeDeletion(ProjectStatus.RETURNED);
         project.setDeletionScheduledAt(deadline);
         when(currentUserService.requireCurrentUser()).thenReturn(actor);
         when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
@@ -355,8 +359,27 @@ class ProjectServiceImplLifecycleTest {
         ProjectResponse response = service().cancelProjectDeletion(project.getId());
 
         assertThat(project.getDeletionScheduledAt()).isNull();
+        assertThat(project.getStatusBeforeDeletion()).isNull();
+        assertThat(project.getStatus()).isEqualTo(ProjectStatus.RETURNED);
         assertThat(response.deletionScheduledAt()).isNull();
+        assertThat(response.status()).isEqualTo(ProjectStatus.RETURNED);
         verify(auditService).record("PROJECT_DELETION_REVOKED", "PROJECT", project.getId(), actor, deadline, null);
+    }
+
+    @Test
+    void cancelProjectDeletionKeepsStatusWhenScheduledBeforeStatusTracking() {
+        User actor = user();
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        project.setStatusBeforeDeletion(null);
+        project.setDeletionScheduledAt(LocalDateTime.now().plusDays(20));
+        when(currentUserService.requireCurrentUser()).thenReturn(actor);
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
+        when(projectRepository.save(project)).thenReturn(project);
+
+        ProjectResponse response = service().cancelProjectDeletion(project.getId());
+
+        assertThat(project.getStatus()).isEqualTo(ProjectStatus.IN_PROGRESS);
+        assertThat(response.status()).isEqualTo(ProjectStatus.IN_PROGRESS);
     }
 
     @Test

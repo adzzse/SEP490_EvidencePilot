@@ -1,4 +1,4 @@
-function toDate(dateInput) {
+export function toDate(dateInput) {
   if (dateInput instanceof Date) return dateInput;
   // Backend LocalDateTime values are UTC but have no offset in JSON.
   const normalized = typeof dateInput === 'string'

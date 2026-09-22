@@ -1825,7 +1825,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
 
       {project?.deletionScheduledAt && (
         <div className="px-4 py-2 shrink-0">
-          <ProjectDeletionNotice deadline={project.deletionScheduledAt} canRevoke={false} />
+          <ProjectDeletionNotice deadline={project.deletionScheduledAt} />
         </div>
       )}
 

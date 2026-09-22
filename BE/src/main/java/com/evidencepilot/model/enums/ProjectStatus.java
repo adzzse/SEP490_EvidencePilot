@@ -16,23 +16,26 @@ import java.util.Set;
  *                                              +-> SUBMITTED_FOR_REVIEW (student resubmits)
  * </pre>
  *
- * RETURNED is a writable state: students revise and resubmit. Only APPROVED and
- * ARCHIVED are read-only.
+ * Any writable status (CREATED, ASSIGNED, IN_PROGRESS, RETURNED) may move to
+ * PENDING_DELETE when deletion is scheduled; revoking restores the stored
+ * pre-deletion status. RETURNED is a writable state: students revise and
+ * resubmit. APPROVED, ARCHIVED and PENDING_DELETE are read-only.
  */
 public enum ProjectStatus {
-    CREATED, ASSIGNED, IN_PROGRESS, SUBMITTED_FOR_REVIEW, RETURNED, APPROVED, ARCHIVED;
+    CREATED, ASSIGNED, IN_PROGRESS, SUBMITTED_FOR_REVIEW, RETURNED, APPROVED, ARCHIVED, PENDING_DELETE;
 
     private static final Map<ProjectStatus, Set<ProjectStatus>> LEGAL_TRANSITIONS = Map.of(
-            CREATED, EnumSet.of(ASSIGNED),
-            ASSIGNED, EnumSet.of(IN_PROGRESS, SUBMITTED_FOR_REVIEW),
-            IN_PROGRESS, EnumSet.of(SUBMITTED_FOR_REVIEW, APPROVED),
+            CREATED, EnumSet.of(ASSIGNED, PENDING_DELETE),
+            ASSIGNED, EnumSet.of(IN_PROGRESS, SUBMITTED_FOR_REVIEW, PENDING_DELETE),
+            IN_PROGRESS, EnumSet.of(SUBMITTED_FOR_REVIEW, APPROVED, PENDING_DELETE),
             SUBMITTED_FOR_REVIEW, EnumSet.of(RETURNED, APPROVED, IN_PROGRESS),
-            RETURNED, EnumSet.of(SUBMITTED_FOR_REVIEW, IN_PROGRESS),
+            RETURNED, EnumSet.of(SUBMITTED_FOR_REVIEW, IN_PROGRESS, PENDING_DELETE),
             APPROVED, EnumSet.of(ARCHIVED),
-            ARCHIVED, EnumSet.of(APPROVED));
+            ARCHIVED, EnumSet.of(APPROVED),
+            PENDING_DELETE, EnumSet.of(CREATED, ASSIGNED, IN_PROGRESS, RETURNED));
 
     public boolean isReadOnly() {
-        return this == APPROVED || this == ARCHIVED;
+        return this == APPROVED || this == ARCHIVED || this == PENDING_DELETE;
     }
 
     /** Returns true when the state machine permits moving from this status to {@code target}. */

@@ -288,6 +288,8 @@ public class ProjectServiceImpl {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Project deletion is already scheduled.");
         }
         currentUserService.requireProjectWriteAccess(currentUser, project);
+        project.setStatusBeforeDeletion(project.getStatus());
+        project.setStatus(ProjectStatus.PENDING_DELETE);
         project.setDeletionScheduledAt(LocalDateTime.now().plusDays(30));
         project.setUpdatedAt(LocalDateTime.now());
         Project saved = projectRepository.save(project);
@@ -305,6 +307,11 @@ public class ProjectServiceImpl {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Project deletion is not scheduled.");
         }
         LocalDateTime previousDeadline = project.getDeletionScheduledAt();
+        // ponytail: rows scheduled before status tracking keep their current status.
+        if (project.getStatusBeforeDeletion() != null) {
+            project.setStatus(project.getStatusBeforeDeletion());
+        }
+        project.setStatusBeforeDeletion(null);
         project.setDeletionScheduledAt(null);
         project.setUpdatedAt(LocalDateTime.now());
         Project saved = projectRepository.save(project);
