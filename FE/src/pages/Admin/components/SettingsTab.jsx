@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import useUndoDelete, { UndoToast } from '../../../components/ui/UndoDelete.jsx';
+import useUndoDelete from '../../../components/ui/UndoDelete.jsx';
 import DeleteConfirm from '../../../components/ui/DeleteConfirm.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
 import { useTranslation } from 'react-i18next';
@@ -13,7 +13,7 @@ function SettingsSection({ api }) {
   const [catErr, setCatErr] = useState('');
   const [config, setConfig] = useState(null);
   const [configLoading, setConfigLoading] = useState(true);
-  const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete({ onUndo: () => fetchCats(new AbortController().signal) });
+  const { start: startDelete } = useUndoDelete();
 
   const fetchCats = useCallback(async (signal) => {
     setCatsLoading(true);
@@ -287,7 +287,6 @@ function SettingsSection({ api }) {
         </div>
       )}
 
-      {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
     </div>
   );
 }

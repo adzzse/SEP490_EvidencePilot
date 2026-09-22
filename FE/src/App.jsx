@@ -7,6 +7,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './components/ui/Toast.jsx';
+import { UndoDeleteProvider } from './components/ui/UndoDelete.jsx';
 import ProtectedRoute from './routes/ProtectedRoute';
 import ErrorBoundary from './components/layout/ErrorBoundary';
 import ScrollToTop from './components/layout/ScrollToTop';
@@ -47,6 +48,7 @@ function App() {
         <LanguageProvider>
           <ThemeProvider>
           <ToastProvider>
+          <UndoDeleteProvider>
           <UrgentNotificationBanner />
           <Suspense fallback={<div className="min-h-screen grid place-items-center" role="status">Loading...</div>}>
           <Routes>
@@ -113,6 +115,7 @@ function App() {
             
           </Routes>
           </Suspense>
+          </UndoDeleteProvider>
           </ToastProvider>
           </ThemeProvider>
         </LanguageProvider>

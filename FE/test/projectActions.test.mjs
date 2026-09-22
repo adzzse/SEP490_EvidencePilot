@@ -47,3 +47,17 @@ test('completion follows the backend transition contract', () => {
 test('trash exposes only restore', () => {
   assert.deepEqual(getProjectActions({ status: 'IN_PROGRESS', active: false }), ['restore']);
 });
+
+test('scheduled project exposes only revoke plus its read-only export action', () => {
+  assert.deepEqual(getProjectActions({
+    active: true,
+    status: 'IN_PROGRESS',
+    deletionScheduledAt: '2026-10-22T03:00:00',
+  }), ['revokeDeletion', 'export']);
+
+  assert.deepEqual(getProjectActions({
+    active: true,
+    status: 'CREATED',
+    deletionScheduledAt: '2026-10-22T03:00:00',
+  }), ['revokeDeletion']);
+});

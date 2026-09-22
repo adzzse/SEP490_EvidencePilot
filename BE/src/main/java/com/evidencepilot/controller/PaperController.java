@@ -482,6 +482,7 @@ public class PaperController {
         User currentUser = currentUserService.requireCurrentUser();
         PaperSection section = requireReviewSection(documentId, sectionId);
         currentUserService.requireProjectAccess(currentUser, section.getDocument().getProject());
+        currentUserService.requireProjectMutationAllowed(section.getDocument().getProject());
         return aiEvaluationService.submitSourceMatches(
                 section.getDocument().getProject().getId(), documentId, sectionId, request.findings());
     }
@@ -506,7 +507,7 @@ public class PaperController {
             @PathVariable UUID sectionId) {
         User currentUser = currentUserService.requireCurrentUser();
         PaperSection section = requireReviewSection(documentId, sectionId);
-        currentUserService.requireSectionContentWriteAccess(currentUser, section);
+        currentUserService.requireSectionContentReadAccess(currentUser, section);
         return evidenceTraceService.listSectionTraces(documentId, sectionId);
     }
 
@@ -532,6 +533,7 @@ public class PaperController {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException(projectId, "Project"));
         currentUserService.requireEvidenceTraceReviewAccess(currentUser, project);
+        currentUserService.requireProjectMutationAllowed(project);
         return evidenceTraceService.review(projectId, traceId, request);
     }
 
@@ -552,6 +554,7 @@ public class PaperController {
         User currentUser = currentUserService.requireCurrentUser();
         PaperSection section = requireReviewSection(documentId, sectionId);
         currentUserService.requireProjectAccess(currentUser, section.getDocument().getProject());
+        currentUserService.requireProjectMutationAllowed(section.getDocument().getProject());
         return ResponseEntity.accepted().body(aiEvaluationService.submitSectionSuggestion(
                 section.getDocument().getProject().getId(),
                 documentId,

@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api.js';
 import { feedbackKeys } from '../services/feedbackKeys.js';
@@ -33,10 +34,11 @@ export default function useProjectFeedback(projectId, requestId) {
     staleTime: 30_000,
   });
 
-  const refresh = async () => {
-    const result = await query.refetch();
+  const { refetch } = query;
+  const refresh = useCallback(async () => {
+    const result = await refetch();
     return result.data?.items;
-  };
+  }, [refetch]);
 
   // rationale: mirror the old hook — a 401/403 clears the list instead of
   // showing stale threads the account can no longer open.

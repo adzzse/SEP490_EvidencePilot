@@ -2324,5 +2324,17 @@
     "Đang trích xuất bài viết",
     "Bài viết Markdown",
     "Chia thành các phần"
-  ]
+  ],
+  "instructor.projectManagement.deletionScheduled": "Đã lên lịch xóa",
+  "instructor.projectManagement.revokeDeletion": "Hủy lên lịch xóa",
+  "instructor.projectManagement.revokeDeletionFailed": "Không thể hủy lên lịch xóa.",
+  "instructor.projectManagement.deleteProjectConfirmSchedule": "Lên lịch xóa dự án này? Dự án sẽ ở trạng thái chỉ đọc trong 30 ngày trước khi bị xóa vĩnh viễn.",
+  "projectDeletion.readOnlyNotice": "Dự án này đã được lên lịch xóa vào {{deadline}} và hiện đang ở trạng thái chỉ đọc.",
+  "projectDeletion.remainingDays": "Còn {{count}} ngày",
+  "projectDeletion.remainingDays_plural": "Còn {{count}} ngày",
+  "projectDeletion.remainingHours": "Còn {{count}} giờ",
+  "projectDeletion.remainingHours_plural": "Còn {{count}} giờ",
+  "projectDeletion.remainingMinutes": "Còn {{count}} phút",
+  "projectDeletion.remainingMinutes_plural": "Còn {{count}} phút",
+  "projectDeletion.awaitingPurge": "Đang chờ xóa vĩnh viễn."
 }

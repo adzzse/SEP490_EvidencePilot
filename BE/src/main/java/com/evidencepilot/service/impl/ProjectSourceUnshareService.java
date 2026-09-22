@@ -122,6 +122,7 @@ public class ProjectSourceUnshareService {
     }
 
     private void requireProjectWriteAccess(User currentUser, Project project) {
+        currentUserService.requireProjectMutationAllowed(project);
         if (currentUserService.isInstructor(currentUser) || currentUserService.isAdmin(currentUser)) {
             currentUserService.requireProjectAccess(currentUser, project);
         } else {

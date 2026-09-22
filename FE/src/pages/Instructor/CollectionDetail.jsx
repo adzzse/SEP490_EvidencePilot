@@ -3,11 +3,12 @@ import { useParams, Link } from 'react-router-dom';
 import { AppHeader, LoadingSkeleton, EmptyState, Modal, UploadZone, Breadcrumb, FileViewerModal, UniversalDocumentIngestionModal } from '../../components';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../context/ThemeContext';
+import { useNotification } from '../../context/NotificationContext';
 import { useCollectionSources } from '../../hooks/useCollections';
 import api from '../../services/api';
 import SourceGraph from '../../components/features/SourceGraph.jsx';
 import { collectionGraph, sourceAuthors } from '../../utils/sourceGraph.js';
-import useUndoDelete, { UndoToast } from '../../components/ui/UndoDelete.jsx';
+import useUndoDelete from '../../components/ui/UndoDelete.jsx';
 import DeleteConfirm from '../../components/ui/DeleteConfirm.jsx';
 
 import {
@@ -39,7 +40,7 @@ function FileIcon({ name, className = 'w-5 h-5' }) {
   return <svg className={`${className} ${color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 3h7l5 5v13H7a2 2 0 01-2-2V5a2 2 0 012-2zm7 0v6h6M9 13h6m-6 4h6" /></svg>;
 }
 
-function VisualizeMapPanel({ collectionId, isDark, t }) {
+function VisualizeMapPanel({ collectionId, isDark, t, graphRefreshToken }) {
   const [graphData, setGraphData] = useState(null);
   const [graphLoading, setGraphLoading] = useState(true);
   const [selectedGraphNode, setSelectedGraphNode] = useState(null);
@@ -48,6 +49,7 @@ function VisualizeMapPanel({ collectionId, isDark, t }) {
   const [graphSearch, setGraphSearch] = useState('');
 
   const graphRef = useRef(null);
+  const { subscribeToEntityChanges } = useNotification();
   const fetchGraph = useCallback(async () => {
     setGraphLoading(true);
     try {
@@ -62,7 +64,11 @@ function VisualizeMapPanel({ collectionId, isDark, t }) {
 
   useEffect(() => {
     fetchGraph();
-  }, [fetchGraph]);
+  }, [fetchGraph, graphRefreshToken]);
+
+  useEffect(() => subscribeToEntityChanges(event => {
+    if (event?.entity === 'COLLECTION' && String(event.id) === String(collectionId)) void fetchGraph();
+  }), [collectionId, fetchGraph, subscribeToEntityChanges]);
 
   const graph = useMemo(() => graphData ? collectionGraph(graphData, t) : null, [graphData, t]);
   const updateGraphSetting = (key, value) => setGraphSettings(previous => ({ ...previous, [key]: value }));
@@ -250,7 +256,7 @@ export default function CollectionDetail() {
   const { t, i18n } = useTranslation();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
+  const { start: startDelete } = useUndoDelete();
   const undoStrings = {
     header: t('instructor.collectionDetail.undoHeader'),
     bodyTemplate: t('instructor.collectionDetail.undoBodyTemplate'),
@@ -284,6 +290,7 @@ export default function CollectionDetail() {
   const [categories, setCategories] = useState([]);
   const [projects, setProjects] = useState([]);
   const [editModal, setEditModal] = useState({ open: false, name: '', description: '', categoryId: '', submitting: false });
+  const [graphRefreshToken, setGraphRefreshToken] = useState(0);
 
   useEffect(() => {
     api.get(API_ROUTES.COLLECTIONS.CATEGORIES).then(r => setCategories(r.data)).catch(() => { });
@@ -308,6 +315,7 @@ export default function CollectionDetail() {
     try {
       const res = await api.post(API_ROUTES.SOURCES.BATCH, fd);
       await refetchSources();
+      setGraphRefreshToken(token => token + 1);
       if (res.data?.failed && res.data.failed.length > 0) {
         alert(`${res.data.succeeded?.length || 0} uploaded, ${res.data.failed.length} failed.`);
       }
@@ -325,6 +333,7 @@ export default function CollectionDetail() {
       await api.delete(API_ROUTES.COLLECTIONS.SOURCE_BY_ID(id, sourceId));
       if (String(selectedSource?.id) === sid) setSelectedSource(null);
       await refetchSources();
+      setGraphRefreshToken(token => token + 1);
     } catch {
       alert(t('instructor.collectionDetail.deleteFailed'));
       setRemovedIds(prev => { const n = new Set(prev); n.delete(sid); return n; });
@@ -380,6 +389,11 @@ export default function CollectionDetail() {
       setEditModal(p => ({ ...p, submitting: false }));
     }
   };
+
+  const handleSourcesChanged = useCallback(async () => {
+    await refetchSources();
+    setGraphRefreshToken(token => token + 1);
+  }, [refetchSources]);
 
   const renderDocuments = () => {
     // rationale: client-side filter + 5/page pager over the fetched list (mirrors Connected Map tab)
@@ -841,6 +855,7 @@ export default function CollectionDetail() {
             collectionId={id}
             isDark={isDark}
             t={t}
+            graphRefreshToken={graphRefreshToken}
           />
         )}
       </main>
@@ -851,7 +866,7 @@ export default function CollectionDetail() {
         entityType={ENTITY_TYPES.COLLECTION}
         entityId={id}
         existingSourceIds={sources.map(s => s.id)}
-        onSuccess={refetchSources}
+        onSuccess={handleSourcesChanged}
         allowedTabs={DEFAULT_COLLECTION_INGESTION_TABS}
       />
 
@@ -901,8 +916,6 @@ export default function CollectionDetail() {
           onClose={() => setViewerFile(null)}
         />
       )}
-
-      {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
     </div>
   );
 }

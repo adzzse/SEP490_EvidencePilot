@@ -9,10 +9,12 @@ import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.repository.CollectionRepository;
 import com.evidencepilot.service.impl.CollectionServiceImpl;
 import com.evidencepilot.service.impl.ProjectCollectionService;
+import com.evidencepilot.event.EntityChangedEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -45,6 +47,9 @@ class CollectionServiceImplTest {
 
     @Mock
     private com.evidencepilot.service.AuditService auditService;
+
+    @Mock
+    private ApplicationEventPublisher events;
 
     @Test
     void createCollectionRequiresInstructorRole() {
@@ -110,6 +115,8 @@ class CollectionServiceImplTest {
                 org.mockito.ArgumentMatchers.eq(instructor),
                 org.mockito.ArgumentMatchers.isNull(),
                 org.mockito.ArgumentMatchers.any());
+        verify(events).publishEvent(new EntityChangedEvent(
+                "COLLECTION", response.id(), "CREATED", null));
     }
 
     @Test
@@ -123,12 +130,14 @@ class CollectionServiceImplTest {
 
         verify(auditService).record("COLLECTION_DELETED", "COLLECTION", collection.getId(),
                 instructor, null, null);
+        verify(events).publishEvent(new EntityChangedEvent(
+                "COLLECTION", collection.getId(), "DELETED", null));
     }
 
     private CollectionServiceImpl service() {
         return new CollectionServiceImpl(
                 collectionRepository, collectionCategoryRepository, currentUserService, projectCollectionService,
-                documentRepository, collectionDocumentRepository, auditService);
+                documentRepository, collectionDocumentRepository, auditService, events);
     }
 
     private User user(UserRole role) {

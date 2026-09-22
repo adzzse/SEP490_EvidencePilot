@@ -127,7 +127,8 @@ public class ProjectServiceImpl {
                         null,
                         memberCounts.getOrDefault(p.getId(), 0L),
                         sourceCounts.getOrDefault(p.getId(), 0L),
-                        sectionCounts.getOrDefault(p.getId(), 0L)
+                        sectionCounts.getOrDefault(p.getId(), 0L),
+                        p.getDeletionScheduledAt()
                 ))
                 .toList();
     }
@@ -217,6 +218,7 @@ public class ProjectServiceImpl {
         Project project = findActiveProject(id);
         currentUserService.requireRole(currentUser, UserRole.INSTRUCTOR);
         currentUserService.requireProjectAccess(currentUser, project);
+        currentUserService.requireProjectMutationAllowed(project);
         if (!project.getStatus().canTransitionTo(ProjectStatus.APPROVED)) {
             throw new ApiException(HttpStatus.CONFLICT, ApiException.PROJECT_TRANSITION_INVALID,
                     "Project cannot be completed in its current state.");
@@ -242,6 +244,7 @@ public class ProjectServiceImpl {
         User currentUser = currentUserService.requireCurrentUser();
         Project project = findActiveProject(id);
         currentUserService.requireProjectManageAccess(currentUser, project);
+        currentUserService.requireProjectMutationAllowed(project);
         if (!project.getStatus().canTransitionTo(ProjectStatus.ARCHIVED)) {
             throw new ApiException(HttpStatus.CONFLICT, ApiException.PROJECT_TRANSITION_INVALID,
                     "Only APPROVED projects can be archived.");
@@ -261,6 +264,7 @@ public class ProjectServiceImpl {
         User currentUser = currentUserService.requireCurrentUser();
         Project project = findActiveProject(id);
         currentUserService.requireProjectManageAccess(currentUser, project);
+        currentUserService.requireProjectMutationAllowed(project);
         if (!project.getStatus().canTransitionTo(ProjectStatus.APPROVED)) {
             throw new ApiException(HttpStatus.CONFLICT, ApiException.PROJECT_TRANSITION_INVALID,
                     "Only ARCHIVED projects can be unarchived.");
@@ -276,15 +280,37 @@ public class ProjectServiceImpl {
     }
 
     @Transactional
-    public void deleteProject(UUID id) {
+    public ProjectResponse deleteProject(UUID id) {
         User currentUser = currentUserService.requireCurrentUser();
-        Project project = findActiveProject(id);
+        Project project = findActiveProjectForUpdate(id);
         currentUserService.requireProjectManageAccess(currentUser, project);
+        if (project.getDeletionScheduledAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Project deletion is already scheduled.");
+        }
         currentUserService.requireProjectWriteAccess(currentUser, project);
-        project.setActive(false);
-        projectRepository.save(project);
-        auditService.record("PROJECT_DELETED", "PROJECT", project.getId(), currentUser, null, null);
-        events.publishEvent(new EntityChangedEvent("PROJECT", project.getId(), "STATUS_CHANGED", null));
+        project.setDeletionScheduledAt(LocalDateTime.now().plusDays(30));
+        project.setUpdatedAt(LocalDateTime.now());
+        Project saved = projectRepository.save(project);
+        auditService.record("PROJECT_DELETION_SCHEDULED", "PROJECT", saved.getId(), currentUser, null, saved.getDeletionScheduledAt());
+        events.publishEvent(new EntityChangedEvent("PROJECT", saved.getId(), "DELETION_SCHEDULED", null));
+        return ProjectResponse.from(saved);
+    }
+
+    @Transactional
+    public ProjectResponse cancelProjectDeletion(UUID id) {
+        User currentUser = currentUserService.requireCurrentUser();
+        Project project = findActiveProjectForUpdate(id);
+        currentUserService.requireProjectManageAccess(currentUser, project);
+        if (project.getDeletionScheduledAt() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Project deletion is not scheduled.");
+        }
+        LocalDateTime previousDeadline = project.getDeletionScheduledAt();
+        project.setDeletionScheduledAt(null);
+        project.setUpdatedAt(LocalDateTime.now());
+        Project saved = projectRepository.save(project);
+        auditService.record("PROJECT_DELETION_REVOKED", "PROJECT", saved.getId(), currentUser, previousDeadline, null);
+        events.publishEvent(new EntityChangedEvent("PROJECT", saved.getId(), "DELETION_REVOKED", null));
+        return ProjectResponse.from(saved);
     }
 
     @Transactional
@@ -399,6 +425,8 @@ public class ProjectServiceImpl {
                 project.getId(),
                 currentUser.getEmail() + " changed your role in project \"" + project.getTitle()
                         + "\" to " + role + ".");
+        events.publishEvent(new EntityChangedEvent(
+                "PROJECT", project.getId(), "MEMBER_ROLE_CHANGED", null));
     }
 
     @Transactional
@@ -444,6 +472,15 @@ public class ProjectServiceImpl {
 
     private Project findActiveProject(UUID id) {
         Project project = projectRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(id, "Project"));
+        if (!project.isActive()) {
+            throw new ResourceNotFoundException(id, "Project");
+        }
+        return project;
+    }
+
+    private Project findActiveProjectForUpdate(UUID id) {
+        Project project = projectRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResourceNotFoundException(id, "Project"));
         if (!project.isActive()) {
             throw new ResourceNotFoundException(id, "Project");

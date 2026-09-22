@@ -4,6 +4,15 @@ const EXPORTABLE_STATUSES = new Set(['IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'RET
 export function getProjectActions(project = {}) {
   if (!project.active) return ['restore'];
 
+  if (project.deletionScheduledAt) {
+    const actions = ['revokeDeletion'];
+    const status = project.status;
+    if (EXPORTABLE_STATUSES.has(status) && project.hasAuthoritativeData !== false) {
+      actions.push('export');
+    }
+    return actions;
+  }
+
   const status = project.status;
   const actions = [];
 

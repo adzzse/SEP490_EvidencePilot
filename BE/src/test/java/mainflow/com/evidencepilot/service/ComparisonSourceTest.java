@@ -295,7 +295,8 @@ class ComparisonSourceTest {
                 mapper,
                 baselineRepository,
                 new FeedbackAnchorService(instructorFeedbackRepository, mapper),
-                org.mockito.Mockito.mock(FeedbackAttachmentService.class));
+                org.mockito.Mockito.mock(FeedbackAttachmentService.class),
+                org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class));
     }
 
     private record Fixture(User instructor, User student, Project project,

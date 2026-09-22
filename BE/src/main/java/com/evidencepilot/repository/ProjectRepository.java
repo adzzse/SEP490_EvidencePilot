@@ -23,4 +23,7 @@ public interface ProjectRepository extends JpaRepository<Project, UUID>, JpaSpec
 
     @Query("select project.status, count(project) from Project project where project.active = true group by project.status")
     List<Object[]> countActiveByStatus();
+
+    @Query("select project.id from Project project where project.active = true and project.deletionScheduledAt is not null and project.deletionScheduledAt <= :now order by project.deletionScheduledAt asc")
+    List<UUID> findIdsDueForDeletion(@Param("now") java.time.LocalDateTime now, org.springframework.data.domain.Pageable pageable);
 }

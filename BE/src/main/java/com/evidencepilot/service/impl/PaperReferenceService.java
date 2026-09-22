@@ -2,6 +2,7 @@ package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.response.PaperReferenceCheckResponse;
 import com.evidencepilot.dto.response.PaperReferenceResponse;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperReference;
@@ -23,6 +24,7 @@ import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.CitationBibliography;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -73,6 +75,7 @@ public class PaperReferenceService {
     private final UserRepository userRepository;
     private final CurrentUserServiceImpl currentUserService;
     private final PaperProcessingServiceImpl paperProcessingService;
+    private final ApplicationEventPublisher events;
 
     @Transactional(readOnly = true)
     public PaperReferenceCheckResponse check(UUID paperId, UUID requesterId) {
@@ -361,8 +364,10 @@ public class PaperReferenceService {
                     reference.setSource(source);
                     reference.setAddedBy(requester);
                     reference.setAddedAt(LocalDateTime.now());
-                    return response(paperReferenceRepository.save(reference), requester,
-                            project, citationNumber);
+                    PaperReference saved = paperReferenceRepository.save(reference);
+                    events.publishEvent(new EntityChangedEvent(
+                            "REFERENCE", paperId, "ADDED", project.getId()));
+                    return response(saved, requester, project, citationNumber);
                 });
     }
 
@@ -430,6 +435,8 @@ public class PaperReferenceService {
                     "REFERENCE_IN_USE: remove \\cite{" + citationKey + "} from the paper before removing this reference");
         }
         paperReferenceRepository.delete(reference);
+        events.publishEvent(new EntityChangedEvent(
+                "REFERENCE", paperId, "REMOVED", paper.getProject().getId()));
     }
 
     @Transactional(readOnly = true)
@@ -486,6 +493,7 @@ public class PaperReferenceService {
     }
 
     private void requireStudentWriter(User requester, Project project) {
+        currentUserService.requireProjectMutationAllowed(project);
         if (project.getStatus().isReadOnly()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Project is read-only.");
         }

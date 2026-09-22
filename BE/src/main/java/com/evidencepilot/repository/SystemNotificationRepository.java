@@ -17,4 +17,18 @@ public interface SystemNotificationRepository extends JpaRepository<SystemNotifi
     @Modifying
     @Query("update SystemNotification n set n.read = true where n.user.id = :userId and n.read = false")
     int markAllUnreadByUserId(@Param("userId") UUID userId);
+
+    @Modifying
+    @Query("delete from SystemNotification n where (n.entityId in :entityIds) or (n.feedbackId in :feedbackIds)")
+    int deleteByEntityIdInOrFeedbackIdIn(
+            @Param("entityIds") java.util.Collection<UUID> entityIds,
+            @Param("feedbackIds") java.util.Collection<UUID> feedbackIds);
+
+    @Modifying
+    @Query("delete from SystemNotification n where n.entityId in :entityIds")
+    int deleteByEntityIdIn(@Param("entityIds") java.util.Collection<UUID> entityIds);
+
+    @Modifying
+    @Query("delete from SystemNotification n where n.feedbackId in :feedbackIds")
+    int deleteByFeedbackIdIn(@Param("feedbackIds") java.util.Collection<UUID> feedbackIds);
 }

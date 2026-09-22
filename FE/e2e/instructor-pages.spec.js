@@ -63,7 +63,7 @@ async function setup(page) {
   sectionStandards: {},
   batchAttempts: 0,
   batchConflictOnce: false,
-  puts: [], paperPuts: [], sectionPuts: [], sectionCreates: [], unassignAll: [], deleteProject: [], errors: [], unhandled: [] };
+  puts: [], paperPuts: [], sectionPuts: [], sectionCreates: [], unassignAll: [], deleteProject: [], cancelProjectDeletion: [], errors: [], unhandled: [] };
 
   page.on('pageerror', error => state.errors.push(error.message));
   await page.addInitScript(() => {
@@ -130,7 +130,20 @@ async function setup(page) {
 
     if (method === 'DELETE' && path === `/api/projects/${projectId}`) {
       state.deleteProject.push(projectId);
-      return route.fulfill({ status: 204 });
+      state.project = {
+        ...state.project,
+        deletionScheduledAt: '2026-10-22T08:00:00Z',
+      };
+      return route.fulfill({ status: 200, json: state.project });
+    }
+
+    if (method === 'PATCH' && path === `/api/projects/${projectId}/cancel-deletion`) {
+      state.cancelProjectDeletion.push(projectId);
+      state.project = {
+        ...state.project,
+        deletionScheduledAt: null,
+      };
+      return route.fulfill({ status: 200, json: state.project });
     }
 
     if (method === 'PUT' && path.startsWith(`/api/papers/${paperId}/sections/`) && path.endsWith('/standard-evaluation/config')) {
@@ -313,14 +326,17 @@ test('Instructor action headers stay sticky and Requests controls share the head
   const headerFor = heading => page.locator('div.border-b').filter({ has: page.getByRole('heading', { name: heading, exact: true }) }).first();
 
   await page.goto(`${baseUrl}/instructor/collections`);
-  await expect(headerFor('Collections')).toHaveClass(/sticky/);
+  await expect(page.getByRole('heading', { name: 'Collections', exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(headerFor('Collections')).toHaveClass(/sticky/, { timeout: 15000 });
 
   await page.goto(`${baseUrl}/instructor/source-library`);
-  await expect(headerFor('Source Library')).toHaveClass(/sticky/);
+  await expect(page.getByRole('heading', { name: 'Source Library', exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(headerFor('Source Library')).toHaveClass(/sticky/, { timeout: 15000 });
 
   await page.goto(`${baseUrl}/instructor/requests`);
+  await expect(page.getByRole('heading', { name: 'Review Requests', exact: true })).toBeVisible({ timeout: 15000 });
   const requestsHeader = headerFor('Review Requests');
-  await expect(requestsHeader).toHaveClass(/sticky/);
+  await expect(requestsHeader).toHaveClass(/sticky/, { timeout: 15000 });
   await expect(requestsHeader.getByRole('searchbox')).toBeVisible();
   await expect(requestsHeader.getByRole('combobox').first()).toBeVisible();
   await expect(requestsHeader.getByRole('button', { name: 'User Guide', exact: true })).toBeVisible();
@@ -597,17 +613,29 @@ test('Unassign all is available in Sections instead of Assign Students', async (
   expect(state.unhandled).toEqual([]);
 });
 
-test('Project Detail exposes project delete and returns to Projects', async ({ page }) => {
+test('undo survives leaving the project detail before the five-second deadline', async ({ page }) => {
   const state = await setup(page);
   await page.goto(`${baseUrl}/instructor/projects/${projectId}`);
-
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
-  const confirmation = page.getByRole('alertdialog', { name: 'Delete this project permanently?' });
-  await expect(confirmation).toBeVisible();
-  await confirmation.getByRole('button', { name: 'Delete', exact: true }).click();
-
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Deletion pending');
+  await page.getByRole('link', { name: 'Projects', exact: true }).first().click();
   await expect(page).toHaveURL(`${baseUrl}/instructor/projects`);
+  await page.getByRole('button', { name: /^Undo/ }).click();
+  await page.waitForTimeout(5200);
+  expect(state.deleteProject).toEqual([]);
+});
+
+test('project delete schedules a read-only deadline and instructor can revoke it', async ({ page }) => {
+  const state = await setup(page);
+  await page.goto(`${baseUrl}/instructor/projects/${projectId}`);
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete now', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('read-only');
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Revoke deletion', exact: true }).first().click();
+  await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
   expect(state.deleteProject).toEqual([projectId]);
-  expect(state.errors).toEqual([]);
-  expect(state.unhandled).toEqual([]);
+  expect(state.cancelProjectDeletion).toEqual([projectId]);
 });

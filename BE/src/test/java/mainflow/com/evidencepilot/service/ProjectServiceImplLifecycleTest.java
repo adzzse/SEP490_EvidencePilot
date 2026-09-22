@@ -2,6 +2,8 @@ package com.evidencepilot.service;
 
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.dto.request.ProjectUpdateRequest;
+import com.evidencepilot.dto.response.ProjectResponse;
+import java.time.LocalDateTime;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
@@ -16,6 +18,7 @@ import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.impl.ProjectServiceImpl;
+import com.evidencepilot.event.EntityChangedEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -30,6 +33,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doThrow;
@@ -263,6 +267,7 @@ class ProjectServiceImplLifecycleTest {
         Project project = project(ProjectStatus.ARCHIVED);
         when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
         doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Project is read-only."))
                 .when(currentUserService).requireProjectWriteAccess(user, project);
 
@@ -309,16 +314,62 @@ class ProjectServiceImplLifecycleTest {
     }
 
     @Test
-    void deleteProjectSoftDeletesAfterManageCheck() {
-        User user = user();
-        Project project = project(ProjectStatus.IN_PROGRESS);
-        when(currentUserService.requireCurrentUser()).thenReturn(user);
-        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+    void deleteProjectSchedulesThirtyDayRetentionWithoutDeactivatingProject() {
+        User actor = user();
+        Project project = project(ProjectStatus.RETURNED);
+        when(currentUserService.requireCurrentUser()).thenReturn(actor);
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
+        when(projectRepository.save(project)).thenReturn(project);
 
-        service().deleteProject(project.getId());
+        LocalDateTime before = LocalDateTime.now().plusDays(30);
+        ProjectResponse response = service().deleteProject(project.getId());
 
-        assertThat(project.isActive()).isFalse();
-        verify(projectRepository).save(project);
+        assertThat(project.isActive()).isTrue();
+        assertThat(response.deletionScheduledAt()).isBetween(before.minusSeconds(2), before.plusSeconds(2));
+        verify(auditService).record("PROJECT_DELETION_SCHEDULED", "PROJECT", project.getId(), actor, null, response.deletionScheduledAt());
+    }
+
+    @Test
+    void deleteProjectThrowsConflictWhenAlreadyScheduled() {
+        User actor = user();
+        Project project = project(ProjectStatus.RETURNED);
+        project.setDeletionScheduledAt(LocalDateTime.now().plusDays(10));
+        when(currentUserService.requireCurrentUser()).thenReturn(actor);
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
+
+        assertThatThrownBy(() -> service().deleteProject(project.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("already scheduled");
+    }
+
+    @Test
+    void cancelProjectDeletionClearsSchedule() {
+        User actor = user();
+        Project project = project(ProjectStatus.RETURNED);
+        LocalDateTime deadline = LocalDateTime.now().plusDays(20);
+        project.setDeletionScheduledAt(deadline);
+        when(currentUserService.requireCurrentUser()).thenReturn(actor);
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
+        when(projectRepository.save(project)).thenReturn(project);
+
+        ProjectResponse response = service().cancelProjectDeletion(project.getId());
+
+        assertThat(project.getDeletionScheduledAt()).isNull();
+        assertThat(response.deletionScheduledAt()).isNull();
+        verify(auditService).record("PROJECT_DELETION_REVOKED", "PROJECT", project.getId(), actor, deadline, null);
+    }
+
+    @Test
+    void cancelProjectDeletionThrowsConflictWhenNotScheduled() {
+        User actor = user();
+        Project project = project(ProjectStatus.RETURNED);
+        project.setDeletionScheduledAt(null);
+        when(currentUserService.requireCurrentUser()).thenReturn(actor);
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
+
+        assertThatThrownBy(() -> service().cancelProjectDeletion(project.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("not scheduled");
     }
 
     @Test
@@ -452,6 +503,24 @@ class ProjectServiceImplLifecycleTest {
 
         assertThat(member.getRole()).isEqualTo(ProjectRole.LEADER);
         verify(projectMemberRepository).save(member);
+        verify(eventPublisher).publishEvent(new EntityChangedEvent(
+                "PROJECT", project.getId(), "MEMBER_ROLE_CHANGED", null));
+    }
+
+    @Test
+    void updateMemberRoleDoesNotPublishForSameRole() {
+        User user = user();
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        ProjectMember member = member(project, ProjectRole.MEMBER);
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(projectMemberRepository.findByProjectIdAndUserId(project.getId(), member.getUser().getId()))
+                .thenReturn(List.of(member));
+
+        service().updateMemberRole(project.getId(), member.getUser().getId(), ProjectRole.MEMBER);
+
+        verify(projectMemberRepository, never()).save(member);
+        verify(eventPublisher, never()).publishEvent(any(EntityChangedEvent.class));
     }
 
     @Test
@@ -471,6 +540,36 @@ class ProjectServiceImplLifecycleTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("at least one leader");
         verify(projectMemberRepository, never()).save(leader);
+    }
+
+    @Test
+    void completeProjectRejectsWhenScheduledForDeletion() {
+        User user = user();
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        project.setDeletionScheduledAt(LocalDateTime.now().plusDays(30));
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Project is scheduled for deletion and is read-only."))
+                .when(currentUserService).requireProjectMutationAllowed(project);
+
+        assertThatThrownBy(() -> service().completeProject(project.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("scheduled for deletion");
+    }
+
+    @Test
+    void archiveProjectRejectsWhenScheduledForDeletion() {
+        User user = user();
+        Project project = project(ProjectStatus.APPROVED);
+        project.setDeletionScheduledAt(LocalDateTime.now().plusDays(30));
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Project is scheduled for deletion and is read-only."))
+                .when(currentUserService).requireProjectMutationAllowed(project);
+
+        assertThatThrownBy(() -> service().archiveProject(project.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("scheduled for deletion");
     }
 
     private ProjectServiceImpl service() {

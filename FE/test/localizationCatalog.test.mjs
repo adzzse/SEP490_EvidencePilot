@@ -556,3 +556,11 @@ test('every dynamic translation family has an explicit complete domain', () => {
     }
   }
 });
+
+test('both locale catalogs contain scheduled-deletion strings', () => {
+  for (const [language, catalog] of Object.entries(locales)) {
+    assert.ok(catalog['instructor.projectManagement.deletionScheduled'], `missing ${language} deletionScheduled`);
+    assert.ok(catalog['instructor.projectManagement.revokeDeletion'], `missing ${language} revokeDeletion`);
+    assert.ok(catalog['projectDeletion.readOnlyNotice'], `missing ${language} readOnlyNotice`);
+  }
+});

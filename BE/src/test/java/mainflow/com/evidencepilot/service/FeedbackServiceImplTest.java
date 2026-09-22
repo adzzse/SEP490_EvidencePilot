@@ -4,6 +4,7 @@ import com.evidencepilot.service.impl.CheckpointServiceImpl;
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.FeedbackAnchorRequest;
+import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.dto.response.FeedbackRequestResponseDto;
 import com.evidencepilot.dto.response.FeedbackRequestPageResponse;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
@@ -20,12 +21,15 @@ import com.evidencepilot.model.enums.FeedbackThreadState;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.service.impl.FeedbackServiceImpl;
 import com.evidencepilot.service.impl.ProjectCollectionService;
+import com.evidencepilot.service.SubmissionReadinessService;
+import com.evidencepilot.dto.response.ReviewReadinessResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +39,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -68,6 +73,7 @@ class FeedbackServiceImplTest {
     @Mock private CheckpointServiceImpl checkpointService;
     @Mock private ProjectCollectionService projectCollectionService;
     @Mock private SubmissionReadinessService submissionReadinessService;
+    @Mock private ApplicationEventPublisher events;
 
     @Test
     void instructorQueueUsesScopedFiltersAndReturnsStablePageMetadata() {
@@ -145,6 +151,34 @@ class FeedbackServiceImplTest {
         assertThat(saved.getValue().getPublishedAt()).isNull();
         assertThat(response.publishedAt()).isNull();
         verifyNoInteractions(systemNotificationService);
+        verify(events).publishEvent(new EntityChangedEvent(
+                "FEEDBACK", request.getId(), "UPDATED", project.getId()));
+    }
+
+    @Test
+    void submitForReviewPublishesFeedbackEntityChange() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(instructor, student, ProjectStatus.IN_PROGRESS);
+        String fingerprint = "a".repeat(64);
+        var readiness = new ReviewReadinessResponse(
+                "READY", true, fingerprint, List.of(), List.of(),
+                new ReviewReadinessResponse.Revision(null, "FIRST_SUBMISSION"));
+        when(currentUserService.requireCurrentUser()).thenReturn(student);
+        when(projectRepository.findByIdForUpdate(project.getId())).thenReturn(Optional.of(project));
+        when(submissionReadinessService.requireReadyForSubmit(project, student, fingerprint))
+                .thenReturn(new SubmissionReadinessService.Assessment(readiness, List.of(), Map.of()));
+        when(feedbackRequestRepository.save(any(FeedbackRequest.class))).thenAnswer(invocation -> {
+            FeedbackRequest saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        FeedbackRequestResponseDto response = service().submitForReview(
+                project.getId(), new SubmitReviewRequest(fingerprint));
+
+        verify(events).publishEvent(new EntityChangedEvent(
+                "FEEDBACK", response.id(), "SUBMITTED", project.getId()));
     }
 
     @Test
@@ -339,6 +373,8 @@ class FeedbackServiceImplTest {
         verify(systemNotificationService).createNotification(
                 eq(student), eq(instructor), eq("INSTRUCTOR_FEEDBACK_PUBLISHED"), eq(request.getId()),
                 eq(root.getId()), any(String.class));
+        verify(events).publishEvent(new EntityChangedEvent(
+                "FEEDBACK", request.getId(), "STATUS_CHANGED", project.getId()));
     }
 
     @Test
@@ -579,7 +615,8 @@ class FeedbackServiceImplTest {
                 mapper,
                 org.mockito.Mockito.mock(com.evidencepilot.repository.AssignmentSectionBaselineRepository.class),
                 new FeedbackAnchorService(instructorFeedbackRepository, mapper),
-                org.mockito.Mockito.mock(com.evidencepilot.service.FeedbackAttachmentService.class));
+                org.mockito.Mockito.mock(com.evidencepilot.service.FeedbackAttachmentService.class),
+                events);
     }
 
     private User user(UserRole role) {

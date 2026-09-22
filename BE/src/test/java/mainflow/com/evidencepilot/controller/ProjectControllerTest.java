@@ -2,8 +2,11 @@ package com.evidencepilot.controller;
 
 import com.evidencepilot.dto.request.ProjectCreateRequest;
 import com.evidencepilot.dto.request.ProjectUpdateRequest;
+import com.evidencepilot.dto.response.ProjectResponse;
+import com.evidencepilot.model.enums.PaperStandard;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
+import java.time.LocalDateTime;
 import com.evidencepilot.service.impl.DocumentServiceImpl;
 import com.evidencepilot.service.impl.PaperProcessingServiceImpl;
 import com.evidencepilot.service.impl.ProjectServiceImpl;
@@ -112,10 +115,29 @@ class ProjectControllerTest {
     }
 
     @Test
-    void deleteProject_returns204() throws Exception {
+    void deleteProject_returns200AndSchedulesDeletion() throws Exception {
         UUID id = UUID.randomUUID();
-        mockMvc.perform(delete("/api/projects/{id}", id)).andExpect(status().isNoContent());
+        when(projectService.deleteProject(id)).thenReturn(new ProjectResponse(
+                id, "Title", "Desc", ProjectStatus.RETURNED, PaperStandard.CUSTOM,
+                LocalDateTime.now(), LocalDateTime.now(), null, 0, 0, 0,
+                LocalDateTime.now().plusDays(30)
+        ));
+        mockMvc.perform(delete("/api/projects/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deletionScheduledAt").isNotEmpty());
         verify(projectService).deleteProject(id);
+    }
+
+    @Test
+    void cancelDeletionRouteDelegatesToProjectService() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(projectService.cancelProjectDeletion(id)).thenReturn(new ProjectResponse(
+                id, "Title", "Desc", ProjectStatus.RETURNED, PaperStandard.CUSTOM,
+                LocalDateTime.now(), LocalDateTime.now(), null, 0, 0, 0, null
+        ));
+        mockMvc.perform(patch("/api/projects/{id}/cancel-deletion", id))
+                .andExpect(status().isOk());
+        verify(projectService).cancelProjectDeletion(id);
     }
 
     @Test

@@ -199,3 +199,24 @@ test('Feedback panel is a compact stacked list with same-row filters', async ({ 
   await expect(panel.getByText(/outside the editor view/)).toHaveCount(0);
   expect(state.errors).toEqual([]);
 });
+
+test('scheduled project renders deletion notice and keeps student workspace read-only', async ({ page }) => {
+  const { projectId, state } = await setupStudent(page, { role: 'MEMBER', userId: 'member-1' });
+  await page.route(`**/api/projects/${projectId}`, async route => {
+    return route.fulfill({
+      json: {
+        id: projectId,
+        title: 'Student fixture',
+        status: 'IN_PROGRESS',
+        currentUserRole: 'MEMBER',
+        deletionScheduledAt: '2026-10-22T08:00:00Z',
+      },
+    });
+  });
+
+  await page.goto(`${baseUrl}/student/projects/${projectId}`);
+  await expect(page.getByRole('status')).toContainText('read-only');
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Export', exact: false })).toBeVisible();
+  expect(state.errors).toEqual([]);
+});

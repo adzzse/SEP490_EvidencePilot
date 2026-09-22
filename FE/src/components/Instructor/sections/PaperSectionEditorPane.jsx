@@ -3,7 +3,6 @@ import PaperSectionAssignment from './PaperSectionAssignment.jsx';
 import PaperSectionStandards from './PaperSectionStandards.jsx';
 
 export default function PaperSectionEditorPane({
-  paper,
   sections,
   selectedSection,
   sectionEvals,
@@ -24,7 +23,6 @@ export default function PaperSectionEditorPane({
   labels,
   ct,
   closeLabel,
-  paperFallback,
   onModeChange,
   onRequestClose,
   onUpdateSection,
@@ -43,7 +41,6 @@ export default function PaperSectionEditorPane({
     <section className="flex min-w-0 flex-1 flex-col bg-white" aria-label={labels.paperEditor}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-6">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{paper?.originalFilename || paper?.title || paperFallback}</p>
           <h1 className="truncate text-lg font-bold text-slate-900">{labels.editPaperSections}</h1>
         </div>
         <div className="flex items-center gap-2">

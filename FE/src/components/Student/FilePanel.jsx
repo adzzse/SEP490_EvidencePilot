@@ -90,7 +90,7 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
                     </span>
                   )}
                   <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1 py-0.5 rounded shrink-0">v{sec.version || 1}</span>
-                  {isSelected && isEditable && onSaveDraft && (
+                  {isSelected && isEditable && !isLocked && onSaveDraft && (
                     <button onClick={(e) => { e.stopPropagation(); onSaveDraft(); }} disabled={isLocked || saveStatus === 'saving'} className="text-xs font-bold text-white bg-(--brand) hover:bg-(--brand-hover) disabled:cursor-not-allowed disabled:opacity-50 px-2 py-1 rounded shrink-0 cursor-pointer" title={isLocked ? t('saveReadOnly') : t('saveSection')}>{t('save')}</button>
                   )}
                 </div>

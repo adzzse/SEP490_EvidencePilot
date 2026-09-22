@@ -2,6 +2,7 @@ package com.evidencepilot.service;
 
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentChunk;
+import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
@@ -13,6 +14,7 @@ import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.DocumentTextRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.event.DocumentUploadedEvent;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.service.impl.DocumentPersistenceService;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
@@ -74,6 +76,7 @@ class DocumentPersistenceServiceTest {
         assertThat(saved.getFileUrl()).isEqualTo("sources/raw/file.pdf");
         assertThat(saved.getFileHashSha256()).isEqualTo("abc123");
         verify(events).publishEvent(new DocumentUploadedEvent(id));
+        verify(events).publishEvent(new EntityChangedEvent("DOCUMENT", id, "CREATED", null));
         // rationale: the upload also writes a DOCUMENT_UPLOADED audit row so the
         // instructor's "My Activity" feed can render a Source Library entry.
         verify(audit).record(eq("DOCUMENT_UPLOADED"), eq("DOCUMENT"), eq(id), eq(uploader),
@@ -104,12 +107,20 @@ class DocumentPersistenceServiceTest {
     @Test
     void markReadyNotifiesOwnerAndAdmins() {
         UUID id = UUID.randomUUID();
+        UUID projectId = UUID.randomUUID();
+        UUID collectionId = UUID.randomUUID();
         User owner = new User();
         owner.setId(UUID.randomUUID());
         User admin = new User();
         admin.setId(UUID.randomUUID());
         Document document = new Document();
         document.setId(id);
+        Project project = new Project();
+        project.setId(projectId);
+        document.setProject(project);
+        Collection collection = new Collection();
+        collection.setId(collectionId);
+        document.setCollection(collection);
         document.setOriginalFilename("paper.pdf");
         document.setUploadedBy(owner);
         when(documents.findById(id)).thenReturn(Optional.of(document));
@@ -121,6 +132,9 @@ class DocumentPersistenceServiceTest {
         assertThat(document.getProcessingStatus()).isEqualTo(ProcessingStatus.READY);
         verify(notifications).createNotification(eq(owner), eq(owner), eq("DOCUMENT_READY"), eq(id), anyString());
         verify(notifications).createNotification(eq(admin), eq(owner), eq("DOCUMENT_READY"), eq(id), anyString());
+        verify(events).publishEvent(new EntityChangedEvent("DOCUMENT", id, "READY", projectId));
+        verify(events).publishEvent(new EntityChangedEvent(
+                "COLLECTION", collectionId, "SOURCE_CHANGED", projectId));
     }
 
     @Test
@@ -140,6 +154,7 @@ class DocumentPersistenceServiceTest {
 
         assertThat(document.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED);
         verify(notifications).createNotification(eq(owner), eq(owner), eq("DOCUMENT_FAILED"), eq(id), anyString());
+        verify(events).publishEvent(new EntityChangedEvent("DOCUMENT", id, "FAILED", null));
     }
 
     @Test

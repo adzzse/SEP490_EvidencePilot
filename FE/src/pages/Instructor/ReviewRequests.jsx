@@ -1,14 +1,16 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { StatusBadge, LoadingSkeleton, EmptyState, Modal, AppHeader, Breadcrumb, EntityCard } from '../../components';
 import { useTranslation } from 'react-i18next';
 import { formatDateTime } from '../../utils/formatters/date';
 import { CARD_GRID_PAGE_SIZE } from '../../constants';
 import api from '../../services/api.js';
+import { useNotification } from '../../context/NotificationContext';
 
 export default function ReviewRequests() {
   const [searchParams] = useSearchParams();
   const { t, i18n } = useTranslation();
+  const { subscribeToEntityChanges } = useNotification();
   const reviewLink = searchParams.get('review');
 
   const [requests, setRequests] = useState([]);
@@ -26,7 +28,12 @@ export default function ReviewRequests() {
   const [pagination, setPagination] = useState({ totalPages: 0, totalElements: 0 });
   const [showGuide, setShowGuide] = useState(false);
 
-  const fetchReviewRequests = async () => {
+  const requestControllerRef = useRef(null);
+
+  const fetchReviewRequests = useCallback(async () => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoading(true); setErrorMessage('');
     try {
       const params = new URLSearchParams({ page: String(page), size: String(CARD_GRID_PAGE_SIZE) });
@@ -36,9 +43,10 @@ export default function ReviewRequests() {
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
       const [res, proj] = await Promise.all([
-        api.get(`/api/feedback-requests/queue?${params.toString()}`),
-        api.get('/api/projects?page=0&size=100').catch(() => null),
+        api.get(`/api/feedback-requests/queue?${params.toString()}`, { signal: controller.signal }),
+        api.get('/api/projects?page=0&size=100', { signal: controller.signal }).catch(() => null),
       ]);
+      if (controller.signal.aborted) return;
       const result = res.data || {};
       setRequests(result.content || []);
       if (reviewLink) {
@@ -49,12 +57,14 @@ export default function ReviewRequests() {
         } else {
           try {
             const { data } = await api.get(
-              `/api/feedback-requests/${encodeURIComponent(reviewLink)}`);
+              `/api/feedback-requests/${encodeURIComponent(reviewLink)}`, { signal: controller.signal });
             setDeepLinkedRequest(data || null);
           } catch (error) {
+            if (controller.signal.aborted) return;
             if (error?.response?.status !== 404) throw error;
             const { data } = await api.get(
-              `/api/feedback-requests/queue?page=0&size=1&projectId=${encodeURIComponent(reviewLink)}`);
+              `/api/feedback-requests/queue?page=0&size=1&projectId=${encodeURIComponent(reviewLink)}`,
+              { signal: controller.signal });
             setDeepLinkedRequest(data?.content?.[0] || null);
           }
         }
@@ -64,11 +74,22 @@ export default function ReviewRequests() {
       setPagination({ totalPages: result.totalPages || 0, totalElements: result.totalElements || 0 });
       setProjects(proj?.data?.content || []);
     }
-    catch { setErrorMessage(t('instructor.reviewRequests.loadReviewRequestsFailed')); }
-    finally { setLoading(false); }
-  };
+    catch (error) {
+      if (!controller.signal.aborted) setErrorMessage(t('instructor.reviewRequests.loadReviewRequestsFailed'));
+    }
+    finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  }, [dateFrom, dateTo, page, projectFilter, reviewLink, searchQuery, statusFilter, t]);
 
-  useEffect(() => { fetchReviewRequests(); }, [page, searchQuery, projectFilter, statusFilter, dateFrom, dateTo, reviewLink]);
+  useEffect(() => {
+    fetchReviewRequests();
+    return () => requestControllerRef.current?.abort();
+  }, [fetchReviewRequests]);
+
+  useEffect(() => subscribeToEntityChanges(event => {
+    if (event?.entity === 'FEEDBACK' || event?.entity === 'PROJECT') void fetchReviewRequests();
+  }), [fetchReviewRequests, subscribeToEntityChanges]);
 
   const projectById = useMemo(() => {
     const m = new Map();

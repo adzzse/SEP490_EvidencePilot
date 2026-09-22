@@ -52,6 +52,9 @@ public class Project {
     @Column(nullable = false)
     private boolean active = true;
 
+    @Column(name = "deletion_scheduled_at")
+    private LocalDateTime deletionScheduledAt;
+
     @OneToMany(mappedBy = "project")
     private List<ProjectMember> projectMembers;
 

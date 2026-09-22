@@ -329,7 +329,7 @@ export default function EditorPanel({
               </button>}
             </div>}
             {feedbackOpen && canShowThree && !narrow && <label className="hidden xl:flex items-center gap-1.5 text-[11px] text-(--text-secondary) shrink-0"><input type="checkbox" checked={keepPreview} onChange={event => setKeepPreview(event.target.checked)} />{t('studentFeedback.keepPreview')}</label>}
-            {!review && <span className="inline-flex" title={saveTitle}>
+            {!review && !isLocked && <span className="inline-flex" title={saveTitle}>
               <button onClick={handleSaveDraft} disabled={saveStatus === 'saving' || !isOwnSection || isLocked} className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-50 ${saveStatus === 'saving' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30' : saveStatus === 'saved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30' : saveStatus === 'error' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30' : 'bg-(--surface-tertiary) text-(--text-secondary) hover:bg-(--border)'}`}>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
                 {saveStatus === 'saving' ? t('saving') : saveStatus === 'saved' ? t('saved') : saveStatus === 'error' ? t('error') : t('save')}

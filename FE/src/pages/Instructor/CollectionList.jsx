@@ -6,6 +6,7 @@ import { useCollections } from '../../hooks/useCollections';
 import { CARD_GRID_PAGE_SIZE } from '../../constants';
 import { formatDate } from '../../utils/formatters/date';
 import api from '../../services/api';
+import useUndoDelete from '../../components/ui/UndoDelete.jsx';
 
 export default function CollectionList() {
   const navigate = useNavigate();
@@ -37,6 +38,7 @@ export default function CollectionList() {
   const [categoryId, setCategoryId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const { start: startDelete } = useUndoDelete();
 
   const handleEdit = (col) => {
     setEditing(col.id);
@@ -69,14 +71,24 @@ export default function CollectionList() {
     finally { setSubmitting(false); }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = (id) => {
     if (!id || deletingId) return;
-    setDeletingId(id);
-    try {
-      await api.delete(`/api/collections/${id}`);
-      await refetch();
-    } catch { alert(t('instructor.collections.deleteCollectionFailed')); }
-    finally { setDeletingId(null); }
+    const col = collections.find(c => c.id === id);
+    const colName = col?.name || id;
+    startDelete({
+      entityName: colName,
+      entityDetails: id,
+    }, async () => {
+      setDeletingId(id);
+      try {
+        await api.delete(`/api/collections/${id}`);
+        await refetch();
+      } catch {
+        alert(t('instructor.collections.deleteCollectionFailed'));
+      } finally {
+        setDeletingId(null);
+      }
+    });
   };
 
   return (

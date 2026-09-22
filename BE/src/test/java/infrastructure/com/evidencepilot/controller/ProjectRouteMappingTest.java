@@ -70,6 +70,7 @@ class ProjectRouteMappingTest {
                 "PATCH /api/projects/{id}/archive",
                 "PATCH /api/projects/{id}/unarchive",
                 "PATCH /api/projects/{id}/restore",
+                "PATCH /api/projects/{id}/cancel-deletion",
                 "DELETE /api/projects/{id}",
                 "GET /api/projects/{id}/members",
                 "GET /api/projects/{projectId}/documents",

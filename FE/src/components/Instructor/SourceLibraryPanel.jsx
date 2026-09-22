@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EmptyState, LoadingSkeleton, Modal } from '../index.js';
 import FileViewerModal from '../features/FileViewerModal';
-import useUndoDelete, { UndoToast } from '../ui/UndoDelete.jsx';
+import useUndoDelete from '../ui/UndoDelete.jsx';
 import DeleteConfirm from '../ui/DeleteConfirm.jsx';
 import { useTranslation } from 'react-i18next';
 import {
@@ -73,7 +73,7 @@ function recoveryInfo(source, t) {
 
 export default function SourceLibraryPanel() {
   const { t, i18n } = useTranslation();
-  const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
+  const { start: startDelete } = useUndoDelete();
   const undoStrings = {
     header: t('instructor.sourceLibrary.undoHeader'),
     bodyTemplate: t('instructor.sourceLibrary.undoBodyTemplate'),
@@ -272,9 +272,6 @@ export default function SourceLibraryPanel() {
           ? { ...item, processingStatus: 'QUEUED', processingError: null }
           : item
       )));
-      setExpandedErrorId(null);
-      setSuccessMessage(t('instructor.sourceLibrary.sourcePdfUploaded'));
-      await loadSources({ silent: true });
     } catch (requestError) {
       setError(requestError.response?.data?.message || t('instructor.sourceLibrary.sourcePdfUploadFailed'));
     } finally {
@@ -296,8 +293,6 @@ export default function SourceLibraryPanel() {
 
   const deleteSource = async (source) => {
     const message = getDeleteSourceMessage(source);
-    const sid = String(source.id);
-    setSources(prev => prev.filter(s => String(s.id) !== sid));
     startDelete({
       ...undoStrings,
       bodyTemplate: undefined,
@@ -320,7 +315,7 @@ export default function SourceLibraryPanel() {
       } finally {
         setDeletingId(null);
       }
-    }, () => { loadSources(); });
+    });
   };
 
   return (
@@ -742,7 +737,6 @@ export default function SourceLibraryPanel() {
           onClose={() => setViewerFile(null)}
         />
       )}
-      <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />
     </section>
   );
 }

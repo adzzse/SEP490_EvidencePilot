@@ -562,6 +562,7 @@ public class DocumentServiceImpl {
         // including student-imported. Only students need strict write check.
         if (currentUserService.isInstructor(currentUser) || currentUserService.isAdmin(currentUser)) {
             currentUserService.requireProjectAccess(currentUser, project);
+            currentUserService.requireProjectMutationAllowed(project);
         } else {
             currentUserService.requireProjectWriteAccess(currentUser, project);
         }
@@ -918,6 +919,7 @@ public class DocumentServiceImpl {
                 throw new ResponseStatusException(
                         HttpStatus.CONFLICT, "Project is locked and cannot be modified.");
             }
+            currentUserService.requireProjectMutationAllowed(link.getProject());
         }
     }
 

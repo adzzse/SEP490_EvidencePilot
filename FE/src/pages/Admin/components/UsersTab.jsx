@@ -6,7 +6,7 @@ import Modal from '../../../components/ui/Modal.jsx';
 import UserImportModal from './UserImportModal.jsx';
 import UserDetailCard from '../../../components/ui/UserDetailCard.jsx';
 import DeleteConfirm from '../../../components/ui/DeleteConfirm.jsx';
-import useUndoDelete, { UndoToast } from '../../../components/ui/UndoDelete.jsx';
+import useUndoDelete from '../../../components/ui/UndoDelete.jsx';
 import SearchBar from '../../../components/ui/SearchBar.jsx';
 import { useToast } from '../../../components/ui/Toast.jsx';
 import { useAuth } from '../../../context/AuthContext.jsx';
@@ -45,7 +45,7 @@ function UsersSection({ api }) {
   const loading = usersQuery.isLoading;
   const error = usersQuery.error ? (usersQuery.error.message || t('admin.loadFailed')) : null;
 
-  const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete({ onUndo: () => usersQuery.refetch() });
+  const { pending: pendingDelete, start: startDelete } = useUndoDelete();
 
   useEffect(() => {
     setPage(0);
@@ -411,8 +411,6 @@ function UsersSection({ api }) {
           )}
         </div>
       </div>
-
-      {pendingDelete && <UndoToast pending={pendingDelete} onUndo={undoDelete} onDismiss={dismissDelete} />}
 
       <Modal open={!!detailUser} onClose={() => setDetailUser(null)} title={t('admin.details')} closeLabel={t('admin.close')} style={{ maxWidth: '480px' }}>
         {detailUser && (

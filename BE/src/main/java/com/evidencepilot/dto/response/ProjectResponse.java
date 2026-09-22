@@ -18,7 +18,8 @@ public record ProjectResponse(
     String currentUserRole,
     long memberCount,
     long sourceCount,
-    long sectionCount
+    long sectionCount,
+    LocalDateTime deletionScheduledAt
 ) {
     public static ProjectResponse from(Project project) {
         return new ProjectResponse(
@@ -32,7 +33,8 @@ public record ProjectResponse(
             null,
             project.getProjectMembers() != null ? project.getProjectMembers().size() : 0,
             0,
-            0
+            0,
+            project.getDeletionScheduledAt()
         );
     }
 
@@ -48,7 +50,8 @@ public record ProjectResponse(
             currentUserRole,
             project.getProjectMembers() != null ? project.getProjectMembers().size() : 0,
             0,
-            0
+            0,
+            project.getDeletionScheduledAt()
         );
     }
 
@@ -77,7 +80,8 @@ public record ProjectResponse(
             base.currentUserRole(),
             base.memberCount(),
             sourceCount,
-            sectionCount
+            sectionCount,
+            base.deletionScheduledAt()
         );
     }
 }

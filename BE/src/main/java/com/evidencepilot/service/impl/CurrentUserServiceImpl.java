@@ -100,7 +100,17 @@ public class CurrentUserServiceImpl {
         }
     }
 
+    public void requireProjectMutationAllowed(Project project) {
+        if (project.getDeletionScheduledAt() != null) {
+            throw new ApiException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    ApiException.PROJECT_TRANSITION_INVALID,
+                    "Project is scheduled for deletion and is read-only.");
+        }
+    }
+
     public void requireProjectWriteAccess(User currentUser, Project project) {
+        requireProjectMutationAllowed(project);
         if (project.getStatus().isReadOnly()) {
             throw new ApiException(
                     org.springframework.http.HttpStatus.CONFLICT,
@@ -216,6 +226,26 @@ public class CurrentUserServiceImpl {
 
     public void requireSectionContentWriteAccess(User currentUser, PaperSection section) {
         requireProjectWriteAccess(currentUser, section.getDocument().getProject());
+        if (!section.isActive()) {
+            throw new ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "Section is inactive.");
+        }
+        if (isAdmin(currentUser) || isInstructor(currentUser)) {
+            return;
+        }
+        if (section.getSectionType() == PaperSectionType.REFERENCE
+                && currentUser.getRole() == UserRole.STUDENT
+                && currentUser.getAccountStatus() == AccountStatus.ACTIVE
+                && hasProjectRole(currentUser, section.getDocument().getProject(),
+                        Set.of(ProjectRole.LEADER, ProjectRole.MEMBER))) {
+            return;
+        }
+        requireSectionAssignment(currentUser, section);
+    }
+
+    public void requireSectionContentReadAccess(User currentUser, PaperSection section) {
+        requireProjectAccess(currentUser, section.getDocument().getProject());
         if (!section.isActive()) {
             throw new ResponseStatusException(
                     org.springframework.http.HttpStatus.CONFLICT,

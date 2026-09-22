@@ -10,6 +10,7 @@ import com.evidencepilot.dto.response.FeedbackRequestPageResponse;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
 import com.evidencepilot.dto.response.ReviewSubmissionSnapshotResponse;
 import com.evidencepilot.dto.response.ReviewSectionSnapshotDto;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.model.AssignmentSectionBaseline;
 import com.evidencepilot.model.ReviewSectionSnapshot;
 import com.evidencepilot.model.FeedbackRequest;
@@ -39,6 +40,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -81,6 +83,7 @@ public class FeedbackServiceImpl {
     private final AssignmentSectionBaselineRepository assignmentSectionBaselineRepository;
     private final FeedbackAnchorService feedbackAnchorService;
     private final FeedbackAttachmentService feedbackAttachmentService;
+    private final ApplicationEventPublisher events;
 
     @Transactional(readOnly = true)
     public List<FeedbackRequestResponseDto> findAllForCurrentUser() {
@@ -181,6 +184,7 @@ public class FeedbackServiceImpl {
         writeSnapshots(saved, assessment.sectionsByPaper().values().stream().flatMap(List::stream).toList(),
                 SnapshotType.SUBMITTED, now);
         checkpointService.capture(projectId, "SUBMIT_FOR_REVIEW");
+        publishFeedbackChanged(saved, "SUBMITTED");
         systemNotificationService.createNotification(
                 instructor, currentUser, "REVIEW_SUBMITTED", saved.getId(),
                 currentUser.getEmail() + " submitted project \"" + project.getTitle() + "\" for review.");
@@ -217,6 +221,7 @@ public class FeedbackServiceImpl {
         InstructorFeedback saved = instructorFeedbackRepository.save(feedback);
         feedbackAttachmentService.linkMediaAssets(request.mediaAssetIds(), feedbackRequest.getProject(),
                 currentUser, saved, null);
+        publishFeedbackChanged(feedbackRequest, "UPDATED");
         return response(saved, currentUser);
     }
 
@@ -268,6 +273,7 @@ public class FeedbackServiceImpl {
         feedbackAttachmentService.linkMediaAssets(request.mediaAssetIds(), feedback.getRequest().getProject(),
                 currentUser, feedback, null);
         instructorFeedbackRepository.saveAndFlush(feedback);
+        publishFeedbackChanged(feedback.getRequest(), "UPDATED");
         return response(feedback, currentUser);
     }
 
@@ -276,7 +282,9 @@ public class FeedbackServiceImpl {
         User currentUser = currentUserService.requireCurrentUser();
         InstructorFeedback feedback = requireOwnedFeedback(feedbackItemId, currentUser);
         requireRootDraftEditable(feedback);
+        FeedbackRequest request = feedback.getRequest();
         instructorFeedbackRepository.delete(feedback);
+        publishFeedbackChanged(request, "UPDATED");
     }
 
     /**
@@ -437,6 +445,7 @@ public class FeedbackServiceImpl {
                 SnapshotType.BASELINE, now);
         checkpointService.capture(project.getId(), "REVIEW_STATUS:RETURNED");
         notifyReturned(project, request, currentUser, roots, feedbackWithNewInstructorContent);
+        publishFeedbackChanged(request, "STATUS_CHANGED");
         return FeedbackRequestResponseDto.fromEntity(request);
     }
 
@@ -461,7 +470,14 @@ public class FeedbackServiceImpl {
         transition(request, project, FeedbackStatus.REVIEWED, ProjectStatus.APPROVED, now);
         request.setReviewedAt(now);
         checkpointService.capture(project.getId(), "REVIEW_STATUS:REVIEWED");
+        publishFeedbackChanged(request, "STATUS_CHANGED");
         return FeedbackRequestResponseDto.fromEntity(request);
+    }
+
+    private void publishFeedbackChanged(FeedbackRequest request, String action) {
+        events.publishEvent(new EntityChangedEvent(
+                "FEEDBACK", request.getId(), action,
+                request.getProject() == null ? null : request.getProject().getId()));
     }
 
     private void transition(FeedbackRequest request, Project project, FeedbackStatus next,
@@ -501,6 +517,7 @@ public class FeedbackServiceImpl {
     private FeedbackRequest requireFeedbackAccessForUpdate(UUID id, User currentUser, boolean instructorOnly) {
         FeedbackRequest request = feedbackRequestRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> notFound("Feedback request", id));
+        currentUserService.requireProjectMutationAllowed(request.getProject());
         requireFeedbackAccess(request, currentUser, instructorOnly);
         return request;
     }
@@ -549,6 +566,7 @@ public class FeedbackServiceImpl {
 
     private void requirePendingReview(FeedbackRequest request) {
         if (request.getStatus() != FeedbackStatus.PENDING) throw conflict("Feedback request closed.");
+        currentUserService.requireProjectMutationAllowed(request.getProject());
         if (request.getProject().getStatus().isReadOnly()) throw conflict("Project is read-only.");
     }
 
@@ -562,6 +580,7 @@ public class FeedbackServiceImpl {
     private Project lockProject(FeedbackRequest request) {
         Project project = projectRepository.findByIdForUpdate(request.getProject().getId())
                 .orElseThrow(() -> notFound("Project", request.getProject().getId()));
+        currentUserService.requireProjectMutationAllowed(project);
         request.setProject(project);
         return project;
     }

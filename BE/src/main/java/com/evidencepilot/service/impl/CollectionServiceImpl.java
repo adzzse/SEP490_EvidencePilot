@@ -3,6 +3,7 @@ package com.evidencepilot.service.impl;
 import com.evidencepilot.dto.request.CollectionRequest;
 import com.evidencepilot.dto.response.CollectionResponse;
 import com.evidencepilot.dto.response.PagedResponse;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.CollectionCategory;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -41,6 +43,7 @@ public class CollectionServiceImpl {
     private final com.evidencepilot.repository.DocumentRepository documentRepository;
     private final com.evidencepilot.repository.CollectionDocumentRepository collectionDocumentRepository;
     private final AuditService auditService;
+    private final ApplicationEventPublisher events;
 
     @Transactional
     public CollectionResponse createCollection(CollectionRequest request) {
@@ -58,6 +61,7 @@ public class CollectionServiceImpl {
         Collection saved = collectionRepository.save(collection);
         auditService.record("COLLECTION_CREATED", "COLLECTION", saved.getId(), currentUser, null,
                 java.util.Map.of("title", saved.getTitle() != null ? saved.getTitle() : ""));
+        events.publishEvent(new EntityChangedEvent("COLLECTION", saved.getId(), "CREATED", null));
         return toResponse(saved);
     }
 
@@ -81,6 +85,7 @@ public class CollectionServiceImpl {
         Collection saved = collectionRepository.save(collection);
         auditService.record("COLLECTION_UPDATED", "COLLECTION", saved.getId(), currentUser, null,
                 java.util.Map.of("title", saved.getTitle() != null ? saved.getTitle() : ""));
+        events.publishEvent(new EntityChangedEvent("COLLECTION", saved.getId(), "UPDATED", null));
         return toResponse(saved);
     }
 
@@ -103,6 +108,7 @@ public class CollectionServiceImpl {
         collection.setActive(false);
         collectionRepository.save(collection);
         auditService.record("COLLECTION_DELETED", "COLLECTION", collection.getId(), currentUser, null, null);
+        events.publishEvent(new EntityChangedEvent("COLLECTION", collection.getId(), "DELETED", null));
     }
 
     private CollectionResponse toResponse(Collection collection) {

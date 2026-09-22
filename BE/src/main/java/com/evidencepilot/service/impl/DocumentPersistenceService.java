@@ -85,6 +85,7 @@ public class DocumentPersistenceService {
         eventPublisher.publishEvent(new EntityChangedEvent(
                 "DOCUMENT", saved.getId(), "CREATED",
                 saved.getProject() != null ? saved.getProject().getId() : null));
+        publishCollectionChanged(saved);
         // rationale: write a "DOCUMENT_UPLOADED" row so the instructor's "My Activity"
         // tab can render a Source Library entry. Failure here must not roll back the
         // upload — wrap in try/catch to keep the primary write durable.
@@ -205,6 +206,7 @@ public class DocumentPersistenceService {
         eventPublisher.publishEvent(new EntityChangedEvent(
                 "DOCUMENT", document.getId(), "READY",
                 document.getProject() != null ? document.getProject().getId() : null));
+        publishCollectionChanged(document);
         notifyTerminal(document, "DOCUMENT_READY",
                 "Extraction complete: " + document.getOriginalFilename());
     }
@@ -219,6 +221,7 @@ public class DocumentPersistenceService {
         eventPublisher.publishEvent(new EntityChangedEvent(
                 "DOCUMENT", document.getId(), "FAILED",
                 document.getProject() != null ? document.getProject().getId() : null));
+        publishCollectionChanged(document);
         notifyTerminal(document, "DOCUMENT_FAILED",
                 "Extraction failed: " + document.getOriginalFilename());
     }
@@ -249,6 +252,13 @@ public class DocumentPersistenceService {
             org.slf4j.LoggerFactory.getLogger(DocumentPersistenceService.class)
                     .warn("Failed to resolve notification recipients for {}", document.getId(), e);
         }
+    }
+
+    private void publishCollectionChanged(Document document) {
+        if (document.getCollection() == null || document.getCollection().getId() == null) return;
+        eventPublisher.publishEvent(new EntityChangedEvent(
+                "COLLECTION", document.getCollection().getId(), "SOURCE_CHANGED",
+                document.getProject() == null ? null : document.getProject().getId()));
     }
 
     @Transactional

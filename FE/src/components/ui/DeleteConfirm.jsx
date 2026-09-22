@@ -1,6 +1,6 @@
 import { useId } from 'react';
 
-export default function DeleteConfirm({ message, onConfirm, triggerLabel, confirmLabel, cancelLabel, disabled, className = '', children }) {
+export default function DeleteConfirm({ message, onConfirm, triggerLabel, confirmLabel, cancelLabel, disabled, className = '', placement = 'bottom', children }) {
   const id = useId();
   const anchorName = `--delete-${id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
@@ -30,10 +30,10 @@ export default function DeleteConfirm({ message, onConfirm, triggerLabel, confir
         className="fixed z-50 w-64 max-w-[calc(100vw-1.5rem)] rounded-xl border border-(--border) bg-(--surface) p-3 text-left shadow-xl"
         style={{
           positionAnchor: anchorName,
-          top: 'calc(anchor(bottom) + 0.5rem)',
+          top: placement === 'top' ? 'auto' : 'calc(anchor(bottom) + 0.5rem)',
           left: 'max(0.75rem, calc(anchor(right) - 16rem))',
           right: 'auto',
-          bottom: 'auto',
+          bottom: placement === 'top' ? 'calc(anchor(top) + 0.5rem)' : 'auto',
           margin: 0,
         }}
       >

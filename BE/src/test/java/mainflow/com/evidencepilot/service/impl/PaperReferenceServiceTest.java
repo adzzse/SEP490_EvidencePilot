@@ -2,6 +2,7 @@ package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.response.PaperReferenceCheckResponse;
 import com.evidencepilot.dto.response.PaperReferenceResponse;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperReference;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -53,6 +55,7 @@ class PaperReferenceServiceTest {
     private final UserRepository userRepository = mock(UserRepository.class);
     private final CurrentUserServiceImpl currentUserService = mock(CurrentUserServiceImpl.class);
     private final PaperProcessingServiceImpl paperProcessingService = mock(PaperProcessingServiceImpl.class);
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
 
     private PaperReferenceService service;
     private Project project;
@@ -66,7 +69,7 @@ class PaperReferenceServiceTest {
     void setUp() {
         service = new PaperReferenceService(documentRepository, paperReferenceRepository,
                 paperSectionRepository, projectDocumentRepository, projectMemberRepository,
-                sourceMatchingService, userRepository, currentUserService, paperProcessingService);
+                sourceMatchingService, userRepository, currentUserService, paperProcessingService, events);
         projectId = UUID.randomUUID();
         paperId = UUID.randomUUID();
         leaderId = UUID.randomUUID();
@@ -251,6 +254,8 @@ class PaperReferenceServiceTest {
         assertThat(response.retrievable()).isTrue();
         assertThat(response.addedBy()).isEqualTo(leaderId);
         verify(paperReferenceRepository).save(any());
+        verify(events).publishEvent(new EntityChangedEvent(
+                "REFERENCE", paperId, "ADDED", projectId));
     }
 
     @Test
@@ -293,6 +298,7 @@ class PaperReferenceServiceTest {
 
         assertThat(service.add(paperId, source.getId(), leaderId).sourceId()).isEqualTo(source.getId());
         verify(paperReferenceRepository, never()).save(any());
+        verify(events, never()).publishEvent(any(EntityChangedEvent.class));
     }
 
     @Test
@@ -379,6 +385,8 @@ class PaperReferenceServiceTest {
         service.remove(paperId, source.getId(), leaderId);
 
         verify(paperReferenceRepository).delete(reference);
+        verify(events).publishEvent(new EntityChangedEvent(
+                "REFERENCE", paperId, "REMOVED", projectId));
     }
 
     @Test

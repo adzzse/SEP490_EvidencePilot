@@ -2324,5 +2324,17 @@
     "Extracting paper",
     "Markdown paper",
     "Divide into sections"
-  ]
+  ],
+  "instructor.projectManagement.deletionScheduled": "Deletion scheduled",
+  "instructor.projectManagement.revokeDeletion": "Revoke deletion",
+  "instructor.projectManagement.revokeDeletionFailed": "Failed to revoke deletion.",
+  "instructor.projectManagement.deleteProjectConfirmSchedule": "Schedule this project for deletion? It will remain read-only for 30 days before permanent removal.",
+  "projectDeletion.readOnlyNotice": "This project is scheduled for deletion on {{deadline}} and is currently read-only.",
+  "projectDeletion.remainingDays": "{{count}} day remaining",
+  "projectDeletion.remainingDays_plural": "{{count}} days remaining",
+  "projectDeletion.remainingHours": "{{count}} hour remaining",
+  "projectDeletion.remainingHours_plural": "{{count}} hours remaining",
+  "projectDeletion.remainingMinutes": "{{count}} minute remaining",
+  "projectDeletion.remainingMinutes_plural": "{{count}} minutes remaining",
+  "projectDeletion.awaitingPurge": "Awaiting permanent removal."
 }

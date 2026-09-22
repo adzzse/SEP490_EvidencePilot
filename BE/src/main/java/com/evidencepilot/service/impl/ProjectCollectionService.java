@@ -1,6 +1,7 @@
 package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.response.CollectionResponse;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.CollectionDocument;
@@ -19,6 +20,7 @@ import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -47,6 +49,7 @@ public class ProjectCollectionService {
     private final DocumentRepository documentRepository;
     private final CollectionDocumentRepository collectionDocumentRepository;
     private final CurrentUserServiceImpl currentUserService;
+    private final ApplicationEventPublisher events;
 
     /**
      * Seed-only collection creation: no auth checks, the seed job runs as
@@ -82,18 +85,25 @@ public class ProjectCollectionService {
         currentUserService.requireCollectionAccess(currentUser, collection);
         requireSyncWriteAccess(currentUser, project);
 
-        ProjectCollection link = projectCollectionRepository
-                .findByProjectIdAndCollectionId(projectId, collectionId)
-                .orElseGet(() -> {
-                    ProjectCollection created = new ProjectCollection();
-                    created.setProject(project);
-                    created.setCollection(collection);
-                    created.setLinkedBy(currentUser);
-                    created.setLinkedAt(LocalDateTime.now());
-                    return projectCollectionRepository.save(created);
-                });
+        var existing = projectCollectionRepository
+                .findByProjectIdAndCollectionId(projectId, collectionId);
+        ProjectCollection link = existing.orElse(null);
+        boolean created = false;
+        if (link == null) {
+            link = new ProjectCollection();
+            link.setProject(project);
+            link.setCollection(collection);
+            link.setLinkedBy(currentUser);
+            link.setLinkedAt(LocalDateTime.now());
+            link = projectCollectionRepository.save(link);
+            created = true;
+        }
 
         syncCollection(link);
+        if (created) {
+            events.publishEvent(new EntityChangedEvent(
+                    "COLLECTION", collection.getId(), "SOURCE_CHANGED", project.getId()));
+        }
         return CollectionResponse.from(collection);
     }
 
@@ -109,6 +119,8 @@ public class ProjectCollectionService {
                 .ifPresent(link -> {
                     detachCollectionLink(link);
                     projectCollectionRepository.delete(link);
+                    events.publishEvent(new EntityChangedEvent(
+                            "COLLECTION", collection.getId(), "SOURCE_CHANGED", project.getId()));
                 });
     }
 
@@ -175,6 +187,8 @@ public class ProjectCollectionService {
         membership.setAddedAt(LocalDateTime.now());
         collectionDocumentRepository.save(membership);
         syncCollectionSource(targetCollection, document);
+        events.publishEvent(new EntityChangedEvent(
+                "COLLECTION", targetCollection.getId(), "SOURCE_CHANGED", null));
         return document;
     }
 
@@ -185,6 +199,8 @@ public class ProjectCollectionService {
             detachCollectionSource(collection, document);
             document.setCollection(null);
             documentRepository.save(document);
+            events.publishEvent(new EntityChangedEvent(
+                    "COLLECTION", collection.getId(), "SOURCE_CHANGED", null));
             return;
         }
         collectionDocumentRepository
@@ -192,6 +208,8 @@ public class ProjectCollectionService {
                 .ifPresent(membership -> {
                     collectionDocumentRepository.delete(membership);
                     detachCollectionSource(collection, document);
+                    events.publishEvent(new EntityChangedEvent(
+                            "COLLECTION", collection.getId(), "SOURCE_CHANGED", null));
                 });
     }
 
@@ -200,6 +218,8 @@ public class ProjectCollectionService {
         for (ProjectDocument projectDocument : projectDocumentRepository.findByDocumentId(document.getId())) {
             requireCorpusMutable(projectDocument.getProject());
             projectDocumentRepository.delete(projectDocument);
+            events.publishEvent(new EntityChangedEvent(
+                    "PROJECT", projectDocument.getProject().getId(), "SOURCE_CHANGED", null));
         }
     }
 
@@ -225,11 +245,17 @@ public class ProjectCollectionService {
                     created.setSharedAt(LocalDateTime.now());
                     return created;
                 });
+        boolean changed = !projectDocument.isPinned();
         projectDocument.setPinned(true);
-        if (projectDocument.getProjectCollection() == null) {
+        if (projectDocument.getProjectCollection() == null && link != null) {
             projectDocument.setProjectCollection(link);
+            changed = true;
         }
-        projectDocumentRepository.save(projectDocument);
+        if (changed) {
+            projectDocumentRepository.save(projectDocument);
+            events.publishEvent(new EntityChangedEvent(
+                    "PROJECT", project.getId(), "SOURCE_CHANGED", null));
+        }
     }
 
     @Transactional
@@ -237,11 +263,16 @@ public class ProjectCollectionService {
         Project project = projectDocument.getProject();
         requireCorpusMutable(project);
         if (projectDocument.getProjectCollection() != null) {
+            if (!projectDocument.isPinned()) return;
             projectDocument.setPinned(false);
             projectDocumentRepository.save(projectDocument);
+            events.publishEvent(new EntityChangedEvent(
+                    "PROJECT", project.getId(), "SOURCE_CHANGED", null));
             return;
         }
         projectDocumentRepository.delete(projectDocument);
+        events.publishEvent(new EntityChangedEvent(
+                "PROJECT", project.getId(), "SOURCE_CHANGED", null));
     }
 
     private void syncCollection(ProjectCollection link) {

@@ -253,7 +253,6 @@ export default function EditPaperSectionModal({
         />
 
         <PaperSectionEditorPane
-          paper={paper}
           sections={sections}
           selectedSection={selectedSection}
           sectionEvals={sectionEvals}
@@ -274,7 +273,6 @@ export default function EditPaperSectionModal({
           labels={labels}
           ct={ct}
           closeLabel={t('close')}
-          paperFallback={t('paper')}
           onModeChange={setMode}
           onRequestClose={requestClose}
           onUpdateSection={changes => selectedSection && updateSection(selectedSection.id, changes)}

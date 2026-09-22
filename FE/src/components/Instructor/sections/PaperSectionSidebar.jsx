@@ -72,7 +72,10 @@ export default function PaperSectionSidebar({
             )}
           </div>
         )}
-        <button type="button" data-testid="add-section" onClick={onAddSection} aria-label={labels.addSection} disabled={sectionStructureLocked || sectionStructureSaving || projectReadOnly} className="shrink-0 rounded-lg bg-(--brand) px-2.5 py-1.5 text-[10px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">+ {labels.addSection}</button>
+        <button type="button" data-testid="add-section" onClick={onAddSection} aria-label={labels.addSection} title={labels.addSection} disabled={sectionStructureLocked || sectionStructureSaving || projectReadOnly} className="group flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-(--brand) text-[10px] font-bold text-white transition-[width] duration-200 hover:w-28 focus-visible:w-28 disabled:cursor-not-allowed disabled:opacity-50">
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-none stroke-current" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+          <span className="ml-0 w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[width,margin,opacity] duration-200 group-hover:ml-1.5 group-hover:w-16 group-hover:opacity-100 group-focus-visible:ml-1.5 group-focus-visible:w-16 group-focus-visible:opacity-100">{labels.addSection}</span>
+        </button>
       </div>
       <div className="flex-1 space-y-1 overflow-y-auto p-2">
         {sections.map((section, index) => {
@@ -100,7 +103,6 @@ export default function PaperSectionSidebar({
                 />
                 {renameSectionId != null && String(renameSectionId) === String(section.id) ? (
                   <div className="flex min-w-0 flex-1 items-center gap-1">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-indigo-100 text-[9px] font-bold text-indigo-700">{index + 1}</span>
                     <input
                       autoFocus
                       data-testid={`rename-input-${section.id}`}
@@ -117,10 +119,9 @@ export default function PaperSectionSidebar({
                 ) : (
                   <button type="button" data-testid={`section-nav-${section.id}`} onClick={() => onSelectSection(section.id)} className="min-w-0 flex-1 text-left">
                     <span className="flex items-center gap-2 text-xs font-semibold text-(--text-primary)">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-indigo-100 text-[9px] font-bold text-indigo-700">{index + 1}</span>
                       <span className="truncate">{section.sectionTitle || untitledLabel}</span>
                     </span>
-                    <span className="mt-1 flex flex-wrap gap-1 pl-7 text-[9px] text-(--text-tertiary)">
+                    <span className="mt-1 flex flex-wrap gap-1 text-[9px] text-(--text-tertiary)">
                       <span>{section.assignedUserId ? studentDisplayName(projectMembers.find(member => String(member.userId) === String(section.assignedUserId)) || {}) : labels.unassigned}</span>
                       <span>·</span>
                       <span>{standardConfigured ? labels.standardConfigured : labels.standardNotConfigured}</span>
@@ -162,6 +163,7 @@ export default function PaperSectionSidebar({
         <DeleteConfirm
           message={labels.deleteSelectedSectionsConfirm}
           onConfirm={onDeleteSelectedSections}
+          placement="top"
           triggerLabel={labels.deleteSelectedSections}
           confirmLabel={ct.delete}
           cancelLabel={ct.cancel}

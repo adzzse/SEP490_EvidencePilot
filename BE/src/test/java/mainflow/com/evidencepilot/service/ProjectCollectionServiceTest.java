@@ -1,6 +1,7 @@
 package com.evidencepilot.service;
 
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.CollectionDocument;
 import com.evidencepilot.model.Document;
@@ -24,6 +25,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Optional;
@@ -33,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -53,6 +56,8 @@ class ProjectCollectionServiceTest {
     private CollectionDocumentRepository collectionDocumentRepository;
     @Mock
     private CurrentUserServiceImpl currentUserService;
+    @Mock
+    private ApplicationEventPublisher events;
 
     @Test
     void linkMaterializesEveryCurrentSourceAndIsIdempotent() {
@@ -85,6 +90,8 @@ class ProjectCollectionServiceTest {
                 .requireCollectionAccess(instructor, collection);
         verify(currentUserService, org.mockito.Mockito.times(2))
                 .requireProjectWriteAccess(instructor, project);
+        verify(events, times(1)).publishEvent(new EntityChangedEvent(
+                "COLLECTION", collection.getId(), "SOURCE_CHANGED", project.getId()));
     }
 
     @Test
@@ -200,6 +207,8 @@ class ProjectCollectionServiceTest {
         verify(projectDocumentRepository).save(projectDocument);
         verify(projectDocumentRepository, never()).delete(projectDocument);
         verify(projectCollectionRepository).delete(link);
+        verify(events).publishEvent(new EntityChangedEvent(
+                "COLLECTION", collection.getId(), "SOURCE_CHANGED", project.getId()));
     }
 
     @Test
@@ -361,6 +370,27 @@ class ProjectCollectionServiceTest {
         assertThat(projectDocument.isPinned()).isFalse();
         assertThat(projectDocument.getProjectCollection()).isEqualTo(link);
         verify(projectDocumentRepository, never()).delete(projectDocument);
+        verify(events, times(2)).publishEvent(new EntityChangedEvent(
+                "PROJECT", project.getId(), "SOURCE_CHANGED", null));
+    }
+
+    @Test
+    void pinningAlreadyPinnedSourceDoesNotPublishEvent() {
+        User instructor = instructor();
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Collection collection = collection(instructor);
+        Document source = source(collection);
+        ProjectCollection link = link(project, collection, instructor);
+        ProjectDocument projectDocument = projectDocument(project, source, link, true);
+        when(projectCollectionRepository.findByProjectIdAndCollectionId(project.getId(), collection.getId()))
+                .thenReturn(Optional.of(link));
+        when(projectDocumentRepository.findByProjectIdAndDocumentId(project.getId(), source.getId()))
+                .thenReturn(Optional.of(projectDocument));
+
+        service().pinSource(project, source, instructor);
+
+        verify(projectDocumentRepository, never()).save(projectDocument);
+        verify(events, never()).publishEvent(any(EntityChangedEvent.class));
     }
 
     @Test
@@ -379,6 +409,8 @@ class ProjectCollectionServiceTest {
         assertThat(membership.getValue().getAddedBy()).isEqualTo(instructor);
         assertThat(source.getCollection()).isEqualTo(oldCollection);
         verify(projectCollectionRepository).findByCollectionId(newCollection.getId());
+        verify(events).publishEvent(new EntityChangedEvent(
+                "COLLECTION", newCollection.getId(), "SOURCE_CHANGED", null));
     }
 
     @Test
@@ -412,7 +444,8 @@ class ProjectCollectionServiceTest {
                 collectionRepository,
                 documentRepository,
                 collectionDocumentRepository,
-                currentUserService);
+                currentUserService,
+                events);
     }
 
     private User instructor() {

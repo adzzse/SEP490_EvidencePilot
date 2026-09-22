@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import api from '../services/api.js';
 import { useAuth } from './AuthContext';
 import { subscribeToNotifications, subscribeToEntityEvents } from '../services/notificationSocket.js';
+import { feedbackKeys } from '../services/feedbackKeys.js';
 
 const NotificationContext = createContext(null);
 
@@ -15,6 +16,13 @@ export function NotificationProvider({ children }) {
   const [restReadyToken, setRestReadyToken] = useState(null);
   const requestIdRef = useRef(0);
   const notificationIdsRef = useRef(new Set());
+  const entityListenersRef = useRef(new Set());
+
+  const subscribeToEntityChanges = useCallback(handler => {
+    if (typeof handler !== 'function') return () => {};
+    entityListenersRef.current.add(handler);
+    return () => entityListenersRef.current.delete(handler);
+  }, []);
 
   const reload = useCallback(async ({ preserveSocket = false } = {}) => {
     const requestId = ++requestIdRef.current;
@@ -81,6 +89,15 @@ export function NotificationProvider({ children }) {
       console.log('WS Event Received:', evt);
       if (!evt || !evt.entity) return;
       const { entity, id, action, projectId } = evt;
+      entityListenersRef.current.forEach(handler => {
+        try {
+          Promise.resolve(handler(evt)).catch(handlerError => {
+            console.warn('Entity change handler failed', handlerError);
+          });
+        } catch (handlerError) {
+          console.warn('Entity change handler failed', handlerError);
+        }
+      });
       if (entity === 'USER') {
         queryClient.invalidateQueries({ queryKey: ['users'] });
         return;
@@ -97,6 +114,14 @@ export function NotificationProvider({ children }) {
         if (action === 'FAILED' || action === 'READY') {
           queryClient.invalidateQueries({ queryKey: ['extractionQueue'] });
         }
+        return;
+      }
+      if (entity === 'FEEDBACK') {
+        queryClient.invalidateQueries({ queryKey: feedbackKeys.all });
+        return;
+      }
+      if (entity === 'COLLECTION') {
+        queryClient.invalidateQueries({ queryKey: ['collections'] });
       }
     });
     return unsubscribe;
@@ -127,7 +152,7 @@ export function NotificationProvider({ children }) {
   }, []);
 
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, error, reload, markRead, markAllRead }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, error, reload, markRead, markAllRead, subscribeToEntityChanges }}>
       {children}
     </NotificationContext.Provider>
   );

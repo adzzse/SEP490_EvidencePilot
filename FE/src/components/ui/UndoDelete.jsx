@@ -1,76 +1,67 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+
+const UndoDeleteContext = createContext(null);
 
 const DEFAULT_STRINGS = {
-  header: 'Item permanently deleted',
-  bodyTemplate: 'The item {entityName}{entityDetails} was deleted{actorPart} at {timestamp}.',
+  header: 'Deletion pending',
+  bodyTemplate: 'The item {entityName}{entityDetails} will be deleted in {seconds} seconds unless you undo.',
   caution: 'Caution: This action will become permanent once the countdown expires.',
   undoLabel: 'Undo',
   undoRemaining: '({seconds}s remaining)',
-  dismissLabel: 'Dismiss',
+  dismissLabel: 'Delete now',
 };
 
 function interpolate(template, vars) {
   return template.replace(/\{(\w+)\}/g, (match, key) => (vars[key] != null ? vars[key] : match));
 }
 
-export default function useUndoDelete({ delay = 5000, onUndo } = {}) {
-  const { user } = useAuth();
+export function UndoDeleteProvider({ children }) {
   const timerRef = useRef(null);
   const runRef = useRef(null);
-  const undoRef = useRef(onUndo);
   const [pending, setPending] = useState(null);
 
-  const clearTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
   const clearPending = useCallback(() => {
-    clearTimer();
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
     runRef.current = null;
     setPending(null);
-  }, [clearTimer]);
+  }, []);
 
-  const start = useCallback((payload, run, onUndoCb) => {
+  const commitNow = useCallback(() => {
+    const run = runRef.current;
     clearPending();
-    const timeoutDuration = payload.timeoutDuration || delay;
+    if (run) void run();
+  }, [clearPending]);
+
+  const start = useCallback((payload, run) => {
+    if (runRef.current) return false;
+    const timeoutDuration = payload?.timeoutDuration ?? 5000;
     runRef.current = run;
-    undoRef.current = onUndoCb || onUndo;
-    const actorName = payload.actorName
-      || (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : '');
     setPending({
       ...payload,
-      actorName,
       timeoutDuration,
-      timestamp: payload.timestamp || new Date().toLocaleString(),
       deadline: Date.now() + timeoutDuration,
     });
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null;
-      const r = runRef.current;
-      runRef.current = null;
-      setPending(null);
-      if (r) r();
-    }, timeoutDuration);
-  }, [clearPending, delay, onUndo, user]);
-
-  const undo = useCallback(() => {
-    clearPending();
-    if (undoRef.current) undoRef.current();
-  }, [clearPending]);
-
-  const dismiss = useCallback(() => {
-    const r = runRef.current;
-    clearPending();
-    if (r) r();
-  }, [clearPending]);
+    timerRef.current = setTimeout(commitNow, timeoutDuration);
+    return true;
+  }, [commitNow]);
 
   useEffect(() => clearPending, [clearPending]);
 
-  return { pending, start, undo, dismiss };
+  return (
+    <UndoDeleteContext.Provider value={{ pending, start, undo: clearPending, commitNow, dismiss: commitNow }}>
+      {children}
+      <UndoToast pending={pending} onUndo={clearPending} onDismiss={commitNow} />
+    </UndoDeleteContext.Provider>
+  );
+}
+
+export function useUndoDelete() {
+  const context = useContext(UndoDeleteContext);
+  if (!context) {
+    throw new Error('useUndoDelete must be used within an UndoDeleteProvider');
+  }
+  return context;
 }
 
 export function UndoToast({ pending, onUndo, onDismiss }) {
@@ -92,8 +83,6 @@ export function UndoToast({ pending, onUndo, onDismiss }) {
   const vars = {
     entityName: pending.entityName,
     entityDetails: pending.entityDetails ? ` (${pending.entityDetails})` : '',
-    actorPart: pending.actorName ? ` by ${pending.actorName}` : '',
-    timestamp: pending.timestamp,
     seconds,
   };
   const body = pending.bodyTemplate
@@ -134,3 +123,5 @@ export function UndoToast({ pending, onUndo, onDismiss }) {
     </div>
   );
 }
+
+export default useUndoDelete;

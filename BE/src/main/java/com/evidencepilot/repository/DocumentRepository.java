@@ -44,6 +44,7 @@ public interface DocumentRepository extends JpaRepository<Document, UUID>, JpaSp
     List<Document> findByCollectionId(UUID collectionId);
     List<Document> findByCollectionIdAndDocTypeAndActiveTrue(UUID collectionId, DocumentType docType);
     List<Document> findByProcessingStatusAndActiveTrue(ProcessingStatus processingStatus);
+    boolean existsByFileHashSha256(String fileHashSha256);
     @Query("""
             SELECT d FROM Document d
             WHERE d.uploadedBy.id = :uploadedBy

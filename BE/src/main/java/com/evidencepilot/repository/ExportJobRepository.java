@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 public interface ExportJobRepository extends JpaRepository<ExportJob, UUID> {
+    List<ExportJob> findByProjectId(UUID projectId);
     List<ExportJob> findByProjectIdAndUserIdOrderByCreatedAtDesc(UUID projectId, UUID userId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)

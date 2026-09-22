@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api.js';
+import { useNotification } from '../context/NotificationContext';
 import useUndoDelete from '../components/ui/UndoDelete.jsx';
 import { normalizeSource, resolveAnchor, sourceFingerprint } from '../utils/student/feedbackAnchors.js';
 import { wordDiff } from '../utils/instructor/wordDiff.js';
@@ -26,6 +27,7 @@ export default function useInstructorReview({ projectId, enabled }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
+  const { subscribeToEntityChanges } = useNotification();
   const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
   const undoStrings = {
     header: t('undoHeader'),
@@ -47,6 +49,7 @@ export default function useInstructorReview({ projectId, enabled }) {
   const [sources, setSources] = useState([]);
   const [mediaAssets, setMediaAssets] = useState([]);
   const feedbackLoadRef = useRef(0);
+  const requestsLoadRef = useRef(0);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -330,6 +333,31 @@ export default function useInstructorReview({ projectId, enabled }) {
   }, [orderedRequests, activeRequestId, t, enabled]);
 
   useEffect(() => { if (!enabled) return; loadFeedback(); return () => { feedbackLoadRef.current += 1; }; }, [loadFeedback, enabled]);
+
+  const reloadRequests = useCallback(async () => {
+    if (!enabled || !projectId) return;
+    const generation = ++requestsLoadRef.current;
+    try {
+      const response = await api.get('/api/feedback-requests');
+      if (generation !== requestsLoadRef.current) return;
+      setRequests((response.data || []).filter(request => String(request.projectId) === String(projectId)));
+    } catch (error) {
+      if (generation === requestsLoadRef.current && error?.code !== 'ERR_CANCELED' && error?.name !== 'CanceledError') {
+        setErrorMessage(t('instructor.review.loadFeedbackFailed'));
+      }
+    }
+  }, [enabled, projectId, t]);
+
+  useEffect(() => {
+    if (!enabled || !projectId) return undefined;
+    return subscribeToEntityChanges(event => {
+      if (!event) return;
+      const projectMatches = String(event.projectId || event.id) === String(projectId);
+      if ((event.entity === 'FEEDBACK' || event.entity === 'PROJECT' || event.entity === 'DOCUMENT') && projectMatches) {
+        void reloadRequests();
+      }
+    });
+  }, [enabled, projectId, reloadRequests, subscribeToEntityChanges]);
 
   // rationale: mutations return the full post-commit thread DTO — merge it
   // surgically instead of invalidating/refetching (a fast refetch would race

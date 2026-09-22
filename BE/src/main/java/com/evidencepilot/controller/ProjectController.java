@@ -145,19 +145,34 @@ public class ProjectController {
         return projectService.unarchiveProject(id);
     }
 
-    @Operation(summary = "Soft-delete a project",
-            description = "Sets the project's active flag to false. Requires write access.")
+    @Operation(summary = "Schedule project deletion",
+            description = "Schedules thirty-day retention for the project. Returns the updated project response with deletion deadline.")
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Project soft-deleted"),
+            @ApiResponse(responseCode = "200", description = "Project deletion scheduled"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
             @ApiResponse(responseCode = "403", description = "Insufficient permissions"),
-            @ApiResponse(responseCode = "404", description = "Project not found")
+            @ApiResponse(responseCode = "404", description = "Project not found"),
+            @ApiResponse(responseCode = "409", description = "Project deletion already scheduled or read-only")
     })
     @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteProject(
+    public ProjectResponse deleteProject(
             @Parameter(description = "Project UUID") @PathVariable UUID id) {
-        projectService.deleteProject(id);
+        return projectService.deleteProject(id);
+    }
+
+    @Operation(summary = "Cancel scheduled project deletion",
+            description = "Clears the scheduled deletion deadline.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Project deletion cancelled"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Insufficient permissions"),
+            @ApiResponse(responseCode = "404", description = "Project not found"),
+            @ApiResponse(responseCode = "409", description = "Project deletion is not scheduled")
+    })
+    @PatchMapping("/{id}/cancel-deletion")
+    public ProjectResponse cancelProjectDeletion(
+            @Parameter(description = "Project UUID") @PathVariable UUID id) {
+        return projectService.cancelProjectDeletion(id);
     }
 
     @Operation(summary = "Restore a project from trash",

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AppHeader, EmptyState, LoadingSkeleton, StatusBadge, Modal } from '../../components';
@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { PROJECT_STATUSES } from '../../constants';
 import { formatDateTime } from '../../utils/formatters/date';
 import api from '../../services/api';
+import { useNotification } from '../../context/NotificationContext';
 const LAST_VISITED_KEY = 'ep_project_last_visited';
 
 function readLastVisited() {
@@ -43,6 +44,7 @@ export default function Projects() {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const { user } = useAuth();
+  const { subscribeToEntityChanges } = useNotification();
 
   // State
   const [projectsData, setProjectsData] = useState({ content: [], totalPages: 0, totalElements: 0 });
@@ -71,9 +73,10 @@ export default function Projects() {
   };
 
   // Fetch KPI Stats (From overall project list)
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (signal) => {
     try {
-      const res = await api.get('/api/projects', { params: { size: 100 } });
+      const res = await api.get('/api/projects', { params: { size: 100 }, signal });
+      if (signal?.aborted) return;
       const list = Array.isArray(res.data?.content) ? res.data.content : [];
       const total = list.length;
       const inProg = list.filter(p => ['CREATED', 'ASSIGNED', 'IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'RETURNED'].includes(p.status)).length;
@@ -85,7 +88,7 @@ export default function Projects() {
   }, []);
 
   // Fetch full filtered set (up to 100); ordering by last-visited + paging happen client-side
-  const fetchProjects = useCallback(async (statusFilter = activeTab, q = searchQuery) => {
+  const fetchProjects = useCallback(async (statusFilter = activeTab, q = searchQuery, signal) => {
     try {
       setLoading(true);
       setError(false);
@@ -93,7 +96,8 @@ export default function Projects() {
       if (q.trim()) params.q = q.trim();
       if (statusFilter !== 'ALL') params.status = statusFilter;
 
-      const res = await api.get('/api/projects', { params });
+      const res = await api.get('/api/projects', { params, signal });
+      if (signal?.aborted) return;
       const rawContent = Array.isArray(res.data?.content) ? res.data.content : [];
 
       setProjectsData({
@@ -102,20 +106,33 @@ export default function Projects() {
         totalElements: rawContent.length
       });
     } catch (err) {
+      if (signal?.aborted || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') return;
       console.error('Failed to fetch projects:', err);
       setError(true);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, [activeTab, searchQuery]);
 
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
+  const requestControllerRef = useRef(null);
+  const refreshProjects = useCallback(async (statusFilter = activeTab, q = searchQuery) => {
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+    await Promise.all([
+      fetchStats(controller.signal),
+      fetchProjects(statusFilter, q, controller.signal),
+    ]);
+  }, [activeTab, fetchProjects, fetchStats, searchQuery]);
 
   useEffect(() => {
-    fetchProjects(activeTab, searchQuery);
-  }, [fetchProjects, activeTab, searchQuery]);
+    refreshProjects();
+    return () => requestControllerRef.current?.abort();
+  }, [refreshProjects]);
+
+  useEffect(() => subscribeToEntityChanges(event => {
+    if (event?.entity === 'PROJECT') void refreshProjects();
+  }), [refreshProjects, subscribeToEntityChanges]);
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -281,7 +298,7 @@ export default function Projects() {
         ) : error ? (
           <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 p-6 rounded-2xl text-center">
             <p className="font-semibold text-sm">{t('student.projects.projectsLoadFailed')}</p>
-            <button onClick={() => fetchProjects(activeTab, searchQuery)} className="mt-3 px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition-colors cursor-pointer">
+            <button onClick={() => refreshProjects(activeTab, searchQuery)} className="mt-3 px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition-colors cursor-pointer">
               {t('student.projects.retry')}
             </button>
           </div>
