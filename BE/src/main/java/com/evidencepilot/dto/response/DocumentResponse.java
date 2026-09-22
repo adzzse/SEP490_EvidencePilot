@@ -30,7 +30,8 @@ public record DocumentResponse(
     String openAlexField,
     String openAlexDomain,
     String doi,
-    List<UUID> projectIds
+    List<UUID> projectIds,
+    boolean referenced
 ) {
     public static DocumentResponse from(Document doc) {
         return from(doc, List.of());
@@ -60,7 +61,18 @@ public record DocumentResponse(
             doc.getOpenAlexField(),
             doc.getOpenAlexDomain(),
             doc.getDoi(),
-            projectIds
+            projectIds,
+            false
+        );
+    }
+
+    public DocumentResponse withReferenced(boolean referenced) {
+        return new DocumentResponse(
+            id, projectId, collectionId, uploadedBy, docType, fileUrl, title,
+            authors, publicationYear, originalFilename, contentType, fileSizeBytes,
+            fileHashSha256, processingStatus, processingError, active, createdAt,
+            openAlexTopic, openAlexSubfield, openAlexField, openAlexDomain, doi,
+            projectIds, referenced
         );
     }
 }

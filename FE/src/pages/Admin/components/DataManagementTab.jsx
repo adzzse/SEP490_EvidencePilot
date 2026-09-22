@@ -15,11 +15,10 @@ function DataManagementSection({ api }) {
   const [busy, setBusy] = useState(null);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
-  const [preview, setPreview] = useState(null);
   const [job, setJob] = useState(null);
+  const [zipName, setZipName] = useState('');
   const pollRef = useRef(null);
   const pollGenerationRef = useRef(0);
-  const xlsxRef = useRef(null);
   const logRef = useRef(null);
 
   const tourSteps = useCallback(() => [
@@ -111,33 +110,15 @@ function DataManagementSection({ api }) {
     } catch (e) { setErr(e.response?.data?.message || e.message); }
   };
 
-  const previewFile = async (file, isZip) => {
-    if (!file) return;
-    setBusy('preview'); setErr(''); setMsg(''); setPreview(null);
-    try {
-      if (isZip) {
-        setMsg(t('admin.zipNoPreview'));
-        return;
-      }
-      const fd = new FormData();
-      fd.append('file', file);
-      const r = await api.post('/api/admin/seed/preview', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setPreview(r.data);
-      if (!r.data.valid) setErr((r.data.errors || []).slice(0, 8).join('; '));
-    } catch (e) { setErr(e.response?.data?.message || e.message); }
-    finally { setBusy(null); }
-  };
-
-  const uploadFile = async (file, isZip) => {
+  const uploadFile = async (file) => {
     if (!file) return;
     if (!window.confirm(t('admin.confirmSeedDemo'))) return;
     setBusy('upload'); setErr(''); setMsg(''); setJob({ status: 'QUEUED', processed: 0, total: 1, progress: 0, currentStep: '', errors: [], logs: [] });
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const endpoint = isZip ? '/api/admin/seed/upload-zip' : '/api/admin/seed/upload';
       // large bundles take minutes to transfer — progress polling starts after 202
-      const r = await api.post(endpoint, fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 600000 });
+      const r = await api.post('/api/admin/seed/upload-zip', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 600000 });
       pollJob(r.data.jobId);
       setMsg(t('admin.seedStarted'));
     } catch (e) {
@@ -177,27 +158,16 @@ function DataManagementSection({ api }) {
             <button data-guide="seed-template" onClick={downloadTemplate} className="px-4 py-2 border border-(--border) rounded-xl text-xs font-bold hover:bg-(--surface-secondary)">{t('admin.seedTemplate')}</button>
           </div>
           <div data-guide="seed-btn" className="space-y-3">
-          <label htmlFor="seed-xlsx" className="block text-[11px] font-bold text-(--text-secondary) uppercase tracking-wider">{t('admin.excelUpload')}</label>
-          <input id="seed-xlsx" ref={xlsxRef} type="file" accept=".xlsx" disabled={busy === 'upload' || busy === 'preview'} onChange={(e) => previewFile(e.target.files?.[0], false)} className="text-xs" />
-          <label htmlFor="seed-zip" className="block text-[11px] font-bold text-(--text-secondary) uppercase tracking-wider">{t('admin.zipUpload')}</label>
-          <input id="seed-zip" type="file" accept=".zip" disabled={busy === 'upload' || busy === 'preview'} onChange={(e) => { uploadFile(e.target.files?.[0], true); e.target.value = ''; }} className="text-xs" />
+          <span className="block text-[11px] font-bold text-(--text-secondary) uppercase tracking-wider">{t('admin.zipUpload')}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <label htmlFor="seed-zip" className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-(--border) bg-(--surface-secondary) px-4 py-2 text-xs font-bold text-(--text-primary) transition hover:bg-(--surface-tertiary) has-disabled:cursor-not-allowed has-disabled:opacity-50">
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              {t('admin.chooseFile')}
+              <input id="seed-zip" type="file" accept=".zip" disabled={busy === 'upload'} onChange={(e) => { const file = e.target.files?.[0]; setZipName(file ? file.name : ''); uploadFile(file); e.target.value = ''; }} className="sr-only" />
+            </label>
+            {zipName && <span className="min-w-0 truncate text-xs text-(--text-secondary)" title={zipName}>{zipName}</span>}
+          </div>
           <p className="text-[10px] text-(--text-tertiary)">seed.xlsx + papers/&lt;slug&gt;/&lt;slug&gt;.&#123;pdf,docx,tex&#125; + images/ — {t('admin.zipHint')}</p>
-          {preview && (
-            <div className="text-xs border border-(--border) rounded-xl p-3 space-y-1">
-              <p className="font-bold">{preview.valid ? t('admin.previewPass') : t('admin.previewFail')}</p>
-              {Object.entries(preview.rows || {}).map(([k, v]) => <p key={k} className="font-mono">{k}: {v}</p>)}
-              {preview.invitations && (
-                <p className="font-mono text-amber-600">{t('admin.previewInvitations', { invite: preview.invitations.willInvite ?? 0, silent: preview.invitations.silentActive ?? 0 })}</p>
-              )}
-              {preview.uniqueDois != null && (
-                <p className="font-mono text-sky-600">{t('admin.previewDois', { count: preview.uniqueDois })}</p>
-              )}
-              {(preview.errors || []).slice(0, 8).map((e, i) => <p key={i} className="text-rose-600">{e}</p>)}
-              {preview.valid && (
-                <button disabled={busy === 'upload'} onClick={() => uploadFile(xlsxRef.current?.files?.[0], false)} className="px-3 py-1.5 bg-[#0c162e] text-white rounded-lg text-[11px] font-bold disabled:opacity-50">{t('admin.confirmInsert')}</button>
-              )}
-            </div>
-          )}
           {job && (job.status === 'RUNNING' || job.status === 'QUEUED') && (
             <div className="space-y-2" aria-live="polite">
               <p className="text-xs font-bold">{t('admin.seeding', { step: job.currentStep || '…', done: job.processed, total: job.total })}</p>

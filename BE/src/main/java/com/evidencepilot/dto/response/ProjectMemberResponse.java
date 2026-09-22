@@ -15,7 +15,8 @@ public record ProjectMemberResponse(
     String firstName,
     String lastName,
     String email,
-    String userRole
+    String userRole,
+    String studentCode
 ) {
     public static ProjectMemberResponse from(ProjectMember member) {
         User user = member.getUser();
@@ -28,6 +29,7 @@ public record ProjectMemberResponse(
                 user != null ? user.getFirstName() : null,
                 user != null ? user.getLastName() : null,
                 user != null ? user.getEmail() : null,
-                user != null && user.getRole() != null ? user.getRole().name() : null);
+                user != null && user.getRole() != null ? user.getRole().name() : null,
+                user != null ? user.getStudentCode() : null);
     }
 }

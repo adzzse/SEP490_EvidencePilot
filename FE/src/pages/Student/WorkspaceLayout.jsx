@@ -27,6 +27,7 @@ import { isAbstractSectionTitle } from '../../utils/formatters/latexHtml.js';
 import useUndoDelete from '../../components/ui/UndoDelete.jsx';
 import Modal from '../../components/ui/Modal.jsx';
 import { isProjectMembershipDenied } from '../../utils/authz.js';
+import { targetsProject } from '../../utils/entityEvents.js';
 import { formatDateTime } from '../../utils/formatters/date.js';
 import ProjectDeletionNotice from '../../components/projects/ProjectDeletionNotice.jsx';
 
@@ -734,7 +735,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   }, [navigate, unassignedProject]);
 
   const assignedSections = user ? sections.filter(s => String(s.assignedUserId) === String(user.id)) : [];
-  const isLocked = isReview || project?.status === 'SUBMITTED_FOR_REVIEW' || project?.status === 'APPROVED' || project?.status === 'ARCHIVED' || Boolean(project?.deletionScheduledAt);
+  const isLocked = isReview || project?.status === 'SUBMITTED_FOR_REVIEW' || project?.status === 'APPROVED' || project?.status === 'ARCHIVED' || project?.status === 'PENDING_DELETE' || Boolean(project?.deletionScheduledAt);
   const canEditSection = (section) => {
     if (isReview || isLocked || !section || role !== 'STUDENT') return false;
     if (section.sectionType === 'REFERENCE') {
@@ -856,6 +857,30 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       }
       if (event.entity === 'REFERENCE' && realtimePaperIdRef.current && String(event.id) === String(realtimePaperIdRef.current)) {
         void refreshReferences();
+        return;
+      }
+      // ponytail: PROJECT events carry id-only (no projectId) — match either.
+      // Refreshes the lock fields (status/deletionScheduledAt) plus assignments
+      // without touching selection or unsaved edits.
+      if (event.entity === 'PROJECT' && targetsProject(event, project?.id)) {
+        const refreshProjectState = async () => {
+          try {
+            const projRes = await api.get(`/api/projects/${project.id}`);
+            setProject(projRes.data);
+            projectRef.current = projRes.data;
+          } catch {
+            // Keep current project; the next poll or interaction refreshes.
+          }
+          try {
+            const paperId = realtimePaperIdRef.current;
+            if (!paperId) return;
+            const r = await api.get(`/api/papers/${paperId}/sections`);
+            setSections(r.data || []);
+          } catch {
+            // Sections refresh on the next paper change.
+          }
+        };
+        void refreshProjectState();
         return;
       }
       if ((event.entity === 'DOCUMENT' && projectMatches)
@@ -1817,7 +1842,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     <div role="region" aria-label={t('feedbackProjectWorkspace')} className="h-screen w-full flex flex-col bg-(--surface-secondary) overflow-hidden font-sans antialiased text-(--text-primary)">
       <WorkspaceHeader workspaceMode={workspaceMode} project={project} navigate={navigate} onShowHistory={isReview ? undefined : () => setShowHistoryModal(true)} historyDisabled={editableSections.length === 0}
         reviewRound={isReview ? review.workflow : null}
-        reviewGuide={isReview ? <InstructorReviewGuide review={review.workflow} selectedSection={currentSection} /> : null}
+        reviewGuide={isReview ? <InstructorReviewGuide review={review.workflow} selectedSection={currentSection} plain /> : null}
         review={isReview ? review.workflow : null} reviewSection={isReview ? currentSection : null}
         notifications={notifications} unreadCount={unreadCount} showNotifications={showNotifications} setShowNotifications={setShowNotifications} onMarkNotificationRead={handleMarkNotificationRead} onMarkAllNotificationsRead={handleMarkAllNotificationsRead} onOpenNotification={handleOpenNotification}
         showExportMenu={showExportMenu} setShowExportMenu={setShowExportMenu} handleExportTexArchive={handleExportTexArchive} handleExportTraceabilityJson={handleExportTraceabilityJson} handleExportTraceabilityCsv={handleExportTraceabilityCsv} tourSteps={isReview ? undefined : tourSteps} tourKey="student-workspace"

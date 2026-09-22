@@ -1,5 +1,4 @@
 import { useRef } from 'react';
-import DeleteConfirm from '../../ui/DeleteConfirm.jsx';
 import { studentDisplayName } from '../../../utils/instructor/studentSearch.js';
 
 export default function PaperSectionSidebar({
@@ -136,17 +135,16 @@ export default function PaperSectionSidebar({
                   )}
                   {!locked && (
                     <span data-testid={`delete-section-${section.id}`}>
-                      <DeleteConfirm
-                        message={labels.deleteSectionConfirm}
-                        onConfirm={() => onDeleteSection(section.id)}
-                        triggerLabel={`${labels.deleteSection}: ${section.sectionTitle}`}
-                        confirmLabel={ct.delete}
-                        cancelLabel={ct.cancel}
+                      <button
+                        type="button"
+                        onClick={() => onDeleteSection(section.id)}
+                        title={`${labels.deleteSection}: ${section.sectionTitle}`}
+                        aria-label={`${labels.deleteSection}: ${section.sectionTitle}`}
                         disabled={sectionStructureSaving}
-                        className="rounded p-1 text-rose-600 hover:bg-rose-50"
+                        className="rounded p-1 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                       >
                         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
-                      </DeleteConfirm>
+                      </button>
                     </span>
                   )}
                   {String(section.id) === String(conflictSectionId) && (
@@ -160,18 +158,15 @@ export default function PaperSectionSidebar({
       </div>
       <div data-testid="selected-sections-footer" className="flex items-center justify-between gap-2 border-t border-(--border) p-3">
         <span className="text-[10px] font-semibold text-(--text-secondary)">{labels.selectedSections(selectedBulkIds.length)}</span>
-        <DeleteConfirm
-          message={labels.deleteSelectedSectionsConfirm}
-          onConfirm={onDeleteSelectedSections}
-          placement="top"
-          triggerLabel={labels.deleteSelectedSections}
-          confirmLabel={ct.delete}
-          cancelLabel={ct.cancel}
+        <button
+          type="button"
+          onClick={onDeleteSelectedSections}
+          aria-label={labels.deleteSelectedSections}
           disabled={selectedBulkIds.length === 0 || sectionStructureLocked || sectionStructureSaving || projectReadOnly}
-          className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50"
+          className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
         >
           <span className="flex items-center gap-1 text-[10px] font-bold"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>{labels.deleteSelectedSections}</span>
-        </DeleteConfirm>
+        </button>
       </div>
     </aside>
   );

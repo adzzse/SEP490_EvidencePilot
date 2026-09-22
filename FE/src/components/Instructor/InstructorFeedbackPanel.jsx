@@ -9,32 +9,34 @@ import { selectPreviousCards } from '../../utils/instructor/historySelector.js';
 
 const ACTION_LABELS = { REVIEWED: 'instructor.review.approve', RETURNED: 'instructor.review.returnForRevision' };
 
-export function InstructorReviewGuide({ review, selectedSection }) {
+export function InstructorReviewGuide({ review, selectedSection, plain = false }) {
   const { t } = useTranslation();
   const { activeGuide, selectedSectionId } = review;
   const [checkedItems, setCheckedItems] = useState({});
+  const body = !selectedSection || !activeGuide ? <p className="text-(--text-tertiary) italic">{t('instructor.review.selectSectionGuide')}</p> : <>
+    <span className="inline-block rounded bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300">{activeGuide.sectionType}</span>
+    <p className="text-(--text-secondary) leading-relaxed">{activeGuide.guidance}</p>
+    <ul className="space-y-2">
+      {activeGuide.checklist.map((item, i) => {
+        const key = `${selectedSectionId}-${i}`;
+        const checked = !!checkedItems[key];
+        return <li key={key}><label className="flex items-start gap-2 cursor-pointer text-(--text-secondary)">
+          <input type="checkbox" checked={checked} onChange={() => setCheckedItems(prev => ({ ...prev, [key]: !checked }))} className="mt-0.5 accent-indigo-600" />
+          <span className={checked ? 'line-through opacity-60' : ''}>{item}</span>
+        </label></li>;
+      })}
+    </ul>
+  </>;
+  if (plain) return <div className="space-y-4 text-xs">{body}</div>;
   return <section className="space-y-4 rounded-xl border border-(--border) bg-(--surface) p-4 text-xs shadow-sm">
     <h3 className="font-bold text-(--text-primary)">{t('instructor.review.reviewGuide')}</h3>
-    {!selectedSection || !activeGuide ? <p className="text-(--text-tertiary) italic">{t('instructor.review.selectSectionGuide')}</p> : <>
-      <span className="inline-block rounded bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300">{activeGuide.sectionType}</span>
-      <p className="text-(--text-secondary) leading-relaxed">{activeGuide.guidance}</p>
-      <ul className="space-y-2">
-        {activeGuide.checklist.map((item, i) => {
-          const key = `${selectedSectionId}-${i}`;
-          const checked = !!checkedItems[key];
-          return <li key={key}><label className="flex items-start gap-2 cursor-pointer text-(--text-secondary)">
-            <input type="checkbox" checked={checked} onChange={() => setCheckedItems(prev => ({ ...prev, [key]: !checked }))} className="mt-0.5 accent-indigo-600" />
-            <span className={checked ? 'line-through opacity-60' : ''}>{item}</span>
-          </label></li>;
-        })}
-      </ul>
-    </>}
+    {body}
   </section>;
 }
 
 export default function InstructorFeedbackPanel({ review, selectedSection, projectId, focusSignal = 0, composerFocusToken = 0 }) {
   const { t } = useTranslation();
-  const { activeRequest, isHistoricalRound, errorMessage, successMessage, transitioningRequestId, pendingTransition, setPendingTransition, requestLocked, canReturn, handleTransitionStatus } = review;
+  const { activeRequest, isHistoricalRound, errorMessage, successMessage, transitioningRequestId, pendingTransition, setPendingTransition, requestLocked, canReturn, canApprove, handleTransitionStatus } = review;
   const [panelTab, setPanelTab] = useState('feedback');
   useEffect(() => {
     if (focusSignal > 0) setPanelTab('feedback');
@@ -51,7 +53,7 @@ export default function InstructorFeedbackPanel({ review, selectedSection, proje
     <div className="flex flex-wrap items-stretch justify-center gap-2">
       {!requestLocked && <>
         {canReturn && <button type="button" disabled={actionDisabled} onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'RETURNED' })} className={`${actionBtn} min-w-[116px] flex-[1.2_1_116px] bg-amber-500`}>{t('instructor.review.returnForRevision')}</button>}
-        <button type="button" disabled={actionDisabled} onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'REVIEWED' })} className={`${actionBtn} min-w-[76px] flex-[1_1_76px] bg-emerald-600`}>{t('instructor.review.approve')}</button>
+        {canApprove && <button type="button" disabled={actionDisabled} onClick={() => setPendingTransition({ requestId: activeRequest.id, targetStatus: 'REVIEWED' })} className={`${actionBtn} min-w-[76px] flex-[1_1_76px] bg-emerald-600`}>{t('instructor.review.approve')}</button>}
       </>}
     </div>
     {errorMessage && <p role="alert" className="text-rose-700">{errorMessage}</p>}

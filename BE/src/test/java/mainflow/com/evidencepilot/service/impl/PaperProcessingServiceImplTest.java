@@ -2,6 +2,7 @@ package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.request.SectionBatchItem;
 import com.evidencepilot.dto.response.PaperSectionResponse;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentMetadata;
 import com.evidencepilot.model.DocumentText;
@@ -75,6 +76,8 @@ class PaperProcessingServiceImplTest {
     private FeedbackAnchorService feedbackAnchorService;
     @Mock
     private com.evidencepilot.repository.AssignmentSectionBaselineRepository assignmentSectionBaselineRepository;
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher events;
 
     @Test
     void paperSectionResponseCarriesExplicitSectionKind() {
@@ -514,7 +517,8 @@ class PaperProcessingServiceImplTest {
                 feedbackAnchorService,
                 assignmentSectionBaselineRepository,
                 new com.fasterxml.jackson.databind.ObjectMapper(),
-                mock(SectionWorkHistoryService.class));
+                mock(SectionWorkHistoryService.class),
+                mock(org.springframework.context.ApplicationEventPublisher.class));
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId)).thenReturn(List.of());
         List<PaperSection> saved = new ArrayList<>();
@@ -664,7 +668,8 @@ class PaperProcessingServiceImplTest {
                 feedbackAnchorService,
                 mock(com.evidencepilot.repository.AssignmentSectionBaselineRepository.class),
                 new com.fasterxml.jackson.databind.ObjectMapper(),
-                mock(SectionWorkHistoryService.class));
+                mock(SectionWorkHistoryService.class),
+                mock(org.springframework.context.ApplicationEventPublisher.class));
 
         Project project = project(ProjectStatus.IN_PROGRESS);
         Document paperDoc = paper(project);
@@ -730,7 +735,8 @@ class PaperProcessingServiceImplTest {
                 feedbackAnchorService,
                 mock(com.evidencepilot.repository.AssignmentSectionBaselineRepository.class),
                 new com.fasterxml.jackson.databind.ObjectMapper(),
-                mock(SectionWorkHistoryService.class));
+                mock(SectionWorkHistoryService.class),
+                mock(org.springframework.context.ApplicationEventPublisher.class));
 
         Project project = project(ProjectStatus.IN_PROGRESS);
         project.setTargetStandard(com.evidencepilot.model.enums.PaperStandard.IEEE);
@@ -979,6 +985,29 @@ class PaperProcessingServiceImplTest {
         assertThat(section.getAssignedUser()).isEqualTo(student);
         assertThat(project.getStatus()).isEqualTo(ProjectStatus.ASSIGNED);
         verify(projectRepository).save(project);
+        verify(events).publishEvent(new EntityChangedEvent(
+                "PROJECT", project.getId(), "STATUS_CHANGED", null));
+    }
+
+    @Test
+    void unassignSectionPublishesProjectChange() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(ProjectStatus.ASSIGNED);
+        Document paper = paper(project);
+        PaperSection section = section(paper);
+        section.setAssignedUser(student);
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+        when(paperSectionRepository.findById(section.getId())).thenReturn(Optional.of(section));
+        when(paperSectionRepository.save(section)).thenReturn(section);
+
+        service().assignSection(paper.getId(), section.getId(), null);
+
+        assertThat(section.getAssignedUser()).isNull();
+        verify(events).publishEvent(new EntityChangedEvent(
+                "PROJECT", project.getId(), "STATUS_CHANGED", null));
     }
 
     @Test
@@ -1418,7 +1447,8 @@ class PaperProcessingServiceImplTest {
                 feedbackAnchorService,
                 assignmentSectionBaselineRepository,
                 new com.fasterxml.jackson.databind.ObjectMapper(),
-                mock(SectionWorkHistoryService.class));
+                mock(SectionWorkHistoryService.class),
+                events);
     }
 
     private User user(UserRole role) {

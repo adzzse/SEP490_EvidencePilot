@@ -4,8 +4,8 @@ import test from 'node:test';
 import { getStudentSuggestions, paginateStudents } from '../studentSearch.js';
 
 const users = [
-  { id: 'student-1', role: 'STUDENT', firstName: 'Đỗ', lastName: 'Hoàng Anh', studentCode: 'SE170001' },
-  { id: 'student-2', role: 'STUDENT', firstName: 'Nguyễn', lastName: 'Minh', studentCode: 'SE180002' },
+  { id: 'student-1', role: 'STUDENT', firstName: 'Đỗ', lastName: 'Hoàng Anh', email: 'anhdhse170001@fpt.edu.vn', studentCode: 'SE170001' },
+  { id: 'student-2', role: 'STUDENT', firstName: 'Nguyễn', lastName: 'Minh', email: 'minhnse180002@fpt.edu.vn', studentCode: 'SE180002' },
   { id: 'instructor-1', role: 'INSTRUCTOR', firstName: 'Hoàng', lastName: 'Anh', studentCode: null },
 ];
 
@@ -16,6 +16,10 @@ test('suggests available students by accent-insensitive name or student code', (
   );
   assert.deepEqual(
     getStudentSuggestions(users, [], '180002').map(student => student.id),
+    ['student-2'],
+  );
+  assert.deepEqual(
+    getStudentSuggestions(users, [], 'minhnse180002').map(student => student.id),
     ['student-2'],
   );
 });

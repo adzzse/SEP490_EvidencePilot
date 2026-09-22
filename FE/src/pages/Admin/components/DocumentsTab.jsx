@@ -72,6 +72,13 @@ function PapersSection({ api }) {
   const documents = documentsQuery.data || { content: [], totalElements: 0, totalPages: 0 };
   const projects = projectsQuery.data || [];
   const collections = collectionsQuery.data || [];
+  // ponytail: native options size the select — shorten labels, cap width, full name on hover.
+  const shortName = (name, limit = 32) => {
+    const text = String(name || '');
+    return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+  };
+  const selectedProject = projects.find((p) => String(p.id) === String(projectId));
+  const selectedCollection = collections.find((c) => String(c.id) === String(collectionId));
 
   return (
     <div className="p-8 space-y-6 bg-(--page-bg)">
@@ -101,22 +108,24 @@ function PapersSection({ api }) {
               value={projectId}
               onChange={(e) => { setProjectId(e.target.value); setPage(0); }}
               aria-label={t('admin.project')}
-              className="px-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
+              title={selectedProject?.title || t('admin.projectAll')}
+              className="w-full sm:w-44 lg:w-52 max-w-full overflow-hidden text-ellipsis px-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">{t('admin.projectAll')}</option>
               {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.title}</option>
+                <option key={p.id} value={p.id} title={p.title}>{shortName(p.title)}</option>
               ))}
             </select>
             <select
               value={collectionId}
               onChange={(e) => { setCollectionId(e.target.value); setPage(0); }}
               aria-label={t('admin.collections')}
-              className="px-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
+              title={selectedCollection?.name || t('admin.collectionAll')}
+              className="w-full sm:w-44 lg:w-52 max-w-full overflow-hidden text-ellipsis px-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">{t('admin.collectionAll')}</option>
               {collections.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id} title={c.name}>{shortName(c.name)}</option>
               ))}
             </select>
           </div>

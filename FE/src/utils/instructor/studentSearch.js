@@ -39,7 +39,7 @@ export function getStudentSuggestions(users, projectMembers, query, limit = 8) {
       && student.role === 'STUDENT'
       && !memberIds.has(String(student.id)))
     .filter(student => {
-      const searchable = normalizeSearch(`${studentDisplayName(student)} ${student.studentCode || ''}`);
+      const searchable = normalizeSearch(`${studentDisplayName(student)} ${student.email || ''} ${student.studentCode || ''}`);
       return terms.every(term => searchable.includes(term));
     })
     .slice(0, limit);

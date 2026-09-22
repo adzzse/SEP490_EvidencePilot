@@ -24,9 +24,12 @@ export default function ContributionGraph({ buckets = [], emptyLabel, ariaLabel 
           );
         })}
       </div>
-      <div className="flex justify-between text-[10px] text-[var(--text-tertiary)] border-t border-[var(--border)] pt-2 mt-auto">
-        <span>{buckets[0]?.label || buckets[0]?.date}</span>
-        <span>{buckets[buckets.length - 1]?.label || buckets[buckets.length - 1]?.date}</span>
+      <div className="flex gap-1 text-[10px] text-[var(--text-tertiary)] border-t border-[var(--border)] pt-2 mt-auto">
+        {buckets.map((b, i) => (
+          <span key={`${b.label || b.date}-${i}`} className="flex-1 min-w-0 truncate text-center" title={b.label || b.date}>
+            {b.label || b.date}
+          </span>
+        ))}
       </div>
     </div>
   );

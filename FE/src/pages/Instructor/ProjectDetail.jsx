@@ -423,7 +423,7 @@ export default function ProjectDetail() {
     let filtered = studentMembers;
     if (!memberSearch.trim()) return filtered;
     const q = memberSearch.toLowerCase();
-    return filtered.filter(m => studentDisplayName(m).toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || String(m.userRole||'').toLowerCase().includes(q));
+    return filtered.filter(m => studentDisplayName(m).toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || (m.studentCode?.toLowerCase() ?? '').includes(q) || String(m.userRole||'').toLowerCase().includes(q));
   }, [studentMembers, memberSearch]);
 
   const filteredSources = useMemo(() => {
@@ -436,7 +436,7 @@ export default function ProjectDetail() {
     const q = advancedSearch.trim().toLowerCase();
     const list = getStudentSuggestions(users, members, '', Number.MAX_SAFE_INTEGER);
     if (!q) return list;
-    return list.filter(s => studentDisplayName(s).toLowerCase().includes(q) || (s.email?.toLowerCase() ?? '').includes(q));
+    return list.filter(s => studentDisplayName(s).toLowerCase().includes(q) || (s.email?.toLowerCase() ?? '').includes(q) || (s.studentCode?.toLowerCase() ?? '').includes(q));
   }, [users, members, advancedSearch]);
   const advancedPaging = useMemo(
     () => paginateStudents(advancedFilteredStudents, advancedPage, MODAL_PAGE_SIZE),
@@ -786,7 +786,7 @@ export default function ProjectDetail() {
 
   const handleAddSection = async () => {
     const structureLockedNow = sections.some(section => section.assignedUserId)
-      || ['SUBMITTED_FOR_REVIEW', 'APPROVED', 'ARCHIVED'].includes(project?.status);
+      || ['SUBMITTED_FOR_REVIEW', 'APPROVED', 'ARCHIVED', 'PENDING_DELETE'].includes(project?.status);
     if (!selectedPaper || structureLockedNow || sectionStructureSaving) return;
     setSectionStructureSaving(true);
     try {
@@ -1016,6 +1016,22 @@ export default function ProjectDetail() {
     }
   };
 
+  const [reextractingPaper, setReextractingPaper] = useState(false);
+  const handleReextractPaper = async () => {
+    if (!selectedPaper || reextractingPaper) return;
+    setReextractingPaper(true);
+    try {
+      await api.post(`/api/documents/${selectedPaper.id}/re-extract`);
+      await loadPapers();
+      const res = await api.get(`/api/papers/${selectedPaper.id}`);
+      setSelectedPaper(res.data || null);
+    } catch {
+      alert(t('instructor.projectDetail.reExtractFailed'));
+    } finally {
+      setReextractingPaper(false);
+    }
+  };
+
   const handlePatch = async (action) => {
     setStatusPending(action);
     try {
@@ -1113,7 +1129,10 @@ export default function ProjectDetail() {
 
   const projectMembers = members;
   const hasAssignedSections = sections.some(s => s.assignedUserId);
-  const projectReadOnly = ['SUBMITTED_FOR_REVIEW', 'APPROVED', 'ARCHIVED'].includes(project.status) || Boolean(project.deletionScheduledAt);
+  const projectReadOnly = ['SUBMITTED_FOR_REVIEW', 'APPROVED', 'ARCHIVED', 'PENDING_DELETE'].includes(project.status) || Boolean(project.deletionScheduledAt);
+  // ponytail: sources follow the same mutability as everything else — the
+  // backend rejects writes on read-only/scheduled projects, so hide them here.
+  const canModifySources = !projectReadOnly;
   const sectionStructureLocked = hasAssignedSections || projectReadOnly;
   const standardViewSection = displaySections.find(section => String(section.id) === String(standardViewSectionId)) || null;
   const projectActionState = {
@@ -1221,7 +1240,7 @@ export default function ProjectDetail() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full overflow-hidden">
             <div id="source-documents" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 h-full min-h-0 overflow-hidden flex flex-col">
               <div className="mb-3 shrink-0">
-                <ActionExpandHeader title={t('instructor.projectDetail.sourceDocuments')} placeholder={t('instructor.projectDetail.searchSource')} searchValue={sourceSearch} onSearch={setSourceSearch} onAdd={() => setShowAddSource(true)} addLabel={t('instructor.projectDetail.addSource')} />
+                <ActionExpandHeader title={t('instructor.projectDetail.sourceDocuments')} placeholder={t('instructor.projectDetail.searchSource')} searchValue={sourceSearch} onSearch={setSourceSearch} onAdd={() => setShowAddSource(true)} addLabel={t('instructor.projectDetail.addSource')} hideAdd={!canModifySources} />
               </div>
               {selectedProjectSourceIds.length > 0 && (
                 <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -1232,7 +1251,8 @@ export default function ProjectDetail() {
                     triggerLabel={t('instructor.projectDetail.removeSelectedSources')}
                     confirmLabel={t('instructor.projectDetail.removeSelectedSources')}
                     cancelLabel={t('cancel')}
-                    className="rounded-md bg-rose-600 px-2.5 py-1.5 font-bold text-white transition hover:bg-rose-700"
+                    disabled={!canModifySources}
+                    className="rounded-md bg-rose-600 px-2.5 py-1.5 font-bold text-white transition hover:bg-rose-700 disabled:opacity-50"
                   >
                     {t('instructor.projectDetail.removeSelectedSources')}
                   </DeleteConfirm>
@@ -1248,30 +1268,53 @@ export default function ProjectDetail() {
                         type="checkbox"
                         checked={selectedProjectSourceIds.includes(String(s.id))}
                         onChange={() => toggleProjectSourceSelection(s.id)}
+                        disabled={!canModifySources || s.referenced}
+                        title={s.referenced ? t('instructor.projectDetail.removeSourceReferenced') : undefined}
                         aria-label={t('instructor.projectDetail.selectSource', { name: s.title || s.originalFilename || s.id })}
-                        className="h-4 w-4 shrink-0 rounded border-[var(--border)] text-[var(--brand)] focus:ring-[var(--brand)]"
+                        className="h-4 w-4 shrink-0 rounded border-[var(--border)] text-[var(--brand)] focus:ring-[var(--brand)] disabled:opacity-50"
                       />
                       <button onClick={() => { setSourceDetail(s); setShowSourceDetail(true); }} className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left">
                         <span className="min-w-0 truncate font-medium">{s.title || s.originalFilename || t('unknown')}</span>
                         <StatusBadge status={s.processingStatus || 'READY'} />
                       </button>
+                      <span title={s.referenced ? t('instructor.projectDetail.removeSourceReferenced') : undefined}>
                       <DeleteConfirm
                         message={t('instructor.projectDetail.removeSourceConfirm')}
                         onConfirm={() => handleRemoveSource(s.id)}
                         triggerLabel={t('instructor.projectDetail.removeSource')}
                         confirmLabel={t('instructor.projectDetail.removeSource')}
                         cancelLabel={t('cancel')}
-                        className="shrink-0 rounded-lg p-1.5 text-[var(--text-tertiary)] transition hover:bg-rose-100 hover:text-rose-600"
+                        disabled={!canModifySources || s.referenced}
+                        className="shrink-0 rounded-lg p-1.5 text-[var(--text-tertiary)] transition hover:bg-rose-100 hover:text-rose-600 disabled:opacity-50"
                       >
                         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M10 11v6M14 11v6" /></svg>
                       </DeleteConfirm>
+                      </span>
                     </div>
                   ))}
                 </div>
               )}
             </div>
             <div id="set-up-paper" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 h-full min-h-0 overflow-y-auto flex flex-col">
-              <h2 className="mb-4 text-sm font-bold text-[var(--brand-foreground)]">{t('instructor.projectDetail.setUpPaper')}</h2>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t('instructor.projectDetail.setUpPaper')}</h2>
+                {!sectionStructureLocked && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedPaper && hasProjectAction(projectActionState, 'reExtract') && (
+                      <button
+                        onClick={handleReextractPaper}
+                        disabled={reextractingPaper || selectedPaper.processingStatus === 'QUEUED' || selectedPaper.processingStatus === 'PROCESSING'}
+                        className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-bold text-[var(--brand-foreground)] transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)] disabled:opacity-50"
+                      >
+                        {reextractingPaper ? t('saving') : t('instructor.projectDetail.reExtractPaper')}
+                      </button>
+                    )}
+                    <button onClick={() => { setSetupMode(standard ? 'standard' : 'paper'); setShowSetUpPaper(true); }} className="shrink-0 rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs font-bold text-white hover:bg-[var(--brand-hover)]">
+                      {standard || papers.length > 0 ? t('instructor.projectDetail.updateSetup') : t('instructor.projectDetail.setUpPaper')}
+                    </button>
+                  </div>
+                )}
+              </div>
               {standard && (
                 <div className="mb-3 flex items-center justify-between gap-2 rounded-lg bg-[var(--brand-soft)] px-3 py-2 text-xs">
                   <span className="font-medium text-[var(--brand-foreground)]">{t('instructor.projectDetail.standardLabel', { standard })}</span>
@@ -1343,15 +1386,11 @@ export default function ProjectDetail() {
               {!standard && papers.length === 0 && (
                 <p className="mb-3 text-xs italic text-[var(--text-tertiary)]">{t('instructor.projectDetail.noPaperConfigured')}</p>
               )}
-              {sectionStructureLocked ? (
+              {sectionStructureLocked && (
                 <div className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-center text-xs font-bold text-[var(--text-secondary)]">
                   <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
                   {projectReadOnly ? t('instructor.projectDetail.setupLockedReadOnly') : t('instructor.projectDetail.setupLockedAssigned')}
                 </div>
-              ) : (
-                <button onClick={() => { setSetupMode(standard ? 'standard' : 'paper'); setShowSetUpPaper(true); }} className="w-full rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)]">
-                  {standard || papers.length > 0 ? t('instructor.projectDetail.updateSetup') : t('instructor.projectDetail.setUpPaper')}
-                </button>
               )}
             </div>
           </div>
@@ -1664,7 +1703,7 @@ export default function ProjectDetail() {
                        <button key={m.userId} data-testid={`member-${m.userId}`} onClick={()=>setSelectedMemberId(String(m.userId))} className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs transition ${isSelected ? 'border border-indigo-200 bg-[var(--brand-soft)] text-[var(--brand-foreground)]' : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)]'}`}>
                         <div className="min-w-0 flex-1">
                           <span className="block truncate font-medium">{studentDisplayName(m ?? {})}</span>
-                          <span className="block truncate text-[10px] text-[var(--text-tertiary)]">{m.email}</span>
+                          <span className="block truncate text-[10px] text-[var(--text-tertiary)]">{m.email}{m.studentCode ? ` · ${m.studentCode}` : ''}</span>
                         </div>
                         <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">
                           {m.userRole
@@ -1812,7 +1851,7 @@ export default function ProjectDetail() {
               return (
                 <label key={st.id} className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-[var(--surface-secondary)]">
                   <input type="checkbox" checked={checked} onChange={e=> setAdvancedSelectedIds(cur=> e.target.checked ? [...cur, String(st.id)] : cur.filter(id=>id!==String(st.id)))} />
-                  <span className="min-w-0 flex-1 truncate">{studentDisplayName(st)} <span className="text-[10px] text-[var(--text-tertiary)]">({st.email})</span></span>
+                  <span className="min-w-0 flex-1 truncate">{studentDisplayName(st)} <span className="text-[10px] text-[var(--text-tertiary)]">({st.email}{st.studentCode ? ` · ${st.studentCode}` : ''})</span></span>
                   <select value={advancedRoleMap[st.id]||'MEMBER'} onChange={e=> setAdvancedRoleMap(m=>({...m,[st.id]:e.target.value}))} onClick={e=>e.stopPropagation()} className="rounded border border-[var(--border)] bg-[var(--surface)] px-1 py-0.5 text-[10px]">
                     <option value="MEMBER">{t('instructor.projectDetail.memberRole')}</option><option value="LEADER">{t('instructor.projectDetail.leaderRole')}</option>
                   </select>

@@ -25,6 +25,7 @@ function PromptConfigSection({ api }) {
   const [trialCase, setTrialCase] = useState(CASES[0]);
   const [trialChain, setTrialChain] = useState(false);
   const [pending, setPending] = useState('');
+  const [configTab, setConfigTab] = useState('models');
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [status, setStatus] = useState('');
@@ -256,6 +257,25 @@ function PromptConfigSection({ api }) {
       {status && <div role="status" className="text-xs text-emerald-700 bg-emerald-50 p-3 rounded-xl border border-emerald-200">{status}</div>}
       {loading && <div role="status" className="text-xs text-(--text-tertiary)">{t('admin.loading')}</div>}
 
+      <div className="flex bg-(--surface-tertiary) p-0.5 rounded-xl text-xs font-bold text-(--text-secondary) self-start">
+        {[
+          { id: 'models', label: t('admin.aiModelSelection') },
+          { id: 'functions', label: `${t('admin.aiFunction')} & ${t('admin.promptEditor')}` },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setConfigTab(tab.id)}
+            className={`px-3 py-1.5 rounded-lg transition-all ${configTab === tab.id
+              ? 'bg-(--surface) text-(--text-primary) shadow-sm'
+              : 'hover:text-(--text-primary)'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {configTab === 'models' && (
       <section data-guide="ai-model" className="bg-(--surface) rounded-2xl border border-(--border) p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
           <div><h2 className="font-bold">{t('admin.aiModelSelection')}</h2><p className="text-xs text-(--text-secondary)">{t('admin.aiModelScope')}</p></div>
@@ -270,7 +290,9 @@ function PromptConfigSection({ api }) {
         )}
         <div className="flex justify-end"><button type="button" disabled={!catalog || !modelChanged || !modelDraft[0] || pending === 'model'} onClick={(event) => showConfirm({ type: 'model' }, event)} className="px-4 py-2 bg-[#0c162e] text-white rounded-xl text-xs font-bold disabled:opacity-40">{t('admin.aiApplyModel')}</button></div>
       </section>
+      )}
 
+      {configTab === 'functions' && (
       <div className="grid xl:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.4fr)] gap-6">
         <section data-guide="prompt-list" className="bg-(--surface) rounded-2xl border border-(--border) p-5 space-y-4">
           <label className="text-xs font-bold">{t('admin.aiFunction')}<select aria-label={t('admin.aiFunction')} value={key} onChange={(event) => changeKey(event.target.value)} className="mt-1 w-full px-3 py-2 border border-(--border) rounded-xl bg-(--surface)">{KEYS.map((value) => <option key={value} value={value}>{t(`admin.aiKey${value}`)}</option>)}</select></label>
@@ -297,6 +319,7 @@ function PromptConfigSection({ api }) {
           </section>
         </section>
       </div>
+      )}
 
       <Modal open={Boolean(confirm)} onClose={closeConfirm} title={t('admin.aiConfirmApply')} closeLabel={t('close')}>
         {confirm?.type === 'model' ? <div className="space-y-4 text-sm"><p>{t('admin.aiModelScope')}</p><p className="font-mono">{(config?.modelIds || []).join(' → ')}<br />↓<br />{modelDraft.join(' → ')}</p><button type="button" disabled={pending === 'model'} onClick={applyModel} className="w-full px-4 py-2 bg-[#0c162e] text-white rounded-xl font-bold">{t('admin.aiApplyModel')}</button></div> : confirm?.prompt && <div className="space-y-4 text-sm"><p>{t('admin.aiPromptApplySummary', { before: currentPrompt?.version, after: confirm.prompt.version })}</p>{!trialMatchesConfirm && <p className="text-amber-700">{t('admin.aiNotTrialed')}</p>}<button type="button" disabled={pending === 'prompt'} onClick={applyPrompt} className="w-full px-4 py-2 bg-[#0c162e] text-white rounded-xl font-bold">{t('admin.activate')}</button></div>}

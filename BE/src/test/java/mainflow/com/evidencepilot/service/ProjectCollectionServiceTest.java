@@ -394,6 +394,28 @@ class ProjectCollectionServiceTest {
     }
 
     @Test
+    void pinningNewSourceWithoutCollectionLinkStillPersistsTheLink() {
+        User instructor = instructor();
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        Collection collection = collection(instructor);
+        Document source = source(collection);
+        when(projectCollectionRepository.findByProjectIdAndCollectionId(project.getId(), collection.getId()))
+                .thenReturn(Optional.empty());
+        when(projectDocumentRepository.findByProjectIdAndDocumentId(project.getId(), source.getId()))
+                .thenReturn(Optional.empty());
+
+        service().pinSource(project, source, instructor);
+
+        ArgumentCaptor<ProjectDocument> linkCaptor = ArgumentCaptor.forClass(ProjectDocument.class);
+        verify(projectDocumentRepository).save(linkCaptor.capture());
+        assertThat(linkCaptor.getValue().getProject()).isEqualTo(project);
+        assertThat(linkCaptor.getValue().getDocument()).isEqualTo(source);
+        assertThat(linkCaptor.getValue().isPinned()).isTrue();
+        verify(events).publishEvent(new EntityChangedEvent(
+                "PROJECT", project.getId(), "SOURCE_CHANGED", null));
+    }
+
+    @Test
     void addingSourceCreatesReferenceWithoutChangingOriginalCollection() {
         User instructor = instructor();
         Collection oldCollection = collection(instructor);

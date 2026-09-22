@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDate, formatDateTime } from '../../../utils/formatters/date.js';
+import { latestRoundTraces } from '../../../utils/instructor/evidenceRounds.js';
 
 function confirmationFor(section) {
   if (section?.sectionType === 'REFERENCE') {
@@ -60,7 +61,8 @@ export default function ReviewOverviewBlock({ review }) {
     const byId = new Map(records.map(section => [String(section.id), section]));
     const current = selectedSectionId == null ? null : byId.get(String(selectedSectionId));
     const sectionIds = new Set(records.map(section => String(section.id)));
-    const traces = (evidenceTraces || []).filter(trace => sectionIds.has(String(trace.sectionId)));
+    const traces = latestRoundTraces(
+      (evidenceTraces || []).filter(trace => sectionIds.has(String(trace.sectionId))));
     return {
       sectionRecords: records,
       selected: current,

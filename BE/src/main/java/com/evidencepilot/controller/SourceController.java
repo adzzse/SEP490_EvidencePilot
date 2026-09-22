@@ -9,6 +9,8 @@ import com.evidencepilot.dto.response.SourceLibraryItemResponse;
 import com.evidencepilot.model.ProjectDocument;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.ProcessingStatus;
+import com.evidencepilot.repository.EvidenceRevisionTraceRepository;
+import com.evidencepilot.repository.PaperReferenceRepository;
 import com.evidencepilot.repository.ProjectDocumentRepository;
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.impl.DocumentServiceImpl;
@@ -51,6 +53,8 @@ public class SourceController {
 
     private final DocumentServiceImpl documentService;
     private final ProjectDocumentRepository projectDocumentRepository;
+    private final PaperReferenceRepository paperReferenceRepository;
+    private final EvidenceRevisionTraceRepository evidenceRevisionTraceRepository;
     private final CurrentUserServiceImpl currentUserService;
     private final ProjectRepository projectRepository;
     private final ProjectSourceUnshareService projectSourceUnshareService;
@@ -90,7 +94,12 @@ public class SourceController {
                 .filter(d -> d.isActive() && d.getDocType() == DocumentType.SOURCE)
                 .map(DocumentResponse::from)
                 .toList();
-        return Stream.concat(direct.stream(), shared.stream()).distinct().toList();
+        return Stream.concat(direct.stream(), shared.stream()).distinct()
+                .map(source -> source.withReferenced(
+                        paperReferenceRepository.existsActiveForProject(projectId, source.id())
+                                || evidenceRevisionTraceRepository.existsActiveForProjectAndSource(
+                                        projectId, source.id())))
+                .toList();
     }
 
     @Operation(summary = "Get source by ID", description = "Returns metadata for a single active source document.")

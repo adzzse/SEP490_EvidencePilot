@@ -1,5 +1,5 @@
 const EDITABLE_STATUSES = new Set(['CREATED', 'ASSIGNED', 'IN_PROGRESS', 'RETURNED']);
-const EXPORTABLE_STATUSES = new Set(['IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'RETURNED', 'APPROVED', 'ARCHIVED']);
+const EXPORTABLE_STATUSES = new Set(['IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'RETURNED', 'APPROVED', 'ARCHIVED', 'PENDING_DELETE']);
 
 export function getProjectActions(project = {}) {
   if (!project.active) return ['restore'];

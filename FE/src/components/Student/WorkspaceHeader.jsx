@@ -117,8 +117,8 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               </button>
               {showGuide && (
-                <div className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] max-h-96 overflow-y-auto p-1">
-                  <div className="sticky top-0 bg-(--surface) px-3 py-2 flex justify-between items-center">
+                <div className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] max-h-96 overflow-y-auto px-4 py-3">
+                  <div className="pb-2 flex justify-between items-center">
                     <span className="text-xs font-bold text-(--text-primary)">{t('instructor.review.reviewGuide')}</span>
                     <button type="button" onClick={() => setShowGuide(false)} className={iconButton} aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
                   </div>
@@ -135,8 +135,9 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
           {isReview && review && (
             <>
               <div className="relative">
-                <button type="button" onClick={() => { setShowStandards(!showStandards); setShowAiDrawer(false); setShowGuide(false); setShowRoundMenu(false); setShowMoreMenu(false); }} className={iconButton} title={t('instructor.review.standardsTab')} aria-label={t('instructor.review.standardsTab')} aria-expanded={showStandards}>
+                <button type="button" onClick={() => { setShowStandards(!showStandards); setShowAiDrawer(false); setShowGuide(false); setShowRoundMenu(false); setShowMoreMenu(false); }} className="flex h-8 items-center gap-1 rounded-lg border border-(--border) bg-(--surface) px-2 text-xs font-bold text-(--text-secondary) transition-colors hover:text-(--text-primary)" title={t('instructor.review.standardsTab')} aria-label={t('instructor.review.standardsTab')} aria-expanded={showStandards}>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <span className="hidden lg:inline">{t('instructor.review.standardsTab')}</span>
                 </button>
                 {showStandards && (
                   <div className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] max-h-96 overflow-y-auto p-1">
@@ -150,8 +151,9 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
                   </div>
                 )}
               </div>
-              <button type="button" onClick={() => { setShowAiDrawer(!showAiDrawer); setShowStandards(false); setShowGuide(false); setShowRoundMenu(false); setShowMoreMenu(false); }} className={iconButton} title={t('instructor.review.aiSuggestionTab')} aria-label={t('instructor.review.aiSuggestionTab')} aria-expanded={showAiDrawer}>
+              <button type="button" onClick={() => { setShowAiDrawer(!showAiDrawer); setShowStandards(false); setShowGuide(false); setShowRoundMenu(false); setShowMoreMenu(false); }} className="flex h-8 items-center gap-1 rounded-lg border border-(--border) bg-(--surface) px-2 text-xs font-bold text-(--text-secondary) transition-colors hover:text-(--text-primary)" title={t('instructor.review.aiSuggestionTab')} aria-label={t('instructor.review.aiSuggestionTab')} aria-expanded={showAiDrawer}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                <span className="hidden lg:inline">{t('instructor.review.aiSuggestionTab')}</span>
               </button>
             </>
           )}

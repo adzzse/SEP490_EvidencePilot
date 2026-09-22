@@ -29,11 +29,13 @@ import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.AuditService;
 import com.evidencepilot.service.FeedbackAnchorService;
 import com.evidencepilot.dto.request.SectionContentUpdateRequest.TextChange;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.service.PaperStandardService;
 import com.evidencepilot.service.SystemNotificationService;
 import com.evidencepilot.service.TexArchiveBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -83,6 +85,7 @@ public class PaperProcessingServiceImpl {
     private final AssignmentSectionBaselineRepository assignmentSectionBaselineRepository;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
     private final SectionWorkHistoryService sectionWorkHistoryService;
+    private final ApplicationEventPublisher events;
 
     public List<PaperSectionResponse> getPaperSections(UUID documentId) {
         requireDocumentAccess(documentId);
@@ -458,6 +461,10 @@ public class PaperProcessingServiceImpl {
         section.setUpdatedAt(LocalDateTime.now());
         PaperSection saved = paperSectionRepository.save(section);
         paperSectionRepository.flush();
+        if (!Objects.equals(previousAssigneeId, assignedUserId)) {
+            events.publishEvent(new EntityChangedEvent(
+                    "PROJECT", document.getProject().getId(), "STATUS_CHANGED", null));
+        }
         PaperSectionResponse response = PaperSectionResponse.from(saved);
         if (assignedUserId != null) {
             Project project = document.getProject();

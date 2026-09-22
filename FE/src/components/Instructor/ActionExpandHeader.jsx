@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export default function ActionExpandHeader({ title, placeholder = 'Search...', searchValue = '', onSearch, onAdd, addLabel = 'Add' }) {
+export default function ActionExpandHeader({ title, placeholder = 'Search...', searchValue = '', onSearch, onAdd, addLabel = 'Add', hideAdd = false }) {
   const [isAddHovered, setIsAddHovered] = useState(false);
   const hasText = searchValue && String(searchValue).trim() !== '';
 
@@ -23,6 +23,7 @@ export default function ActionExpandHeader({ title, placeholder = 'Search...', s
             <button type="button" onClick={() => onSearch?.('')} className="shrink-0 rounded p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">×</button>
           )}
         </div>
+        {!hideAdd && (
         <button
           type="button"
           onClick={onAdd}
@@ -34,6 +35,7 @@ export default function ActionExpandHeader({ title, placeholder = 'Search...', s
           <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
           {isAddHovered && <span className="whitespace-nowrap text-xs font-bold">{addLabel}</span>}
         </button>
+        )}
       </div>
     </div>
   );

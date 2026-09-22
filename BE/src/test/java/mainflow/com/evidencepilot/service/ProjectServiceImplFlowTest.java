@@ -155,6 +155,28 @@ class ProjectServiceImplFlowTest {
     }
 
     @Test
+    void getProjectMemberResponsesIncludesStudentCode() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        student.setStudentCode("SE170001");
+        Project project = projectWithInstructor(instructor);
+        ProjectMember member = new ProjectMember();
+        member.setProject(project);
+        member.setUser(student);
+        member.setRole(ProjectRole.MEMBER);
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(projectMemberRepository.findByProjectId(project.getId())).thenReturn(List.of(member));
+
+        var responses = service().getProjectMemberResponses(project.getId());
+
+        assertThat(responses).singleElement().satisfies(response -> {
+            assertThat(response.userId()).isEqualTo(student.getId());
+            assertThat(response.studentCode()).isEqualTo("SE170001");
+        });
+    }
+
+    @Test
     void removeMemberNotifiesAndDeletesMatches() {
         User instructor = user(UserRole.INSTRUCTOR);
         User student = user(UserRole.STUDENT);

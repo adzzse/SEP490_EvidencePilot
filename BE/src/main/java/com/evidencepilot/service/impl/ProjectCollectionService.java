@@ -237,15 +237,17 @@ public class ProjectCollectionService {
                         .orElse(null);
         ProjectDocument projectDocument = projectDocumentRepository
                 .findByProjectIdAndDocumentId(project.getId(), document.getId())
-                .orElseGet(() -> {
-                    ProjectDocument created = new ProjectDocument();
-                    created.setProject(project);
-                    created.setDocument(document);
-                    created.setSharedBy(sharedBy);
-                    created.setSharedAt(LocalDateTime.now());
-                    return created;
-                });
-        boolean changed = !projectDocument.isPinned();
+                .orElse(null);
+        // ponytail: new links default to pinned=true, so creation itself is the change.
+        boolean created = projectDocument == null;
+        if (created) {
+            projectDocument = new ProjectDocument();
+            projectDocument.setProject(project);
+            projectDocument.setDocument(document);
+            projectDocument.setSharedBy(sharedBy);
+            projectDocument.setSharedAt(LocalDateTime.now());
+        }
+        boolean changed = created || !projectDocument.isPinned();
         projectDocument.setPinned(true);
         if (projectDocument.getProjectCollection() == null && link != null) {
             projectDocument.setProjectCollection(link);

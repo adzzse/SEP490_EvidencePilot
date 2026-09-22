@@ -60,4 +60,12 @@ test('scheduled project exposes only revoke plus its read-only export action', (
     status: 'CREATED',
     deletionScheduledAt: '2026-10-22T03:00:00',
   }), ['revokeDeletion']);
+
+  assert.deepEqual(getProjectActions({
+    active: true,
+    status: 'PENDING_DELETE',
+    deletionScheduledAt: '2026-10-22T03:00:00',
+  }), ['revokeDeletion', 'export']);
+
+  assert.deepEqual(getProjectActions({ status: 'PENDING_DELETE', active: true }), ['export']);
 });
