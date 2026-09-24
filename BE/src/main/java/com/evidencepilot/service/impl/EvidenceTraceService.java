@@ -287,6 +287,7 @@ public class EvidenceTraceService {
     }
 
     @Transactional
+    // ponytail: judgment kept pending product decision (PNYTL-001); Scope-A removal = this method + PATCH endpoint + FE route + export cols + tests + ~15 report spots, DB columns stay
     public EvidenceTraceResponse review(UUID projectId, UUID traceId, TraceReviewRequest request) {
         EvidenceRevisionTrace trace = traceRepository.findById(traceId)
                 .filter(found -> projectId.equals(found.getRound().getProject().getId()))

@@ -84,6 +84,7 @@ function App() {
             <Route path="/instructor/projects/:id" element={
               <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><ErrorBoundary><ProjectDetail /></ErrorBoundary></ProtectedRoute>
             } />
+            {/* ponytail: trace-review UI kept pending product decision (PNYTL-001); Scope-A removal = this route + PATCH endpoint + export cols + tests + ~15 report spots */}
             <Route path="/instructor/projects/:id/evidence-traces" element={
               <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}><EvidenceTraceReview /></ProtectedRoute>
             } />

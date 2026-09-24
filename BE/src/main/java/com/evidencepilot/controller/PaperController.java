@@ -524,6 +524,7 @@ public class PaperController {
     }
 
     @Operation(summary = "Instructor judgment on an evidence revision trace")
+    // ponytail: judgment kept pending product decision (PNYTL-001); Scope-A removal = this endpoint + FE route + export cols + tests + ~15 report spots, DB columns stay
     @PatchMapping("/projects/{projectId}/evidence-traces/{traceId}/review")
     public EvidenceTraceResponse reviewTrace(
             @PathVariable UUID projectId,

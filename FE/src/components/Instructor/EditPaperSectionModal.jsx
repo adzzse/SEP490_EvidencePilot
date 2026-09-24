@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import PaperSectionSidebar from './sections/PaperSectionSidebar.jsx';
 import PaperSectionEditorPane from './sections/PaperSectionEditorPane.jsx';
@@ -31,7 +32,6 @@ export default function EditPaperSectionModal({
   ct,
 }) {
   const { t } = useTranslation();
-  const dialogRef = useRef(null);
   const [selectedSectionId, setSelectedSectionId] = useState(null);
   const [selectedBulkIds, setSelectedBulkIds] = useState([]);
   const [bulkAssignments, setBulkAssignments] = useState({});
@@ -62,15 +62,25 @@ export default function EditPaperSectionModal({
   );
   const selectedStudentId = selectedSection?.assignedUserId || '';
 
+  const requestClose = useCallback(() => {
+    if (dirty) {
+      setConfirmClose(true);
+      return;
+    }
+    onClose();
+  }, [dirty, onClose]);
+
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return undefined;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-    return () => {
-      if (dialog.open) dialog.close();
+    if (!open) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        requestClose();
+      }
     };
-  }, [open]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, requestClose]);
 
   useEffect(() => {
     if (!sections.some(section => String(section.id) === String(selectedSectionId))) {
@@ -93,14 +103,6 @@ export default function EditPaperSectionModal({
       setSaveNotice(false);
     }
   }, [open]);
-
-  const requestClose = () => {
-    if (dirty) {
-      setConfirmClose(true);
-      return;
-    }
-    onClose();
-  };
 
   const updateSection = (sectionId, changes) => {
     setSaveNotice(false);
@@ -207,15 +209,17 @@ export default function EditPaperSectionModal({
     }
   };
 
-  return (
-    <dialog
-      ref={dialogRef}
-      onCancel={event => { event.preventDefault(); requestClose(); }}
-      onClick={event => { if (event.target === dialogRef.current) requestClose(); }}
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
       aria-label={labels.editPaperSections}
-      className="fixed inset-0 m-auto h-[92vh] w-[94vw] max-h-none max-w-none rounded-2xl border-0 bg-transparent p-0 shadow-2xl backdrop:bg-slate-900/60 backdrop:backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+      onClick={event => { if (event.target === event.currentTarget) requestClose(); }}
     >
-      <div className="flex h-full w-full overflow-hidden rounded-2xl border border-(--border) bg-(--surface)">
+      <div className="relative flex h-[92vh] w-[94vw] max-h-none max-w-none overflow-hidden rounded-2xl border border-(--border) bg-(--surface) shadow-2xl">
         <PaperSectionSidebar
           paper={paper}
           sections={sections}
@@ -301,6 +305,7 @@ export default function EditPaperSectionModal({
           </div>
         )}
       </div>
-    </dialog>
+    </div>,
+    document.body
   );
 }

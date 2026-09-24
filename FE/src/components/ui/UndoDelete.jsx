@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 const UndoDeleteContext = createContext(null);
 
@@ -91,8 +92,8 @@ export function UndoToast({ pending, onUndo, onDismiss }) {
   const undoLabel = interpolate(pending.undoLabel || DEFAULT_STRINGS.undoLabel, vars);
   const undoLabelWithCountdown = `${undoLabel} ${interpolate(pending.undoRemaining || DEFAULT_STRINGS.undoRemaining, vars)}`.trim();
 
-  return (
-    <div role="alert" className="fixed bottom-5 right-5 z-[70] w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl animate-slide-in-right">
+  return createPortal(
+    <div role="alert" className="fixed bottom-5 right-5 z-[9999] w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl animate-slide-in-right">
       <div className="flex items-center gap-2 border-b border-red-100 bg-red-50 px-4 py-2.5">
         <svg className="h-4 w-4 shrink-0 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
@@ -120,7 +121,8 @@ export function UndoToast({ pending, onUndo, onDismiss }) {
           {undoLabelWithCountdown}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
