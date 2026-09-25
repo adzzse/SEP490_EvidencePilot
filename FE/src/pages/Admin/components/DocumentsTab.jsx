@@ -72,7 +72,8 @@ function PapersSection({ api }) {
   const documents = documentsQuery.data || { content: [], totalElements: 0, totalPages: 0 };
   const projects = projectsQuery.data || [];
   const collections = collectionsQuery.data || [];
-  // ponytail: native options size the select — shorten labels, cap width, full name on hover.
+  // Native options stay compact while the full name remains available in the
+  // option and select title attributes.
   const shortName = (name, limit = 32) => {
     const text = String(name || '');
     return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;

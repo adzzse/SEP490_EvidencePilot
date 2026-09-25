@@ -307,7 +307,8 @@ public class ProjectServiceImpl {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Project deletion is not scheduled.");
         }
         LocalDateTime previousDeadline = project.getDeletionScheduledAt();
-        // ponytail: rows scheduled before status tracking keep their current status.
+        // Legacy scheduled rows have no prior-status value; keep their current
+        // status while newer rows restore the recorded status below.
         if (project.getStatusBeforeDeletion() != null) {
             project.setStatus(project.getStatusBeforeDeletion());
         }

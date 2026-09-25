@@ -859,9 +859,10 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
         void refreshReferences();
         return;
       }
-      // ponytail: PROJECT events carry id-only (no projectId) — match either.
-      // Refreshes the lock fields (status/deletionScheduledAt) plus assignments
-      // without touching selection or unsaved edits.
+      // PROJECT events carry the project id in `id`; `targetsProject` also
+      // accepts `projectId` for the other entity envelopes.
+      // Refreshes lock fields and assignments without touching selection or
+      // unsaved edits.
       if (event.entity === 'PROJECT' && targetsProject(event, project?.id)) {
         const refreshProjectState = async () => {
           try {

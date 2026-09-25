@@ -28,8 +28,8 @@ export default function SectionEvidenceTab({ review, selectedSection }) {
       String(tr.sectionId) === String(selectedSection?.id)
       && ids.has(String(tr.roundId))
       && (version == null || tr.sectionVersion == null || tr.sectionVersion === version));
-    // ponytail: show only this section's latest round — older rounds linger in
-    // the snapshot and would double-count identical findings across returns.
+      // Older rounds remain in the snapshot; show the latest section round so
+      // findings are not double-counted across returns.
     return { traces: latestRoundTraces(roundTraces), linked: true };
   }, [review.evidenceTraces, selectedSection, roundIds, snapshotSection?.contentVersion]);
 

@@ -12,6 +12,11 @@ test('matches DOCUMENT/FEEDBACK events by projectId', () => {
   assert.equal(targetsProject({ entity: 'DOCUMENT', id: 'd1', projectId: 'p1' }, 'p2'), false);
 });
 
+test('matches either id when an event carries both identifiers', () => {
+  assert.equal(targetsProject({ entity: 'PROJECT', id: 'p1', projectId: 'legacy-p1' }, 'p1'), true);
+  assert.equal(targetsProject({ entity: 'PROJECT', id: 'legacy-p1', projectId: 'p1' }, 'p1'), true);
+});
+
 test('rejects missing event or project', () => {
   assert.equal(targetsProject(null, 'p1'), false);
   assert.equal(targetsProject({ entity: 'PROJECT', id: 'p1' }, null), false);

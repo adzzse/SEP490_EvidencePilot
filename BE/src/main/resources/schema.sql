@@ -1,6 +1,6 @@
 -- EvidencePilot consolidated MySQL schema snapshot.
 --
--- Runtime source of truth: db/migration/V1__baseline_schema.sql through V43__*.sql
+-- Runtime source of truth: db/migration/V1__baseline_schema.sql through V46__*.sql
 -- (plus V37_1__SeedReviewSnapshots.java for data-only backfill). This file is a
 -- DDL snapshot for inspection, local bootstrap, and diagram generation; it does
 -- not replay migration backfills or seed data.
@@ -50,11 +50,15 @@ CREATE TABLE projects (
     status VARCHAR(50) NOT NULL,
     target_standard VARCHAR(50),
     active BOOLEAN NOT NULL DEFAULT TRUE,
+    deletion_scheduled_at DATETIME(6),
+    status_before_deletion VARCHAR(50),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT chk_projects_status CHECK (status IN ('CREATED', 'ASSIGNED', 'IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'RETURNED', 'APPROVED', 'ARCHIVED')),
+    CONSTRAINT chk_projects_status CHECK (status IN ('CREATED', 'ASSIGNED', 'IN_PROGRESS', 'SUBMITTED_FOR_REVIEW', 'RETURNED', 'APPROVED', 'ARCHIVED', 'PENDING_DELETE')),
     CONSTRAINT chk_projects_target_standard CHECK (target_standard IS NULL OR target_standard IN ('IEEE', 'ACM', 'SPRINGER_LNCS', 'APA', 'MLA', 'CUSTOM'))
 );
+
+CREATE INDEX idx_projects_deletion_scheduled_at ON projects (deletion_scheduled_at);
 
 CREATE TABLE project_members (
     id BINARY(16) NOT NULL PRIMARY KEY,
@@ -66,6 +70,20 @@ CREATE TABLE project_members (
     CONSTRAINT chk_project_members_role CHECK (role IN ('LEADER', 'MEMBER', 'INSTRUCTOR')),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE project_deletion_cleanup_tasks (
+    id BINARY(16) NOT NULL PRIMARY KEY,
+    project_id BINARY(16) NOT NULL,
+    resource_type VARCHAR(32) NOT NULL,
+    resource_key VARCHAR(512) NOT NULL,
+    guard_key VARCHAR(64),
+    attempts INT NOT NULL DEFAULT 0,
+    next_attempt_at DATETIME(6) NOT NULL,
+    last_error VARCHAR(1000),
+    created_at DATETIME(6) NOT NULL,
+    UNIQUE INDEX uq_project_cleanup_resource (project_id, resource_type, resource_key),
+    INDEX idx_project_cleanup_due (next_attempt_at)
 );
 
 CREATE TABLE collection_categories (

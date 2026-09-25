@@ -238,7 +238,8 @@ public class ProjectCollectionService {
         ProjectDocument projectDocument = projectDocumentRepository
                 .findByProjectIdAndDocumentId(project.getId(), document.getId())
                 .orElse(null);
-        // ponytail: new links default to pinned=true, so creation itself is the change.
+        // A new ProjectDocument is pinned by its entity default, so creation is
+        // itself a state change.
         boolean created = projectDocument == null;
         if (created) {
             projectDocument = new ProjectDocument();

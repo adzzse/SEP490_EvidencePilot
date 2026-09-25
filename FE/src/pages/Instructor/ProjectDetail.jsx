@@ -1130,8 +1130,8 @@ export default function ProjectDetail() {
   const projectMembers = members;
   const hasAssignedSections = sections.some(s => s.assignedUserId);
   const projectReadOnly = ['SUBMITTED_FOR_REVIEW', 'APPROVED', 'ARCHIVED', 'PENDING_DELETE'].includes(project.status) || Boolean(project.deletionScheduledAt);
-  // ponytail: sources follow the same mutability as everything else — the
-  // backend rejects writes on read-only/scheduled projects, so hide them here.
+  // Keep source controls aligned with the backend read-only guard for frozen
+  // and scheduled projects.
   const canModifySources = !projectReadOnly;
   const sectionStructureLocked = hasAssignedSections || projectReadOnly;
   const standardViewSection = displaySections.find(section => String(section.id) === String(standardViewSectionId)) || null;

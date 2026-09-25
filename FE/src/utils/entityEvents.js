@@ -3,5 +3,8 @@
 // (PROJECT events are published id-only).
 export function targetsProject(event, projectId) {
   if (!event || projectId === null || projectId === undefined) return false;
-  return String(event.projectId || event.id) === String(projectId);
+  const target = String(projectId);
+  return [event.projectId, event.id]
+    .filter(value => value !== null && value !== undefined)
+    .some(value => String(value) === target);
 }
