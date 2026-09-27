@@ -273,6 +273,7 @@ export default function CollectionDetail() {
   const [selectedSource, setSelectedSource] = useState(null);
   const [viewerFile, setViewerFile] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [checkedRemoveIds, setCheckedRemoveIds] = useState(() => new Set());
 
   const [sharedSearch, setSharedSearch] = useState('');
   const [sharedProjectFilter, setSharedProjectFilter] = useState('');
@@ -326,6 +327,16 @@ export default function CollectionDetail() {
     }
   };
 
+  const toggleRemoveCheck = (sourceId) => {
+    const sid = String(sourceId);
+    setCheckedRemoveIds(prev => {
+      const next = new Set(prev);
+      if (next.has(sid)) next.delete(sid);
+      else next.add(sid);
+      return next;
+    });
+  };
+
   const handleRemoveSource = async (sourceId) => {
     const sid = String(sourceId);
     setRemovedIds(prev => new Set(prev).add(sid));
@@ -337,6 +348,8 @@ export default function CollectionDetail() {
     } catch {
       alert(t('instructor.collectionDetail.deleteFailed'));
       setRemovedIds(prev => { const n = new Set(prev); n.delete(sid); return n; });
+    } finally {
+      setCheckedRemoveIds(prev => { const n = new Set(prev); n.delete(sid); return n; });
     }
   };
 
@@ -409,43 +422,79 @@ export default function CollectionDetail() {
     return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
       <div className="lg:col-span-2 space-y-4">
-        <div className="relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-(--text-tertiary)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-          <input
-            type="search"
-            value={docSearch}
-            onChange={(e) => { setDocSearch(e.target.value); setDocPage(0); }}
-            placeholder={t('search')}
-            className="w-full pl-9 pr-3 py-2.5 bg-(--surface) border border-(--border) rounded-xl text-xs font-medium text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-(--text-tertiary)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <input
+              type="search"
+              value={docSearch}
+              onChange={(e) => { setDocSearch(e.target.value); setDocPage(0); }}
+              placeholder={t('search')}
+              aria-label={t('search')}
+              className="w-full pl-9 pr-3 py-2.5 bg-(--surface) border border-(--border) rounded-xl text-xs font-medium text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)"
+            />
+          </div>
+          <button id="add-doc-btn" onClick={() => setAddDocModal(true)} title={t('instructor.collectionDetail.addDocument')} aria-label={t('instructor.collectionDetail.addDocument')}
+            className="group flex h-10 w-10 shrink-0 items-center justify-center gap-0 overflow-hidden bg-(--brand) text-(--on-brand) rounded-xl hover:w-36 hover:gap-1.5 hover:bg-(--brand-hover) transition-all duration-300 shadow-sm cursor-pointer">
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 5v14M5 12h14" /></svg>
+            <span className="hidden whitespace-nowrap text-xs font-black group-hover:inline">{t('instructor.collectionDetail.addDocument')}</span>
+          </button>
+          {checkedRemoveIds.size > 0 && (
+            <DeleteConfirm
+              message={t('instructor.collectionDetail.removeSourceFromCollectionConfirm')}
+              onConfirm={async () => {
+                const ids = [...checkedRemoveIds];
+                setCheckedRemoveIds(new Set());
+                await Promise.all(ids.map(sourceId => handleRemoveSource(sourceId)));
+              }}
+              triggerLabel={t('instructor.collectionDetail.removeFromCollection')}
+              confirmLabel={t('instructor.collectionDetail.removeFromCollection')}
+              cancelLabel={t('cancel')}
+              className="group flex h-10 w-10 shrink-0 items-center justify-center gap-0 overflow-hidden rounded-xl bg-rose-600 text-white transition-all duration-300 hover:w-28 hover:gap-1.5 hover:bg-rose-700 shadow-sm cursor-pointer"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-none stroke-current" strokeWidth="2"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+              <span className="hidden whitespace-nowrap text-xs font-black group-hover:inline">Remove?</span>
+            </DeleteConfirm>
+          )}
         </div>
-        <button id="add-doc-btn" onClick={() => setAddDocModal(true)}
-          className="w-full py-3 bg-(--brand) text-(--on-brand) font-black text-xs rounded-xl hover:bg-(--brand-hover) transition-colors shadow-sm cursor-pointer">
-          + {t('instructor.collectionDetail.addDocument')}
-        </button>
         {srcLoading ? <LoadingSkeleton count={4} height="h-12" /> : srcError ? (
           <div className="p-4 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold">{srcError}</div>
         ) : filteredDocs.length === 0 ? (
           <EmptyState title={t('instructor.collectionDetail.noDocuments')} description={t('instructor.collectionDetail.uploadDocsToCollection')} />
         ) : (
           <>
-          <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">
-            {pagedDocs.map(doc => (
-              <button key={doc.id} onClick={() => setSelectedSource(doc)}
-                className={`w-full text-left p-3 rounded-xl border text-xs transition flex items-center gap-3 cursor-pointer ${selectedSource?.id === doc.id
-                  ? 'bg-(--brand-soft) border-indigo-300 shadow-sm'
+          <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+            {pagedDocs.map(doc => {
+              const checked = checkedRemoveIds.has(String(doc.id));
+              return (
+              <div key={doc.id} className={`flex items-center gap-2 rounded-xl border p-2 text-xs transition ${selectedSource?.id === doc.id
+                ? 'bg-(--brand-soft) border-indigo-300 shadow-sm'
+                : checked
+                  ? 'bg-rose-50/60 border-rose-200'
                   : 'bg-(--surface) border-(--border) hover:border-indigo-300 hover:bg-(--surface-secondary)'
-                  }`}>
-                <FileIcon name={doc.originalFilename} />
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-(--text-primary) truncate">{doc.title || doc.originalFilename || t('instructor.collectionDetail.unnamed')}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className={`px-1.5 py-0.5 rounded border text-[9px] font-bold ${statusColor(doc.processingStatus)}`}>{statusLabel(doc.processingStatus)}</span>
-                    {doc.fileSizeBytes && <span className="text-[10px] text-(--text-tertiary)">{(doc.fileSizeBytes / 1024).toFixed(0)} KB</span>}
+                }`}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleRemoveCheck(doc.id)}
+                  aria-label={`${t('instructor.collectionDetail.removeFromCollection')}: ${doc.title || doc.originalFilename || doc.id}`}
+                  className="h-3.5 w-3.5 shrink-0 accent-rose-600 cursor-pointer"
+                  onClick={event => event.stopPropagation()}
+                />
+                <button onClick={() => setSelectedSource(doc)}
+                  className="min-w-0 flex-1 text-left flex items-center gap-3 cursor-pointer">
+                  <FileIcon name={doc.originalFilename} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-(--text-primary) truncate">{doc.title || doc.originalFilename || t('instructor.collectionDetail.unnamed')}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`px-1.5 py-0.5 rounded border text-[9px] font-bold ${statusColor(doc.processingStatus)}`}>{statusLabel(doc.processingStatus)}</span>
+                      {doc.fileSizeBytes ? <span className="text-[10px] text-(--text-tertiary)">{(doc.fileSizeBytes / 1024).toFixed(0)} KB</span> : <span className="text-[10px] text-(--text-tertiary)">—</span>}
+                    </div>
                   </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              </div>
+              );
+            })}
           </div>
           {totalDocPages > 1 && (
             <div className="flex items-center justify-center gap-2 text-xs">
@@ -488,40 +537,27 @@ export default function CollectionDetail() {
                   {selectedSource.title && selectedSource.originalFilename && (
                     <p className="text-[11px] text-(--text-tertiary) mt-0.5">{selectedSource.originalFilename}</p>
                   )}
-                  {/* Action buttons directly below title */}
-                  <div className="flex flex-wrap items-center gap-2 mt-3">
-                    <button
-                      type="button"
-                      onClick={() => setViewerFile({ fileUrl: API_ROUTES.DOCUMENTS.DOWNLOAD(selectedSource.id), fileName: selectedSource.originalFilename || selectedSource.title, documentId: selectedSource.id })}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-(--brand) text-(--on-brand) rounded-xl text-xs font-bold hover:bg-(--brand-hover) transition-colors cursor-pointer"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                      {t('preview')}
-                    </button>
-                    {(selectedSource.processingStatus === DOCUMENT_PROCESSING_STATUS.READY || selectedSource.processingStatus === DOCUMENT_PROCESSING_STATUS.COMPLETED) && (
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadSource(selectedSource)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                        {t('instructor.collectionDetail.downloadPdf')} ↗
-                      </button>
-                    )}
-                  </div>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <DeleteConfirm
-                  message={t('instructor.collectionDetail.removeSourceFromCollectionConfirm')}
-                  onConfirm={() => handleRemoveSource(selectedSource.id)}
-                  triggerLabel={t('instructor.collectionDetail.removeFromCollection')}
-                  confirmLabel={t('instructor.collectionDetail.removeFromCollection')}
-                  cancelLabel={t('cancel')}
-                  className="cursor-pointer rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 transition-colors hover:bg-amber-100"
+                <button
+                  type="button"
+                  onClick={() => setViewerFile({ fileUrl: API_ROUTES.DOCUMENTS.DOWNLOAD(selectedSource.id), fileName: selectedSource.originalFilename || selectedSource.title, documentId: selectedSource.id })}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-(--brand) text-(--on-brand) rounded-xl text-xs font-bold hover:bg-(--brand-hover) transition-colors cursor-pointer"
                 >
-                  {t('instructor.collectionDetail.removeFromCollection')}
-                </DeleteConfirm>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  {t('preview')}
+                </button>
+                {(selectedSource.processingStatus === DOCUMENT_PROCESSING_STATUS.READY || selectedSource.processingStatus === DOCUMENT_PROCESSING_STATUS.COMPLETED) && (
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadSource(selectedSource)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    {t('instructor.collectionDetail.downloadPdf')}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -840,7 +876,7 @@ export default function CollectionDetail() {
                     role="tooltip"
                     className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 w-72 -translate-x-1/2 rounded-xl border border-(--border) bg-(--surface) px-3 py-2 text-[11px] font-normal leading-relaxed text-(--text-secondary) shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity whitespace-normal text-left"
                   >
-                    Note: Some documents lack a DOI, which may cause the graph to display incorrectly.
+                    {t('instructor.collectionDetail.visualMapTooltip')}
                   </div>
                 </div>
               )}

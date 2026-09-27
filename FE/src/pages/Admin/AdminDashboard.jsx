@@ -211,8 +211,9 @@ export default function AdminDashboard() {
       {/* Mobile overlay */}
       {mobileOpen && <div className="fixed inset-0 bg-black/30 z-30 lg:hidden" onClick={() => setMobileOpen(false)} />}
 
-      {/* Sidebar */}
-      <aside data-guide="sidebar" className={`fixed lg:static lg:h-screen lg:sticky lg:top-0 inset-y-0 left-0 z-40 bg-[#111e3b] flex flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-56'} ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} border-none`}>
+      {/* Sidebar — hover to expand, leave to collapse (desktop pointer only);
+          the brand button stays as the explicit toggle for touch/keyboard users */}
+      <aside data-guide="sidebar" onMouseEnter={() => { if (window.matchMedia('(hover: hover)').matches) setCollapsed(false); }} onMouseLeave={() => { if (window.matchMedia('(hover: hover)').matches) setCollapsed(true); }} className={`fixed lg:static lg:h-screen lg:sticky lg:top-0 inset-y-0 left-0 z-40 bg-[#111e3b] flex flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-56'} ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} border-none`}>
         {/* Brand — with inline collapse icon */}
         <div className={`h-16 flex items-center gap-2 px-3 border-b border-white/5 shrink-0 bg-[#0c162e] ${collapsed ? 'justify-center' : 'justify-between'}`}>
           {!collapsed && (

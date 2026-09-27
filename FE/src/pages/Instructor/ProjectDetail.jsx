@@ -207,6 +207,7 @@ export default function ProjectDetail() {
   const [statusPending, setStatusPending] = useState(null);
   // Phase 2: Assign Students local state
   const [selectedMemberId, setSelectedMemberId] = useState(null);
+  const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [memberSearch, setMemberSearch] = useState('');
   const [sourceSearch, setSourceSearch] = useState('');
   const [showAdvancedAdd, setShowAdvancedAdd] = useState(false);
@@ -491,10 +492,11 @@ export default function ProjectDetail() {
 
   // Phase 2 & 3: filtered students for assignment search + selection.
   const filteredMembers = useMemo(() => {
-    let filtered = studentMembers;
-    if (!memberSearch.trim()) return filtered;
+    // ponytail: leaders always on top; stable for the rest.
+    const ordered = [...studentMembers].sort((a, b) => (b.role === 'LEADER') - (a.role === 'LEADER'));
+    if (!memberSearch.trim()) return ordered;
     const q = memberSearch.toLowerCase();
-    return filtered.filter(m => studentDisplayName(m).toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || (m.studentCode?.toLowerCase() ?? '').includes(q) || String(m.userRole||'').toLowerCase().includes(q));
+    return ordered.filter(m => studentDisplayName(m).toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || (m.studentCode?.toLowerCase() ?? '').includes(q) || String(m.userRole||'').toLowerCase().includes(q));
   }, [studentMembers, memberSearch]);
 
   const filteredSources = useMemo(() => {
@@ -532,6 +534,7 @@ export default function ProjectDetail() {
   useEffect(() => {
     if (studentMembers.length > 0 && !selectedMemberId) setSelectedMemberId(String(studentMembers[0].userId || studentMembers[0].id));
     if (studentMembers.length === 0) setSelectedMemberId(null);
+    setSelectedMemberIds(current => current.filter(id => studentMembers.some(m => String(m.userId || m.id) === String(id))));
   }, [studentMembers, selectedMemberId]);
 
   const saveStandard = async (nextStandard) => {
@@ -1041,6 +1044,24 @@ export default function ProjectDetail() {
     } catch { alert(t('instructor.projectDetail.removeMemberFailed')); }
   };
 
+  const toggleMemberSelection = (memberId) => {
+    const key = String(memberId);
+    setSelectedMemberIds(current => current.includes(key)
+      ? current.filter(id => id !== key)
+      : [...current, key]);
+  };
+
+  const handleRemoveSelectedMembers = async () => {
+    const ids = [...selectedMemberIds];
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map(userId => api.delete(`/api/projects/${id}/members/${userId}`)));
+      if (ids.includes(String(selectedMemberId))) setSelectedMemberId(null);
+      setSelectedMemberIds([]);
+      loadProject();
+    } catch { alert(t('instructor.projectDetail.removeMemberFailed')); }
+  };
+
   const handleUpdateMemberRole = async (userId, role) => {
     setUpdatingMemberId(userId);
     try {
@@ -1341,28 +1362,24 @@ export default function ProjectDetail() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full overflow-hidden">
             <div id="source-documents" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 h-full min-h-0 overflow-hidden flex flex-col">
               <div className="mb-3 shrink-0">
-                <ActionExpandHeader title={t('instructor.projectDetail.sourceDocuments')} placeholder={t('instructor.projectDetail.searchSource')} searchValue={sourceSearch} onSearch={setSourceSearch} onAdd={() => setShowAddSource(true)} addLabel={t('instructor.projectDetail.addSource')} hideAdd={!canModifySources} />
-              </div>
-              {selectedProjectSourceIds.length > 0 && (
-                <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                  <span>{t('instructor.projectDetail.selectedSources', { count: selectedProjectSourceIds.length })}</span>
+                <ActionExpandHeader title={t('instructor.projectDetail.sourceDocuments')} placeholder={t('instructor.projectDetail.searchSource')} searchValue={sourceSearch} onSearch={setSourceSearch} onAdd={() => setShowAddSource(true)} addLabel={t('instructor.projectDetail.addSource')} hideAdd={!canModifySources} action={selectedProjectSourceIds.length > 0 && canModifySources ? (
                   <DeleteConfirm
                     message={t('instructor.projectDetail.removeSelectedSourcesConfirm', { count: selectedProjectSourceIds.length })}
                     onConfirm={handleRemoveSelectedSources}
                     triggerLabel={t('instructor.projectDetail.removeSelectedSources')}
                     confirmLabel={t('instructor.projectDetail.removeSelectedSources')}
                     cancelLabel={t('cancel')}
-                    disabled={!canModifySources}
-                    className="rounded-md bg-rose-600 px-2.5 py-1.5 font-bold text-white transition hover:bg-rose-700 disabled:opacity-50"
+                    className="group flex h-8 w-8 shrink-0 items-center justify-center gap-0 overflow-hidden rounded-lg bg-rose-600 text-white transition-all duration-300 hover:w-24 hover:gap-1.5 hover:bg-rose-700"
                   >
-                    {t('instructor.projectDetail.removeSelectedSources')}
+                    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 fill-none stroke-current" strokeWidth="2"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+                    <span className="hidden whitespace-nowrap text-xs font-bold group-hover:inline">Remove?</span>
                   </DeleteConfirm>
-                </div>
-              )}
+                ) : null} />
+              </div>
               {filteredSources.length === 0 ? (
                 <p className="text-xs italic text-[var(--text-tertiary)]">{sourceSearch ? t('instructor.projectDetail.noStudentsFound') : t('instructor.projectDetail.noSourceDocuments')}</p>
               ) : (
-                <div className="space-y-1 flex-1 min-h-0 overflow-y-auto">
+                <div className="space-y-1 flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
                   {filteredSources.map(s => (
                     <div key={s.id} data-testid={`source-${s.id}`} className="flex items-center gap-2 rounded-lg bg-[var(--surface-secondary)] px-3 py-2 text-xs transition hover:bg-[var(--surface-tertiary)]">
                       <input
@@ -1879,35 +1896,60 @@ export default function ProjectDetail() {
         {(activeTab === 'assign-member' || activeTab === 'settings') && (
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-full overflow-hidden">
             {/* Left: Members list with search — expanded from 33% to 40% so search fits without horizontal scroll */}
-            <div id="project-members" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-2 h-full overflow-y-auto">
-              <div className="mb-3">
-                <ActionExpandHeader title={t('instructor.projectDetail.members')} placeholder={t('instructor.projectDetail.searchStudent')} searchValue={memberSearch} onSearch={setMemberSearch} onAdd={() => { setShowAdvancedAdd(true); loadUsers(); }} addLabel={t('instructor.projectDetail.add')} hideAdd={projectReadOnly} />
+            <div id="project-members" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-2 h-full overflow-hidden flex flex-col [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+              <div className="sticky top-0 z-10 mb-3 shrink-0 bg-[var(--surface)] pb-1">
+                <ActionExpandHeader title={t('instructor.projectDetail.members')} placeholder={t('instructor.projectDetail.searchStudent')} searchValue={memberSearch} onSearch={setMemberSearch} onAdd={() => { setShowAdvancedAdd(true); loadUsers(); }} addLabel={t('instructor.projectDetail.add')} hideAdd={projectReadOnly} action={selectedMemberIds.length > 0 && !projectReadOnly ? (
+                  <DeleteConfirm
+                    message={t('instructor.projectDetail.removeSelectedMembersConfirm', { count: selectedMemberIds.length })}
+                    onConfirm={handleRemoveSelectedMembers}
+                    triggerLabel={t('instructor.projectDetail.removeSelectedMembers')}
+                    confirmLabel={t('instructor.projectDetail.removeSelectedMembers')}
+                    cancelLabel={t('cancel')}
+                    className="group flex h-8 w-8 shrink-0 items-center justify-center gap-0 overflow-hidden rounded-lg bg-rose-600 text-white transition-all duration-300 hover:w-24 hover:gap-1.5 hover:bg-rose-700"
+                  >
+                    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 fill-none stroke-current" strokeWidth="2"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+                    <span className="hidden whitespace-nowrap text-xs font-bold group-hover:inline">Remove?</span>
+                  </DeleteConfirm>
+                ) : null} />
               </div>
               {filteredMembers.length === 0 ? (
                 <p className="text-xs italic text-[var(--text-tertiary)]">{memberSearch ? t('instructor.projectDetail.noStudentsFound') : t('instructor.projectDetail.noStudentsAssigned')}</p>
               ) : (
-                <div className="space-y-1 pr-1">
+                <div className="space-y-1 pr-1 flex-1 min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
                   {filteredMembers.map(m => {
                     const isSelected = selectedMember && String(selectedMember.userId||selectedMember.id) === String(m.userId||m.id);
+                    const isLeader = m.role === 'LEADER';
+                    const checked = selectedMemberIds.includes(String(m.userId||m.id));
                     return (
-                       <button key={m.userId} data-testid={`member-${m.userId}`} onClick={()=>setSelectedMemberId(String(m.userId))} className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs transition ${isSelected ? 'border border-indigo-200 bg-[var(--brand-soft)] text-[var(--brand-foreground)]' : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)]'}`}>
-                        <div className="min-w-0 flex-1">
-                          <span className="block truncate font-medium">{studentDisplayName(m ?? {})}</span>
-                          <span className="block truncate text-[10px] text-[var(--text-tertiary)]">{m.email}{m.studentCode ? ` · ${m.studentCode}` : ''}</span>
-                        </div>
-                        <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">
-                          {m.userRole
-                            ? t(`instructor.projectDetail.userRole.${USER_ROLES.includes(m.userRole) ? m.userRole : 'UNKNOWN'}`)
-                            : t(`instructor.projectDetail.projectRole.${PROJECT_ROLES.includes(m.role) ? m.role : 'UNKNOWN'}`)}
-                        </span>
-                      </button>
+                       <div key={m.userId} className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition ${isSelected ? 'border border-indigo-200 bg-[var(--brand-soft)] text-[var(--brand-foreground)]' : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)]'}`}>
+                         <input
+                           type="checkbox"
+                           checked={checked}
+                           onChange={() => toggleMemberSelection(m.userId||m.id)}
+                           disabled={projectReadOnly}
+                           aria-label={`${t('instructor.projectDetail.selectSection')} ${studentDisplayName(m ?? {})}`}
+                           className="h-3.5 w-3.5 shrink-0 accent-indigo-600 disabled:opacity-50"
+                         />
+                          <button data-testid={`member-${m.userId}`} onClick={()=>setSelectedMemberId(String(m.userId))} className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left">
+                            <div className="min-w-0 flex-1">
+                              <span className="block truncate font-medium">{studentDisplayName(m ?? {})}</span>
+                              <span className="block truncate text-[10px] text-[var(--text-tertiary)]">{m.email}{m.studentCode ? ` · ${m.studentCode}` : ''}</span>
+                            </div>
+                            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${isLeader ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-600'}`}>
+                              {t(`instructor.projectDetail.projectRole.${PROJECT_ROLES.includes(m.role) ? m.role : 'UNKNOWN'}`)}
+                            </span>
+                          </button>
+                          <DeleteConfirm message={t('instructor.projectDetail.removeMemberConfirm')} onConfirm={()=>{handleRemoveMember(m.userId||m.id); if (String(selectedMemberId) === String(m.userId||m.id)) setSelectedMemberId(null);}} triggerLabel={`${t('instructor.projectDetail.remove')}: ${studentDisplayName(m ?? {})}`} confirmLabel={t('instructor.projectDetail.remove')} cancelLabel={t('cancel')} disabled={projectReadOnly} className="shrink-0 rounded p-1 text-[var(--text-tertiary)] hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="2"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                          </DeleteConfirm>
+                       </div>
                     );
                   })}
                 </div>
               )}
             </div>
             {/* Right: Selected member detail — PHASE 2 */}
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-3 h-full overflow-y-auto">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-3 h-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
               {!selectedMember ? (
                 <div className="flex h-full min-h-[200px] items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-secondary)] p-6 text-center">
                   <p className="text-xs text-[var(--text-tertiary)]">{t('instructor.projectDetail.selectMemberToView')}</p>
@@ -1917,17 +1959,21 @@ export default function ProjectDetail() {
                   <div className="flex items-start gap-4">
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-sm font-black text-white">{(selectedMember.firstName?.[0]||selectedMember.email?.[0]||'U').toUpperCase()}</div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-sm font-bold text-[var(--brand-foreground)]">{studentDisplayName(selectedMember ?? {})}</h3>
+                      <h3 className="truncate text-sm font-bold text-[var(--brand-foreground)]">{studentDisplayName(selectedMember ?? {})}{selectedMember.studentCode ? ` - ${selectedMember.studentCode}` : ''}</h3>
                       <p className="truncate text-xs text-[var(--text-tertiary)]">{selectedMember.email}</p>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">{t(`instructor.projectDetail.userRole.${USER_ROLES.includes(selectedMember.userRole) ? selectedMember.userRole : 'UNKNOWN'}`)}</span>
-                        <span className="rounded bg-[var(--surface-tertiary)] px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)]">{t(`instructor.projectDetail.projectRole.${PROJECT_ROLES.includes(selectedMember.role) ? selectedMember.role : 'UNKNOWN'}`)}</span>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${selectedMember.role === 'LEADER' ? 'bg-indigo-100 text-indigo-800' : 'bg-[var(--surface-tertiary)] text-[var(--text-secondary)]'}`}>{t(`instructor.projectDetail.projectRole.${PROJECT_ROLES.includes(selectedMember.role) ? selectedMember.role : 'UNKNOWN'}`)}</span>
                       </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div><span className="block text-[10px] font-bold uppercase text-[var(--text-tertiary)]">{t('instructor.projectDetail.studentCode')}</span><span className="text-[11px]">{selectedMember.studentCode || '-'}</span></div>
-                  </div>
+                      {selectedMember.role !== 'INSTRUCTOR' && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold text-[var(--text-secondary)]">{t('instructor.projectDetail.editMemberRole')}:</span>
+                          <select value={selectedMember.role} onChange={e=>handleUpdateMemberRole(selectedMember.userId, e.target.value)} disabled={projectReadOnly || updatingMemberId!==null} className="rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs outline-none disabled:opacity-50">
+                            <option value="MEMBER">{t('instructor.projectDetail.memberRole')}</option>
+                            <option value="LEADER">{t('instructor.projectDetail.leaderRole')}</option>
+                          </select>
+                        </div>
+                      )}
                   {(() => {
                     // ponytail: report sections span all papers; fall back to the
                     // selected paper's draft-state sections before the report loads.
@@ -1970,17 +2016,9 @@ export default function ProjectDetail() {
                       </div>
                     );
                   })()}
-                  {selectedMember.role !== 'INSTRUCTOR' && (
-                    <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border-light)] pt-4">
-                      <span className="text-xs font-semibold text-[var(--text-secondary)]">{t('instructor.projectDetail.editMemberRole')}:</span>
-                      <select value={selectedMember.role} onChange={e=>handleUpdateMemberRole(selectedMember.userId, e.target.value)} disabled={projectReadOnly || updatingMemberId!==null} className="rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs outline-none disabled:opacity-50">
-                        <option value="MEMBER">{t('instructor.projectDetail.memberRole')}</option>
-                        <option value="LEADER">{t('instructor.projectDetail.leaderRole')}</option>
-                      </select>
-                      <DeleteConfirm message={t('instructor.projectDetail.removeMemberConfirm')} onConfirm={()=>{handleRemoveMember(selectedMember.userId); setSelectedMemberId(null)}} triggerLabel={t('instructor.projectDetail.remove')} confirmLabel={t('instructor.projectDetail.remove')} cancelLabel={t('cancel')} disabled={projectReadOnly} className="ml-auto rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-50">{t('instructor.projectDetail.remove')}</DeleteConfirm>
-                    </div>
-                  )}
+                  </div>
                 </div>
+              </div>
               )}
             </div>
           </div>

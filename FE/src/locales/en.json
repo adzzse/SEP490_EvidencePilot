@@ -2091,6 +2091,8 @@
   "instructor.projectDetail.memberRole": "Member",
   "instructor.projectDetail.leaderRole": "Leader",
   "instructor.projectDetail.removeMemberConfirm": "Remove this member from the project?",
+  "instructor.projectDetail.removeSelectedMembers": "Remove selected",
+  "instructor.projectDetail.removeSelectedMembersConfirm": "Remove {{count}} selected member(s) from this project?",
   "instructor.projectDetail.remove": "Remove",
   "instructor.projectDetail.addMember": "Add member",
   "instructor.projectDetail.suggestionPager": "Showing {{shown}} of {{total}}",
@@ -2206,6 +2208,7 @@
   "instructor.collectionDetail.listView": "List View",
   "instructor.collectionDetail.projectFallback": "Project",
   "instructor.collectionDetail.visualMapHelp": "Visualize Map help",
+  "instructor.collectionDetail.visualMapTooltip": "The map shows this collection's documents plus the works that cite them or are cited by them, looked up live through OpenAlex. Documents without a DOI cannot be matched, so the graph may display them incorrectly.",
   "instructor.collectionDetail.guideTitle": "Collection Detail Guide",
   "instructor.collectionDetail.guideSteps": [
     "Inspect the document list in this collection, select any item for detailed metadata or instant PDF preview.",

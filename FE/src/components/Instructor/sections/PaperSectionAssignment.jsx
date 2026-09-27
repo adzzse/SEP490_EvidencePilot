@@ -75,8 +75,9 @@ export default function PaperSectionAssignment({
               className="min-w-36"
             />
             <button type="button" onClick={() => { onAssignBulkToStudent(assignAllStudent); setAssignAllStudent(''); }} disabled={!assignAllStudent || assignableSections.length === 0 || projectReadOnly || sectionStructureSaving} className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-bold text-indigo-700 ring-1 ring-inset ring-indigo-200 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50">{labels.bulkAssignAll}</button>
+            <button type="button" onClick={onApplyBulkAssignment} disabled={bulkTouchedIds.length === 0 || projectReadOnly || sectionStructureSaving} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-[10px] font-bold text-white disabled:opacity-50">{labels.applyAssignment}</button>
           </div>
-          <div className="space-y-2">
+          <div className="max-h-64 space-y-2 overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
             {sections.map(section => {
               const sectionId = String(section.id);
               // ponytail: no select step — a row highlights as soon as it carries
@@ -100,9 +101,6 @@ export default function PaperSectionAssignment({
                 </div>
               );
             })}
-          </div>
-          <div className="mt-3 flex justify-end">
-            <button type="button" onClick={onApplyBulkAssignment} disabled={bulkTouchedIds.length === 0 || projectReadOnly || sectionStructureSaving} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-[10px] font-bold text-white disabled:opacity-50">{labels.applyAssignment}</button>
           </div>
         </div>
       )}

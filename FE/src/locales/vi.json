@@ -2056,6 +2056,8 @@
   "instructor.projectDetail.memberRole": "Thành viên",
   "instructor.projectDetail.leaderRole": "Trưởng nhóm",
   "instructor.projectDetail.removeMemberConfirm": "Xóa thành viên này khỏi dự án?",
+  "instructor.projectDetail.removeSelectedMembers": "Gỡ các mục đã chọn",
+  "instructor.projectDetail.removeSelectedMembersConfirm": "Gỡ {{count}} thành viên đã chọn khỏi dự án?",
   "instructor.projectDetail.remove": "Xóa",
   "instructor.projectDetail.addMember": "Thêm thành viên",
   "instructor.projectDetail.suggestionPager": "Hiển thị {{shown}} / {{total}}",
@@ -2171,6 +2173,7 @@
   "instructor.collectionDetail.listView": "Dạng danh sách",
   "instructor.collectionDetail.projectFallback": "Đồ án",
   "instructor.collectionDetail.visualMapHelp": "Trợ giúp Bản đồ trực quan",
+  "instructor.collectionDetail.visualMapTooltip": "Bản đồ hiển thị các tài liệu trong bộ sưu tập cùng các công trình trích dẫn hoặc được trích dẫn bởi chúng, được tra cứu trực tiếp qua OpenAlex. Tài liệu thiếu DOI không thể đối sánh nên đồ thị có thể hiển thị chưa chính xác.",
   "instructor.collectionDetail.guideTitle": "Hướng dẫn Bộ sưu tập",
   "instructor.collectionDetail.guideSteps": [
     "Xem danh sách tài liệu trong bộ sưu tập, chọn từng tài liệu để xem nhanh thông tin hoặc xem trước file PDF trực tiếp.",

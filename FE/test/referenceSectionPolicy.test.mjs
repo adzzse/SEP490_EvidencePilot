@@ -61,6 +61,8 @@ test('shared References UI keeps Save/history access, no handoff, and section ac
         import { createRoot } from 'react-dom/client';
         import { BrowserRouter } from 'react-router-dom';
         import { AuthProvider } from '/src/context/AuthContext.jsx';
+        import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+        import { NotificationProvider } from '/src/context/NotificationContext.jsx';
         import { LanguageProvider } from '/src/context/LanguageContext.jsx';
         import { ThemeProvider } from '/src/context/ThemeContext.jsx';
         import '/src/i18n.js';
@@ -143,11 +145,16 @@ test('shared References UI keeps Save/history access, no handoff, and section ac
 
         window.__referenceCheckCalls = 0;
         window.__citationReviewCalls = 0;
+        const queryClient = new QueryClient();
         createRoot(document.getElementById('root')).render(
           React.createElement(BrowserRouter, null,
-            React.createElement(AuthProvider, null,
-              React.createElement(LanguageProvider, null,
-                React.createElement(ThemeProvider, null, React.createElement(PolicyHarness)),
+            React.createElement(QueryClientProvider, { client: queryClient },
+              React.createElement(AuthProvider, null,
+                React.createElement(NotificationProvider, null,
+                  React.createElement(LanguageProvider, null,
+                    React.createElement(ThemeProvider, null, React.createElement(PolicyHarness)),
+                  ),
+                ),
               ),
             ),
           ),

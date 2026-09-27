@@ -668,6 +668,10 @@ test('Project members panel shows assignments, activity, and open feedback', asy
   await page.getByTestId('member-student-1').click();
   await expect(panel.getByText('Introduction', { exact: true }).first()).toBeVisible();
   await expect(panel.getByText('No recorded edits in this project yet.')).toHaveCount(0);
+  await expect(panel.getByText('Student One - S001', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove selected', exact: true })).toHaveCount(0);
+  await page.locator('#project-members').getByRole('checkbox').first().check();
+  await expect(page.getByRole('button', { name: 'Remove selected', exact: true })).toBeVisible();
   expect(state.errors).toEqual([]);
   expect(state.unhandled).toEqual([]);
 });
