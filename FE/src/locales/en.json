@@ -1,4 +1,9 @@
 {
+  "recoveryInterrupted": "The transfer was interrupted. Your inputs were kept; check the server receipt before retrying.",
+  "recoveryReceiptPending": "The server is still receiving this file. Check again before retrying.",
+  "recoveryReconcileFailed": "Could not check the server receipt. Retry when the connection is available.",
+  "recoveryStorageFailed": "Could not keep the files in this browser. Free storage and select the files again.",
+  "recoveryRetryUpload": "Check receipt and retry",
   "home": {
     "nav": {
       "home": "Home",

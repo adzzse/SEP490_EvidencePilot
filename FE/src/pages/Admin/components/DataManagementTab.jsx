@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAdminTour } from '../../../hooks/useAdminTour.js';
+import { useAuth } from '../../../context/AuthContext.jsx';
 
 function ProgressBar({ value }) {
   return (
@@ -12,6 +13,8 @@ function ProgressBar({ value }) {
 
 function DataManagementSection({ api }) {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const jobKey = user?.id ? `admin_seed_job:${api.defaults?.baseURL || ''}:${user.id}` : null;
   const [busy, setBusy] = useState(null);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
@@ -30,15 +33,12 @@ function DataManagementSection({ api }) {
   ], [t]);
   const { start } = useAdminTour('data', tourSteps);
 
-  useEffect(() => () => {
-    pollGenerationRef.current += 1;
-    if (pollRef.current) clearTimeout(pollRef.current);
-  }, []);
   useEffect(() => {
     if (job?.logs?.length) logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [job?.logs?.length]);
 
   const pollJob = useCallback((jobId) => {
+    try { if (jobKey) sessionStorage.setItem(jobKey, jobId); } catch { /* storage may be unavailable */ }
     const generation = ++pollGenerationRef.current;
     if (pollRef.current) clearTimeout(pollRef.current);
     const poll = async () => {
@@ -62,6 +62,7 @@ function DataManagementSection({ api }) {
       } catch (e) {
         if (generation !== pollGenerationRef.current) return;
         if ([401, 403, 404].includes(e.response?.status)) {
+          try { if (jobKey) sessionStorage.removeItem(jobKey); } catch { /* storage may be unavailable */ }
           pollRef.current = null;
           setBusy(null); setJob(null); setMsg('');
           setErr(e.response.status === 404 ? t('admin.seedJobExpired') : e.response?.data?.message || e.message);
@@ -70,8 +71,21 @@ function DataManagementSection({ api }) {
       }
       pollRef.current = setTimeout(poll, 1000);
     };
-    pollRef.current = setTimeout(poll, 1000);
-  }, [api, t]);
+    poll();
+  }, [api, t, jobKey]);
+
+  useEffect(() => {
+    let jobId;
+    try { jobId = jobKey && sessionStorage.getItem(jobKey); } catch { /* storage may be unavailable */ }
+    if (jobId) {
+      setBusy('upload');
+      pollJob(jobId);
+    }
+    return () => {
+      pollGenerationRef.current += 1;
+      if (pollRef.current) clearTimeout(pollRef.current);
+    };
+  }, [jobKey, pollJob]);
 
   const backup = async () => {
     setBusy('backup'); setErr(''); setMsg('');

@@ -42,6 +42,7 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -84,7 +85,7 @@ import java.util.zip.ZipInputStream;
 
 /**
  * Excel + folder-per-paper ZIP seed. Streaming-light: caps enforced
- * (6 sheets, 200 rows/sheet with members at 500, 10MB xlsx). ZIP bundles are uncapped and
+ * (v1: 6 sheets; v2: 7 data sheets, 200 rows/sheet with members at 500, 10MB xlsx). ZIP bundles are uncapped and
  * spooled entry-by-entry to temp files (never heap) with per-job cleanup.
  * Reuses AdminService user validation, DocumentServiceImpl extraction pipeline,
  * MediaAssetService for images. Async jobs with in-memory progress (pollable).
@@ -99,9 +100,12 @@ public class AdminExcelSeedService {
     // across 60+ projects exceeds the default cap, so members get headroom
     private static final int MAX_ROWS_MEMBERS = 500;
     private static final long MAX_XLSX_BYTES = 10L * 1024 * 1024;
-    // rationale: no "sections" sheet — file-backed papers get sections from extraction,
-    // standard papers from createSectionsFromStandard; a legacy sheet is ignored by parse
-    private static final List<String> SHEETS = List.of("users", "projects", "members", "sources", "papers", "collections");
+    // rationale: sections are always produced by paper extraction; v2 adds only
+    // the explicit collection-to-project relationship sheet.
+    private static final List<String> SHEETS_V1 = List.of("users", "projects", "members", "sources", "papers", "collections");
+    private static final List<String> SHEETS_V2 = List.of("users", "projects", "members", "sources", "papers", "collections", "project_collections");
+    private static final int FORMAT_V1 = 1;
+    private static final int FORMAT_V2 = 2;
     private static final Set<String> INVITE_TRUE_TOKENS = Set.of("TRUE", "1", "YES", "Y");
     private static final Set<String> INVITE_FALSE_TOKENS = Set.of("FALSE", "0", "NO", "N");
     // rationale: mirrors OpenAlexIngestionServiceImpl — per-PDF cap + header scan
@@ -140,12 +144,17 @@ public class AdminExcelSeedService {
     private final ObjectMapper objectMapper;
     private final PlatformTransactionManager transactionManager;
 
+    @Autowired(required = false)
+    private SeedProjectLifecycle seedProjectLifecycle;
+
     @Value("${app.seed.max-upload-bytes:268435456}")
     private long maxUploadBytes = 256L * 1024 * 1024;
     @Value("${app.seed.max-expanded-bytes:536870912}")
     private long maxExpandedBytes = 512L * 1024 * 1024;
     @Value("${app.seed.max-entries:2000}")
     private int maxEntries = 2000;
+    @Value("${app.seed.paper-ready-timeout-seconds:1800}")
+    private long paperReadyTimeoutSeconds = 1800L;
 
     private final ExecutorService executor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
             new SynchronousQueue<>(), runnable -> {
@@ -172,6 +181,7 @@ public class AdminExcelSeedService {
         private final List<SeedLog> logs = java.util.Collections.synchronizedList(new ArrayList<>());
         private volatile Map<String, Integer> result = Map.of();
         private volatile long completedAt;
+        private final Set<String> incompleteProjects = ConcurrentHashMap.newKeySet();
 
         public List<String> getErrors() {
             synchronized (errors) {
@@ -228,11 +238,23 @@ public class AdminExcelSeedService {
             errors.add(message);
             logs.add(new SeedLog("ERROR", message));
         }
+
+        private void markIncomplete(String projectTitle) {
+            if (projectTitle != null && !projectTitle.isBlank()) incompleteProjects.add(projectTitle);
+        }
+
+        private boolean isIncomplete(String projectTitle) {
+            return incompleteProjects.contains(projectTitle);
+        }
     }
 
     public record SeedLog(String level, String message) {}
 
-    public record ParsedSeed(Map<String, List<Map<String, String>>> sheets, List<String> errors) {}
+    public record ParsedSeed(int formatVersion, Map<String, List<Map<String, String>>> sheets, List<String> errors) {
+        public ParsedSeed(Map<String, List<Map<String, String>>> sheets, List<String> errors) {
+            this(FORMAT_V1, sheets, errors);
+        }
+    }
     public record ZipBundle(Map<String, Path> files, List<String> errors, Path spoolDir) {
         public ZipBundle(Map<String, Path> files, List<String> errors) {
             this(files, errors, null);
@@ -243,93 +265,44 @@ public class AdminExcelSeedService {
 
     public byte[] buildTemplate() throws IOException {
         try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            sheet(wb, "README", List.of("note"),
+            sheet(wb, "README", List.of("key", "value"),
                     List.of(
-                            List.of("Bundle = seed.xlsx + papers/<slug>/ folders only. Fill users→projects→members→sources→papers→collections. Reference by email/project_title/doi. Sections come from extraction (file papers) or the standard (paper_standard papers) — no sections sheet."),
-                            List.of("papers.paper_folder must equal the <slug> in papers.paper_file (^[a-z0-9-]{1,80}$). Main file must be named <slug>.pdf|.docx|.tex after its folder; images/ goes beside it."),
-                            List.of("Precedence: paper_file, then paper_standard, then content_tex. Max 1 paper per project. xlsx<=10MiB, bounded ZIP spooled to disk, 200 rows/sheet (members: 500)."),
-                            List.of("paper_standard (IEEE|ACM|...) creates a standard-template paper like Instructor Page choose-standard: leave paper_file and content_tex blank, sections are generated."),
-                            List.of("users.send_invitation: TRUE requests a set-password invitation; FALSE or blank sends nothing and requires explicitly enabled dev/test bypass. Production rejects silent rows."),
-                            List.of("Project titles are aliases for this import only; existing titles are rejected. Use writable initial states, never seed a submitted review."),
-                            List.of("File papers: wait until extraction is READY, then apply content/assignment using existing paper section APIs/UI. Do not re-upload this bundle to update an existing project."),
-                            List.of("Standard templates generate their own section orders; conflicting section rows are reported, never overwritten."),
-                            List.of("sources.doi is required and resolved live via OpenAlex (metadata + PDF win over sheet columns); rows without OA PDF import as METADATA_FETCHED for later file attach.")));
+                            List.of("seed_format_version", "2"),
+                            List.of("bundle", "seed.xlsx + papers/<slug>/ folders only"),
+                            List.of("workflow", "paper files are extracted into sections; review states use the real submit/approve/archive flow"),
+                            List.of("limits", "xlsx <= 10MiB; 200 rows/sheet; members <= 500"),
+                            List.of("silent_accounts", "send_invitation FALSE or blank creates ACTIVE accounts through the existing local/test seed policy"),
+                            List.of("status", "SUBMITTED_FOR_REVIEW, APPROVED, ARCHIVED are applied only after paper extraction and handoff readiness"),
+                            List.of("source", "sources.doi is required and resolved through OpenAlex; missing OA PDF may remain METADATA_FETCHED")));
             sheet(wb, "users", List.of("email", "first_name", "last_name", "role", "student_code", "send_invitation"),
                     List.of(List.of("demo01@example.test", "An", "Nguyen", "STUDENT", "AB123456", "FALSE"),
-                            List.of("prof@example.test", "Binh", "Tran", "INSTRUCTOR", "", "TRUE")));
+                            List.of("prof@example.test", "Binh", "Tran", "INSTRUCTOR", "", "FALSE")));
             sheet(wb, "projects", List.of("project_title", "description", "status", "target_standard"),
                     List.of(List.of("EP-DEMO-Retrieval", "Demo project", "IN_PROGRESS", "CUSTOM")));
             sheet(wb, "members", List.of("project_title", "user_email", "project_role"),
                     List.of(List.of("EP-DEMO-Retrieval", "demo01@example.test", "LEADER"),
                             List.of("EP-DEMO-Retrieval", "prof@example.test", "INSTRUCTOR")));
-            sheet(wb, "sources", List.of("project_title", "doi", "title", "authors", "publication_year", "publisher", "cited_by_count", "abstract_or_text"),
-                    List.of(List.of("EP-DEMO-Retrieval", "10.48550/arXiv.2004.04906", "Dense Passage Retrieval for Open-Domain Question Answering", "Karpukhin, V.; et al.", "2020", "arXiv", "5600", "Reference only — live OpenAlex metadata wins at import.")));
-            sheet(wb, "papers", List.of("project_title", "paper_folder", "paper_file", "title", "content_tex", "paper_standard"),
-                    List.of(List.of("EP-DEMO-Retrieval", "attention-retrieval", "papers/attention-retrieval/attention-retrieval.tex", "Attention demo", "", "")));
+            sheet(wb, "sources", List.of("project_title", "doi"),
+                    List.of(List.of("EP-DEMO-Retrieval", "10.48550/arXiv.2004.04906")));
+            sheet(wb, "papers", List.of("project_title", "paper_file"),
+                    List.of(List.of("EP-DEMO-Retrieval", "papers/attention-retrieval/attention-retrieval.tex")));
             sheet(wb, "collections", List.of("collection_title", "description", "owner_email", "source_dois"),
                     List.of(List.of("EP-DEMO-Retrieval Methods", "Shared method papers", "prof@example.test", "10.48550/arXiv.2004.04906")));
+            sheet(wb, "project_collections", List.of("project_title", "collection_title"),
+                    List.of(List.of("EP-DEMO-Retrieval", "EP-DEMO-Retrieval Methods")));
             wb.write(out);
             return out.toByteArray();
         }
     }
 
-    /**
-     * Bundle template: seed.xlsx + example papers/&lt;slug&gt;/ folder with a
-     * sample paper.tex, a per-folder README.md manual, and an images/ placeholder.
-     */
+    /** Bundle template: one seed.xlsx plus the example paper file. */
     public byte[] buildTemplateBundle() throws IOException {
         byte[] xlsx = buildTemplate();
-        // rationale: .tex example — passes PAPER validation and takes the latex
-        // fast-path extraction (no model call), unlike .txt which is rejected
+        // .tex is a file upload whose sections are extracted without a model call.
         String paper = "\\section{Introduction}\n"
                 + "Our method improves recall by 34\\% over prior work.\n\n"
                 + "\\section{Results}\n"
                 + "Smith et al. report 89.2\\% accuracy on citation matching.\n";
-        String imgReadme = "Put figures for this paper here (png/jpg/jpeg/gif/pdf).\n"
-                + "Reference from .tex as images/<name>.\n"
-                + "You may delete this README once you've added figures — it is never uploaded as media.\n";
-        // rationale: instructions-only file — sits directly in the paper folder (not
-        // images/), so validation ignores it and it is never imported
-        String folderGuide = "# How to add a paper to this folder (manual)\n"
-                + "\n"
-                + "This folder feeds one `papers` row in seed.xlsx and becomes the project's paper,\n"
-                + "extracted exactly like an Instructor upload (sections auto-detected).\n"
-                + "\n"
-                + "## 1. Folder name\n"
-                + "\n"
-                + "- Must match `paper_folder` in seed.xlsx and satisfy `^[a-z0-9-]{1,80}$`\n"
-                + "  (lowercase, digits, hyphens), e.g. `attention-retrieval`.\n"
-                + "- `paper_file` must then read `papers/<same-slug>/<same-slug>.{pdf,docx,tex}`\n"
-                + "  (e.g. `papers/attention-retrieval/attention-retrieval.pdf`).\n"
-                + "\n"
-                + "## 2. Download the paper (OpenAlex)\n"
-                + "\n"
-                + "1. Find the work: `https://api.openalex.org/works/https://doi.org/<DOI>`\n"
-                + "   (or search `https://openalex.org/works?search=<title>`).\n"
-                + "2. Open `primary_location.pdf_url` (fallback `best_oa_location.pdf_url`) and save it\n"
-                + "   here as `<folder-name>.pdf` (same name as this folder). `.docx`/`.tex` are\n"
-                + "   also accepted; `.txt` is rejected.\n"
-                + "3. Copy the work's title/authors/year/publisher/cited_by_count into the matching\n"
-                + "   `sources` row so the seed mirrors OpenAlex metadata.\n"
-                + "\n"
-                + "## 3. Figures (optional)\n"
-                + "\n"
-                + "- Put them flat under `images/` (png/jpg/jpeg/gif/pdf, max 10MB each).\n"
-                + "- Reference from `.tex` as `images/<name>`. `images/README.txt` is only a\n"
-                + "  placeholder — delete it or leave it, it is never uploaded.\n"
-                + "- This README.md is instructions only: it is ignored by validation and never imported.\n"
-                + "\n"
-                + "## 4. Wire up seed.xlsx\n"
-                + "\n"
-                + "- `papers` row: `paper_folder` = this folder's name, `paper_file` = its path,\n"
-                + "  leave `content_tex` empty (file wins). Max 1 paper row per project.\n"
-                + "- Prefer `.tex` for instant sections (latex fast-path, no model call);\n"
-                + "  `.pdf`/`.docx` go through full extraction and appear as QUEUED, then READY.\n"
-                + "\n"
-                + "## 5. Upload\n"
-                + "\n"
-                + "Re-zip as `seed.xlsx` at root + `papers/...`, upload the `.zip` in Data Management\n"
-                + "-> Insert Data. Preview first for `.xlsx`-only bundles; watch the progress bar.\n";
         try (ByteArrayOutputStream out = new ByteArrayOutputStream();
                 java.util.zip.ZipOutputStream zip = new java.util.zip.ZipOutputStream(out, StandardCharsets.UTF_8)) {
             zip.putNextEntry(new java.util.zip.ZipEntry("seed.xlsx"));
@@ -337,12 +310,6 @@ public class AdminExcelSeedService {
             zip.closeEntry();
             zip.putNextEntry(new java.util.zip.ZipEntry("papers/attention-retrieval/attention-retrieval.tex"));
             zip.write(paper.getBytes(StandardCharsets.UTF_8));
-            zip.closeEntry();
-            zip.putNextEntry(new java.util.zip.ZipEntry("papers/attention-retrieval/README.md"));
-            zip.write(folderGuide.getBytes(StandardCharsets.UTF_8));
-            zip.closeEntry();
-            zip.putNextEntry(new java.util.zip.ZipEntry("papers/attention-retrieval/images/README.txt"));
-            zip.write(imgReadme.getBytes(StandardCharsets.UTF_8));
             zip.closeEntry();
             zip.finish();
             return out.toByteArray();
@@ -366,12 +333,28 @@ public class AdminExcelSeedService {
         List<String> errors = new ArrayList<>();
         if (size > MAX_XLSX_BYTES) {
             errors.add("xlsx exceeds 10MB limit");
-            return new ParsedSeed(Map.of(), errors);
+            return new ParsedSeed(FORMAT_V1, Map.of(), errors);
         }
         Map<String, List<Map<String, String>>> sheets = new LinkedHashMap<>();
+        int formatVersion = FORMAT_V1;
         try (Workbook wb = new XSSFWorkbook(in)) {
-            if (wb.getNumberOfSheets() > 7) errors.add("too many sheets (max README + 6 data sheets)");
-            for (String name : SHEETS) {
+            formatVersion = readFormatVersion(wb.getSheet("README"), errors);
+            int maxSheets = formatVersion == FORMAT_V2 ? 8 : 7;
+            if (wb.getNumberOfSheets() > maxSheets) {
+                errors.add(formatVersion == FORMAT_V2
+                        ? "too many sheets (max README + 7 data sheets)"
+                        : "too many sheets (max README + 6 data sheets)");
+            }
+            if (formatVersion == FORMAT_V2) {
+                Set<String> allowed = new java.util.HashSet<>(SHEETS_V2);
+                allowed.add("README");
+                for (int index = 0; index < wb.getNumberOfSheets(); index++) {
+                    String sheetName = wb.getSheetName(index);
+                    if (!allowed.contains(sheetName)) errors.add("unsupported v2 sheet: " + sheetName);
+                }
+            }
+            List<String> sheetNames = formatVersion == FORMAT_V2 ? SHEETS_V2 : SHEETS_V1;
+            for (String name : sheetNames) {
                 Sheet s = wb.getSheet(name);
                 if (s == null) continue;
                 List<String> headers = new ArrayList<>();
@@ -400,8 +383,32 @@ public class AdminExcelSeedService {
         } catch (org.apache.poi.ooxml.POIXMLException | org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid XLSX workbook", ex);
         }
-        errors.addAll(validate(sheets));
-        return new ParsedSeed(sheets, errors);
+        if (formatVersion == FORMAT_V2) {
+            for (String required : SHEETS_V2) {
+                if (!sheets.containsKey(required)) errors.add(required + ": sheet is required for seed_format_version=2");
+            }
+            errors.addAll(validateV2(sheets));
+        } else {
+            errors.addAll(validate(sheets));
+        }
+        return new ParsedSeed(formatVersion, sheets, errors);
+    }
+
+    private int readFormatVersion(Sheet readme, List<String> errors) {
+        if (readme == null) return FORMAT_V1;
+        for (int index = 0; index <= readme.getLastRowNum(); index++) {
+            Row row = readme.getRow(index);
+            if (row == null) continue;
+            String key = str(row.getCell(0)).trim().toLowerCase(Locale.ROOT);
+            if (!"seed_format_version".equals(key)) continue;
+            String value = str(row.getCell(1)).trim();
+            if (!String.valueOf(FORMAT_V2).equals(value)) {
+                errors.add("README: unsupported seed_format_version: " + value);
+                return FORMAT_V1;
+            }
+            return FORMAT_V2;
+        }
+        return FORMAT_V1;
     }
 
     /**
@@ -637,6 +644,201 @@ public class AdminExcelSeedService {
         return errors;
     }
 
+    List<String> validateV2(Map<String, List<Map<String, String>>> sheets) {
+        List<String> errors = new ArrayList<>();
+        Set<String> emails = new java.util.HashSet<>();
+        Map<String, String> rolesByEmail = new LinkedHashMap<>();
+        for (var row : sheets.getOrDefault("users", List.of())) {
+            String at = "users row " + row.get("_row") + ": ";
+            String email = row.getOrDefault("email", "").trim().toLowerCase(Locale.ROOT);
+            String role = row.getOrDefault("role", "").trim().toUpperCase(Locale.ROOT);
+            if (!email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) errors.add(at + "invalid email");
+            else if (!emails.add(email)) errors.add(at + "duplicate email in file");
+            if (!role.equals("STUDENT") && !role.equals("INSTRUCTOR")) {
+                errors.add(at + "role must be STUDENT or INSTRUCTOR");
+            } else {
+                rolesByEmail.put(email, role);
+            }
+            String code = row.getOrDefault("student_code", "").trim().toUpperCase(Locale.ROOT);
+            if (role.equals("STUDENT") && !code.matches("^[A-Z]{2}\\d{6}$")) {
+                errors.add(at + "student_code must match AB123456");
+            }
+            if (role.equals("INSTRUCTOR") && !code.isBlank()) errors.add(at + "INSTRUCTOR must omit student_code");
+            if (!isInviteTokenValid(row.getOrDefault("send_invitation", ""))) {
+                errors.add(at + "send_invitation must be TRUE or FALSE (blank means FALSE)");
+            }
+        }
+        Set<String> titles = new java.util.HashSet<>();
+        Map<String, ProjectStatus> statuses = new LinkedHashMap<>();
+        for (var row : sheets.getOrDefault("projects", List.of())) {
+            String at = "projects row " + row.get("_row") + ": ";
+            String title = row.getOrDefault("project_title", "").trim();
+            if (title.isBlank() || !titles.add(title)) {
+                errors.add(at + (title.isBlank() ? "project_title required" : "duplicate project_title"));
+                continue;
+            }
+            String rawStatus = row.getOrDefault("status", "CREATED").trim().toUpperCase(Locale.ROOT);
+            try {
+                ProjectStatus status = ProjectStatus.valueOf(rawStatus.isBlank() ? "CREATED" : rawStatus);
+                if (status == ProjectStatus.RETURNED || status == ProjectStatus.PENDING_DELETE) {
+                    errors.add(at + "status is not supported in seed_format_version=2: " + rawStatus);
+                } else {
+                    statuses.put(title, status);
+                }
+            } catch (IllegalArgumentException ex) {
+                errors.add(at + "unknown status: " + rawStatus);
+            }
+            String standard = row.getOrDefault("target_standard", "").trim();
+            if (!standard.isBlank()) {
+                try {
+                    PaperStandard.valueOf(standard.toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException ex) {
+                    errors.add(at + "unknown target_standard: " + standard);
+                }
+            }
+        }
+
+        Map<String, String> instructorByProject = new LinkedHashMap<>();
+        Map<String, String> leaderByProject = new LinkedHashMap<>();
+        Set<String> memberKeys = new java.util.HashSet<>();
+        for (var row : sheets.getOrDefault("members", List.of())) {
+            String at = "members row " + row.get("_row") + ": ";
+            String project = row.getOrDefault("project_title", "").trim();
+            String email = row.getOrDefault("user_email", "").trim().toLowerCase(Locale.ROOT);
+            String role = row.getOrDefault("project_role", "").trim().toUpperCase(Locale.ROOT);
+            if (!titles.contains(project)) errors.add(at + "unknown project_title");
+            if (!memberKeys.add(project + "\0" + email)) errors.add(at + "duplicate project membership");
+            try {
+                ProjectRole.valueOf(role);
+            } catch (IllegalArgumentException ex) {
+                errors.add(at + "project_role must be LEADER|MEMBER|INSTRUCTOR");
+                continue;
+            }
+            if (ProjectRole.INSTRUCTOR.name().equals(role)) {
+                if (rolesByEmail.containsKey(email) && !"INSTRUCTOR".equals(rolesByEmail.get(email))) {
+                    errors.add(at + "INSTRUCTOR member must refer to an INSTRUCTOR user");
+                }
+                if (instructorByProject.putIfAbsent(project, email) != null) {
+                    errors.add(at + "project must have exactly one INSTRUCTOR member");
+                }
+            }
+            if (ProjectRole.LEADER.name().equals(role)) {
+                if (rolesByEmail.containsKey(email) && !"STUDENT".equals(rolesByEmail.get(email))) {
+                    errors.add(at + "LEADER member must refer to a STUDENT user");
+                }
+                if (leaderByProject.putIfAbsent(project, email) != null) {
+                    errors.add(at + "project must have at most one LEADER member");
+                }
+            }
+            if (ProjectRole.MEMBER.name().equals(role)
+                    && rolesByEmail.containsKey(email) && !"STUDENT".equals(rolesByEmail.get(email))) {
+                errors.add(at + "MEMBER member must refer to a STUDENT user");
+            }
+        }
+        for (String project : titles) {
+            if (!instructorByProject.containsKey(project)) {
+                errors.add("projects '" + project + "': exactly one INSTRUCTOR member is required");
+            }
+            if (needsRealReview(statuses.get(project)) && !leaderByProject.containsKey(project)) {
+                errors.add("projects '" + project + "': a LEADER member is required for review status");
+            }
+        }
+
+        Set<String> sourceKeys = new java.util.HashSet<>();
+        for (var row : sheets.getOrDefault("sources", List.of())) {
+            String at = "sources row " + row.get("_row") + ": ";
+            String project = row.getOrDefault("project_title", "").trim();
+            String doi = DoiUtils.normalize(row.getOrDefault("doi", ""));
+            rejectUnsupportedV2Columns(row, Set.of("project_title", "doi", "_row"), at, errors);
+            if (!titles.contains(project)) errors.add(at + "unknown project_title");
+            if (doi == null || !DoiUtils.isValid(doi)) errors.add(at + "valid DOI is required");
+            else if (!sourceKeys.add(project + "\0" + doi.toLowerCase(Locale.ROOT))) {
+                errors.add(at + "duplicate DOI in project");
+            }
+        }
+
+        Map<String, String> paperFileByProject = new LinkedHashMap<>();
+        for (var row : sheets.getOrDefault("papers", List.of())) {
+            String at = "papers row " + row.get("_row") + ": ";
+            String project = row.getOrDefault("project_title", "").trim();
+            String file = row.getOrDefault("paper_file", "").replace('\\', '/').replaceAll("^/+", "");
+            rejectUnsupportedV2Columns(row, Set.of("project_title", "paper_file", "_row"), at, errors);
+            if (!titles.contains(project)) errors.add(at + "unknown project_title");
+            if (file.isBlank() || !file.matches("papers/[a-z0-9-]{1,80}/[a-z0-9-]{1,80}\\.(pdf|docx|tex)")) {
+                errors.add(at + "paper_file must be papers/<slug>/<slug>.{pdf,docx,tex}");
+            } else if (!file.substring(file.indexOf('/') + 1, file.lastIndexOf('/')).equals(
+                    file.substring(file.lastIndexOf('/') + 1, file.lastIndexOf('.')))) {
+                errors.add(at + "paper filename must match its folder slug");
+            } else if (paperFileByProject.putIfAbsent(project, file) != null) {
+                errors.add(at + "one paper row per project is allowed");
+            }
+            if (!row.getOrDefault("content_tex", "").isBlank()
+                    || !row.getOrDefault("paper_standard", "").isBlank()
+                    || !row.getOrDefault("doi", "").isBlank()) {
+                errors.add(at + "v2 papers accept paper_file only");
+            }
+        }
+        for (var entry : statuses.entrySet()) {
+            if (needsRealReview(entry.getValue()) && !paperFileByProject.containsKey(entry.getKey())) {
+                errors.add("projects '" + entry.getKey() + "': paper_file is required for review status");
+            }
+        }
+
+        Set<String> collectionKeys = new java.util.HashSet<>();
+        Set<String> collectionLinks = new java.util.HashSet<>();
+        for (var row : sheets.getOrDefault("collections", List.of())) {
+            String at = "collections row " + row.get("_row") + ": ";
+            String title = row.getOrDefault("collection_title", "").trim();
+            String owner = row.getOrDefault("owner_email", "").trim().toLowerCase(Locale.ROOT);
+            if (title.isBlank() || !collectionKeys.add(title)) errors.add(at + "collection_title is required and must be unique");
+            if (rolesByEmail.containsKey(owner) && !"INSTRUCTOR".equals(rolesByEmail.get(owner))) {
+                errors.add(at + "owner_email must refer to an INSTRUCTOR user");
+            }
+            List<String> dois = splitSemiDois(row.getOrDefault("source_dois", ""));
+            if (dois.isEmpty()) errors.add(at + "source_dois requires at least one DOI");
+            for (String doi : dois) if (!DoiUtils.isValid(DoiUtils.normalize(doi))) errors.add(at + "invalid DOI format: " + doi);
+        }
+        for (var row : sheets.getOrDefault("project_collections", List.of())) {
+            String at = "project_collections row " + row.get("_row") + ": ";
+            String project = row.getOrDefault("project_title", "").trim();
+            String collection = row.getOrDefault("collection_title", "").trim();
+            if (!titles.contains(project)) errors.add(at + "unknown project_title");
+            if (!collectionKeys.contains(collection)) errors.add(at + "unknown collection_title");
+            if (!collectionLinks.add(project + "\0" + collection)) {
+                errors.add(at + "duplicate project-collection link");
+            }
+        }
+        // Owner-scoped source resolution is checked again after users are resolved;
+        // this pass catches duplicate source rows already visible in the workbook.
+        for (var row : sheets.getOrDefault("collections", List.of())) {
+            String owner = row.getOrDefault("owner_email", "").trim().toLowerCase(Locale.ROOT);
+            for (String doi : splitSemiDois(row.getOrDefault("source_dois", ""))) {
+                long matches = sheets.getOrDefault("sources", List.of()).stream()
+                        .filter(source -> DoiUtils.normalize(source.getOrDefault("doi", "")) != null)
+                        .filter(source -> DoiUtils.normalize(source.getOrDefault("doi", "")).equalsIgnoreCase(DoiUtils.normalize(doi)))
+                        .filter(source -> owner.equals(instructorByProject.get(source.getOrDefault("project_title", "").trim())))
+                        .count();
+                if (matches != 1) errors.add("collections row " + row.get("_row") + ": DOI must resolve to exactly one source owned by collection Instructor: " + doi);
+            }
+        }
+        return errors;
+    }
+
+    private static void rejectUnsupportedV2Columns(Map<String, String> row, Set<String> allowed,
+                                                   String prefix, List<String> errors) {
+        for (var entry : row.entrySet()) {
+            if (!allowed.contains(entry.getKey())) {
+                errors.add(prefix + "unsupported v2 column: " + entry.getKey());
+            }
+        }
+    }
+
+    private static boolean needsRealReview(ProjectStatus status) {
+        return status == ProjectStatus.SUBMITTED_FOR_REVIEW
+                || status == ProjectStatus.APPROVED
+                || status == ProjectStatus.ARCHIVED;
+    }
+
     static List<String> splitSemiDois(String raw) {
         List<String> dois = new ArrayList<>();
         if (raw == null) return dois;
@@ -660,12 +862,18 @@ public class AdminExcelSeedService {
         }
         List<String> errors = new ArrayList<>(parsed.errors());
         errors.addAll(safe.errors());
-        errors.addAll(checkZipLayout(parsed.sheets(), safe.files()));
+        errors.addAll(checkZipLayout(parsed.sheets(), safe.files(), parsed.formatVersion()));
         if (!errors.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, String.join("; ", errors));
-        preflight(parsed.sheets());
+        if (parsed.formatVersion() == FORMAT_V2) preflightV2(parsed.sheets());
+        else preflight(parsed.sheets());
         pruneJobs();
         SeedJob job = new SeedJob();
         job.total = parsed.sheets().values().stream().mapToInt(List::size).sum();
+        if (parsed.formatVersion() == FORMAT_V2) {
+            job.total += (int) parsed.sheets().getOrDefault("projects", List.of()).stream()
+                    .filter(row -> needsRealReview(parseProjectStatus(row.getOrDefault("status", "CREATED"))))
+                    .count();
+        }
         jobs.put(job.getId(), job);
         // rationale: worker thread has no SecurityContext — capture the requesting
         // ADMIN auth so uploadDocument/media/importUsers don't 401 (ADMIN bypasses
@@ -710,6 +918,85 @@ public class AdminExcelSeedService {
         }
     }
 
+    private void preflightV2(Map<String, List<Map<String, String>>> sheets) {
+        preflight(sheets);
+        Set<String> memberEmails = sheets.getOrDefault("members", List.of()).stream()
+                .map(row -> row.getOrDefault("user_email", "").toLowerCase(Locale.ROOT))
+                .collect(java.util.stream.Collectors.toSet());
+        Map<String, User> membersByEmail = new LinkedHashMap<>();
+        userRepository.findAllByEmailIn(memberEmails)
+                .forEach(user -> membersByEmail.put(user.getEmail().toLowerCase(Locale.ROOT), user));
+        List<String> memberErrors = new ArrayList<>();
+        for (var row : sheets.getOrDefault("members", List.of())) {
+            String email = row.getOrDefault("user_email", "").toLowerCase(Locale.ROOT);
+            String role = row.getOrDefault("project_role", "").toUpperCase(Locale.ROOT);
+            User existing = membersByEmail.get(email);
+            Map<String, String> declared = sheets.getOrDefault("users", List.of()).stream()
+                    .filter(user -> email.equals(user.getOrDefault("email", "").toLowerCase(Locale.ROOT)))
+                    .findFirst().orElse(null);
+            String actualRole = existing == null && declared != null
+                    ? declared.getOrDefault("role", "").toUpperCase(Locale.ROOT)
+                    : existing == null ? "" : existing.getRole().name();
+            if (actualRole.isBlank()) memberErrors.add("members row " + row.get("_row") + ": user_email does not resolve to an existing or seeded user");
+            if (role.equals("INSTRUCTOR") && !actualRole.equals("INSTRUCTOR")) memberErrors.add("members row " + row.get("_row") + ": INSTRUCTOR member role mismatch");
+            if (role.equals("LEADER") && !actualRole.equals("STUDENT")) memberErrors.add("members row " + row.get("_row") + ": LEADER member role mismatch");
+        }
+        if (!memberErrors.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, String.join("; ", memberErrors));
+        Set<String> requiredActors = new java.util.HashSet<>();
+        Map<String, UserRole> requiredRoles = new LinkedHashMap<>();
+        Map<String, ProjectStatus> statuses = new LinkedHashMap<>();
+        for (var row : sheets.getOrDefault("projects", List.of())) {
+            statuses.put(row.getOrDefault("project_title", ""), parseProjectStatus(row.getOrDefault("status", "CREATED")));
+        }
+        for (var row : sheets.getOrDefault("members", List.of())) {
+            ProjectStatus status = statuses.get(row.getOrDefault("project_title", ""));
+            String role = row.getOrDefault("project_role", "").toUpperCase(Locale.ROOT);
+            if (role.equals("INSTRUCTOR") || (role.equals("LEADER") && needsRealReview(status))) {
+                String email = row.getOrDefault("user_email", "").toLowerCase(Locale.ROOT);
+                requiredActors.add(email);
+                requiredRoles.put(email, role.equals("INSTRUCTOR") ? UserRole.INSTRUCTOR : UserRole.STUDENT);
+            }
+        }
+        for (var row : sheets.getOrDefault("collections", List.of())) {
+            String email = row.getOrDefault("owner_email", "").toLowerCase(Locale.ROOT);
+            requiredActors.add(email);
+            requiredRoles.put(email, UserRole.INSTRUCTOR);
+        }
+        if (requiredActors.isEmpty()) return;
+        Map<String, User> existing = new LinkedHashMap<>();
+        userRepository.findAllByEmailIn(requiredActors)
+                .forEach(user -> existing.put(user.getEmail().toLowerCase(Locale.ROOT), user));
+        Map<String, Map<String, String>> rowsByEmail = new LinkedHashMap<>();
+        for (var row : sheets.getOrDefault("users", List.of())) {
+            rowsByEmail.put(row.getOrDefault("email", "").toLowerCase(Locale.ROOT), row);
+        }
+        for (String email : requiredActors) {
+            User user = existing.get(email);
+            if (user != null) {
+                if (user.getAccountStatus() != AccountStatus.ACTIVE) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Required seed actor " + email + " must already be ACTIVE");
+                }
+                if (user.getRole() != requiredRoles.get(email)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Required seed actor " + email + " has the wrong role");
+                }
+                continue;
+            }
+            Map<String, String> row = rowsByEmail.get(email);
+            if (row == null || sendInvitationRequested(row.getOrDefault("send_invitation", ""))
+                    || !requiredRoles.get(email).name().equalsIgnoreCase(row.getOrDefault("role", ""))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Required seed actor " + email + " must be a silent account with the expected role");
+            }
+        }
+    }
+
+    private static ProjectStatus parseProjectStatus(String raw) {
+        String value = raw == null || raw.isBlank() ? "CREATED" : raw.trim().toUpperCase(Locale.ROOT);
+        return ProjectStatus.valueOf(value);
+    }
+
     private void runJob(SeedJob job, ParsedSeed parsed, ZipBundle bundle, Authentication auth) {
         job.status = "RUNNING";
         job.info("Import started");
@@ -717,15 +1004,20 @@ public class AdminExcelSeedService {
         Authentication previous = context.getAuthentication();
         context.setAuthentication(auth);
         try {
-            job.result = Map.of("users", 0, "projects", 0, "members", 0, "sources", 0, "collections", 0, "papers", 0, "sections", 0);
-            var userRows = parsed.sheets().getOrDefault("users", List.of());
-            commitUsers(userRows, job);
-            var projects = commitProjects(parsed.sheets().getOrDefault("projects", List.of()), job);
-            commitMembers(parsed.sheets().getOrDefault("members", List.of()), job, projects);
-            commitSources(parsed.sheets().getOrDefault("sources", List.of()), job, projects);
-            commitCollections(parsed.sheets().getOrDefault("collections", List.of()), job);
-            commitPapers(parsed.sheets().getOrDefault("papers", List.of()), bundle.files(), job, projects);
-            commitSections(parsed.sheets().getOrDefault("sections", List.of()), job, projects);
+            job.result = Map.of("users", 0, "projects", 0, "members", 0, "sources", 0,
+                    "collections", 0, "project_collections", 0, "papers", 0, "sections", 0,
+                    "review_states", 0);
+            if (parsed.formatVersion() == FORMAT_V2) runV2(job, parsed, bundle);
+            else {
+                var userRows = parsed.sheets().getOrDefault("users", List.of());
+                commitUsers(userRows, job);
+                var projects = commitProjects(parsed.sheets().getOrDefault("projects", List.of()), job);
+                commitMembers(parsed.sheets().getOrDefault("members", List.of()), job, projects);
+                commitSources(parsed.sheets().getOrDefault("sources", List.of()), job, projects);
+                commitCollections(parsed.sheets().getOrDefault("collections", List.of()), job);
+                commitPapers(parsed.sheets().getOrDefault("papers", List.of()), bundle.files(), job, projects);
+                commitSections(parsed.sheets().getOrDefault("sections", List.of()), job, projects);
+            }
         } catch (Exception e) {
             log.error("Seed job {} failed", job.getId(), e);
             job.failed(job.currentStep + ": " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()), job.pendingRows);
@@ -744,8 +1036,111 @@ public class AdminExcelSeedService {
         }
     }
 
+    private void runV2(SeedJob job, ParsedSeed parsed, ZipBundle bundle) {
+        List<Map<String, String>> projectRows = parsed.sheets().getOrDefault("projects", List.of());
+        Map<String, ProjectStatus> desiredStatuses = new LinkedHashMap<>();
+        for (var row : projectRows) desiredStatuses.put(row.getOrDefault("project_title", "").trim(), parseProjectStatus(row.get("status")));
+
+        commitUsers(parsed.sheets().getOrDefault("users", List.of()), job);
+        Map<String, Project> projects = commitProjectsV2(projectRows, job, desiredStatuses);
+        commitMembers(parsed.sheets().getOrDefault("members", List.of()), job, projects);
+
+        Map<String, Document> importedSources = new LinkedHashMap<>();
+        commitSourcesV2(parsed.sheets().getOrDefault("sources", List.of()), job, projects, importedSources);
+        List<Map<String, String>> collectionRows = parsed.sheets().getOrDefault("collections", List.of());
+        Map<String, com.evidencepilot.model.Collection> collections = commitCollectionsV2(
+                collectionRows, job, importedSources);
+        List<Map<String, String>> collectionLinks = parsed.sheets()
+                .getOrDefault("project_collections", List.of());
+        for (var link : collectionLinks) {
+            if (!collections.containsKey(link.get("collection_title"))) {
+                job.markIncomplete(link.get("project_title"));
+            }
+        }
+        linkProjectCollectionsV2(collectionLinks,
+                job, projects, collections);
+        commitPapers(parsed.sheets().getOrDefault("papers", List.of()), bundle.files(), job, projects);
+
+        boolean hasReviewProjects = desiredStatuses.values().stream().anyMatch(AdminExcelSeedService::needsRealReview);
+        if (hasReviewProjects && seedProjectLifecycle == null) {
+            throw new IllegalStateException("v2 seed lifecycle is unavailable");
+        }
+        User seedAdmin = hasReviewProjects ? currentSeedAdmin() : null;
+        long deadline = System.nanoTime()
+                + TimeUnit.SECONDS.toNanos(Math.max(1L, paperReadyTimeoutSeconds));
+        for (var row : projectRows) {
+            ProjectStatus desired = desiredStatuses.get(row.get("project_title"));
+            if (!needsRealReview(desired)) continue;
+            job.startRows("review_states", 1);
+            if (job.isIncomplete(row.get("project_title"))) {
+                job.skipped("projects row " + row.get("_row")
+                        + ": review state not applied because this project has incomplete foundation data", 1);
+                continue;
+            }
+            try {
+                Project project = projects.get(row.getOrDefault("project_title", "").trim());
+                waitForPaperReady(project, deadline);
+                seedProjectLifecycle.apply(project.getId(), desired, seedAdmin);
+                job.succeeded("review_states", 1);
+            } catch (Exception failure) {
+                job.failed("projects row " + row.get("_row")
+                        + ": review lifecycle failed: " + messageOf(failure), 1);
+                if (Thread.currentThread().isInterrupted()) return;
+            }
+        }
+    }
+
+    private User currentSeedAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) throw new IllegalStateException("Seed lifecycle requires an ADMIN actor");
+        User actor = auth.getPrincipal() instanceof User user ? user
+                : userRepository.findByEmail(auth.getName()).orElse(null);
+        if (actor != null && actor.getRole() == UserRole.ADMIN
+                && actor.getAccountStatus() == AccountStatus.ACTIVE) return actor;
+        throw new IllegalStateException("Seed lifecycle requires an ADMIN actor");
+    }
+
+    private void waitForPaperReady(Project project, long deadline) {
+        if (project == null) throw new IllegalStateException("review project was not created");
+        while (true) {
+            List<Document> papers = documentRepository.findByProjectIdAndDocTypeAndActiveTrue(
+                    project.getId(), DocumentType.PAPER);
+            if (papers.size() != 1) throw new IllegalStateException("review project must have exactly one paper");
+            ProcessingStatus status = papers.getFirst().getProcessingStatus();
+            if (status == ProcessingStatus.READY || status == ProcessingStatus.COMPLETED) return;
+            if (status == ProcessingStatus.FAILED || status == ProcessingStatus.PARTIAL) {
+                throw new IllegalStateException("paper extraction finished with status " + status);
+            }
+            if (System.nanoTime() >= deadline) throw new IllegalStateException("paper extraction timed out");
+            try {
+                TimeUnit.SECONDS.sleep(2);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("paper extraction wait interrupted", interrupted);
+            }
+        }
+    }
+
+    private static String messageOf(Exception failure) {
+        String message = failure.getMessage();
+        return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
+    }
+
     List<String> checkZipLayout(Map<String, List<Map<String, String>>> sheets, Map<String, Path> zipFiles) {
+        return checkZipLayout(sheets, zipFiles, FORMAT_V1);
+    }
+
+    List<String> checkZipLayout(Map<String, List<Map<String, String>>> sheets,
+                                Map<String, Path> zipFiles, int formatVersion) {
         List<String> errors = new ArrayList<>();
+        if (formatVersion == FORMAT_V2) {
+            for (String name : zipFiles.keySet()) {
+                String normalized = name.replace('\\', '/');
+                if (!normalized.startsWith("papers/")) {
+                    errors.add("ZIP " + name + ": v2 bundles allow only papers/ entries");
+                }
+            }
+        }
         for (var r : sheets.getOrDefault("papers", List.of())) {
             String pf = r.getOrDefault("paper_file", "");
             if (pf.isBlank()) continue;
@@ -890,25 +1285,58 @@ public class AdminExcelSeedService {
         return projects;
     }
 
+    public Map<String, Project> commitProjectsV2(
+            List<Map<String, String>> rows, SeedJob job, Map<String, ProjectStatus> desiredStatuses) {
+        Map<String, Project> projects = new LinkedHashMap<>();
+        for (var r : rows) {
+            if (job != null) job.startRows("projects", 1);
+            try {
+                Project p = new Project();
+                p.setTitle(r.getOrDefault("project_title", "").trim());
+                p.setDescription(nullIfBlank(r.getOrDefault("description", "")));
+                ProjectStatus desired = desiredStatuses.getOrDefault(p.getTitle(), ProjectStatus.CREATED);
+                ProjectStatus foundation = needsRealReview(desired) ? ProjectStatus.ASSIGNED : desired;
+                p.setStatus(foundation);
+                String std = r.getOrDefault("target_standard", "").trim().toUpperCase(Locale.ROOT);
+                if (!std.isBlank()) p.setTargetStandard(PaperStandard.valueOf(std));
+                p.setActive(true);
+                p.setCreatedAt(LocalDateTime.now());
+                p.setUpdatedAt(LocalDateTime.now());
+                projects.put(p.getTitle(), projectRepository.save(p));
+                if (job != null) job.succeeded("projects", 1);
+            } catch (Exception failure) {
+                failRow(job, "projects", r, failure);
+            }
+        }
+        return projects;
+    }
+
     public int commitMembers(List<Map<String, String>> rows, SeedJob job, Map<String, Project> projects) {
         int n = 0;
         for (var r : rows) {
             if (job != null) job.startRows("members", 1);
             try {
-                var project = projects.get(r.get("project_title"));
+                var project = projects.get(r.getOrDefault("project_title", "").trim());
                 var user = userRepository.findByEmail(r.getOrDefault("user_email", "").toLowerCase(Locale.ROOT)).orElse(null);
-                if (project == null || user == null) {
-                    if (job != null) job.skipped("members row " + r.get("_row") + ": unresolvable FK", 1);
-                    continue;
+            if (project == null || user == null) {
+                if (job != null) {
+                    job.markIncomplete(r.get("project_title"));
+                    job.skipped("members row " + r.get("_row") + ": unresolvable FK", 1);
                 }
-                if (!memberRepository.findByProjectIdAndUserId(project.getId(), user.getId()).isEmpty()) {
-                    if (job != null) job.skipped("members row " + r.get("_row") + ": duplicate membership", 1);
-                    continue;
+                continue;
+            }
+            if (!memberRepository.findByProjectIdAndUserId(project.getId(), user.getId()).isEmpty()) {
+                if (job != null) {
+                    job.markIncomplete(r.get("project_title"));
+                    job.skipped("members row " + r.get("_row") + ": duplicate membership", 1);
+                }
+                continue;
                 }
                 ProjectMember m = new ProjectMember();
                 m.setProject(project);
                 m.setUser(user);
-                m.setRole(ProjectRole.valueOf(r.getOrDefault("project_role", "MEMBER")));
+                m.setRole(ProjectRole.valueOf(r.getOrDefault("project_role", "MEMBER")
+                        .trim().toUpperCase(Locale.ROOT)));
                 m.setJoinedAt(LocalDateTime.now());
                 memberRepository.save(m);
                 n++;
@@ -929,25 +1357,40 @@ public class AdminExcelSeedService {
      * markDocumentAsUploaded runs in its own transaction.
      */
     public int commitSources(List<Map<String, String>> rows, SeedJob job, Map<String, Project> projects) {
+        return commitSources(rows, job, projects, null);
+    }
+
+    private int commitSources(List<Map<String, String>> rows, SeedJob job,
+                              Map<String, Project> projects,
+                              Map<String, Document> importedSourcesByOwnerDoi) {
         int n = 0;
         // per-job cache: unique DOIs resolve + download once, reused across projects
         Map<String, ResolvedSourceDoi> cache = new LinkedHashMap<>();
         for (var r : rows) {
             if (job != null) job.startRows("sources", 1);
             try {
-            var project = projects.get(r.get("project_title"));
+            var project = projects.get(r.getOrDefault("project_title", "").trim());
             var uploader = instructorOf(project);
             if (project == null || uploader == null) {
-                if (job != null) job.skipped("sources row " + r.get("_row") + ": unresolvable project/member", 1);
+                if (job != null) {
+                    job.markIncomplete(r.get("project_title"));
+                    job.skipped("sources row " + r.get("_row") + ": unresolvable project/member", 1);
+                }
                 continue;
             }
             String doi = DoiUtils.normalize(r.getOrDefault("doi", ""));
             if (!DoiUtils.isValid(doi)) {
-                if (job != null) job.failed("sources row " + r.get("_row") + ": invalid DOI format", 1);
+                if (job != null) {
+                    job.markIncomplete(r.get("project_title"));
+                    job.failed("sources row " + r.get("_row") + ": invalid DOI format", 1);
+                }
                 continue;
             }
             if (documentRepository.countActiveProjectSourcesByDoi(project.getId(), DocumentType.SOURCE, doi) > 0) {
-                if (job != null) job.skipped("sources row " + r.get("_row") + ": DOI already in project — skipped", 1);
+                if (job != null) {
+                    job.markIncomplete(r.get("project_title"));
+                    job.skipped("sources row " + r.get("_row") + ": DOI already in project — skipped", 1);
+                }
                 continue;
             }
             ResolvedSourceDoi resolved = cache.get(doi);
@@ -966,8 +1409,20 @@ public class AdminExcelSeedService {
                         work = resolveWithoutDoi(r, doi);
                     }
                 }
+                if (work == null && importedSourcesByOwnerDoi != null
+                        && isDataCiteArxivDoi(doi) && arxivId(doi) != null) {
+                    String arxiv = arxivId(doi);
+                    OpenAlexWorkResponse.OpenAlexOpenAccess openAccess =
+                            new OpenAlexWorkResponse.OpenAlexOpenAccess(
+                                    true, "gold", "https://arxiv.org/pdf/" + arxiv, true);
+                    work = new OpenAlexWorkResponse(null, doi, doi, List.of(), null, null,
+                            openAccess, null, null, null, null, null);
+                }
                 if (work == null) {
-                    if (job != null) job.failed("sources row " + r.get("_row") + ": DOI not resolvable: " + doi, 1);
+                    if (job != null) {
+                        job.markIncomplete(r.get("project_title"));
+                        job.failed("sources row " + r.get("_row") + ": DOI not resolvable: " + doi, 1);
+                    }
                     continue;
                 }
                 byte[] pdf = null;
@@ -1051,6 +1506,9 @@ public class AdminExcelSeedService {
                     documentRepository.save(d);
                 }
             }
+            if (importedSourcesByOwnerDoi != null) {
+                importedSourcesByOwnerDoi.put(sourceKey(uploader, doi), d);
+            }
             projectCollectionService.syncSource(d);
             // rationale: the visual/citation maps read saved DocumentReference rows —
             // without this, seeded sources render as isolated nodes with no edges
@@ -1070,6 +1528,16 @@ public class AdminExcelSeedService {
         return n;
     }
 
+    private String sourceKey(User owner, String doi) {
+        return owner.getEmail().toLowerCase(Locale.ROOT) + "\0" + doi.toLowerCase(Locale.ROOT);
+    }
+
+    public int commitSourcesV2(List<Map<String, String>> rows, SeedJob job,
+                               Map<String, Project> projects,
+                               Map<String, Document> importedSourcesByOwnerDoi) {
+        return commitSources(rows, job, projects, importedSourcesByOwnerDoi);
+    }
+
     private record ResolvedSourceDoi(OpenAlexWorkResponse work, byte[] pdfBytes, String note) {
     }
 
@@ -1085,7 +1553,7 @@ public class AdminExcelSeedService {
             if (job != null) job.startRows("collections", 1);
             try {
             var owner = userRepository.findByEmail(
-                    r.getOrDefault("owner_email", "").toLowerCase(Locale.ROOT)).orElse(null);
+                    r.getOrDefault("owner_email", "").trim().toLowerCase(Locale.ROOT)).orElse(null);
             if (owner == null || owner.getRole() != UserRole.INSTRUCTOR) {
                 if (job != null) job.skipped("collections row " + r.get("_row") + ": unresolvable owner", 1);
                 continue;
@@ -1113,6 +1581,60 @@ public class AdminExcelSeedService {
             }
         }
         log.info("Seed collections committed: {} collections, {} source links", n, links);
+        return n;
+    }
+
+    public Map<String, com.evidencepilot.model.Collection> commitCollectionsV2(
+            List<Map<String, String>> rows, SeedJob job,
+            Map<String, Document> importedSourcesByOwnerDoi) {
+        Map<String, com.evidencepilot.model.Collection> collections = new LinkedHashMap<>();
+        for (var r : rows) {
+            if (job != null) job.startRows("collections", 1);
+            try {
+                User owner = userRepository.findByEmail(
+                        r.getOrDefault("owner_email", "").trim().toLowerCase(Locale.ROOT)).orElse(null);
+                if (owner == null || owner.getRole() != UserRole.INSTRUCTOR
+                        || owner.getAccountStatus() != AccountStatus.ACTIVE) {
+                    throw new IllegalStateException("collection owner must be an ACTIVE INSTRUCTOR");
+                }
+                Set<UUID> seen = new java.util.HashSet<>();
+                List<Document> sources = new ArrayList<>();
+                for (String rawDoi : splitSemiDois(r.getOrDefault("source_dois", ""))) {
+                    String doi = DoiUtils.normalize(rawDoi);
+                    Document source = importedSourcesByOwnerDoi.get(sourceKey(owner, doi));
+                    if (source == null) throw new IllegalStateException(
+                            "collection DOI did not resolve to one imported source: " + doi);
+                    if (seen.add(source.getId())) sources.add(source);
+                }
+                var collection = projectCollectionService.createSeedCollectionWithSources(
+                        owner, r.getOrDefault("collection_title", "").trim(),
+                        nullIfBlank(r.getOrDefault("description", "")), sources);
+                collections.put(collection.getTitle().trim(), collection);
+                if (job != null) job.succeeded("collections", 1);
+            } catch (Exception failure) {
+                failRow(job, "collections", r, failure);
+            }
+        }
+        return collections;
+    }
+
+    public int linkProjectCollectionsV2(List<Map<String, String>> rows, SeedJob job,
+                                        Map<String, Project> projects,
+                                        Map<String, com.evidencepilot.model.Collection> collections) {
+        int n = 0;
+        for (var r : rows) {
+            if (job != null) job.startRows("project_collections", 1);
+            try {
+                Project project = projects.get(r.getOrDefault("project_title", "").trim());
+                var collection = collections.get(r.getOrDefault("collection_title", "").trim());
+                if (project == null || collection == null) throw new IllegalStateException("unknown project or collection");
+                projectCollectionService.link(project.getId(), collection.getId());
+                n++;
+                if (job != null) job.succeeded("project_collections", 1);
+            } catch (Exception failure) {
+                failRow(job, "project_collections", r, failure);
+            }
+        }
         return n;
     }
 
@@ -1199,10 +1721,13 @@ public class AdminExcelSeedService {
         for (var r : rows) {
             if (job != null) job.startRows("papers", 1);
             try {
-            var project = projects.get(r.get("project_title"));
+            var project = projects.get(r.getOrDefault("project_title", "").trim());
             var uploader = instructorOf(project);
             if (project == null || uploader == null) {
-                if (job != null) job.skipped("papers row " + r.get("_row") + ": unresolvable project/member", 1);
+                if (job != null) {
+                    job.markIncomplete(r.get("project_title"));
+                    job.skipped("papers row " + r.get("_row") + ": unresolvable project/member", 1);
+                }
                 continue;
             }
             String pf = r.getOrDefault("paper_file", "");
@@ -1214,7 +1739,10 @@ public class AdminExcelSeedService {
                     String norm = pf.replace("\\", "/").replaceAll("^/+", "");
                     Path data = zipFiles.get(norm);
                     if (data == null) {
-                        if (job != null) job.skipped("papers row " + r.get("_row") + ": file not in ZIP: " + norm, 1);
+                        if (job != null) {
+                            job.markIncomplete(r.get("project_title"));
+                            job.skipped("papers row " + r.get("_row") + ": file not in ZIP: " + norm, 1);
+                        }
                         continue;
                     }
                     String filename = norm.substring(norm.lastIndexOf('/') + 1);
@@ -1350,6 +1878,7 @@ public class AdminExcelSeedService {
     // ---------- helpers ----------
 
     private static void failRow(SeedJob job, String sheet, Map<String, String> row, Exception failure) {
+        if (job != null) job.markIncomplete(row.get("project_title"));
         failRows(job, sheet + " row " + row.getOrDefault("_row", "?"), 1, failure);
     }
 

@@ -3,20 +3,20 @@ package com.evidencepilot.service;
 import com.evidencepilot.client.openalex.DoiUtils;
 import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.Document;
-import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.CollectionDocumentRepository;
 import com.evidencepilot.repository.CollectionRepository;
 import com.evidencepilot.repository.DocumentRepository;
-import com.evidencepilot.repository.DocumentTextRepository;
-import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
+import com.evidencepilot.repository.ProjectCollectionRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Row;
@@ -37,7 +37,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -45,8 +44,8 @@ import java.util.regex.Pattern;
  * ({@code seed.xlsx} + {@code papers/<slug>/} files) that re-imports through
  * the existing Data Management seed upload with zero dry-run errors.
  *
- * <p>Only reimportable rows are emitted (valid student codes, DOI sources,
- * file-or-text-or-standard papers, non-empty collections); everything skipped
+ * <p>Only v2-reimportable rows are emitted (active non-Admin users, DOI sources,
+ * stored file-backed papers, non-empty owner-scoped collections); everything skipped
  * is tallied into the README sheet. Reimport targets a fresh database —
  * existing emails/DOIs are skipped as duplicates by the importer.
  */
@@ -55,17 +54,17 @@ import java.util.regex.Pattern;
 @Slf4j
 public class AdminSeedExportService {
 
-    private static final int ABSTRACT_CAP = 5000;
     private static final Pattern STANDARD_STUB = Pattern.compile("^_standard_(.+)\\.tex$");
 
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository memberRepository;
     private final DocumentRepository documentRepository;
-    private final DocumentTextRepository documentTextRepository;
-    private final PaperSectionRepository paperSectionRepository;
     private final CollectionRepository collectionRepository;
     private final CollectionDocumentRepository collectionDocumentRepository;
     private final DocumentObjectStorage documentObjectStorage;
+
+    @Autowired(required = false)
+    private ProjectCollectionRepository projectCollectionRepository;
 
     public record PaperFileEntry(String zipPath, String objectKey) {
     }
@@ -75,20 +74,59 @@ public class AdminSeedExportService {
 
     @Transactional(readOnly = true)
     public SeedBundle buildBundle(UUID projectId) throws IOException {
-        List<Project> projects = projectId == null
+        List<Project> candidates = projectId == null
                 ? projectRepository.findAll().stream().filter(Project::isActive).toList()
                 : projectRepository.findById(projectId).filter(Project::isActive).map(List::of).orElse(List.of());
+        List<ProjectMember> allMembers = memberRepository.findAll();
+        List<Document> documents = documentRepository.findAll().stream()
+                .filter(Document::isActive)
+                .toList();
+        List<Project> projects = candidates.stream().filter(project -> {
+            List<ProjectMember> projectMembers = allMembers.stream()
+                    .filter(member -> member.getProject() != null
+                            && project.getId().equals(member.getProject().getId()))
+                    .toList();
+            long instructors = projectMembers.stream().filter(member -> member.getRole() == com.evidencepilot.model.enums.ProjectRole.INSTRUCTOR)
+                    .map(ProjectMember::getUser)
+                    .filter(user -> user != null && user.getRole() == UserRole.INSTRUCTOR
+                            && user.getAccountStatus() == AccountStatus.ACTIVE)
+                    .count();
+            if (instructors != 1) return false;
+            boolean restorableMembers = projectMembers.stream()
+                    .allMatch(AdminSeedExportService::isRestorableMember);
+            if (!restorableMembers) return false;
+            Set<String> memberKeys = new LinkedHashSet<>();
+            if (projectMembers.stream().anyMatch(member -> !memberKeys.add(emailOf(member.getUser())))) return false;
+            boolean review = project.getStatus() == com.evidencepilot.model.enums.ProjectStatus.SUBMITTED_FOR_REVIEW
+                    || project.getStatus() == com.evidencepilot.model.enums.ProjectStatus.APPROVED
+                    || project.getStatus() == com.evidencepilot.model.enums.ProjectStatus.ARCHIVED;
+            if (project.getStatus() == com.evidencepilot.model.enums.ProjectStatus.RETURNED
+                    || project.getStatus() == com.evidencepilot.model.enums.ProjectStatus.PENDING_DELETE) return false;
+            if (!review) return true;
+            long leaders = projectMembers.stream().filter(member -> member.getRole() == com.evidencepilot.model.enums.ProjectRole.LEADER)
+                    .map(ProjectMember::getUser)
+                    .filter(user -> user != null && user.getRole() == UserRole.STUDENT
+                            && user.getAccountStatus() == AccountStatus.ACTIVE)
+                    .count();
+            return leaders == 1 && documents.stream()
+                    .filter(document -> document.getDocType() == DocumentType.PAPER
+                            && document.getProject() != null
+                            && project.getId().equals(document.getProject().getId()))
+                    .anyMatch(document -> paperRow(document) != null);
+        }).toList();
+        Map<String, Long> titleCounts = projects.stream().collect(java.util.stream.Collectors.groupingBy(
+                project -> project.getTitle() == null ? "" : project.getTitle().toLowerCase(Locale.ROOT),
+                LinkedHashMap::new, java.util.stream.Collectors.counting()));
+        projects = projects.stream().filter(project -> titleCounts.getOrDefault(
+                project.getTitle() == null ? "" : project.getTitle().toLowerCase(Locale.ROOT), 0L) == 1L).toList();
         Set<UUID> projectIds = new LinkedHashSet<>();
         for (Project project : projects) projectIds.add(project.getId());
 
-        List<ProjectMember> members = memberRepository.findAll().stream()
+        List<ProjectMember> members = allMembers.stream()
                 .filter(m -> m.getProject() != null && projectIds.contains(m.getProject().getId()))
                 .filter(m -> m.getUser() != null)
                 .toList();
 
-        List<Document> documents = documentRepository.findAll().stream()
-                .filter(Document::isActive)
-                .toList();
         List<Document> inScopeSources = documents.stream()
                 .filter(d -> d.getDocType() == DocumentType.SOURCE)
                 .filter(d -> d.getProject() != null && projectIds.contains(d.getProject().getId()))
@@ -118,12 +156,23 @@ public class AdminSeedExportService {
         List<Collection> collections = collectionRepository.findAll().stream()
                 .filter(Collection::isActive)
                 .toList();
+        Set<UUID> linkedCollectionIds = projectId == null || projectCollectionRepository == null
+                ? null
+                : projectCollectionRepository.findByProjectId(projectId).stream()
+                        .map(link -> link.getCollection() == null ? null : link.getCollection().getId())
+                        .filter(java.util.Objects::nonNull)
+                        .collect(java.util.stream.Collectors.toSet());
+        if (linkedCollectionIds != null) {
+            collections = collections.stream()
+                    .filter(collection -> linkedCollectionIds.contains(collection.getId()))
+                    .toList();
+        }
         for (Collection collection : collections) {
             if (collection.getInstructor() != null) putUser(usersByEmail, collection.getInstructor());
         }
         for (String email : new ArrayList<>(usersByEmail.keySet())) {
             User user = usersByEmail.get(email);
-            if (user.getAccountStatus() == AccountStatus.DELETED) {
+            if (user.getAccountStatus() != AccountStatus.ACTIVE) {
                 usersByEmail.remove(email);
                 skippedUsers++;
                 continue;
@@ -153,6 +202,7 @@ public class AdminSeedExportService {
 
         List<List<String>> sourceRows = new ArrayList<>();
         Set<String> exportedDois = new LinkedHashSet<>();
+        Set<String> exportedProjectDoiKeys = new java.util.HashSet<>();
         int skippedSources = 0;
         for (Document doc : inScopeSources) {
             String doi = DoiUtils.normalize(doc.getDoi());
@@ -160,23 +210,12 @@ public class AdminSeedExportService {
                 skippedSources++;
                 continue;
             }
-            String text = null;
-            try {
-                var documentText = documentTextRepository.findByDocumentId(doc.getId());
-                if (documentText != null) text = documentText.getExtractedText();
-            } catch (RuntimeException e) {
-                log.warn("Seed export: unreadable text for source {}", doc.getId());
+            String projectDoiKey = doc.getProject().getId() + "\0" + doi.toLowerCase(Locale.ROOT);
+            if (!exportedProjectDoiKeys.add(projectDoiKey)) {
+                skippedSources++;
+                continue;
             }
-            if (text != null && text.length() > ABSTRACT_CAP) text = text.substring(0, ABSTRACT_CAP);
-            sourceRows.add(List.of(
-                    doc.getProject().getTitle(),
-                    doi,
-                    nullToEmpty(doc.getTitle()),
-                    nullToEmpty(doc.getAuthors()),
-                    doc.getPublicationYear() == null ? "" : String.valueOf(doc.getPublicationYear()),
-                    nullToEmpty(doc.getPublisher()),
-                    doc.getCitedByCount() == null ? "" : String.valueOf(doc.getCitedByCount()),
-                    text == null ? "" : text));
+            sourceRows.add(List.of(doc.getProject().getTitle(), doi));
             exportedDois.add(doi.toLowerCase(Locale.ROOT));
         }
 
@@ -204,10 +243,23 @@ public class AdminSeedExportService {
         }
 
         List<List<String>> collectionRows = new ArrayList<>();
+        List<List<String>> projectCollectionRows = new ArrayList<>();
         int skippedCollections = 0;
+        Set<String> exportedCollectionTitles = new java.util.HashSet<>();
+        Map<UUID, String> instructorByProject = new LinkedHashMap<>();
+        for (ProjectMember member : members) {
+            if (member.getRole() == ProjectRole.INSTRUCTOR
+                    && isRestorableMember(member)
+                    && member.getUser() != null) {
+                instructorByProject.put(member.getProject().getId(), emailOf(member.getUser()));
+            }
+        }
+        Map<UUID, String> exportedCollectionTitlesById = new LinkedHashMap<>();
         for (Collection collection : collections) {
             User owner = collection.getInstructor();
-            if (owner == null || owner.getRole() != UserRole.INSTRUCTOR
+            String collectionTitle = collection.getTitle() == null ? "" : collection.getTitle().trim();
+            if (collectionTitle.isBlank()
+                    || owner == null || owner.getRole() != UserRole.INSTRUCTOR
                     || !keptEmails.contains(emailOf(owner))) {
                 skippedCollections++;
                 continue;
@@ -218,35 +270,63 @@ public class AdminSeedExportService {
                 if (doc == null || !doc.isActive()) continue;
                 String doi = DoiUtils.normalize(doc.getDoi());
                 if (doi == null || doi.isBlank()) continue;
-                if (projectId != null && (doc.getProject() == null
-                        || !projectIds.contains(doc.getProject().getId()))) continue;
+                if (doc.getProject() == null || !projectIds.contains(doc.getProject().getId())) continue;
+                if (!emailOf(owner).equals(instructorByProject.get(doc.getProject().getId()))) continue;
                 if (!exportedDois.contains(doi.toLowerCase(Locale.ROOT))) continue;
                 if (!dois.contains(doi)) dois.add(doi);
             }
-            if (dois.isEmpty()) {
+            boolean ambiguous = dois.stream().anyMatch(doi -> inScopeSources.stream()
+                    .filter(source -> source.getProject() != null
+                            && emailOf(owner).equals(instructorByProject.get(source.getProject().getId()))
+                            && doi.equalsIgnoreCase(DoiUtils.normalize(source.getDoi())))
+                    .count() != 1);
+            if (dois.isEmpty() || ambiguous) {
                 skippedCollections++;
                 continue;
             }
+            if (!exportedCollectionTitles.add(collectionTitle)) {
+                skippedCollections++;
+                continue;
+            }
+            exportedCollectionTitlesById.put(collection.getId(), collectionTitle);
             collectionRows.add(List.of(
-                    collection.getTitle() == null ? "" : collection.getTitle(),
+                    collectionTitle,
                     collection.getDescription() == null ? "" : collection.getDescription(),
                     emailOf(owner),
                     String.join("; ", dois)));
         }
+
+        if (projectCollectionRepository != null) {
+            for (var link : projectCollectionRepository.findAll()) {
+                if (link.getProject() == null || link.getCollection() == null
+                        || !projectIds.contains(link.getProject().getId())
+                        || (projectId != null && !projectId.equals(link.getProject().getId()))
+                        || !link.getCollection().isActive()) continue;
+                String collectionTitle = exportedCollectionTitlesById.get(link.getCollection().getId());
+                if (collectionTitle == null) continue;
+                projectCollectionRows.add(List.of(
+                        link.getProject().getTitle(), collectionTitle));
+            }
+        }
+
+        validateExportCaps(userRows, projects, keptMemberRows, sourceRows, paperRows,
+                collectionRows, projectCollectionRows);
 
         String summary = "Backup bundle exported " + LocalDateTime.now()
                 + ": " + userRows.size() + " users, " + projects.size() + " projects, "
                 + keptMemberRows.size() + " members, " + sourceRows.size() + " sources, "
                 + paperRows.size() + " papers, " + collectionRows.size() + " collections"
                 + " (skipped — unrestorable via seed: " + skippedUsers + " users, "
+                + (candidates.size() - projects.size()) + " projects, "
                 + skippedMembers + " members, " + skippedSources + " sources, "
                 + skippedPapers + " papers, " + skippedCollections + " collections).";
         byte[] xlsx;
         try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            sheet(wb, "README", List.of("note"), List.of(
-                    List.of("Backup bundle — reimport via Data Management seed upload (seed.xlsx at root + papers/<slug>/ files). Targets a fresh database; existing emails/DOIs import as duplicate-skips."),
-                    List.of("papers rows: paper_file re-runs extraction; paper_standard regenerates template sections; content_tex imports text without sections."),
-                    List.of(summary)));
+            sheet(wb, "README", List.of("key", "value"), List.of(
+                    List.of("seed_format_version", "2"),
+                    List.of("bundle", "Backup bundle — seed.xlsx at root + papers/<slug>/ files."),
+                    List.of("papers", "Only stored PDF/DOCX/TEX papers are exported; standard/text-only papers are skipped."),
+                    List.of("summary", summary)));
             sheet(wb, "users", List.of("email", "first_name", "last_name", "role", "student_code", "send_invitation"), userRows);
             sheet(wb, "projects", List.of("project_title", "description", "status", "target_standard"),
                     projects.stream().map(p -> List.of(
@@ -255,9 +335,10 @@ public class AdminSeedExportService {
                             p.getStatus() == null ? "" : p.getStatus().name(),
                             p.getTargetStandard() == null ? "" : p.getTargetStandard().name())).toList());
             sheet(wb, "members", List.of("project_title", "user_email", "project_role"), keptMemberRows);
-            sheet(wb, "sources", List.of("project_title", "doi", "title", "authors", "publication_year", "publisher", "cited_by_count", "abstract_or_text"), sourceRows);
-            sheet(wb, "papers", List.of("project_title", "paper_folder", "paper_file", "title", "content_tex", "paper_standard"), paperRows);
+            sheet(wb, "sources", List.of("project_title", "doi"), sourceRows);
+            sheet(wb, "papers", List.of("project_title", "paper_file"), paperRows);
             sheet(wb, "collections", List.of("collection_title", "description", "owner_email", "source_dois"), collectionRows);
+            sheet(wb, "project_collections", List.of("project_title", "collection_title"), projectCollectionRows);
             wb.write(out);
             xlsx = out.toByteArray();
         } catch (IOException e) {
@@ -266,68 +347,52 @@ public class AdminSeedExportService {
         return new SeedBundle(xlsx, paperFiles, summary);
     }
 
+    private static void validateExportCaps(List<List<String>> users, List<Project> projects,
+                                           List<List<String>> members, List<List<String>> sources,
+                                           List<List<String>> papers, List<List<String>> collections,
+                                           List<List<String>> projectCollections) {
+        if (users.size() > 200 || projects.size() > 200 || sources.size() > 200
+                || papers.size() > 200 || collections.size() > 200 || projectCollections.size() > 200) {
+            throw new IllegalStateException("v2 seed export exceeds the 200-row sheet limit");
+        }
+        if (members.size() > 500) throw new IllegalStateException("v2 seed export exceeds the 500-row members limit");
+    }
+
     private record ScoredPaperRow(List<String> values, PaperFileEntry file, int score) {
     }
 
-    // One paper per project (mirrors the PaperController invariant): file-backed
-    // re-extracts with full fidelity, text-only keeps words, stubs last.
-    private ScoredPaperRow paperRow(Document doc) {
-        String title = doc.getTitle() == null ? "" : doc.getTitle();
-        String original = doc.getOriginalFilename() == null ? "" : doc.getOriginalFilename();
-        Matcher stub = STANDARD_STUB.matcher(original);
-        if ("placeholder".equals(doc.getFileUrl()) || stub.matches()) {
-            String standard = stub.matches() ? stub.group(1) : "";
-            if (standard.isBlank() && doc.getProject().getTargetStandard() != null) {
-                standard = doc.getProject().getTargetStandard().name();
-            }
-            if (standard.isBlank()) {
-                return null;
-            }
-            return new ScoredPaperRow(
-                    List.of(doc.getProject().getTitle(), "", "", title, "", standard), null, 1);
+    private static boolean isRestorableMember(ProjectMember member) {
+        if (member == null || member.getUser() == null || member.getRole() == null) return false;
+        User user = member.getUser();
+        if (user.getRole() == UserRole.ADMIN || user.getAccountStatus() != AccountStatus.ACTIVE) return false;
+        if (user.getRole() == UserRole.STUDENT) {
+            return (member.getRole() == ProjectRole.LEADER || member.getRole() == ProjectRole.MEMBER)
+                    && user.getStudentCode() != null
+                    && user.getStudentCode().trim().toUpperCase(Locale.ROOT).matches("^[A-Z]{2}\\d{6}$");
         }
-        String objectKey = doc.getFileUrl() == null ? "" : doc.getFileUrl();
-        if (!objectKey.isBlank() && documentObjectStorage.exists(objectKey)) {
-            String slug = slug(title.isBlank() ? original : title);
-            String filename = sanitizeFilename(original.isBlank() ? slug + ".pdf" : original);
-            String zipPath = "papers/" + slug + "/" + filename;
-            return new ScoredPaperRow(
-                    List.of(doc.getProject().getTitle(), slug, zipPath, title, "", ""),
-                    new PaperFileEntry(zipPath, objectKey), 3);
-        }
-        String content = sectionsText(doc);
-        if (content == null || content.isBlank()) {
-            try {
-                var documentText = documentTextRepository.findByDocumentId(doc.getId());
-                if (documentText != null) content = documentText.getExtractedText();
-            } catch (RuntimeException e) {
-                log.warn("Seed export: unreadable text for paper {}", doc.getId());
-            }
-        }
-        if (content == null || content.isBlank()) {
-            return null;
-        }
-        return new ScoredPaperRow(
-                List.of(doc.getProject().getTitle(), "", "", title, content, ""), null, 2);
+        return user.getRole() == UserRole.INSTRUCTOR && member.getRole() == ProjectRole.INSTRUCTOR;
     }
 
-    private String sectionsText(Document doc) {
-        try {
-            List<PaperSection> sections = paperSectionRepository
-                    .findByDocumentIdOrderBySectionOrderAsc(doc.getId());
-            List<String> parts = new ArrayList<>();
-            for (PaperSection section : sections) {
-                if (!section.isActive()) continue;
-                String body = section.getContentTex() == null ? "" : section.getContentTex().strip();
-                if (body.isBlank()) continue;
-                String title = section.getSectionTitle() == null ? "" : section.getSectionTitle().strip();
-                parts.add(title.isBlank() ? body : "## " + title + "\n\n" + body);
-            }
-            return String.join("\n\n", parts);
-        } catch (RuntimeException e) {
-            log.warn("Seed export: unreadable sections for paper {}", doc.getId());
-            return null;
+    // One file-backed paper per project. v2 deliberately drops text-only and
+    // standard stubs because the handoff contract is paper-file only.
+    private ScoredPaperRow paperRow(Document doc) {
+        String original = doc.getOriginalFilename() == null ? "" : doc.getOriginalFilename();
+        if ("placeholder".equals(doc.getFileUrl()) || STANDARD_STUB.matcher(original).matches()) return null;
+        String objectKey = doc.getFileUrl() == null ? "" : doc.getFileUrl();
+        if (!objectKey.isBlank() && documentObjectStorage.exists(objectKey)) {
+            String slug = slug(doc.getProject().getTitle());
+            String suffix = doc.getId().toString().substring(0, 8);
+            slug = slug.length() > 71 ? slug.substring(0, 71) : slug;
+            slug = slug + "-" + suffix;
+            String filename = sanitizeFilename(original.isBlank() ? slug + ".pdf" : original);
+            if (!filename.toLowerCase(Locale.ROOT).matches(".+\\.(pdf|docx|tex)")) return null;
+            String zipPath = "papers/" + slug + "/" + slug
+                    + filename.substring(filename.lastIndexOf('.')).toLowerCase(Locale.ROOT);
+            return new ScoredPaperRow(
+                    List.of(doc.getProject().getTitle(), zipPath),
+                    new PaperFileEntry(zipPath, objectKey), 3);
         }
+        return null;
     }
 
     private static void putUser(Map<String, User> usersByEmail, User user) {

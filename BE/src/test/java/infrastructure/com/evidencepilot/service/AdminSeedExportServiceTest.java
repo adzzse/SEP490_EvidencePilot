@@ -8,6 +8,7 @@ import com.evidencepilot.model.CollectionDocument;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
+import com.evidencepilot.model.ProjectCollection;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.DocumentType;
@@ -40,7 +41,7 @@ class AdminSeedExportServiceTest {
             com.evidencepilot.repository.CollectionDocumentRepository memberships,
             DocumentObjectStorage storage) {
         return new AdminSeedExportService(
-                projects, members, documents, texts, sections,
+                projects, members, documents,
                 collections, memberships, storage);
     }
 
@@ -142,6 +143,10 @@ class AdminSeedExportServiceTest {
         CollectionDocument membership = new CollectionDocument();
         membership.setCollection(collection);
         membership.setDocument(source);
+        ProjectCollection projectCollection = new ProjectCollection();
+        projectCollection.setProject(project);
+        projectCollection.setCollection(collection);
+        projectCollection.setLinkedBy(instructor);
 
         var projects = mock(com.evidencepilot.repository.ProjectRepository.class);
         var members = mock(com.evidencepilot.repository.ProjectMemberRepository.class);
@@ -159,9 +164,13 @@ class AdminSeedExportServiceTest {
         when(memberships.findByCollectionId(collection.getId())).thenReturn(List.of(membership));
         when(storage.exists("objects/paper.pdf")).thenReturn(true);
 
-        AdminSeedExportService.SeedBundle bundle =
-                exportService(projects, members, documents, texts, sections,
-                        collections, memberships, storage).buildBundle(null);
+        var projectCollections = mock(com.evidencepilot.repository.ProjectCollectionRepository.class);
+        when(projectCollections.findAll()).thenReturn(List.of(projectCollection));
+        var exporter = exportService(projects, members, documents, texts, sections,
+                collections, memberships, storage);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                exporter, "projectCollectionRepository", projectCollections);
+        AdminSeedExportService.SeedBundle bundle = exporter.buildBundle(null);
 
         assertThat(bundle.paperFiles()).singleElement().satisfies(file ->
                 assertThat(file.zipPath()).startsWith("papers/"));
@@ -180,10 +189,11 @@ class AdminSeedExportServiceTest {
         assertThat(parsed.sheets().get("papers").getFirst().get("paper_file"))
                 .startsWith("papers/");
         assertThat(parsed.sheets().get("collections")).hasSize(1);
+        assertThat(parsed.sheets().get("project_collections")).hasSize(1);
     }
 
     @Test
-    void stubPaperExportsAsStandardRow() throws Exception {
+    void stubPaperIsSkippedFromV2Export() throws Exception {
         User instructor = user("prof@example.test", UserRole.INSTRUCTOR, null);
         Project project = project("P1");
         ProjectMember member = new ProjectMember();
@@ -221,8 +231,7 @@ class AdminSeedExportServiceTest {
             parsed = seedService().parse(in, bundle.xlsx().length);
         }
         assertThat(parsed.errors()).as(String.join("; ", parsed.errors())).isEmpty();
-        assertThat(parsed.sheets().get("papers")).hasSize(1);
-        assertThat(parsed.sheets().get("papers").getFirst().get("paper_standard")).isEqualTo("IEEE");
+        assertThat(parsed.sheets().get("papers")).isEmpty();
         assertThat(bundle.paperFiles()).isEmpty();
     }
 
@@ -279,5 +288,42 @@ class AdminSeedExportServiceTest {
         assertThat(parsed.sheets().get("sources")).isEmpty();
         assertThat(parsed.sheets().get("collections")).isEmpty();
         assertThat(bundle.summary()).contains("skipped");
+    }
+
+    @Test
+    void malformedInstructorMembershipDoesNotExportAnUnimportableProject() throws Exception {
+        User instructor = user("prof@example.test", UserRole.INSTRUCTOR, null);
+        User student = user("student@example.test", UserRole.STUDENT, "AB123456");
+        Project project = project("P1");
+        ProjectMember valid = new ProjectMember();
+        valid.setProject(project);
+        valid.setUser(instructor);
+        valid.setRole(ProjectRole.INSTRUCTOR);
+        ProjectMember malformed = new ProjectMember();
+        malformed.setProject(project);
+        malformed.setUser(student);
+        malformed.setRole(ProjectRole.INSTRUCTOR);
+
+        var projects = mock(com.evidencepilot.repository.ProjectRepository.class);
+        var members = mock(com.evidencepilot.repository.ProjectMemberRepository.class);
+        var documents = mock(com.evidencepilot.repository.DocumentRepository.class);
+        var collections = mock(com.evidencepilot.repository.CollectionRepository.class);
+        when(projects.findAll()).thenReturn(List.of(project));
+        when(members.findAll()).thenReturn(List.of(valid, malformed));
+        when(documents.findAll()).thenReturn(List.of());
+        when(collections.findAll()).thenReturn(List.of());
+
+        var bundle = exportService(projects, members, documents,
+                mock(com.evidencepilot.repository.DocumentTextRepository.class),
+                mock(com.evidencepilot.repository.PaperSectionRepository.class), collections,
+                mock(com.evidencepilot.repository.CollectionDocumentRepository.class),
+                mock(DocumentObjectStorage.class)).buildBundle(null);
+        try (var in = new ByteArrayInputStream(bundle.xlsx())) {
+            var parsed = seedService().parse(in, bundle.xlsx().length);
+            assertThat(parsed.errors()).isEmpty();
+            assertThat(parsed.sheets().get("projects")).isEmpty();
+            assertThat(parsed.sheets().get("members")).isEmpty();
+        }
+        assertThat(bundle.summary()).contains("1 projects");
     }
 }

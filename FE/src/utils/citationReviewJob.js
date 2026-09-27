@@ -13,7 +13,7 @@ export function normalizeCitationReviewReload({ serverState = null, storedJob = 
   return {
     jobId,
     review,
-    shouldPoll: active && review?.complete !== true,
+    shouldPoll: active && Boolean(jobId),
     shouldClearJob: Boolean(jobId && terminal),
     errorCode: serverState?.errorCode || storedJob?.errorCode || null,
     errorMessage: serverState?.errorMessage || storedJob?.errorMessage || null,

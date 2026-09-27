@@ -10,9 +10,11 @@ import com.evidencepilot.exception.SubmissionReadinessException;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.UserRole;
+import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.service.impl.FeedbackServiceImpl;
 import com.evidencepilot.service.impl.ProjectCollectionService;
+import com.evidencepilot.service.impl.ProjectServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -53,7 +55,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Import({FeedbackServiceImpl.class, FeedbackAnchorService.class, CurrentUserServiceImpl.class,
         SubmissionReadinessService.class, SectionStandardService.class, ProjectCollectionService.class,
         PaperProcessingServiceImpl.class, BlockTreeIngestor.class,
-        SectionWorkHistoryService.class,
+        SectionWorkHistoryService.class, SeedProjectLifecycle.class, ProjectServiceImpl.class,
         com.evidencepilot.service.FeedbackAttachmentService.class,
         FeedbackRevisionMySqlTest.JsonConfig.class})
 class FeedbackRevisionMySqlTest {
@@ -75,6 +77,7 @@ class FeedbackRevisionMySqlTest {
 
     @Autowired private JdbcTemplate jdbc;
     @Autowired private FeedbackServiceImpl feedback;
+    @Autowired private SeedProjectLifecycle seedProjectLifecycle;
     @Autowired private SubmissionReadinessService readiness;
     @Autowired private PaperProcessingServiceImpl paperService;
     @Autowired private ObjectMapper json;
@@ -151,6 +154,68 @@ class FeedbackRevisionMySqlTest {
         assertThat(json.readTree(stored).path("papers").get(0).path("sections").get(0).path("contentTex").asText()).isEqualTo("Revised evidence.");
         assertThat(requestCount(f.project())).isEqualTo(2);
         assertThat(projectStatus(f.project())).isEqualTo("SUBMITTED_FOR_REVIEW");
+    }
+
+    @Test
+    void seedLifecycleCreatesRealPendingRequestForInstructorQueue() {
+        Fixture f = fixture();
+        User admin = user(UserRole.ADMIN);
+
+        login(admin);
+        seedProjectLifecycle.apply(f.project(), ProjectStatus.SUBMITTED_FOR_REVIEW, admin);
+
+        assertThat(projectStatus(f.project())).isEqualTo("SUBMITTED_FOR_REVIEW");
+        assertThat(requestCount(f.project())).isEqualTo(1);
+        Integer submittedSnapshots = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM review_section_snapshots rss JOIN feedback_requests fr ON fr.id=rss.request_id "
+                        + "WHERE fr.project_id=UUID_TO_BIN(?) AND rss.snapshot_type='SUBMITTED'",
+                Integer.class, f.project().toString());
+        assertThat(submittedSnapshots).isEqualTo(2);
+
+        login(f.instructor());
+        assertThat(feedback.findQueueForCurrentUser(0, 10, null, null, null, null, null).content())
+                .singleElement()
+                .satisfies(request -> assertThat(request.status()).isEqualTo(com.evidencepilot.model.FeedbackStatus.PENDING));
+    }
+
+    @Test
+    void seedLifecycleApprovesAndArchivesThroughRealTransitions() {
+        User admin = user(UserRole.ADMIN);
+        Fixture approved = fixture();
+        login(admin);
+        seedProjectLifecycle.apply(approved.project(), ProjectStatus.APPROVED, admin);
+        assertThat(projectStatus(approved.project())).isEqualTo("APPROVED");
+        assertThat(requestCount(approved.project())).isEqualTo(1);
+        String approvedRequestStatus = jdbc.queryForObject(
+                "SELECT status FROM feedback_requests WHERE project_id=UUID_TO_BIN(?)",
+                String.class, approved.project().toString());
+        assertThat(approvedRequestStatus).isEqualTo("REVIEWED");
+
+        Fixture archived = fixture();
+        login(admin);
+        seedProjectLifecycle.apply(archived.project(), ProjectStatus.ARCHIVED, admin);
+        assertThat(projectStatus(archived.project())).isEqualTo("ARCHIVED");
+        assertThat(requestCount(archived.project())).isEqualTo(1);
+        String archivedRequestStatus = jdbc.queryForObject(
+                "SELECT status FROM feedback_requests WHERE project_id=UUID_TO_BIN(?)",
+                String.class, archived.project().toString());
+        assertThat(archivedRequestStatus).isEqualTo("REVIEWED");
+    }
+
+    @Test
+    void seedLifecycleRejectsBlankSectionWithoutCreatingRequest() {
+        Fixture f = fixture();
+        User admin = user(UserRole.ADMIN);
+        jdbc.update("UPDATE paper_sections SET content_tex='' WHERE id=UUID_TO_BIN(?)",
+                f.first().toString());
+
+        login(admin);
+        assertThatThrownBy(() -> seedProjectLifecycle.apply(
+                f.project(), ProjectStatus.SUBMITTED_FOR_REVIEW, admin))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("blank active section");
+        assertThat(projectStatus(f.project())).isEqualTo("IN_PROGRESS");
+        assertThat(requestCount(f.project())).isZero();
     }
 
     @Test

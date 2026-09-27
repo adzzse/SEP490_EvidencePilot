@@ -57,6 +57,9 @@ test('clears a saved job after a terminal complete result', () => {
 });
 
 test('keeps an active job when the server still reports it as running', () => {
+  assert.equal(normalizeCitationReviewReload({
+    serverState: { status: 'RUNNING', jobId: 'job-1', review: complete },
+  }).shouldPoll, true);
   assert.equal(
     normalizeCitationReviewReload({
       serverState: { status: 'RUNNING', review: complete },

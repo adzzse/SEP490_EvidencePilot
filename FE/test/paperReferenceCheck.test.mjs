@@ -96,7 +96,7 @@ test('paper reference panel keeps the advisory check independent and refreshable
     }
     if (pathname === '/api/papers/paper-1/references/check') {
       checkRequests += 1;
-      if (scenario === 'error-first' && checkRequests === 1) {
+      if (scenario === 'error-first') {
         response.statusCode = 500;
         response.end('failed');
         return;
@@ -178,6 +178,7 @@ test('paper reference panel keeps the advisory check independent and refreshable
   await alert.waitFor();
   assert.match(await alert.textContent(), /Could not check imported references\./i);
   assert.match(await errorPage.getByText('Existing reference').textContent(), /Existing reference/);
+  scenario = 'recovered';
   await errorPage.getByRole('button', { name: 'Check again' }).click();
   await errorPage.getByRole('region', { name: 'Reference check' }).waitFor();
 });

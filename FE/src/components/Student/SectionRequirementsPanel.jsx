@@ -3,6 +3,8 @@ import { formatDateTime } from '../../utils/formatters/date.js';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api.js';
+import { getWithRetry, trackAiJob } from '../../utils/aiJobPolling.js';
+import { taskKey, writeTask } from '../../utils/taskState.js';
 
 const VERDICT_STYLE = {
   MET: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200',
@@ -25,7 +27,6 @@ export default function SectionRequirementsPanel({
   isLocked,
   isDirty,
   onHandoffChanged,
-  pollAiJob,
   showToast,
 }) {
   const { t } = useTranslation();
@@ -36,6 +37,7 @@ export default function SectionRequirementsPanel({
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const jobKey = taskKey(api, user?.id, 'self-check', project?.id, selectedPaper?.id, selectedSection?.id);
 
   const load = useCallback(async () => {
     const requestId = ++requestRef.current;
@@ -50,20 +52,28 @@ export default function SectionRequirementsPanel({
     setLoading(true);
     try {
       const [evaluationResponse, readinessResponse] = await Promise.all([
-        api.get(`/api/papers/${selectedPaper.id}/sections/${selectedSection.id}/standard-evaluation`),
-        api.get(`/api/projects/${project.id}/review-readiness`),
+        getWithRetry(api, `/api/papers/${selectedPaper.id}/sections/${selectedSection.id}/standard-evaluation`, () => requestId !== requestRef.current),
+        getWithRetry(api, `/api/projects/${project.id}/review-readiness`, () => requestId !== requestRef.current),
       ]);
       if (requestId !== requestRef.current) return;
       setEvaluation(evaluationResponse.status === 204 ? null : evaluationResponse.data);
-      setReadinessSection(findReadinessSection(readinessResponse.data, selectedSection.id));
+      const readiness = findReadinessSection(readinessResponse.data, selectedSection.id);
+      setReadinessSection(readiness);
+      setLoading(false);
+      if (!isDirty && readiness?.currentInputFingerprint) {
+        setBusy('check');
+        const job = await trackAiJob(api, jobKey, readiness.currentInputFingerprint, null,
+          () => requestId !== requestRef.current);
+        if (job && requestId === requestRef.current) setEvaluation(job.result);
+      }
     } catch (loadError) {
       if (requestId === requestRef.current) {
         setError(loadError?.response?.data?.message || t('selfCheckLoadFailed'));
       }
     } finally {
-      if (requestId === requestRef.current) setLoading(false);
+      if (requestId === requestRef.current) { setLoading(false); setBusy(''); }
     }
-  }, [project?.id, selectedPaper?.id, selectedSection?.id, selectedSection?.revision, isDirty, t]);
+  }, [project?.id, selectedPaper?.id, selectedSection?.id, selectedSection?.revision, isDirty, jobKey, t]);
 
   useEffect(() => {
     load();
@@ -71,16 +81,15 @@ export default function SectionRequirementsPanel({
   }, [load]);
 
   const runCheck = async () => {
-    if (isDirty) return;
+    if (isDirty || !readinessSection?.currentInputFingerprint) return;
     const requestId = ++requestRef.current;
     setBusy('check');
     setError('');
     try {
-      const response = await api.post(
+      writeTask(jobKey, null);
+      const job = await trackAiJob(api, jobKey, readinessSection?.currentInputFingerprint, () => api.post(
         `/api/papers/${selectedPaper.id}/sections/${selectedSection.id}/standard-evaluation/jobs`,
-      );
-      if (requestId !== requestRef.current) return;
-      const job = await pollAiJob(response.data.jobId, () => requestId !== requestRef.current);
+      ), () => requestId !== requestRef.current);
       if (requestId !== requestRef.current || !job) return;
       setEvaluation(job.result);
       if (job.result.status === 'COMPLETED') showToast(t('selfCheckCompleted'));
@@ -190,7 +199,7 @@ export default function SectionRequirementsPanel({
             <div className="mb-3 flex items-center justify-between gap-2">
               <h3 className="text-xs font-bold text-(--text-primary)">{t('sectionRequirements')}</h3>
               {requirements.length > 0 && (
-                <button type="button" onClick={runCheck} disabled={!canAct || busy !== ''}
+                <button type="button" onClick={runCheck} disabled={!canAct || busy !== '' || !readinessSection?.currentInputFingerprint}
                   className="rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40">
                   {busy === 'check' ? t('checkingRequirements') : completed ? t('checkAgain') : t('checkRequirements')}
                 </button>

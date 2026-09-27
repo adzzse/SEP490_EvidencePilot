@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { trackAiJob } from '../src/utils/aiJobPolling.js';
+
+const savedTasks = new Map();
+globalThis.sessionStorage = { getItem: key => savedTasks.get(key) ?? null, setItem: (key, value) => savedTasks.set(key, value), removeItem: key => savedTasks.delete(key) };
 
 const source = readFileSync(new URL('../src/components/Student/SectionRequirementsPanel.jsx', import.meta.url), 'utf8');
 
@@ -12,8 +16,13 @@ function harness(name) {
   const jobPending = Promise.withResolvers();
   const record = type => value => events.push([type, value]);
   const dependencies = {
-    api: { post: (...args) => { events.push(['post', args]); return pending.promise; }, delete: () => pending.promise },
-    pollAiJob: (...args) => { events.push(['poll', args]); return jobPending.promise; },
+    api: {
+      post: (...args) => { events.push(['post', args]); return pending.promise; }, delete: () => pending.promise,
+      get: (...args) => { events.push(['poll', args]); return jobPending.promise.then(data => ({ data })); },
+    },
+    trackAiJob,
+    jobKey: 'self-check-test',
+    writeTask: key => savedTasks.delete(key),
     requestRef,
     isDirty: false,
     selectedPaper: { id: 'paper-a' },
@@ -69,10 +78,8 @@ test('self-check discards a late job result after the input changes', async () =
   const done = h.run();
   h.pending.resolve({ data: { jobId: 'job-a' } });
   await Promise.resolve();
-  const [, invalidate] = h.events.find(([type]) => type === 'poll')[1];
-  assert.equal(invalidate(), false);
+  assert.equal(h.events.find(([type]) => type === 'poll')[1][0], '/api/jobs/job-a');
   h.requestRef.current += 1;
-  assert.equal(invalidate(), true);
   h.events.length = 0;
   h.jobPending.resolve({ result: { status: 'COMPLETED' } });
   await done;
@@ -84,7 +91,7 @@ test('self-check shows a failed job as an error and ends its pending state', asy
   const done = h.run();
   h.pending.resolve({ data: { jobId: 'job-a' } });
   await Promise.resolve();
-  h.jobPending.reject(new Error('job failed'));
+  h.jobPending.resolve({ status: 'FAILED', errorMessage: 'job failed' });
   await done;
   assert.deepEqual(h.events.find(([type, value]) => type === 'error' && value), ['error', 'selfCheckFailed']);
   assert.deepEqual(h.events.at(-1), ['busy', '']);

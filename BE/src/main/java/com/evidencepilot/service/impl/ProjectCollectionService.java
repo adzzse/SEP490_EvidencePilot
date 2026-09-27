@@ -66,6 +66,14 @@ public class ProjectCollectionService {
         return collectionRepository.save(collection);
     }
 
+    @Transactional
+    public Collection createSeedCollectionWithSources(
+            User owner, String title, String description, List<Document> sources) {
+        Collection collection = createSeedCollection(owner, title, description);
+        for (Document source : sources) addSource(source, collection, owner);
+        return collection;
+    }
+
         public List<CollectionResponse> getLinkedCollections(UUID projectId) {
         User currentUser = currentUserService.requireCurrentUser();
         Project project = requireActiveProject(projectId);

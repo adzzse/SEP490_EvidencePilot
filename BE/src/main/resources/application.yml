@@ -121,6 +121,7 @@ app:
   dev-bypass:
     enabled: ${APP_DEV_BYPASS_ENABLED:false}
   seed:
+    paper-ready-timeout-seconds: ${SEED_PAPER_READY_TIMEOUT_SECONDS:1800}
     max-upload-bytes: ${SEED_MAX_UPLOAD_BYTES:268435456}
     max-expanded-bytes: ${SEED_MAX_EXPANDED_BYTES:536870912}
     max-entries: ${SEED_MAX_ENTRIES:2000}

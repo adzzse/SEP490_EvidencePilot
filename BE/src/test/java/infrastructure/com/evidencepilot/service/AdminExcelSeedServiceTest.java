@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipInputStream;
+import java.io.ByteArrayInputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -85,9 +86,7 @@ class AdminExcelSeedServiceTest {
         }
         assertThat(names).containsExactlyInAnyOrder(
                 "seed.xlsx",
-                "papers/attention-retrieval/attention-retrieval.tex",
-                "papers/attention-retrieval/README.md",
-                "papers/attention-retrieval/images/README.txt");
+                "papers/attention-retrieval/attention-retrieval.tex");
     }
 
     @Test
@@ -104,9 +103,152 @@ class AdminExcelSeedServiceTest {
         try (var wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(
                 new java.io.ByteArrayInputStream(files.get("seed.xlsx")))) {
             var sheet = wb.getSheet("papers");
-            String paperFile = sheet.getRow(1).getCell(2).toString();
+            String paperFile = sheet.getRow(1).getCell(1).toString();
             assertThat(files).containsKey(paperFile);
         }
+    }
+
+    @Test
+    void v2TemplateParsesFilePaperAndProjectCollectionSheets() throws Exception {
+        var parsed = service().parse(
+                new ByteArrayInputStream(service().buildTemplate()),
+                service().buildTemplate().length);
+
+        assertThat(parsed.formatVersion()).isEqualTo(2);
+        assertThat(parsed.errors()).isEmpty();
+        assertThat(parsed.sheets().keySet()).containsExactly(
+                "users", "projects", "members", "sources", "papers", "collections", "project_collections");
+        assertThat(parsed.sheets().get("papers").getFirst()).containsEntry(
+                "paper_file", "papers/attention-retrieval/attention-retrieval.tex");
+    }
+
+    @Test
+    void v2ReviewStatusRequiresLeaderAndPaperFile() {
+        Map<String, List<Map<String, String>>> sheets = new HashMap<>();
+        sheets.put("users", List.of(
+                row("email", "prof@example.test", "role", "INSTRUCTOR", "send_invitation", "FALSE", "_row", "2"),
+                row("email", "student@example.test", "role", "STUDENT", "student_code", "AB123456", "send_invitation", "FALSE", "_row", "3")));
+        sheets.put("projects", List.of(row("project_title", "P", "status", "SUBMITTED_FOR_REVIEW", "_row", "2")));
+        sheets.put("members", List.of(row("project_title", "P", "user_email", "prof@example.test", "project_role", "INSTRUCTOR", "_row", "2")));
+        sheets.put("sources", List.of());
+        sheets.put("papers", List.of());
+        sheets.put("collections", List.of());
+        sheets.put("project_collections", List.of());
+
+        assertThat(service().validateV2(sheets))
+                .anyMatch(error -> error.contains("LEADER member is required"))
+                .anyMatch(error -> error.contains("paper_file is required"));
+    }
+
+    @Test
+    void v2TemplateAcceptsSixtyDoiSourcesForOneProject() throws Exception {
+        byte[] workbook = service().buildTemplate();
+        byte[] expanded;
+        try (var wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new ByteArrayInputStream(workbook));
+             var out = new java.io.ByteArrayOutputStream()) {
+            var sources = wb.getSheet("sources");
+            for (int index = 2; index <= 60; index++) {
+                var row = sources.createRow(index);
+                row.createCell(0).setCellValue("EP-DEMO-Retrieval");
+                row.createCell(1).setCellValue("10.1234/seed-" + index);
+            }
+            wb.write(out);
+            expanded = out.toByteArray();
+        }
+
+        var parsed = service().parse(new ByteArrayInputStream(expanded), expanded.length);
+        assertThat(parsed.errors()).isEmpty();
+        assertThat(parsed.sheets().get("sources")).hasSize(60);
+    }
+
+    @Test
+    void v2RejectsAdminRowsAndInlinePaperContent() throws Exception {
+        byte[] workbook = service().buildTemplate();
+        byte[] invalid;
+        try (var wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new ByteArrayInputStream(workbook));
+             var out = new java.io.ByteArrayOutputStream()) {
+            wb.getSheet("users").getRow(1).getCell(3).setCellValue("ADMIN");
+            wb.getSheet("papers").getRow(0).createCell(2).setCellValue("content_tex");
+            wb.getSheet("papers").getRow(1).createCell(2).setCellValue("Must not import inline");
+            wb.write(out);
+            invalid = out.toByteArray();
+        }
+
+        var parsed = service().parse(new ByteArrayInputStream(invalid), invalid.length);
+        assertThat(parsed.errors()).anyMatch(error -> error.contains("role must be STUDENT or INSTRUCTOR"));
+        assertThat(parsed.errors()).anyMatch(error -> error.contains("v2 papers accept paper_file only"));
+    }
+
+    @Test
+    void v2RejectsUnknownAdminProjectRole() {
+        Map<String, List<Map<String, String>>> sheets = new HashMap<>();
+        sheets.put("users", List.of(row("email", "admin@example.test", "role", "ADMIN", "_row", "2")));
+        sheets.put("projects", List.of(row("project_title", "P", "status", "IN_PROGRESS", "_row", "2")));
+        sheets.put("members", List.of(row("project_title", "P", "user_email", "admin@example.test", "project_role", "INSTRUCTOR", "_row", "2")));
+        sheets.put("sources", List.of());
+        sheets.put("papers", List.of());
+        sheets.put("collections", List.of());
+        sheets.put("project_collections", List.of());
+
+        assertThat(service().validateV2(sheets))
+                .anyMatch(error -> error.contains("role must be STUDENT or INSTRUCTOR"));
+    }
+
+    @Test
+    void v2AcceptsCaseInsensitiveTargetStandardAndMemberRole() throws Exception {
+        byte[] workbook = service().buildTemplate();
+        byte[] normalized;
+        try (var wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new ByteArrayInputStream(workbook));
+             var out = new java.io.ByteArrayOutputStream()) {
+            wb.getSheet("projects").getRow(1).getCell(3).setCellValue("custom");
+            wb.getSheet("members").getRow(1).getCell(2).setCellValue("leader");
+            wb.getSheet("members").getRow(2).getCell(2).setCellValue("instructor");
+            wb.write(out);
+            normalized = out.toByteArray();
+        }
+        var parsed = service().parse(new ByteArrayInputStream(normalized), normalized.length);
+        assertThat(parsed.errors()).isEmpty();
+    }
+
+    @Test
+    void v2RejectsUnsupportedSourceAndPaperColumns() throws Exception {
+        byte[] workbook = service().buildTemplate();
+        byte[] invalid;
+        try (var wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new ByteArrayInputStream(workbook));
+             var out = new java.io.ByteArrayOutputStream()) {
+            wb.getSheet("sources").getRow(0).createCell(2).setCellValue("source_file");
+            wb.getSheet("sources").getRow(1).createCell(2).setCellValue("sources/local.pdf");
+            wb.getSheet("papers").getRow(0).createCell(2).setCellValue("title");
+            wb.getSheet("papers").getRow(1).createCell(2).setCellValue("ignored title");
+            wb.write(out);
+            invalid = out.toByteArray();
+        }
+
+        var parsed = service().parse(new ByteArrayInputStream(invalid), invalid.length);
+        assertThat(parsed.errors()).anyMatch(error -> error.contains("unsupported v2 column: source_file"));
+        assertThat(parsed.errors()).anyMatch(error -> error.contains("unsupported v2 column: title"));
+    }
+
+    @Test
+    void v2RejectsUnsupportedSheets() throws Exception {
+        byte[] workbook = service().buildTemplate();
+        byte[] invalid;
+        try (var wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new ByteArrayInputStream(workbook));
+             var out = new java.io.ByteArrayOutputStream()) {
+            wb.createSheet("feedback");
+            wb.write(out);
+            invalid = out.toByteArray();
+        }
+        var parsed = service().parse(new ByteArrayInputStream(invalid), invalid.length);
+        assertThat(parsed.errors()).contains("unsupported v2 sheet: feedback");
+    }
+
+    @Test
+    void v2ZipRejectsEntriesOutsidePapers() {
+        var errors = service().checkZipLayout(
+                Map.of("papers", List.of()),
+                zip("seed.xlsx", "README.md"), 2);
+        assertThat(errors).anyMatch(error -> error.contains("v2 bundles allow only papers/ entries"));
     }
 
     @Test
@@ -751,6 +893,54 @@ class AdminExcelSeedServiceTest {
         assertThat(job.getErrors()).anyMatch(m -> m.contains("DOI not resolvable"));
         assertThat(job.getFailedRows()).isOne();
         assertThat(job.getProcessed()).isOne();
+        verify(t.documents(), never()).save(any(com.evidencepilot.model.Document.class));
+    }
+
+    @Test
+    void v2DataCiteArxivDoiPersistsMetadataWhenOpenAlexCannotResolve() {
+        var t = doiService();
+        var project = doiProject("P");
+        var instructor = doiInstructor();
+        when(t.members().findByProjectId(project.getId()))
+                .thenReturn(List.of(doiMembership(project, instructor)));
+        when(t.documents().save(any(com.evidencepilot.model.Document.class))).thenAnswer(call -> {
+            var source = (com.evidencepilot.model.Document) call.getArgument(0);
+            if (source.getId() == null) source.setId(java.util.UUID.randomUUID());
+            return source;
+        });
+        Map<String, com.evidencepilot.model.Document> imported = new HashMap<>();
+
+        int count = t.service().commitSourcesV2(
+                List.of(doiRow("P", "10.48550/arXiv.2004.04906", "2")),
+                new AdminExcelSeedService.SeedJob(), Map.of("P", project), imported);
+
+        assertThat(count).isOne();
+        assertThat(imported.values()).singleElement().satisfies(source -> {
+            assertThat(source.getDoi()).isEqualTo("10.48550/arXiv.2004.04906");
+            assertThat(source.getProcessingStatus())
+                    .isEqualTo(com.evidencepilot.model.enums.ProcessingStatus.METADATA_FETCHED);
+        });
+    }
+
+    @Test
+    void v2UnknownDoiFailsInsteadOfCreatingFakeMetadata() {
+        var t = doiService();
+        var project = doiProject("P");
+        var instructor = doiInstructor();
+        when(t.members().findByProjectId(project.getId()))
+                .thenReturn(List.of(doiMembership(project, instructor)));
+        when(t.openAlex().fetchWork(anyString())).thenThrow(
+                new com.evidencepilot.client.openalex.OpenAlexClient.OpenAlexApiException("not found", 404));
+        Map<String, com.evidencepilot.model.Document> imported = new HashMap<>();
+        var job = new AdminExcelSeedService.SeedJob();
+
+        int count = t.service().commitSourcesV2(
+                List.of(doiRow("P", "10.1234/not-a-work", "2")),
+                job, Map.of("P", project), imported);
+
+        assertThat(count).isZero();
+        assertThat(imported).isEmpty();
+        assertThat(job.getErrors()).anyMatch(error -> error.contains("DOI not resolvable"));
         verify(t.documents(), never()).save(any(com.evidencepilot.model.Document.class));
     }
 

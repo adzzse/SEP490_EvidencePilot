@@ -1,4 +1,9 @@
 {
+  "recoveryInterrupted": "Việc truyền dữ liệu đã gián đoạn. Đầu vào đã được giữ lại; hãy kiểm tra dữ liệu server đã nhận trước khi thử lại.",
+  "recoveryReceiptPending": "Server vẫn đang nhận file này. Hãy kiểm tra lại trước khi thử tải lại.",
+  "recoveryReconcileFailed": "Chưa kiểm tra được dữ liệu server đã nhận. Hãy thử lại khi kết nối hoạt động.",
+  "recoveryStorageFailed": "Không giữ được file trong trình duyệt này. Hãy giải phóng dung lượng và chọn lại file.",
+  "recoveryRetryUpload": "Kiểm tra và thử tải lại",
   "home": {
     "nav": {
       "home": "Trang chủ",

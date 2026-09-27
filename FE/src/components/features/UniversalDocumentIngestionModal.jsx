@@ -1,8 +1,11 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import api from '../../services/api.js';
 import Modal from '../ui/Modal.jsx';
 import UploadZone from './UploadZone.jsx';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../../context/AuthContext';
+import { taskKey, readTask, writeTask } from '../../utils/taskState.js';
+import { readUpload, writeUpload, prepareUpload, listUploadDocuments, reconcileFiles } from '../../utils/uploadRecovery.js';
 import {
   ENTITY_TYPES,
   INGESTION_TABS,
@@ -32,6 +35,24 @@ export default function UniversalDocumentIngestionModal({
   existingSourceIds = [],
 }) {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const recoveryKey = taskKey(api, user?.id, 'ingestion', entityType, entityId);
+  const uploadKey = recoveryKey ? `${recoveryKey}:files` : null;
+  const [recoveredOpen, setRecoveredOpen] = useState(false);
+  const [hydratedKey, setHydratedKey] = useState(null);
+  const [interruptedUpload, setInterruptedUpload] = useState(false);
+  const uploadRecordRef = useRef(null);
+  const recoveryKeyRef = useRef(recoveryKey);
+  recoveryKeyRef.current = recoveryKey;
+  const visible = open || recoveredOpen;
+  const documentsUrl = entityType === ENTITY_TYPES.PROJECT
+    ? `/api/projects/${entityId}/sources` : API_ROUTES.COLLECTIONS.SOURCES(entityId);
+  const closeModal = () => {
+    const saved = readTask(recoveryKey);
+    writeTask(recoveryKey, { ...saved, open: false });
+    setRecoveredOpen(false);
+    onClose();
+  };
 
   // Resolve tabs according to entityType if allowedTabs is not specified
   const effectiveTabs = useMemo(() => {
@@ -114,25 +135,58 @@ export default function UniversalDocumentIngestionModal({
     return false;
   }, [existingSourceIds, entityType, entityId]);
 
-  // Reset state when modal opens or active tab changes
+  // Recover drafts without replaying an interrupted POST.
   useEffect(() => {
-    if (open) {
-      if (!effectiveTabs.includes(activeOption)) {
-        setActiveOption(effectiveTabs[0] || INGESTION_TABS.DOI);
+    let cancelled = false;
+    setHydratedKey(null);
+    const saved = readTask(recoveryKey);
+    setActiveOption(effectiveTabs.includes(saved?.activeOption) ? saved.activeOption : effectiveTabs[0]);
+    setDoiInput(saved?.doiInput || '');
+    setDoiSubmitting(false);
+    setUploadingFiles(false);
+    setDoiBatchResult(saved?.doiBatchResult || null);
+    setDoiError(saved?.doiPending ? t('recoveryInterrupted') : saved?.doiError || '');
+    setRecoveredOpen(Boolean(saved?.open));
+    setPendingBatchFiles(null);
+    setBatchFailedDetails(null);
+    setUploadError('');
+    setInterruptedUpload(false);
+    uploadRecordRef.current = null;
+    const restoreFiles = record => {
+      uploadRecordRef.current = record;
+      setPendingBatchFiles(record?.entries?.length ? record.entries.map(entry => entry.file) : null);
+      setBatchFailedDetails(record?.failed || null);
+      setInterruptedUpload(record?.status === 'interrupted');
+      setHydratedKey(recoveryKey);
+    };
+    readUpload(uploadKey).then(async record => {
+      if (cancelled) return;
+      restoreFiles(record);
+      if (record?.status === 'interrupted') {
+        try {
+          const recovery = reconcileFiles(record, await listUploadDocuments(api, documentsUrl));
+          if (cancelled) return;
+          record = recovery.entries.length ? recovery : null;
+          await writeUpload(uploadKey, record);
+          if (cancelled) return;
+          restoreFiles(record);
+          if (recovery.pending) setUploadError(t('recoveryReceiptPending'));
+          if (recovery.accepted.length && onSuccess) await onSuccess();
+        } catch { if (!cancelled) setUploadError(t('recoveryReconcileFailed')); }
       }
-      setDoiError('');
-      setDoiBatchResult(null);
-      setUploadError('');
-      setCollectionError('');
-      setLibraryError('');
-      setPendingBatchFiles(null);
-      setBatchFailedDetails(null);
+    }).catch(() => { if (!cancelled) { setUploadError(t('recoveryStorageFailed')); setHydratedKey(recoveryKey); } });
+    return () => { cancelled = true; };
+  }, [recoveryKey, uploadKey]);
+
+  useEffect(() => {
+    if (recoveryKey && hydratedKey === recoveryKey && visible) {
+      writeTask(recoveryKey, { open: true, activeOption, doiInput, doiBatchResult, doiError, doiPending: doiSubmitting });
     }
-  }, [open, effectiveTabs, activeOption]);
+  }, [recoveryKey, hydratedKey, visible, activeOption, doiInput, doiBatchResult, doiError, doiSubmitting]);
 
   // Load Collections when Collection tab is active in PROJECT context
   useEffect(() => {
-    if (!open || activeOption !== INGESTION_TABS.COLLECTION) return;
+    if (!visible || activeOption !== INGESTION_TABS.COLLECTION) return;
     let active = true;
     setCollectionsLoading(true);
     setCollectionError('');
@@ -149,11 +203,11 @@ export default function UniversalDocumentIngestionModal({
         if (active) setCollectionsLoading(false);
       });
     return () => { active = false; };
-  }, [open, activeOption, t]);
+  }, [visible, activeOption, t]);
 
   // Load sources when a collection is selected
   useEffect(() => {
-    if (!open || activeOption !== INGESTION_TABS.COLLECTION || !selectedCollectionId) {
+    if (!visible || activeOption !== INGESTION_TABS.COLLECTION || !selectedCollectionId) {
       setCollectionSources([]);
       setSelectedCollectionSourceIds(new Set());
       return;
@@ -184,11 +238,11 @@ export default function UniversalDocumentIngestionModal({
         if (active) setCollectionSourcesLoading(false);
       });
     return () => { active = false; };
-  }, [open, activeOption, selectedCollectionId, isSourceAlreadyInserted, t]);
+  }, [visible, activeOption, selectedCollectionId, isSourceAlreadyInserted, t]);
 
   // Load Library sources when Library tab is active
   useEffect(() => {
-    if (!open || activeOption !== INGESTION_TABS.LIBRARY) return;
+    if (!visible || activeOption !== INGESTION_TABS.LIBRARY) return;
     let active = true;
     setLibraryLoading(true);
     setLibraryError('');
@@ -221,15 +275,16 @@ export default function UniversalDocumentIngestionModal({
       });
 
     return () => { active = false; };
-  }, [open, activeOption, entityType, entityId, isSourceAlreadyInserted, t]);
+  }, [visible, activeOption, entityType, entityId, isSourceAlreadyInserted, t]);
 
   // Handle DOI Ingestion
   const handleDoiBatchSubmit = async (e) => {
     e.preventDefault();
+    if (doiSubmitting || uploadingFiles || hydratedKey !== recoveryKey) return;
     setDoiError('');
     setDoiBatchResult(null);
 
-    const dois = doiInput
+    let dois = doiInput
       .split(/[\n,;]+/)
       .map(d => d.trim())
       .filter(Boolean);
@@ -241,30 +296,47 @@ export default function UniversalDocumentIngestionModal({
 
     setDoiSubmitting(true);
     try {
+      const documents = await listUploadDocuments(api, documentsUrl);
+      if (recoveryKeyRef.current !== recoveryKey) return;
+      const known = new Set(documents.map(doc => (doc.doi || '').toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, '')));
+      dois = dois.filter(doi => !known.has(doi.toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, '')));
+      if (dois.length === 0) {
+        setDoiInput('');
+        if (onSuccess) await onSuccess();
+        closeModal();
+        return;
+      }
+      writeTask(recoveryKey, { open: true, activeOption, doiInput: dois.join('\n'), doiPending: true });
       const payload = entityType === ENTITY_TYPES.PROJECT
         ? { dois, projectId: entityId }
         : { dois, collectionId: entityId };
 
       const res = await api.post(API_ROUTES.DOCUMENTS.INGEST_DOI_BATCH, payload);
+      if (recoveryKeyRef.current !== recoveryKey) return;
 
       if (res.data?.failed && res.data.failed.length > 0) {
         setDoiBatchResult(res.data);
+        setDoiInput(res.data.failed.map(item => item.doi).join('\n'));
+        writeTask(recoveryKey, { open: true, activeOption, doiInput: res.data.failed.map(item => item.doi).join('\n'), doiBatchResult: res.data });
+        if (onSuccess && res.data.succeeded?.length) await onSuccess();
       } else {
         setDoiInput('');
         if (onSuccess) await onSuccess();
-        onClose();
+        writeTask(recoveryKey, null);
+        closeModal();
       }
     } catch (err) {
+      if (recoveryKeyRef.current !== recoveryKey) return;
       setDoiError(err.response?.data?.message || t('shared.ingestion.uploadFailed'));
     } finally {
-      setDoiSubmitting(false);
+      if (recoveryKeyRef.current === recoveryKey) setDoiSubmitting(false);
     }
   };
 
   // Handle Multi-file Upload — re-batch failed-only slice on 207
-  const handleUploadFiles = async (files) => {
+  const handleUploadFiles = async (files, retained = []) => {
     const fileList = Array.from(files || []);
-    if (fileList.length === 0) return;
+    if (fileList.length === 0 || uploadingFiles || doiSubmitting || hydratedKey !== recoveryKey) return;
     setUploadingFiles(true);
     setUploadError('');
     setPendingBatchFiles(fileList);
@@ -278,40 +350,87 @@ export default function UniversalDocumentIngestionModal({
       return fd;
     };
 
+    let record;
+    let persisted = false;
     try {
+      record = await prepareUpload(api, documentsUrl, fileList);
+      if (recoveryKeyRef.current !== recoveryKey) return;
+      uploadRecordRef.current = { ...record, entries: [...retained, ...record.entries], failed: retained.map((entry, index) => ({ ...entry.failure, index, filename: entry.file.name })) };
+      await writeUpload(uploadKey, uploadRecordRef.current);
+      persisted = true;
+      if (recoveryKeyRef.current !== recoveryKey) return;
       const res = await api.post(API_ROUTES.SOURCES.BATCH, buildForm(fileList));
       const failed = res.data?.failed || [];
-      if (failed.length > 0) {
-        setBatchFailedDetails(failed);
-        const failedIdx = new Set(failed.map(f => f.index));
-        const remaining = fileList.filter((_, idx) => failedIdx.has(idx));
-        setPendingBatchFiles(remaining);
+      const entries = [...retained, ...failed.map(failure => ({ ...record.entries[failure.index], failure }))];
+      if (recoveryKeyRef.current !== recoveryKey) {
+        await writeUpload(uploadKey, entries.length ? { ...record, entries, status: 'failed', failed: entries.map((entry, index) => ({ ...entry.failure, index, filename: entry.file.name })) } : null);
+        return;
+      }
+      if (entries.length > 0) {
+        await retainFailures({ ...record, entries, status: 'failed' });
         if (onSuccess && res.data?.succeeded?.length > 0) await onSuccess();
       } else {
+        await writeUpload(uploadKey, null);
+        uploadRecordRef.current = null;
         setPendingBatchFiles(null);
         setBatchFailedDetails(null);
+        setInterruptedUpload(false);
         if (onSuccess) await onSuccess();
-        onClose();
+        closeModal();
       }
     } catch (err) {
+      if (recoveryKeyRef.current !== recoveryKey) return;
       const failed = err.response?.data?.failed;
       if (failed && failed.length > 0) {
-        setBatchFailedDetails(failed);
-        const failedIdx = new Set(failed.map(f => f.index));
-        const remaining = fileList.filter((_, idx) => failedIdx.has(idx));
-        setPendingBatchFiles(remaining);
+        record = uploadRecordRef.current;
+        await retainFailures({ ...record, entries: [...retained, ...failed.map(failure => ({ ...record.entries[retained.length + failure.index], failure }))], status: 'failed' });
         if (err.response?.data?.succeeded?.length > 0 && onSuccess) await onSuccess();
       } else {
-        setUploadError(err.response?.data?.message || t('shared.ingestion.uploadFailed'));
+        setUploadError(err.response?.data?.message || t(persisted ? 'shared.ingestion.uploadFailed' : 'recoveryStorageFailed'));
+        setInterruptedUpload(persisted && Boolean(uploadRecordRef.current?.entries?.length));
       }
     } finally {
-      setUploadingFiles(false);
+      if (recoveryKeyRef.current === recoveryKey) setUploadingFiles(false);
     }
   };
 
+  const retainFailures = async record => {
+    record.failed = record.entries.map((entry, index) => ({ ...entry.failure, index, filename: entry.file.name }));
+    uploadRecordRef.current = record;
+    await writeUpload(uploadKey, record);
+    setPendingBatchFiles(record.entries.map(entry => entry.file));
+    setBatchFailedDetails(record.failed);
+    setInterruptedUpload(false);
+  };
+
   const handleRetryBatch = async () => {
-    if (!pendingBatchFiles || pendingBatchFiles.length === 0 || !batchFailedDetails) return;
-    await handleUploadFiles(pendingBatchFiles);
+    if (uploadingFiles || !uploadRecordRef.current?.entries?.length) return;
+    setUploadingFiles(true);
+    setUploadError('');
+    let record;
+    try {
+      record = reconcileFiles(uploadRecordRef.current, await listUploadDocuments(api, documentsUrl));
+      if (recoveryKeyRef.current !== recoveryKey) return;
+      if (record.pending) { setUploadError(t('recoveryReceiptPending')); return; }
+      uploadRecordRef.current = record;
+      await writeUpload(uploadKey, record.entries.length ? record : null);
+      if (record.accepted.length && onSuccess) await onSuccess();
+      if (!record.entries.length) {
+        setPendingBatchFiles(null); setBatchFailedDetails(null); setInterruptedUpload(false); closeModal(); return;
+      }
+    } catch (err) { if (recoveryKeyRef.current === recoveryKey) setUploadError(err.response?.data?.message || t('recoveryReconcileFailed')); return; }
+    finally { if (recoveryKeyRef.current === recoveryKey) setUploadingFiles(false); }
+    const retained = record.entries.filter(entry => entry.failure?.retryable === false);
+    const retry = record.entries.filter(entry => entry.failure?.retryable !== false);
+    if (retry.length) await handleUploadFiles(retry.map(entry => entry.file), retained);
+  };
+
+  const dismissFiles = async () => {
+    try {
+      await writeUpload(uploadKey, null);
+      uploadRecordRef.current = null;
+      setBatchFailedDetails(null); setPendingBatchFiles(null); setInterruptedUpload(false);
+    } catch { setUploadError(t('recoveryStorageFailed')); }
   };
 
   // Handle Adding Sources from Collection to Project
@@ -328,7 +447,7 @@ export default function UniversalDocumentIngestionModal({
 
     if (sourceIdsToShare.length === 0) {
       if (onSuccess) await onSuccess();
-      onClose();
+      closeModal();
       return;
     }
 
@@ -365,7 +484,7 @@ export default function UniversalDocumentIngestionModal({
     setLibrarySources([]);
     setSelectedCollectionSourceIds(new Set());
     if (onSuccess) await onSuccess();
-    onClose();
+    closeModal();
   };
 
   // Handle Adding Sources from Library
@@ -381,7 +500,7 @@ export default function UniversalDocumentIngestionModal({
 
     if (sourceIdsToAdd.length === 0) {
       if (onSuccess) await onSuccess();
-      onClose();
+      closeModal();
       return;
     }
 
@@ -397,7 +516,7 @@ export default function UniversalDocumentIngestionModal({
       }
       setLibrarySubmitting(false);
       if (onSuccess) await onSuccess();
-      onClose();
+      closeModal();
       return;
     }
 
@@ -434,7 +553,7 @@ export default function UniversalDocumentIngestionModal({
     setCollectionSources([]);
     setSelectedLibraryIds(new Set());
     if (onSuccess) await onSuccess();
-    onClose();
+    closeModal();
   };
 
   // Tab Definitions Metadata
@@ -483,8 +602,8 @@ export default function UniversalDocumentIngestionModal({
 
   return (
     <Modal
-      open={open}
-      onClose={onClose}
+      open={visible}
+      onClose={closeModal}
       title={title || t('shared.ingestion.addDocument')}
       closeLabel={t('close')}
     >
@@ -514,6 +633,7 @@ export default function UniversalDocumentIngestionModal({
                 aria-selected={isSelected}
                 aria-controls="add-doc-panel"
                 onClick={() => setActiveOption(tabKey)}
+                disabled={uploadingFiles || doiSubmitting}
                 className={`w-full cursor-pointer rounded-xl border p-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-(--focus) ${
                   isSelected
                     ? 'bg-(--brand-soft) border-indigo-400 dark:border-indigo-600 shadow-xs'
@@ -574,17 +694,19 @@ export default function UniversalDocumentIngestionModal({
             <p className="text-xs text-(--text-secondary)">
               {t('shared.ingestion.uploadInstructions')}
             </p>
-            <UploadZone
+            {!pendingBatchFiles?.length && <UploadZone
               onUpload={handleUploadFiles}
+              multiple
               accept={ACCEPTED_DOCUMENT_EXTENSIONS}
               label={t('shared.ingestion.dropFiles')}
-            />
+            />}
             <div className="flex items-center justify-between text-xs text-(--text-tertiary) px-1">
               <span>{t('shared.ingestion.multiFileSupported')}</span>
               <label className="cursor-pointer text-(--brand) font-bold hover:underline">
                 <input
                   type="file"
                   multiple
+                  disabled={uploadingFiles || Boolean(pendingBatchFiles?.length)}
                   accept={ACCEPTED_DOCUMENT_EXTENSIONS}
                   className="hidden"
                   onChange={e => {
@@ -599,6 +721,14 @@ export default function UniversalDocumentIngestionModal({
             {uploadingFiles && (
               <div className="p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl text-xs font-bold text-center animate-pulse">
                 {t('shared.ingestion.uploadingFiles')}
+              </div>
+            )}
+            {interruptedUpload && pendingBatchFiles?.length > 0 && (
+              <div role="status" className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <p>{t('recoveryInterrupted')}</p>
+                <ul>{pendingBatchFiles.map((file, index) => <li key={index}>{file.name}</li>)}</ul>
+                <button type="button" onClick={handleRetryBatch} disabled={uploadingFiles} className="rounded-lg bg-(--brand) px-3 py-1.5 font-bold text-(--on-brand) disabled:opacity-50">{t('shared.ingestion.retryFailedFiles')}</button>
+                <button type="button" onClick={dismissFiles} disabled={uploadingFiles} className="ml-2 rounded-lg border border-(--border) px-3 py-1.5">{t('shared.ingestion.commonDismiss')}</button>
               </div>
             )}
             {batchFailedDetails && batchFailedDetails.length > 0 && (
@@ -618,7 +748,7 @@ export default function UniversalDocumentIngestionModal({
                   <button type="button" onClick={handleRetryBatch} disabled={uploadingFiles || !batchFailedDetails.some(f=>f.retryable)} className="px-3 py-1.5 bg-(--brand) text-(--on-brand) rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer">
                     {t('shared.ingestion.retryFailedFiles')}
                   </button>
-                  <button type="button" onClick={() => { setBatchFailedDetails(null); setPendingBatchFiles(null); }} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg text-xs font-bold cursor-pointer">
+                  <button type="button" onClick={dismissFiles} disabled={uploadingFiles} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg text-xs font-bold cursor-pointer">
                     {t('shared.ingestion.commonDismiss')}
                   </button>
                 </div>

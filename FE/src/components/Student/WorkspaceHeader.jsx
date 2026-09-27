@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
@@ -10,6 +10,8 @@ import StatusBadge from '../ui/StatusBadge.jsx';
 import SectionStandardsTab from '../Instructor/review/SectionStandardsTab.jsx';
 import AiSuggestionDrawer from '../Instructor/review/AiSuggestionDrawer.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
+import api from '../../services/api.js';
+import { taskKey, readTask, writeTask } from '../../utils/taskState.js';
 
 export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onMarkAllNotificationsRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, reviewAction = null, reviewRound = null, reviewGuide = null, review = null, reviewSection = null }) {
   const { user } = useAuth();
@@ -22,7 +24,13 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
   const [showRoundMenu, setShowRoundMenu] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [showStandards, setShowStandards] = useState(false);
-  const [showAiDrawer, setShowAiDrawer] = useState(false);
+  const aiDrawerKey = taskKey(api, user?.id, 'suggestion-drawer', project?.id);
+  const [showAiDrawer, setAiDrawer] = useState(false);
+  const setShowAiDrawer = open => {
+    setAiDrawer(open);
+    writeTask(aiDrawerKey, open);
+  };
+  useEffect(() => { setAiDrawer(Boolean(readTask(aiDrawerKey))); }, [aiDrawerKey]);
   const [showMobileStandards, setShowMobileStandards] = useState(false);
   const isReview = workspaceMode === 'review';
   const activeRound = reviewRound?.orderedRequests?.find(r => String(r.id) === String(reviewRound.activeRequestId)) || reviewRound?.orderedRequests?.[0] || null;

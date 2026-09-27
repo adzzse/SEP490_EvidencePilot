@@ -24,6 +24,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import { hasProjectAction } from '../../utils/projectActions.js';
 import { formatDate, formatDateTime } from '../../utils/formatters/date.js';
+import { taskKey, readTask, writeTask } from '../../utils/taskState.js';
+import { getWithRetry } from '../../utils/aiJobPolling.js';
+import { readUpload, writeUpload, prepareUpload, listUploadDocuments, reconcileFiles } from '../../utils/uploadRecovery.js';
 
 import {
   CITATION_STANDARDS,
@@ -50,6 +53,10 @@ export default function ProjectDetail() {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const setupKey = taskKey(api, user?.id, 'paper-setup', id);
+  const paperUploadKey = setupKey ? `${setupKey}:file` : null;
+  const setupKeyRef = useRef(setupKey);
+  setupKeyRef.current = setupKey;
   const { subscribeToEntityChanges } = useNotification();
   const { pending: pendingDelete, start: startDelete } = useUndoDelete();
   // rationale: common action labels for SectionManager/SectionRow/StandardConfigModal (were an undefined `ct` → crash).
@@ -191,6 +198,9 @@ export default function ProjectDetail() {
   const [editingSectionTitle, setEditingSectionTitle] = useState('');
   const [sectionStructureSaving, setSectionStructureSaving] = useState(false);
   const [uploadState, setUploadState] = useState(null);
+  const [pendingPaperUpload, setPendingPaperUpload] = useState(null);
+  const [paperUploadError, setPaperUploadError] = useState('');
+  const [setupHydratedKey, setSetupHydratedKey] = useState(null);
   const [standardSuggestion, setStandardSuggestion] = useState(null);
   const [standardSuggestionLoading, setStandardSuggestionLoading] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -220,6 +230,42 @@ export default function ProjectDetail() {
   selectedPaperIdRef.current = selectedPaper?.id || null;
   selectedCollectionIdRef.current = selectedCollectionId;
 
+  useEffect(() => {
+    const saved = readTask(setupKey);
+    setActiveTab(['setup', 'sections', 'review', 'progress', 'assign-member'].includes(saved?.activeTab) ? saved.activeTab : 'setup');
+    setShowSetUpPaper(Boolean(saved?.showSetUpPaper));
+    setSetupMode(saved?.setupMode === 'paper' ? 'paper' : 'standard');
+    setSetupHydratedKey(setupKey);
+  }, [setupKey]);
+
+  useEffect(() => {
+    if (!setupKey || setupHydratedKey !== setupKey || String(project?.id) !== String(id)) return;
+    writeTask(setupKey, { activeTab, showSetUpPaper, setupMode, standard, standardBase: project.targetStandard || '', paperId: selectedPaper?.id });
+  }, [setupKey, setupHydratedKey, id, project?.id, project?.targetStandard, activeTab, showSetUpPaper, setupMode, standard, selectedPaper?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPendingPaperUpload(null);
+    setPaperUploadError('');
+    setUploadState(null);
+    readUpload(paperUploadKey).then(async record => {
+      if (!record || cancelled) return;
+      setPendingPaperUpload(record);
+      setPaperUploadError(t('recoveryInterrupted'));
+      const recovery = reconcileFiles(record, await listUploadDocuments(api, `/api/projects/${id}/papers`));
+      if (cancelled) return;
+      if (recovery.accepted.length) {
+        setSelectedPaper(recovery.accepted[0]);
+        setPendingPaperUpload(null); setPaperUploadError('');
+        await writeUpload(paperUploadKey, null);
+      } else {
+        setPendingPaperUpload(recovery);
+        setPaperUploadError(t(recovery.pending ? 'recoveryReceiptPending' : 'recoveryInterrupted'));
+      }
+    }).catch(() => { if (!cancelled) setPaperUploadError(t('recoveryReconcileFailed')); });
+    return () => { cancelled = true; };
+  }, [paperUploadKey, id]);
+
   const collectionSources = useMemo(
     () => Object.values(collectionSourcePages).flat(),
     [collectionSourcePages],
@@ -234,11 +280,13 @@ export default function ProjectDetail() {
         api.get(`/api/projects/${id}/members`).catch(() => ({ data: [] })),
       ]);
       setProject(projRes.data);
-      setStandard(projRes.data.targetStandard || '');
+      const saved = readTask(setupKey);
+      const serverStandard = projRes.data.targetStandard || '';
+      setStandard(saved?.standardBase === serverStandard ? saved.standard : serverStandard);
       setMembers(memRes.data || []);
     } catch { navigate('/instructor/projects'); }
     finally { if (showLoading) setLoading(false); }
-  }, [id, navigate]);
+  }, [id, navigate, setupKey]);
 
   const loadPapers = useCallback(async () => {
     try {
@@ -579,22 +627,33 @@ export default function ProjectDetail() {
     return results;
   };
 
-  const handleUploadPaper = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadPaperFile = async file => {
+    if (!file || uploadState) return;
     const formData = new FormData();
     formData.append('file', file);
     formData.append('projectId', id);
     setUploadState('uploading');
+    setPaperUploadError('');
     setStandardSuggestion(null);
+    let persisted = false;
     try {
+      const record = await prepareUpload(api, `/api/projects/${id}/papers`, [file]);
+      if (setupKeyRef.current !== setupKey) return;
+      setPendingPaperUpload(record);
+      await writeUpload(paperUploadKey, record);
+      persisted = true;
+      if (setupKeyRef.current !== setupKey) return;
       const { data: doc } = await api.post('/api/papers', formData);
+      await writeUpload(paperUploadKey, null);
+      if (setupKeyRef.current !== setupKey) return;
+      setPendingPaperUpload(null);
       setSelectedPaper(doc);
       setUploadState('processing');
       loadPapers();
       loadProject();
       if (doc?.id) loadSections(doc.id);
     } catch (err) {
+      if (setupKeyRef.current !== setupKey) return;
       const msg = err?.response?.data?.message || err?.response?.data || t('instructor.projectDetail.uploadFailed');
       if (err?.response?.status === 409) {
         alert(msg);
@@ -602,7 +661,24 @@ export default function ProjectDetail() {
         alert(t('instructor.projectDetail.uploadFailed'));
       }
       setUploadState(null);
+      setPaperUploadError(t(persisted ? 'recoveryInterrupted' : 'recoveryStorageFailed'));
     }
+  };
+
+  const handleUploadPaper = e => uploadPaperFile(e.target.files?.[0]);
+
+  const retryPaperUpload = async () => {
+    try {
+      const record = reconcileFiles(pendingPaperUpload, await listUploadDocuments(api, `/api/projects/${id}/papers`));
+      if (setupKeyRef.current !== setupKey) return;
+      if (record.pending) { setPaperUploadError(t('recoveryReceiptPending')); return; }
+      if (record.accepted.length) {
+        setSelectedPaper(record.accepted[0]);
+        setPendingPaperUpload(null); setPaperUploadError('');
+        await writeUpload(paperUploadKey, null);
+        loadPapers();
+      } else await uploadPaperFile(record.entries[0]?.file);
+    } catch { setPaperUploadError(t('recoveryReconcileFailed')); }
   };
 
   const resetSourceSharing = () => {
@@ -1077,7 +1153,8 @@ export default function ProjectDetail() {
 
   useEffect(() => {
     if (papers.length > 0 && !selectedPaper) {
-      setSelectedPaper(papers[0]);
+      const saved = readTask(setupKey);
+      setSelectedPaper(papers.find(paper => String(paper.id) === String(saved?.paperId)) || papers[0]);
     }
   }, [papers]);
 
@@ -1088,21 +1165,30 @@ export default function ProjectDetail() {
   useEffect(() => {
     if (!selectedPaper) return;
     const status = selectedPaper.processingStatus;
-    if (status === 'READY' || status === 'FAILED' || !status) return;
-    const interval = setInterval(async () => {
+    if (status === 'READY' || status === 'FAILED' || !status) { setUploadState(null); return; }
+    setUploadState('processing');
+    let cancelled = false;
+    let timer;
+    const poll = async () => {
       try {
-        const res = await api.get(`/api/papers/${selectedPaper.id}`);
+        const res = await getWithRetry(api, `/api/papers/${selectedPaper.id}`, () => cancelled);
+        if (!res || cancelled) return;
         setSelectedPaper(res.data);
         if (res.data.processingStatus === 'READY' || res.data.processingStatus === 'FAILED') {
-          clearInterval(interval);
           setUploadState(null);
           if (res.data.processingStatus === 'READY') loadSections(res.data.id);
           loadSources();
           loadPapers();
+          return;
         }
-      } catch { clearInterval(interval); }
-    }, 3000);
-    return () => clearInterval(interval);
+      } catch (error) {
+        if (cancelled) return;
+        if ([401, 403, 404].includes(error.response?.status)) { setUploadState(null); return; }
+      }
+      if (!cancelled) timer = setTimeout(poll, 3000);
+    };
+    timer = setTimeout(poll, 3000);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [selectedPaper?.id, selectedPaper?.processingStatus]);
 
   useEffect(() => {
@@ -1235,6 +1321,16 @@ export default function ProjectDetail() {
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        {paperUploadError && (
+          <div role="status" className="mb-3 shrink-0 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            <p>{paperUploadError}</p>
+            {pendingPaperUpload && <>
+              <p className="mt-1">{pendingPaperUpload.entries[0]?.file.name}</p>
+              <button type="button" onClick={retryPaperUpload} disabled={Boolean(uploadState) || !canModifySources} className="mt-2 rounded-lg bg-(--brand) px-3 py-1.5 font-bold text-(--on-brand) disabled:opacity-50">{t('recoveryRetryUpload')}</button>
+              <button type="button" onClick={async () => { await writeUpload(paperUploadKey, null); setPendingPaperUpload(null); setPaperUploadError(''); }} className="ml-2 rounded-lg border border-(--border) px-3 py-1.5">{t('shared.ingestion.commonDismiss')}</button>
+            </>}
+          </div>
+        )}
         {/* Tab: Setup */}
         {activeTab === 'setup' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full overflow-hidden">

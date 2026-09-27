@@ -57,6 +57,7 @@ import static org.mockito.Mockito.mock;
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({AdminExcelSeedService.class, PaperProcessingServiceImpl.class, BlockTreeIngestor.class,
         CurrentUserServiceImpl.class, PaperStandardService.class, SectionWorkHistoryService.class,
+        com.evidencepilot.service.impl.ProjectCollectionService.class,
         AdminSeedMySqlTest.Config.class})
 class AdminSeedMySqlTest {
     @Container static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.46");
@@ -91,7 +92,11 @@ class AdminSeedMySqlTest {
     @MockBean OpenAlexIngestionServiceImpl ingestion;
     @MockBean DocumentObjectStorage storage;
     @MockBean com.evidencepilot.service.impl.DocumentPersistenceService persistence;
-    @MockBean com.evidencepilot.service.impl.ProjectCollectionService collections;
+    @Autowired com.evidencepilot.service.impl.ProjectCollectionService collections;
+    @Autowired com.evidencepilot.repository.CollectionRepository collectionRows;
+    @Autowired com.evidencepilot.repository.ProjectCollectionRepository projectCollectionRows;
+    @Autowired com.evidencepilot.repository.ProjectDocumentRepository projectDocumentRows;
+    @MockBean SeedProjectLifecycle seedProjectLifecycle;
     private User instructor;
     private User actor;
 
@@ -185,6 +190,124 @@ class AdminSeedMySqlTest {
         org.mockito.Mockito.verify(openAlex, org.mockito.Mockito.never()).downloadPdf(any());
     }
 
+    @Test void v2WaitsForReadyPaperAndInvokesRealLifecycleTarget() throws Exception {
+        User leader = account(UserRole.STUDENT);
+        String title = alias();
+        String collectionTitle = "C-" + title;
+        String sourceDoi = "10.1234/seed-collection";
+        String paperPath = "papers/seed-paper/seed-paper.tex";
+        byte[] workbook = workbook(Map.of(
+                "README", new String[][]{{"seed_format_version", "2"}},
+                "users", new String[][]{{"email", "first_name", "last_name", "role", "student_code", "send_invitation"}},
+                "projects", new String[][]{{"project_title", "status"}, {title, "SUBMITTED_FOR_REVIEW"}},
+                "members", new String[][]{{"project_title", "user_email", "project_role"},
+                        {title, instructor.getEmail(), "INSTRUCTOR"},
+                        {title, leader.getEmail(), "LEADER"}},
+                "sources", new String[][]{{"project_title", "doi"}, {title, sourceDoi}},
+                "papers", new String[][]{{"project_title", "paper_file"}, {title, paperPath}},
+                "collections", new String[][]{{"collection_title", "description", "owner_email", "source_dois"},
+                        {collectionTitle, "fixture", instructor.getEmail(), sourceDoi}},
+                "project_collections", new String[][]{{"project_title", "collection_title"},
+                        {title, collectionTitle}}));
+        java.nio.file.Path paperFile = java.nio.file.Files.createTempFile("seed-paper-test-", ".tex");
+        java.nio.file.Files.writeString(paperFile, "\\section{Introduction} Content.");
+        try {
+            org.mockito.Mockito.when(openAlex.fetchWork(sourceDoi)).thenReturn(
+                    new com.evidencepilot.dto.openalex.OpenAlexWorkResponse(
+                            "https://openalex.org/seed-collection", sourceDoi,
+                            "Seed source", List.of(), null, null, null, null,
+                            2026, null, null, 0));
+            org.mockito.Mockito.when(documents.uploadDocument(any(UUID.class), any(org.springframework.web.multipart.MultipartFile.class),
+                    org.mockito.ArgumentMatchers.eq(com.evidencepilot.model.enums.DocumentType.PAPER)))
+                    .thenAnswer(call -> {
+                        UUID projectId = call.getArgument(0);
+                        String documentId = UUID.randomUUID().toString();
+                        jdbc.update("INSERT INTO documents(id,project_id,uploaded_by,doc_type,file_url,processing_status,active,download_token) "
+                                        + "VALUES(UUID_TO_BIN(?),UUID_TO_BIN(?),UUID_TO_BIN(?),'PAPER','fixture.tex','READY',TRUE,UUID())",
+                                documentId, projectId.toString(), instructor.getId().toString());
+                        var response = mock(com.evidencepilot.dto.response.DocumentResponse.class);
+                        org.mockito.Mockito.when(response.id()).thenReturn(UUID.fromString(documentId));
+                        return response;
+                    });
+            var job = run(workbook, new AdminExcelSeedService.ZipBundle(Map.of(paperPath, paperFile), List.of()));
+            assertThat(job.getStatus()).isEqualTo("DONE");
+            assertThat(job.getResult().get("review_states")).isEqualTo(1);
+            assertThat(job.getResult().get("project_collections")).isEqualTo(1);
+            UUID projectId = projects.findAll().stream().filter(p -> title.equals(p.getTitle()))
+                    .findFirst().orElseThrow().getId();
+            assertThat(projectCollectionRows.findByProjectId(projectId)).hasSize(1);
+            assertThat(projectDocumentRows.findByProjectId(projectId)).hasSize(1);
+            org.mockito.Mockito.verify(seedProjectLifecycle).apply(projectId,
+                    com.evidencepilot.model.enums.ProjectStatus.SUBMITTED_FOR_REVIEW, actor);
+        } finally {
+            java.nio.file.Files.deleteIfExists(paperFile);
+        }
+    }
+
+    @Test void v2PersistsSixtyDoiOnlySourcesWithoutOpenAlexMetadata() {
+        String title = alias();
+        var project = new com.evidencepilot.model.Project();
+        project.setTitle(title);
+        project.setStatus(com.evidencepilot.model.enums.ProjectStatus.IN_PROGRESS);
+        project.setActive(true);
+        project = projects.saveAndFlush(project);
+        jdbc.update("INSERT INTO project_members(id,project_id,user_id,role) "
+                        + "VALUES(UUID_TO_BIN(?),UUID_TO_BIN(?),UUID_TO_BIN(?),'INSTRUCTOR')",
+                UUID.randomUUID().toString(), project.getId().toString(), instructor.getId().toString());
+        org.mockito.Mockito.when(openAlex.fetchWork(org.mockito.ArgumentMatchers.anyString())).thenAnswer(call -> new com.evidencepilot.dto.openalex.OpenAlexWorkResponse(
+                "https://openalex.org/" + call.getArgument(0), call.getArgument(0),
+                "Seed source " + call.getArgument(0), List.of(), null, null, null, null,
+                2026, null, null, 0));
+        List<Map<String, String>> rows = new java.util.ArrayList<>();
+        for (int index = 1; index <= 60; index++) {
+            rows.add(Map.of("project_title", title, "doi", "10.1234/seed-" + index,
+                    "_row", String.valueOf(index + 1)));
+        }
+        Map<String, com.evidencepilot.model.Document> imported = new java.util.LinkedHashMap<>();
+        var job = new AdminExcelSeedService.SeedJob();
+
+        int count = service.commitSourcesV2(rows, job, Map.of(title, project), imported);
+
+        assertThat(count).isEqualTo(60);
+        assertThat(imported).hasSize(60);
+        assertThat(count("SELECT COUNT(*) FROM documents d WHERE d.project_id=UUID_TO_BIN(?) "
+                + "AND d.doc_type='SOURCE' AND d.processing_status='METADATA_FETCHED'",
+                project.getId().toString())).isEqualTo(60);
+    }
+
+    @Test void seedCollectionLinkPersistsProjectCollectionAndDerivedDocument() {
+        String title = alias();
+        var project = new com.evidencepilot.model.Project();
+        project.setTitle(title);
+        project.setStatus(com.evidencepilot.model.enums.ProjectStatus.IN_PROGRESS);
+        project.setActive(true);
+        project = projects.saveAndFlush(project);
+        jdbc.update("INSERT INTO project_members(id,project_id,user_id,role) "
+                        + "VALUES(UUID_TO_BIN(?),UUID_TO_BIN(?),UUID_TO_BIN(?),'INSTRUCTOR')",
+                UUID.randomUUID().toString(), project.getId().toString(), instructor.getId().toString());
+
+        var source = new com.evidencepilot.model.Document();
+        source.setProject(project);
+        source.setUploadedBy(instructor);
+        source.setDocType(com.evidencepilot.model.enums.DocumentType.SOURCE);
+        source.setDoi("10.1234/collection-source");
+        source.setOriginalFilename("source.pdf");
+        source.setFileUrl("sources/source.pdf");
+        source.setProcessingStatus(com.evidencepilot.model.enums.ProcessingStatus.METADATA_FETCHED);
+        source.setContentType("application/pdf");
+        source.setFileSizeBytes(0L);
+        source.setActive(true);
+        source.setDownloadToken(UUID.randomUUID().toString());
+        source = documentRows.saveAndFlush(source);
+
+        var collection = collections.createSeedCollection(instructor, "C-" + title, "fixture");
+        collections.addSource(source, collection, instructor);
+        collections.link(project.getId(), collection.getId());
+
+        assertThat(projectCollectionRows.findByProjectId(project.getId())).hasSize(1);
+        assertThat(projectDocumentRows.findByProjectId(project.getId())).hasSize(1);
+    }
+
     @Test void missingMemberAndSubmittedStateRejectBeforeWrites() throws Exception {
         for (byte[] workbook : List.of(
                 workbook(Map.of("projects", new String[][]{{"project_title"}, {alias()}}, "members",
@@ -273,9 +396,12 @@ class AdminSeedMySqlTest {
         }
     }
     private AdminExcelSeedService.SeedJob run(byte[] workbook) throws Exception {
+        return run(workbook, null);
+    }
+    private AdminExcelSeedService.SeedJob run(byte[] workbook, AdminExcelSeedService.ZipBundle bundle) throws Exception {
         assertThat(service.tryReserveImport()).isTrue();
         AdminExcelSeedService.SeedJob job;
-        try { job = service.submit(workbook, null, null); }
+        try { job = service.submit(workbook, bundle, null); }
         catch (Exception ex) { service.releaseImport(); throw ex; }
         long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
         while (System.nanoTime() < deadline) {

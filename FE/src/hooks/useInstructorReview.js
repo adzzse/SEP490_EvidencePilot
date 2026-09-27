@@ -7,6 +7,9 @@ import useUndoDelete from '../components/ui/UndoDelete.jsx';
 import { normalizeSource, resolveAnchor, sourceFingerprint } from '../utils/student/feedbackAnchors.js';
 import { wordDiff } from '../utils/instructor/wordDiff.js';
 import { previousRequest } from '../utils/reviewRounds.js';
+import { useAuth } from '../context/AuthContext';
+import { trackAiJob } from '../utils/aiJobPolling.js';
+import { taskKey, readTask, writeTask } from '../utils/taskState.js';
 
 export async function loadAllProjectSources(projectId) {
   const sources = [];
@@ -27,6 +30,8 @@ export default function useInstructorReview({ projectId, enabled }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const selectionKey = taskKey(api, user?.id, 'instructor-review', projectId);
   const { subscribeToEntityChanges } = useNotification();
   const { pending: pendingDelete, start: startDelete, undo: undoDelete, dismiss: dismissDelete } = useUndoDelete();
   const undoStrings = {
@@ -97,15 +102,6 @@ export default function useInstructorReview({ projectId, enabled }) {
 
   useEffect(() => {
     if (!enabled) return;
-    suggestionRequestRef.current += 1;
-    setSuggestions([]);
-    setSuggestionError('');
-    setSuggestionLoading(false);
-    setSuggestionRan(false);
-  }, [selectedSectionId, activeRequestId, viewMode, projectId]);
-
-  useEffect(() => {
-    if (!enabled) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -132,7 +128,13 @@ export default function useInstructorReview({ projectId, enabled }) {
         setLivePapers(papersRes.data || []);
         setRequests((reqs.data || []).filter(r => String(r.projectId) === String(projectId)));
         setSources(srcs);
-        if ((papersRes.data || []).length > 0) setSelectedPaperId(papersRes.data[0].id);
+        const saved = readTask(selectionKey);
+        setViewMode(saved?.viewMode === 'working' ? 'working' : 'submitted');
+        setActiveRequestId(saved?.requestId || null);
+        setSelectedSectionId(saved?.sectionId || null);
+        if ((papersRes.data || []).length > 0) {
+          setSelectedPaperId(papersRes.data.find(paper => String(paper.id) === String(saved?.paperId))?.id || papersRes.data[0].id);
+        }
       } catch {
         if (!cancelled) setErrorMessage(t('instructor.review.loadReviewSpaceFailed'));
       } finally {
@@ -140,7 +142,7 @@ export default function useInstructorReview({ projectId, enabled }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [projectId, enabled]);
+  }, [projectId, enabled, selectionKey]);
 
   const orderedRequests = useMemo(() => [...requests].sort((left, right) =>
     new Date(right.requestedAt || 0) - new Date(left.requestedAt || 0)), [requests]);
@@ -237,7 +239,7 @@ export default function useInstructorReview({ projectId, enabled }) {
       }));
       setSections(snapshotSections);
       setSelectedSectionId(previous => snapshotSections.some(section => String(section.id) === String(previous))
-        ? previous : snapshotSections[0]?.id || null);
+        ? previous : snapshotSections.find(section => String(section.id) === String(readTask(selectionKey)?.sectionId))?.id || snapshotSections[0]?.id || null);
       return;
     }
     let cancelled = false;
@@ -247,12 +249,12 @@ export default function useInstructorReview({ projectId, enabled }) {
           const liveSections = r.data || [];
           setSections(liveSections);
           setSelectedSectionId(previous => liveSections.some(section => String(section.id) === String(previous))
-            ? previous : liveSections[0]?.id || null);
+            ? previous : liveSections.find(section => String(section.id) === String(readTask(selectionKey)?.sectionId))?.id || liveSections[0]?.id || null);
         }
       })
       .catch(() => { if (!cancelled) setSections([]); });
     return () => { cancelled = true; };
-  }, [selectedPaperId, snapshotState, submissionSnapshot, viewMode]);
+  }, [selectedPaperId, snapshotState, submissionSnapshot, viewMode, selectionKey]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -298,6 +300,44 @@ export default function useInstructorReview({ projectId, enabled }) {
     });
     return contained || guides.find(g => normalizeKey(g.sectionType) === 'default') || null;
   }, [guides, selectedSection]);
+
+  useEffect(() => {
+    if (!enabled || String(project?.id) !== String(projectId) || !selectedSection || !activeRequestId) return;
+    if (loading || (viewMode === 'submitted' && snapshotState !== 'AVAILABLE')) return;
+    writeTask(selectionKey, { paperId: selectedPaperId, sectionId: selectedSectionId, requestId: activeRequestId, viewMode });
+  }, [enabled, loading, snapshotState, project?.id, projectId, selectedPaperId, selectedSection, selectedSectionId, activeRequestId, viewMode, selectionKey]);
+
+  const suggestionKey = taskKey(api, user?.id, 'suggestions', projectId, activeRequestId, viewMode, selectedPaperId, selectedSectionId);
+  const suggestionSignature = JSON.stringify([selectedSection?.contentTex, selectedSection?.version, activeGuide]);
+  const showSuggestionResult = job => {
+    setSuggestions((job.result || []).map(s => ({
+      ...s, actionableFix: s.actionableFix ?? s.actionable_fix, lineReference: s.lineReference ?? s.line_reference,
+    })));
+    setSuggestionRan(true);
+  };
+  const showSuggestionError = err => {
+    const status = err?.response?.status || err?.status;
+    setSuggestionError(status === 429 ? t('instructor.review.aiSuggestionRateLimited')
+      : [502, 503, 504].includes(status) ? t('instructor.review.aiSuggestionWorkerUnavailable')
+        : err?.response?.data?.message || err?.message || t('instructor.review.suggestionFailed'));
+  };
+
+  useEffect(() => {
+    const requestId = ++suggestionRequestRef.current;
+    setSuggestions([]);
+    setSuggestionError('');
+    setSuggestionLoading(false);
+    setSuggestionRan(false);
+    const saved = readTask(suggestionKey);
+    if (enabled && selectedSection && activeGuide && saved?.signature === suggestionSignature) {
+      setSuggestionLoading(true);
+      trackAiJob(api, suggestionKey, suggestionSignature, null, () => suggestionRequestRef.current !== requestId)
+        .then(job => { if (job && suggestionRequestRef.current === requestId) showSuggestionResult(job); })
+        .catch(err => { if (suggestionRequestRef.current === requestId) showSuggestionError(err); })
+        .finally(() => { if (suggestionRequestRef.current === requestId) setSuggestionLoading(false); });
+    }
+    return () => { suggestionRequestRef.current += 1; };
+  }, [enabled, suggestionKey, suggestionSignature]);
 
   // rationale: word-level BASELINE-vs-SUBMITTED diff (was checkpoint-vs-live).
   // Normalized first so change offsets line up with displayContent (what the
@@ -625,28 +665,6 @@ export default function useInstructorReview({ projectId, enabled }) {
     } finally { setTransitioningRequestId(null); }
   };
 
-  const pollAiJob = async (jobId, shouldAbort) => {
-    let polls = 0;
-    const MAX_POLLS = 1200;
-    const startedAt = Date.now();
-    for (; ;) {
-      if (shouldAbort?.()) return null;
-      const { data: job } = await api.get(`/api/jobs/${jobId}`);
-      if (job.status === 'SUCCESS') return job;
-      if (job.status === 'FAILED') {
-        const error = new Error(job.errorMessage || t('instructor.review.suggestionFailed'));
-        error.status = Number(job.errorMessage?.match(/(\d{3})/)?.[1]) || undefined;
-        throw error;
-      }
-      if (++polls >= MAX_POLLS || Date.now() - startedAt > 30 * 60 * 1000) {
-        const error = new Error(t('instructor.review.aiSuggestionWorkerUnavailable'));
-        error.status = 503;
-        throw error;
-      }
-      await new Promise(resolve => setTimeout(resolve, 1500));
-    }
-  };
-
   const handleGenerateSuggestions = async () => {
     if (!enabled || !selectedPaperId || !selectedSection || !activeGuide || suggestionLoading
       || requestLocked || activeRequest?.status !== 'PENDING') return;
@@ -655,26 +673,15 @@ export default function useInstructorReview({ projectId, enabled }) {
     setSuggestionError('');
     setSuggestionRan(false);
     try {
-      const { data: submit } = await api.post(
+      writeTask(suggestionKey, null);
+      const job = await trackAiJob(api, suggestionKey, suggestionSignature, () => api.post(
         `/api/papers/${selectedPaperId}/sections/${selectedSectionId}/suggestions`,
-        { sectionType: activeGuide.sectionType });
-      if (suggestionRequestRef.current !== requestId) return;
-      const job = await pollAiJob(submit.jobId, () => suggestionRequestRef.current !== requestId);
+        { sectionType: activeGuide.sectionType }), () => suggestionRequestRef.current !== requestId);
       if (suggestionRequestRef.current !== requestId || !job) return;
-      setSuggestions((job.result || []).map(s => ({
-        ...s,
-        actionableFix: s.actionableFix ?? s.actionable_fix,
-        lineReference: s.lineReference ?? s.line_reference,
-      })));
-      setSuggestionRan(true);
+      showSuggestionResult(job);
     } catch (err) {
       if (suggestionRequestRef.current === requestId) {
-        const status = err?.response?.status || err?.status;
-        setSuggestionError(status === 429
-          ? t('instructor.review.aiSuggestionRateLimited')
-          : status === 502 || status === 503 || status === 504
-            ? t('instructor.review.aiSuggestionWorkerUnavailable')
-            : err?.response?.data?.message || err?.message || t('instructor.review.suggestionFailed'));
+        showSuggestionError(err);
       }
     } finally {
       if (suggestionRequestRef.current === requestId) setSuggestionLoading(false);

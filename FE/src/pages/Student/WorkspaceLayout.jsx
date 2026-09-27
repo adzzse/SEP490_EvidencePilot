@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { pollAiJob as pollSavedAiJob, getWithRetry, trackAiJob } from '../../utils/aiJobPolling.js';
+import { taskKey, readTask, writeTask } from '../../utils/taskState.js';
 import { useTranslation } from 'react-i18next';
 import FileViewerModal from '../../components/features/FileViewerModal';
 import InlineCitationCard from '../../components/features/InlineCitationCard.jsx';
@@ -288,6 +290,11 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   const selectSection = (id) => {
     selectedSectionIdRef.current = id;
     setSelectedSectionId(id);
+    if (id && studentSelectedPaper?.id && project?.id) {
+      writeTask(taskKey(api, user?.id, 'workspace', project.id), {
+        paperId: studentSelectedPaper.id, sectionId: id,
+      });
+    }
   };
 
   const putSectionContent = useCallback((paperId, sectionId, content, fallbackRevision, changes) => {
@@ -452,26 +459,8 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     setTimeout(() => setToastMessage(''), 3000);
   };
 
-  const pollAiJob = async (jobId, shouldAbort, onProgress) => {
-    for (; ;) {
-      if (shouldAbort?.()) return null;
-      const { data: job } = await api.get(`/api/jobs/${jobId}`);
-      if (shouldAbort?.()) return null;
-      const progress = {
-        current: Math.max(0, Number(job.progressCurrent) || 0),
-        total: Math.max(0, Number(job.progressTotal) || 0),
-      };
-      onProgress?.(progress, job);
-      if (job.status === 'SUCCESS' || (job.status === 'FAILED'
-        && job.kind === 'SECTION_CITATION_REVIEW' && job.result?.complete === false)) return job;
-      if (job.status === 'FAILED') {
-        const error = new Error(job.errorMessage || t('aiEvaluationFailed'));
-        error.status = Number(job.errorMessage?.match(/(\d{3})/)?.[1]) || undefined;
-        throw error;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-  };
+  const pollAiJob = (jobId, shouldAbort, onProgress) =>
+    pollSavedAiJob(api, jobId, shouldAbort, onProgress);
 
   const updateAiReviewProgress = (next) => {
     setAiReviewProgress((current) =>
@@ -480,16 +469,15 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
 
   // rationale: refresh-while-running survival — the active jobId lives in localStorage
   // (FE state is wiped by reload) so a remount can reattach to the still-running job.
-  const reviewJobKey = (sectionId) => `citation_review_job:${sectionId}`;
+  const reviewJobKey = (sectionId) => taskKey(api, user?.id, 'citation-review', project?.id, selectedPaper?.id, sectionId);
   const storeReviewJob = (sectionId, jobId) => {
-    try { if (sectionId && jobId) localStorage.setItem(reviewJobKey(sectionId), jobId); } catch { /* ignore */ }
+    if (sectionId && jobId) writeTask(reviewJobKey(sectionId), jobId);
   };
   const clearReviewJob = (sectionId) => {
-    try { if (sectionId) localStorage.removeItem(reviewJobKey(sectionId)); } catch { /* ignore */ }
+    if (sectionId) writeTask(reviewJobKey(sectionId), null);
   };
   const readReviewJob = (sectionId) => {
-    try { return sectionId ? localStorage.getItem(reviewJobKey(sectionId)) : null; }
-    catch { return null; }
+    return sectionId ? readTask(reviewJobKey(sectionId)) : null;
   };
 
   // Progress callback that also renders checkpoint partials live: job.result carries
@@ -629,7 +617,11 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
         if (stale()) return;
         const list = r.data || [];
         setPapers(list);
-        if (list.length > 0) { setSelectedPaper(list[0]); loadCode(''); }
+        if (list.length > 0) {
+          const saved = readTask(taskKey(api, user?.id, 'workspace', projId));
+          setSelectedPaper(list.find(paper => String(paper.id) === String(saved?.paperId)) || list[0]);
+          loadCode('');
+        }
         else { setSelectedPaper(null); loadCode(''); }
       } catch { if (!stale()) setLoadErrors(errs => [...errs, 'paper']); }
     } catch (err) {
@@ -829,7 +821,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   }, [aiReviewResult]);
 
   // Paper-scoped References.
-  const paperRefs = usePaperReferences(selectedPaper?.id);
+  const paperRefs = usePaperReferences(selectedPaper?.id, user?.id);
   const paperReferences = paperRefs.references;
   const referenceSourceIds = useMemo(
     () => new Set((paperReferences || []).map(reference => String(reference.sourceId))),
@@ -1008,7 +1000,9 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
         const currentSectionId = String(selectedSectionIdRef.current || '');
         if (currentSectionId && dirtySectionsRef.current.has(currentSectionId)) return;
         const mine = user ? list.filter(s => String(s.assignedUserId) === String(user.id)) : [];
-        const target = list.find(section => String(section.id) === String(pendingFeedbackRef.current?.sectionId)) || mine[0];
+        const saved = readTask(taskKey(api, user?.id, 'workspace', projectRef.current?.id));
+        const target = list.find(section => String(section.id) === String(pendingFeedbackRef.current?.sectionId))
+          || list.find(section => String(section.id) === String(saved?.sectionId)) || mine[0];
         if (target) {
           selectSection(target.id);
           const draft = readWorkspaceDraft(projectRef.current?.id, target.id);
@@ -1328,7 +1322,9 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
           const slot = nextBatch++;
           if (slot >= batchStarts.length) return;
           const start = batchStarts[slot];
-          const { data: submit } = await api.post(
+          const key = taskKey(api, user?.id, 'citation-sources', project.id, selectedPaper.id, selectedSectionId, start);
+          const signature = JSON.stringify([currentSection?.version, findings.slice(start, start + SOURCE_MATCH_BATCH_SIZE)]);
+          const job = await trackAiJob(api, key, signature, () => api.post(
             `/api/papers/${selectedPaper.id}/sections/${selectedSectionId}/review/source-matches`,
             {
               findings: findings.slice(start, start + SOURCE_MATCH_BATCH_SIZE)
@@ -1339,9 +1335,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
                   endOffset: finding.endOffset,
                 })),
             },
-          );
-          if (aborted()) return;
-          const job = await pollAiJob(submit.jobId, aborted);
+          ), aborted);
           if (!job) return;
           if (aborted()) return;
           (job.result?.findings || []).forEach(item => {
@@ -1579,9 +1573,10 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     setAiReviewResult(null);
     setAiReviewError(null);
     setAiReviewedContent('');
-    api.get(`/api/papers/${selectedPaper.id}/sections/${selectedSectionId}/review`)
+    getWithRetry(api, `/api/papers/${selectedPaper.id}/sections/${selectedSectionId}/review`,
+      () => aiReviewRequestRef.current !== requestId)
       .then(async response => {
-        if (aiReviewRequestRef.current !== requestId) return;
+        if (!response || aiReviewRequestRef.current !== requestId) return;
         const serverState = response.status === 204 ? null : response.data;
         const storedJobId = readReviewJob(selectedSectionId);
         let storedJob = null;
