@@ -4,7 +4,7 @@ export default function PaperSectionStandards({
   selectedSection,
   standardSection,
   sectionEvals,
-  sectionStructureLocked,
+  sectionLocked,
   projectReadOnly,
   labels,
   ct,
@@ -12,11 +12,14 @@ export default function PaperSectionStandards({
   onCloseStandard,
   onSaveStandard,
 }) {
+  // ponytail: per-section lock — only the assigned row freezes its standards.
+  const openLocked = sectionLocked || projectReadOnly;
+  const editorLocked = Boolean(standardSection?.assignedUserId) || projectReadOnly;
   return (
     <div data-testid="standards-block" className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div data-testid="standards-label" className="block text-[10px] font-black uppercase tracking-wider text-slate-400">{labels.standards}</div>
-        <button type="button" onClick={() => onOpenStandard(selectedSection.id)} disabled={sectionStructureLocked || projectReadOnly} className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{labels.configStandard}</button>
+        <button type="button" onClick={() => onOpenStandard(selectedSection.id)} disabled={openLocked} className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-[10px] font-bold text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">{labels.configStandard}</button>
       </div>
       <div data-testid="standards-requirements" className="space-y-1">
         {sectionEvals[String(selectedSection.id)]?.requirements?.length ? (
@@ -37,7 +40,7 @@ export default function PaperSectionStandards({
           <StandardConfigEditor
             open
             initialRequirements={sectionEvals[String(standardSection.id)]?.requirements || []}
-            isLocked={sectionStructureLocked || projectReadOnly}
+            isLocked={editorLocked}
             onSave={async config => {
               const saved = await onSaveStandard(standardSection.id, config);
               if (saved) onCloseStandard();

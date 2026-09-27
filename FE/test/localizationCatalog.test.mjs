@@ -220,6 +220,7 @@ const INSTRUCTOR_REVIEW_KEYS = [
   'threadsEmpty',
   'mediaTitle', 'mediaEmpty', 'mediaDone', 'addMedia', 'attachments',
   'removePassage',
+  'reopenThread', 'resolveThread', 'resolveThreadFailed',
   'changePassage', 'adjustPassageHint', 'useThisPassage',
   'returnForRevision', 'reviewApproved', 'reviewClosed',
   'reviewGuide', 'reviewOverview', 'reviewRejected', 'reviewReturned', 'reviewRound',

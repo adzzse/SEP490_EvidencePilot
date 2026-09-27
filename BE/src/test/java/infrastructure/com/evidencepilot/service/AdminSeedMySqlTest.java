@@ -149,12 +149,14 @@ class AdminSeedMySqlTest {
         assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal()).isSameAs(actor);
     }
 
-    @Test void legacySectionsSheetIsIgnoredWithoutOverwrite() throws Exception {
+    @Test void sectionsSheetIsCommittedWithoutOverwrite() throws Exception {
         String title = alias();
         var job = run(bundle(title, "ACM", true));
         assertThat(job.getStatus()).isEqualTo("DONE");
-        assertThat(job.getResult().get("sections")).isZero();
-        assertThat(count("SELECT COUNT(*) FROM paper_sections s JOIN documents d ON d.id=s.document_id JOIN projects p ON p.id=d.project_id WHERE p.title=? AND s.content_tex='MUST NOT OVERWRITE'", title)).isZero();
+        assertThat(job.getResult().get("sections")).isOne();
+        assertThat(count("SELECT COUNT(*) FROM paper_sections s JOIN documents d ON d.id=s.document_id JOIN projects p ON p.id=d.project_id WHERE p.title=? AND s.content_tex='MUST NOT OVERWRITE'", title)).isOne();
+        assertThat(count("SELECT COUNT(*) FROM paper_sections s JOIN documents d ON d.id=s.document_id JOIN projects p ON p.id=d.project_id WHERE p.title=? AND s.section_title='Overwritten'", title)).isOne();
+        assertThat(count("SELECT COUNT(*) FROM paper_sections s JOIN documents d ON d.id=s.document_id JOIN projects p ON p.id=d.project_id WHERE p.title=?", title)).isGreaterThan(1);
     }
 
     @Test void inlinePaperTextFailureRollsBackDocumentTextAndChunks() throws Exception {

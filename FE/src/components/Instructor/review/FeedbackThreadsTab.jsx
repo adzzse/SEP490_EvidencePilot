@@ -11,7 +11,7 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
     feedbackItems, activeRequestId, canCreateRoot,
     feedbackDraft, selectedAnchor, editingFeedbackId, updateFeedbackDraft,
     savingFeedback, activeFeedbackId, handleSubmitFeedback,
-    handleEditFeedback, handleCancelEdit, handleDeleteFeedback,
+    handleEditFeedback, handleCancelEdit, handleDeleteFeedback, handleResolveThread,
     selectFeedback, errorMessage, successMessage,
     isAdjustingPassage, startPassageAdjust, cancelPassageAdjust,
   } = review;
@@ -225,6 +225,21 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
                       {t('delete')}
                     </button>
                   )}
+                  {(item.canEdit || item.canDelete) && (item.threadState === 'RESOLVED' || item.threadState === 'REJECTED' ? (
+                    <button
+                      type="button" disabled={busy} onClick={() => handleResolveThread(item.id, 'OPEN')}
+                      className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold text-slate-600 disabled:opacity-50"
+                    >
+                      {t('instructor.review.reopenThread')}
+                    </button>
+                  ) : (
+                    <button
+                      type="button" disabled={busy} onClick={() => handleResolveThread(item.id, 'RESOLVED')}
+                      className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700 disabled:opacity-50"
+                    >
+                      {t('instructor.review.resolveThread')}
+                    </button>
+                  ))}
                 </div>
               )}
             />

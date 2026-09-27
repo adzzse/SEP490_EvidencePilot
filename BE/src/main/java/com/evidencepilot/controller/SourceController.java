@@ -60,7 +60,7 @@ public class SourceController {
     private final ProjectSourceUnshareService projectSourceUnshareService;
 
     @Operation(summary = "List the current user's source library",
-            description = "Returns active source documents uploaded by the current user, including collection and project usage.")
+            description = "Returns active source documents the current user uploaded plus sources in their projects and collections, including collection and project usage.")
     @GetMapping
     public PagedResponse<SourceLibraryItemResponse> findLibrary(
             @RequestParam(defaultValue = "0") int page,

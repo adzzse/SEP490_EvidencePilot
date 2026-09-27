@@ -572,8 +572,7 @@ export default function useInstructorReview({ projectId, enabled }) {
     setPassageAdjust(null);
   };
 
-  const handleDeleteFeedback = async (itemId) => {
-    const sid = String(itemId);
+  const handleDeleteFeedback = async (itemId) => {    const sid = String(itemId);
     const item = feedbackItems.find(f => String(f.id) === sid);
     setFeedbackItems(prev => prev.filter(f => String(f.id) !== sid));
     startDelete({
@@ -589,6 +588,19 @@ export default function useInstructorReview({ projectId, enabled }) {
         loadFeedback();
       }
     }, () => { loadFeedback(); });
+  };
+
+  const handleResolveThread = async (itemId, targetState) => {
+    const sid = String(itemId);
+    setFeedbackItems(prev => prev.map(f => String(f.id) === sid ? { ...f, threadState: targetState } : f));
+    try {
+      const { data } = await api.patch(`/api/instructor-feedback/${itemId}/thread-state`, null, { params: { state: targetState } });
+      if (data) setFeedbackItems(prev => prev.map(f => String(f.id) === sid ? { ...f, ...data } : f));
+      loadFeedback();
+    } catch (err) {
+      setErrorMessage(err?.response?.data?.message || t('instructor.review.resolveThreadFailed'));
+      loadFeedback();
+    }
   };
 
   const selectFeedback = (feedback, { focus = false } = {}) => {
@@ -803,6 +815,7 @@ export default function useInstructorReview({ projectId, enabled }) {
     handleEditFeedback,
     handleCancelEdit,
     handleDeleteFeedback,
+    handleResolveThread,
     selectFeedback,
     handleTransitionStatus,
     handleGenerateSuggestions,

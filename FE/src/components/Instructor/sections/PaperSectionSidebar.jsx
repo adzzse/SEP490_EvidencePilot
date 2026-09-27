@@ -79,8 +79,16 @@ export default function PaperSectionSidebar({
       <div className="flex-1 space-y-1 overflow-y-auto p-2">
         {sections.map((section, index) => {
           const selected = String(section.id) === String(selectedSection?.id);
+          // ponytail: drag/add/reorder are order-only (status gate from parent);
+          // rename + delete touch the row itself, so they lock per-section.
           const locked = sectionStructureLocked || sectionStructureSaving;
+          const rowLocked = Boolean(section.assignedUserId) || projectReadOnly || sectionStructureSaving;
           const standardConfigured = Boolean(sectionEvals[String(section.id)]?.requirements?.length);
+          const bulkSelected = selectedBulkIds.includes(String(section.id));
+          const bulkDisabled = section.sectionType === 'REFERENCE' || projectReadOnly || sectionStructureSaving;
+          const assigneeName = section.assignedUserId
+            ? studentDisplayName(projectMembers.find(member => String(member.userId) === String(section.assignedUserId)) || {})
+            : null;
           return (
             <div
               key={section.id}
@@ -88,17 +96,18 @@ export default function PaperSectionSidebar({
               onDragStart={() => { dragIndexRef.current = index; }}
               onDragOver={event => event.preventDefault()}
               onDrop={() => { onDropSection(dragIndexRef.current, index); dragIndexRef.current = null; }}
-              className={`rounded-lg border p-2 ${selected ? 'border-indigo-400 bg-(--surface)' : 'border-transparent hover:border-(--border) hover:bg-(--surface-tertiary)'}`}
+              className={`rounded-lg border p-2 ${selected ? 'border-indigo-400 bg-(--surface)' : bulkSelected ? 'border-indigo-300 bg-indigo-50/50' : 'border-transparent hover:border-(--border) hover:bg-(--surface-tertiary)'}`}
               data-testid={String(section.id) === String(conflictSectionId) ? `section-conflict-${section.id}` : undefined}
             >
               <div className="flex items-start gap-2">
                 <input
                   type="checkbox"
+                  data-testid={`sidebar-bulk-section-${section.id}`}
                   aria-label={`${labels.selectSection} ${section.sectionTitle}`}
-                  checked={selectedBulkIds.includes(String(section.id))}
+                  checked={bulkSelected}
                   onChange={() => onToggleBulkSection(section.id)}
-                  disabled={section.sectionType === 'REFERENCE' || projectReadOnly}
-                  className="mt-1 h-3.5 w-3.5 shrink-0"
+                  disabled={bulkDisabled}
+                  className="mt-1 h-3.5 w-3.5 shrink-0 accent-indigo-600"
                 />
                 {renameSectionId != null && String(renameSectionId) === String(section.id) ? (
                   <div className="flex min-w-0 flex-1 items-center gap-1">
@@ -120,20 +129,19 @@ export default function PaperSectionSidebar({
                     <span className="flex items-center gap-2 text-xs font-semibold text-(--text-primary)">
                       <span className="truncate">{section.sectionTitle || untitledLabel}</span>
                     </span>
-                    <span className="mt-1 flex flex-wrap gap-1 text-[9px] text-(--text-tertiary)">
-                      <span>{section.assignedUserId ? studentDisplayName(projectMembers.find(member => String(member.userId) === String(section.assignedUserId)) || {}) : labels.unassigned}</span>
-                      <span>·</span>
-                      <span>{standardConfigured ? labels.standardConfigured : labels.standardNotConfigured}</span>
+                    <span className="mt-1 flex flex-wrap gap-1">
+                      <span data-testid={`sidebar-assignee-badge-${section.id}`} className={`rounded-full px-1.5 py-px text-[9px] font-bold ${assigneeName ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-500'}`}>{assigneeName || labels.unassigned}</span>
+                      <span data-testid={`sidebar-standard-badge-${section.id}`} className={`rounded-full px-1.5 py-px text-[9px] font-bold ${standardConfigured ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>{standardConfigured ? labels.standardConfigured : labels.standardNotConfigured}</span>
                     </span>
                   </button>
                 )}
                 <div className="flex shrink-0 items-center gap-0.5">
-                  {!locked && (
+                  {!rowLocked && (
                     <button type="button" data-testid={`rename-section-${section.id}`} onClick={() => onStartRename(section)} aria-label={`${labels.rename}: ${section.sectionTitle}`} title={labels.rename} className="rounded p-1 text-(--text-tertiary) hover:bg-(--brand-soft) hover:text-(--brand-foreground)">
                       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z" /><path d="m13 7 4 4" /></svg>
                     </button>
                   )}
-                  {!locked && (
+                  {!rowLocked && (
                     <span data-testid={`delete-section-${section.id}`}>
                       <button
                         type="button"

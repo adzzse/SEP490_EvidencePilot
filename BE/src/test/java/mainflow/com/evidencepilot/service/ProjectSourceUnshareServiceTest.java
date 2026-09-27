@@ -142,8 +142,59 @@ class ProjectSourceUnshareServiceTest {
     }
 
     @Test
-    void processingSourceIsBlockedUntilExtractionFinishes() {
-        Document source = source(ProcessingStatus.PROCESSING);
+    void processingSourceIsBlockedUntilExtractionFinishes() {        Document source = source(ProcessingStatus.PROCESSING);
+        ProjectDocument sourceLink = link(source);
+        when(projectDocumentRepository.findByProjectIdAndDocumentIdForUpdate(project.getId(), source.getId()))
+                .thenReturn(Optional.of(sourceLink));
+
+        var result = service().unshare(project.getId(), List.of(source.getId()));
+
+        assertThat(result.removedSourceIds()).isEmpty();
+        assertThat(result.blocked()).singleElement()
+                .extracting(ProjectSourceUnshareResponse.BlockedSource::reason)
+                .isEqualTo("SOURCE_NOT_READY");
+        verify(projectDocumentRepository, never()).delete(any(ProjectDocument.class));
+    }
+
+    @Test
+    void metadataFetchedSourceIsRemovableWhenUnreferenced() {
+        Document source = source(ProcessingStatus.METADATA_FETCHED);
+        ProjectDocument sourceLink = link(source);
+        when(projectDocumentRepository.findByProjectIdAndDocumentIdForUpdate(project.getId(), source.getId()))
+                .thenReturn(Optional.of(sourceLink));
+        when(paperReferenceRepository.findActiveForProjectForUpdate(project.getId(), source.getId()))
+                .thenReturn(List.of());
+        when(evidenceRevisionTraceRepository.existsActiveForProjectAndSource(project.getId(), source.getId()))
+                .thenReturn(false);
+
+        var result = service().unshare(project.getId(), List.of(source.getId()));
+
+        assertThat(result.removedSourceIds()).containsExactly(source.getId());
+        assertThat(result.blocked()).isEmpty();
+        verify(projectDocumentRepository).delete(sourceLink);
+    }
+
+    @Test
+    void failedSourceIsRemovableWhenUnreferenced() {
+        Document source = source(ProcessingStatus.FAILED);
+        ProjectDocument sourceLink = link(source);
+        when(projectDocumentRepository.findByProjectIdAndDocumentIdForUpdate(project.getId(), source.getId()))
+                .thenReturn(Optional.of(sourceLink));
+        when(paperReferenceRepository.findActiveForProjectForUpdate(project.getId(), source.getId()))
+                .thenReturn(List.of());
+        when(evidenceRevisionTraceRepository.existsActiveForProjectAndSource(project.getId(), source.getId()))
+                .thenReturn(false);
+
+        var result = service().unshare(project.getId(), List.of(source.getId()));
+
+        assertThat(result.removedSourceIds()).containsExactly(source.getId());
+        assertThat(result.blocked()).isEmpty();
+        verify(projectDocumentRepository).delete(sourceLink);
+    }
+
+    @Test
+    void queuedSourceStaysBlockedWhileExtractionIsPending() {
+        Document source = source(ProcessingStatus.QUEUED);
         ProjectDocument sourceLink = link(source);
         when(projectDocumentRepository.findByProjectIdAndDocumentIdForUpdate(project.getId(), source.getId()))
                 .thenReturn(Optional.of(sourceLink));

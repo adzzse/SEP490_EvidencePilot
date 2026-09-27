@@ -37,11 +37,12 @@ class AdminSeedExportServiceTest {
             com.evidencepilot.repository.DocumentRepository documents,
             com.evidencepilot.repository.DocumentTextRepository texts,
             com.evidencepilot.repository.PaperSectionRepository sections,
+            com.evidencepilot.repository.FeedbackRequestRepository feedbackRequests,
             com.evidencepilot.repository.CollectionRepository collections,
             com.evidencepilot.repository.CollectionDocumentRepository memberships,
             DocumentObjectStorage storage) {
         return new AdminSeedExportService(
-                projects, members, documents,
+                projects, members, documents, texts, sections, feedbackRequests,
                 collections, memberships, storage);
     }
 
@@ -78,6 +79,7 @@ class AdminSeedExportServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
+                mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
                 mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
                 mock(PaperProcessingServiceImpl.class),
@@ -164,13 +166,10 @@ class AdminSeedExportServiceTest {
         when(memberships.findByCollectionId(collection.getId())).thenReturn(List.of(membership));
         when(storage.exists("objects/paper.pdf")).thenReturn(true);
 
-        var projectCollections = mock(com.evidencepilot.repository.ProjectCollectionRepository.class);
-        when(projectCollections.findAll()).thenReturn(List.of(projectCollection));
-        var exporter = exportService(projects, members, documents, texts, sections,
-                collections, memberships, storage);
-        org.springframework.test.util.ReflectionTestUtils.setField(
-                exporter, "projectCollectionRepository", projectCollections);
-        AdminSeedExportService.SeedBundle bundle = exporter.buildBundle(null);
+        AdminSeedExportService.SeedBundle bundle =
+                exportService(projects, members, documents, texts, sections,
+                        mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
+                        collections, memberships, storage).buildBundle(null);
 
         assertThat(bundle.paperFiles()).singleElement().satisfies(file ->
                 assertThat(file.zipPath()).startsWith("papers/"));
@@ -224,6 +223,7 @@ class AdminSeedExportServiceTest {
 
         AdminSeedExportService.SeedBundle bundle =
                 exportService(projects, members, documents, texts, sections,
+                        mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
                         collections, memberships, storage).buildBundle(null);
 
         AdminExcelSeedService.ParsedSeed parsed;
@@ -277,6 +277,7 @@ class AdminSeedExportServiceTest {
 
         AdminSeedExportService.SeedBundle bundle =
                 exportService(projects, members, documents, texts, sections,
+                        mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
                         collections, memberships, storage).buildBundle(null);
 
         AdminExcelSeedService.ParsedSeed parsed;
@@ -291,39 +292,83 @@ class AdminSeedExportServiceTest {
     }
 
     @Test
-    void malformedInstructorMembershipDoesNotExportAnUnimportableProject() throws Exception {
+    void returnedProjectExportsSectionsAndFeedbackRequest() throws Exception {
         User instructor = user("prof@example.test", UserRole.INSTRUCTOR, null);
-        User student = user("student@example.test", UserRole.STUDENT, "AB123456");
+        User student = user("demo01@example.test", UserRole.STUDENT, "AB123456");
         Project project = project("P1");
-        ProjectMember valid = new ProjectMember();
-        valid.setProject(project);
-        valid.setUser(instructor);
-        valid.setRole(ProjectRole.INSTRUCTOR);
-        ProjectMember malformed = new ProjectMember();
-        malformed.setProject(project);
-        malformed.setUser(student);
-        malformed.setRole(ProjectRole.INSTRUCTOR);
+        project.setStatus(ProjectStatus.RETURNED);
+        ProjectMember m1 = new ProjectMember();
+        m1.setProject(project);
+        m1.setUser(instructor);
+        m1.setRole(ProjectRole.INSTRUCTOR);
+        ProjectMember m2 = new ProjectMember();
+        m2.setProject(project);
+        m2.setUser(student);
+        m2.setRole(ProjectRole.MEMBER);
+
+        Document paper = new Document();
+        paper.setId(UUID.randomUUID());
+        paper.setProject(project);
+        paper.setDocType(DocumentType.PAPER);
+        paper.setFileUrl("objects/paper.pdf");
+        paper.setOriginalFilename("paper.pdf");
+        paper.setTitle("Real Paper");
+        paper.setActive(true);
+
+        com.evidencepilot.model.PaperSection intro = new com.evidencepilot.model.PaperSection();
+        intro.setId(UUID.randomUUID());
+        intro.setDocument(paper);
+        intro.setSectionTitle("Introduction");
+        intro.setSectionOrder(0);
+        intro.setContentTex("Seeded introduction content.");
+        intro.setAssignedUser(student);
+        intro.setActive(true);
+        com.evidencepilot.model.PaperSection methods = new com.evidencepilot.model.PaperSection();
+        methods.setId(UUID.randomUUID());
+        methods.setDocument(paper);
+        methods.setSectionTitle("Methods");
+        methods.setSectionOrder(1024);
+        methods.setContentTex("Seeded methods content.");
+        methods.setActive(true);
+
+        com.evidencepilot.model.FeedbackRequest returned = new com.evidencepilot.model.FeedbackRequest();
+        returned.setId(UUID.randomUUID());
+        returned.setProject(project);
+        returned.setStudent(student);
+        returned.setInstructor(instructor);
+        returned.setStatus(com.evidencepilot.model.FeedbackStatus.RETURNED);
+        returned.setRequestedAt(LocalDateTime.of(2026, 9, 1, 8, 0, 0));
+        returned.setReturnedAt(LocalDateTime.of(2026, 9, 10, 8, 0, 0));
 
         var projects = mock(com.evidencepilot.repository.ProjectRepository.class);
         var members = mock(com.evidencepilot.repository.ProjectMemberRepository.class);
         var documents = mock(com.evidencepilot.repository.DocumentRepository.class);
+        var texts = mock(com.evidencepilot.repository.DocumentTextRepository.class);
+        var sections = mock(com.evidencepilot.repository.PaperSectionRepository.class);
         var collections = mock(com.evidencepilot.repository.CollectionRepository.class);
+        var memberships = mock(com.evidencepilot.repository.CollectionDocumentRepository.class);
+        var storage = mock(DocumentObjectStorage.class);
+        var feedbackRequests = mock(com.evidencepilot.repository.FeedbackRequestRepository.class);
         when(projects.findAll()).thenReturn(List.of(project));
-        when(members.findAll()).thenReturn(List.of(valid, malformed));
-        when(documents.findAll()).thenReturn(List.of());
+        when(members.findAll()).thenReturn(List.of(m1, m2));
+        when(documents.findAll()).thenReturn(List.of(paper));
+        when(sections.findByDocumentIdOrderBySectionOrderAsc(paper.getId())).thenReturn(List.of(intro, methods));
         when(collections.findAll()).thenReturn(List.of());
+        when(storage.exists("objects/paper.pdf")).thenReturn(true);
+        when(feedbackRequests.findByProjectIdOrderByRequestedAtDesc(project.getId())).thenReturn(List.of(returned));
 
-        var bundle = exportService(projects, members, documents,
-                mock(com.evidencepilot.repository.DocumentTextRepository.class),
-                mock(com.evidencepilot.repository.PaperSectionRepository.class), collections,
-                mock(com.evidencepilot.repository.CollectionDocumentRepository.class),
-                mock(DocumentObjectStorage.class)).buildBundle(null);
+        AdminSeedExportService.SeedBundle bundle =
+                exportService(projects, members, documents, texts, sections, feedbackRequests,
+                        collections, memberships, storage).buildBundle(null);
+
+        AdminExcelSeedService.ParsedSeed parsed;
         try (var in = new ByteArrayInputStream(bundle.xlsx())) {
-            var parsed = seedService().parse(in, bundle.xlsx().length);
-            assertThat(parsed.errors()).isEmpty();
-            assertThat(parsed.sheets().get("projects")).isEmpty();
-            assertThat(parsed.sheets().get("members")).isEmpty();
+            parsed = seedService().parse(in, bundle.xlsx().length);
         }
-        assertThat(bundle.summary()).contains("1 projects");
+        assertThat(parsed.errors()).as(String.join("; ", parsed.errors())).isEmpty();
+        assertThat(parsed.sheets().get("sections")).hasSize(2);
+        assertThat(parsed.sheets().get("feedback_requests")).hasSize(1);
+        assertThat(parsed.sheets().get("feedback_requests").getFirst().get("reviewer_email"))
+                .isEqualTo("prof@example.test");
     }
 }

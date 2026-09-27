@@ -152,7 +152,9 @@ export default function SourceLibraryPanel() {
   }, [loadSources]);
 
   const statusOptions = useMemo(() => (
-    DOCUMENT_PROCESSING_STATUSES.map(status => ({
+    // ponytail: only statuses the pipeline actually writes — COMPLETED, PARTIAL,
+    // PDF_DOWNLOADED and RAW_EXTRACTED have no writers and would filter to nothing.
+    ['READY', 'PROCESSING', 'QUEUED', 'UPLOADED', 'PENDING_UPLOAD', 'METADATA_FETCHED', 'FAILED'].map(status => ({
       value: status,
       label: t(`status.${status}`),
     }))

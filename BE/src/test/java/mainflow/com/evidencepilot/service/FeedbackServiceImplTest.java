@@ -348,6 +348,77 @@ class FeedbackServiceImplTest {
     }
 
     @Test
+    void assignedInstructorResolvesOpenThreadOnReturnedRequest() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(instructor, student, ProjectStatus.RETURNED);
+        FeedbackRequest request = request(project, instructor, student, FeedbackStatus.RETURNED);
+        PaperSection section = section(project, student);
+        InstructorFeedback root = feedback(request, section, instructor, true);
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(instructorFeedbackRepository.findById(root.getId())).thenReturn(Optional.of(root));
+
+        var view = service().setThreadState(root.getId(), FeedbackThreadState.RESOLVED);
+
+        assertThat(root.getThreadState()).isEqualTo(FeedbackThreadState.RESOLVED);
+        assertThat(root.getStateChangedBy()).isEqualTo(instructor);
+        assertThat(root.getStateChangedAt()).isNotNull();
+        assertThat(view.threadState()).isEqualTo(FeedbackThreadState.RESOLVED);
+        verify(instructorFeedbackRepository).saveAndFlush(root);
+    }
+
+    @Test
+    void assignedInstructorReopensResolvedThread() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(instructor, student, ProjectStatus.RETURNED);
+        FeedbackRequest request = request(project, instructor, student, FeedbackStatus.RETURNED);
+        PaperSection section = section(project, student);
+        InstructorFeedback root = feedback(request, section, instructor, true);
+        root.setThreadState(FeedbackThreadState.RESOLVED);
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(instructorFeedbackRepository.findById(root.getId())).thenReturn(Optional.of(root));
+
+        var view = service().setThreadState(root.getId(), FeedbackThreadState.OPEN);
+
+        assertThat(root.getThreadState()).isEqualTo(FeedbackThreadState.OPEN);
+        assertThat(view.threadState()).isEqualTo(FeedbackThreadState.OPEN);
+        verify(instructorFeedbackRepository).saveAndFlush(root);
+    }
+
+    @Test
+    void studentCannotResolveThread() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(instructor, student, ProjectStatus.RETURNED);
+        FeedbackRequest request = request(project, instructor, student, FeedbackStatus.RETURNED);
+        PaperSection section = section(project, student);
+        InstructorFeedback root = feedback(request, section, instructor, true);
+        when(currentUserService.requireCurrentUser()).thenReturn(student);
+        when(instructorFeedbackRepository.findById(root.getId())).thenReturn(Optional.of(root));
+
+        assertThatThrownBy(() -> service().setThreadState(root.getId(), FeedbackThreadState.RESOLVED))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        verify(instructorFeedbackRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void readOnlyProjectRejectsThreadResolution() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(instructor, student, ProjectStatus.ARCHIVED);
+        FeedbackRequest request = request(project, instructor, student, FeedbackStatus.REVIEWED);
+        PaperSection section = section(project, student);
+        InstructorFeedback root = feedback(request, section, instructor, true);
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(instructorFeedbackRepository.findById(root.getId())).thenReturn(Optional.of(root));
+
+        assertThatThrownBy(() -> service().setThreadState(root.getId(), FeedbackThreadState.RESOLVED))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("read-only");
+        verify(instructorFeedbackRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void returnPublishesCurrentRootAndNotifiesTheGroupAndCurrentAssignee() {
         User instructor = user(UserRole.INSTRUCTOR);
         User student = user(UserRole.STUDENT);

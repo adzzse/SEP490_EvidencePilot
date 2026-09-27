@@ -288,6 +288,31 @@ public class FeedbackServiceImpl {
     }
 
     /**
+     * Marks a feedback thread RESOLVED, REJECTED, or back to OPEN.
+     * Lifecycle authority follows {@link #isRequestInstructor} (project instructor
+     * role, not row authorship) and works on any request status — threads are
+     * typically resolved after return, when drafts are immutable.
+     */
+    @Transactional
+    public InstructorFeedbackResponseDto setThreadState(UUID feedbackItemId, FeedbackThreadState state) {
+        User currentUser = currentUserService.requireCurrentUser();
+        InstructorFeedback feedback = instructorFeedbackRepository.findById(feedbackItemId)
+                .orElseThrow(() -> notFound("Instructor feedback", feedbackItemId));
+        if (!isInstructorViewer(currentUser, feedback.getRequest())) {
+            throw forbidden("Only the assigned instructor can resolve feedback threads.");
+        }
+        if (feedback.getRequest().getProject().getStatus().isReadOnly()) {
+            throw conflict("Project is read-only.");
+        }
+        feedback.setThreadState(state);
+        feedback.setStateChangedAt(LocalDateTime.now());
+        feedback.setStateChangedBy(currentUser);
+        instructorFeedbackRepository.saveAndFlush(feedback);
+        publishFeedbackChanged(feedback.getRequest(), "UPDATED");
+        return response(feedback, currentUser);
+    }
+
+    /**
      * Single published thread with its legacy replies and attachments.
      * Students see only threads on sections assigned to them (leaders see all);
      * unpublished drafts stay instructor-visible only.

@@ -166,6 +166,7 @@ class ProjectRouteMappingTest {
                 "PATCH /api/feedback-requests/{id}/status",
                 "GET /api/instructor-feedback/{id}",
                 "PATCH /api/instructor-feedback/{id}",
+                "PATCH /api/instructor-feedback/{id}/thread-state",
                 "DELETE /api/instructor-feedback/{id}",
                 "GET /api/notifications",
                 "GET /api/notifications/unread-count",

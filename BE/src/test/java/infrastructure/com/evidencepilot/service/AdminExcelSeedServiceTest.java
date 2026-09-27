@@ -41,6 +41,7 @@ class AdminExcelSeedServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
+                mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
                 mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
                 mock(PaperProcessingServiceImpl.class),
@@ -399,6 +400,7 @@ class AdminExcelSeedServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
+                mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
                 mock(DocumentServiceImpl.class), mock(MediaAssetService.class), papers,
                 mock(com.evidencepilot.client.openalex.OpenAlexClient.class),
                 mock(OpenAlexIngestionServiceImpl.class),
@@ -446,8 +448,138 @@ class AdminExcelSeedServiceTest {
     }
 
     @Test
-    void sendInvitationFlagTruthTable() {
-        assertThat(AdminExcelSeedService.sendInvitationRequested(null)).isFalse();
+    void feedbackRequestsRequireReturnedProjectWithSectionsAndMembers() {
+        var sheets = new HashMap<String, List<Map<String, String>>>();
+        sheets.put("projects", List.of(
+                row("project_title", "P", "status", "IN_PROGRESS", "_row", "2")));
+        sheets.put("users", List.of(
+                row("email", "prof@fixture.test", "role", "INSTRUCTOR", "_row", "2"),
+                row("email", "stu@fixture.test", "role", "STUDENT", "student_code", "AB123456", "_row", "3")));
+        sheets.put("members", List.of(
+                row("project_title", "P", "user_email", "prof@fixture.test", "project_role", "INSTRUCTOR", "_row", "2"),
+                row("project_title", "P", "user_email", "stu@fixture.test", "project_role", "MEMBER", "_row", "3")));
+        sheets.put("sections", List.of(
+                row("project_title", "P", "section_title", "Intro", "section_order", "0", "content_tex", "Seeded.", "_row", "2")));
+        sheets.put("feedback_requests", List.of(
+                row("project_title", "P", "reviewer_email", "prof@fixture.test", "student_email", "stu@fixture.test", "_row", "2")));
+        assertThat(service().validate(sheets))
+                .anyMatch(m -> m.contains("only allowed for RETURNED projects"));
+
+        sheets.put("projects", List.of(
+                row("project_title", "P", "status", "RETURNED", "_row", "2")));
+        sheets.put("feedback_requests", List.of(
+                row("project_title", "P", "reviewer_email", "prof@fixture.test", "student_email", "stu@fixture.test", "_row", "2"),
+                row("project_title", "P", "reviewer_email", "prof@fixture.test", "student_email", "stu@fixture.test", "_row", "3")));
+        assertThat(service().validate(sheets))
+                .anyMatch(m -> m.contains("max 1"));
+    }
+
+    @Test
+    void feedbackRequestsRejectUnknownReviewerStudentAndBadDates() {
+        var base = new HashMap<String, List<Map<String, String>>>();
+        base.put("projects", List.of(row("project_title", "P", "status", "RETURNED", "_row", "2")));
+        base.put("users", List.of(
+                row("email", "prof@fixture.test", "role", "INSTRUCTOR", "_row", "2"),
+                row("email", "stu@fixture.test", "role", "STUDENT", "student_code", "AB123456", "_row", "3")));
+        base.put("members", List.of(
+                row("project_title", "P", "user_email", "prof@fixture.test", "project_role", "INSTRUCTOR", "_row", "2"),
+                row("project_title", "P", "user_email", "stu@fixture.test", "project_role", "MEMBER", "_row", "3")));
+        base.put("sections", List.of(
+                row("project_title", "P", "section_title", "Intro", "section_order", "0", "content_tex", "Seeded.", "_row", "2")));
+        var badReviewer = new HashMap<>(base);
+        badReviewer.put("feedback_requests", List.of(row("project_title", "P", "reviewer_email", "ghost@fixture.test",
+                "student_email", "stu@fixture.test", "_row", "2")));
+        assertThat(service().validate(badReviewer))
+                .anyMatch(m -> m.contains("reviewer_email must be"));
+        var badDate = new HashMap<>(base);
+        badDate.put("feedback_requests", List.of(row("project_title", "P", "reviewer_email", "prof@fixture.test",
+                "student_email", "stu@fixture.test", "requested_at", "yesterday", "_row", "2")));
+        assertThat(service().validate(badDate))
+                .anyMatch(m -> m.contains("must be ISO date-time"));
+        var noSections = new HashMap<>(base);
+        noSections.put("sections", List.of());
+        noSections.put("feedback_requests", List.of(row("project_title", "P", "reviewer_email", "prof@fixture.test",
+                "student_email", "stu@fixture.test", "_row", "2")));
+        assertThat(service().validate(noSections))
+                .anyMatch(m -> m.contains("needs at least one complete sections row"));
+    }
+
+    @Test
+    void sectionsRowsRequireIntegerOrderAndContent() {
+        var sheets = Map.of("sections", List.of(
+                row("project_title", "P", "section_title", "Intro", "section_order", "first", "content_tex", "Seeded.", "_row", "2"),
+                row("project_title", "P", "section_title", "", "section_order", "0", "content_tex", "", "_row", "3")));
+        assertThat(service().validate(sheets)).anyMatch(m -> m.contains("section_order must be an integer"));
+    }
+
+    @Test
+    void commitFeedbackRequestsCreatesReturnedRequestWithSnapshot() throws Exception {
+        var documents = mock(com.evidencepilot.repository.DocumentRepository.class);
+        var users = mock(com.evidencepilot.repository.UserRepository.class);
+        var members = mock(com.evidencepilot.repository.ProjectMemberRepository.class);
+        var requests = mock(com.evidencepilot.repository.FeedbackRequestRepository.class);
+        var tx = mock(org.springframework.transaction.PlatformTransactionManager.class);
+        var service = new AdminExcelSeedService(
+                mock(AdminService.class), users,
+                mock(com.evidencepilot.repository.ProjectRepository.class), members, documents,
+                mock(com.evidencepilot.repository.DocumentTextRepository.class),
+                mock(com.evidencepilot.repository.DocumentChunkRepository.class),
+                mock(com.evidencepilot.repository.PaperSectionRepository.class),
+                requests,
+                mock(DocumentServiceImpl.class), mock(MediaAssetService.class),
+                mock(PaperProcessingServiceImpl.class),
+                mock(com.evidencepilot.client.openalex.OpenAlexClient.class),
+                mock(OpenAlexIngestionServiceImpl.class),
+                mock(DocumentObjectStorage.class),
+                mock(com.evidencepilot.service.impl.DocumentPersistenceService.class),
+                mock(com.evidencepilot.service.impl.ProjectCollectionService.class),
+                new com.fasterxml.jackson.databind.ObjectMapper(), tx);
+
+        var projectId = java.util.UUID.randomUUID();
+        var project = new com.evidencepilot.model.Project();
+        project.setId(projectId);
+        project.setTitle("P");
+        project.setStatus(com.evidencepilot.model.enums.ProjectStatus.RETURNED);
+        var paper = new com.evidencepilot.model.Document();
+        paper.setId(java.util.UUID.randomUUID());
+        paper.setProject(project);
+        paper.setTitle("Seeded paper");
+        var instructor = new com.evidencepilot.model.User();
+        instructor.setId(java.util.UUID.randomUUID());
+        instructor.setRole(com.evidencepilot.model.enums.UserRole.INSTRUCTOR);
+        var student = new com.evidencepilot.model.User();
+        student.setId(java.util.UUID.randomUUID());
+        student.setRole(com.evidencepilot.model.enums.UserRole.STUDENT);
+        var membership = new com.evidencepilot.model.ProjectMember();
+        membership.setRole(com.evidencepilot.model.enums.ProjectRole.INSTRUCTOR);
+        membership.setUser(instructor);
+        when(documents.findByProjectIdAndDocTypeAndActiveTrue(eq(projectId), eq(com.evidencepilot.model.enums.DocumentType.PAPER)))
+                .thenReturn(List.of(paper));
+        when(users.findByEmail("prof@fixture.test")).thenReturn(java.util.Optional.of(instructor));
+        when(users.findByEmail("stu@fixture.test")).thenReturn(java.util.Optional.of(student));
+        when(members.findByProjectIdAndUserId(eq(projectId), any())).thenReturn(List.of(membership));
+
+        var rows = List.of(row("project_title", "P", "reviewer_email", "prof@fixture.test",
+                "student_email", "stu@fixture.test", "requested_at", "2026-09-01T08:00:00", "_row", "2"));
+        var sectionRows = List.of(row("project_title", "P", "section_title", "Intro", "section_order", "0",
+                "content_tex", "Seeded content.", "_row", "2"));
+        int n = service.commitFeedbackRequests(rows, sectionRows, null, Map.of("P", project));
+
+        assertThat(n).isOne();
+        var saved = org.mockito.ArgumentCaptor.forClass(com.evidencepilot.model.FeedbackRequest.class);
+        verify(requests).save(saved.capture());
+        assertThat(saved.getValue().getStatus()).isEqualTo(com.evidencepilot.model.FeedbackStatus.RETURNED);
+        var root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(saved.getValue().getSubmissionSnapshotJson());
+        assertThat(root.path("schemaVersion").asInt()).isEqualTo(2);
+        assertThat(root.path("projectId").asText()).isEqualTo(projectId.toString());
+        assertThat(root.path("papers").get(0).path("sections")).hasSize(1);
+        assertThat(root.path("papers").get(0).path("sections").get(0).path("title").asText()).isEqualTo("Intro");
+        assertThat(root.path("papers").get(0).path("sections").get(0).path("contentTex").asText()).isEqualTo("Seeded content.");
+        assertThat(root.path("papers").get(0).path("sections").get(0).path("order").asInt()).isZero();
+    }
+
+    @Test
+    void sendInvitationFlagTruthTable() {        assertThat(AdminExcelSeedService.sendInvitationRequested(null)).isFalse();
         assertThat(AdminExcelSeedService.sendInvitationRequested("")).isFalse();
         assertThat(AdminExcelSeedService.sendInvitationRequested("  ")).isFalse();
         assertThat(AdminExcelSeedService.sendInvitationRequested("FALSE")).isFalse();
@@ -480,6 +612,7 @@ class AdminExcelSeedServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
+                mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
                 mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
                 mock(PaperProcessingServiceImpl.class),
@@ -825,6 +958,7 @@ class AdminExcelSeedServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
+                mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
                 mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
                 mock(PaperProcessingServiceImpl.class),
@@ -1169,6 +1303,7 @@ class AdminExcelSeedServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
+                mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
                 mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
                 mock(PaperProcessingServiceImpl.class),
@@ -1215,6 +1350,7 @@ class AdminExcelSeedServiceTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
+                mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
                 mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
                 mock(PaperProcessingServiceImpl.class),

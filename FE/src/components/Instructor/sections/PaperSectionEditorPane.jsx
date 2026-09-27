@@ -1,6 +1,7 @@
 import PreviewPane from '../../features/PreviewPane';
 import PaperSectionAssignment from './PaperSectionAssignment.jsx';
 import PaperSectionStandards from './PaperSectionStandards.jsx';
+import { studentDisplayName } from '../../../utils/instructor/studentSearch.js';
 
 export default function PaperSectionEditorPane({
   sections,
@@ -9,16 +10,13 @@ export default function PaperSectionEditorPane({
   assignableMembers,
   studentMembers,
   selectedStudentId,
-  selectedBulkIds,
   bulkAssignments,
   bulkTouchedIds,
   bulkOpen,
   mode,
   dirty,
-  saveNotice,
   standardSection,
   projectReadOnly,
-  sectionStructureLocked,
   sectionStructureSaving,
   labels,
   ct,
@@ -27,9 +25,9 @@ export default function PaperSectionEditorPane({
   onRequestClose,
   onUpdateSection,
   onToggleBulkEditor,
-  onToggleBulkSection,
   onUpdateBulkAssignment,
   onApplyBulkAssignment,
+  onAssignBulkToStudent,
   onClearAllAssignments,
   onOpenStandard,
   onCloseStandard,
@@ -37,6 +35,14 @@ export default function PaperSectionEditorPane({
   onDiscard,
   onSave,
 }) {
+  // ponytail: sectionStructureLocked is status-only (see ProjectDetail);
+  // the selected row locks itself while assigned. Content + assignment stay
+  // status-gated to match the BE (instructors may fix content / reassign).
+  const selectedLocked = Boolean(selectedSection?.assignedUserId) || projectReadOnly;
+  const assigneeName = selectedSection?.assignedUserId
+    ? studentDisplayName(studentMembers.find(member => String(member.userId) === String(selectedSection.assignedUserId)) || {})
+    : null;
+  const standardConfigured = Boolean(sectionEvals[String(selectedSection?.id)]?.requirements?.length);
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-white" aria-label={labels.paperEditor}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-6">
@@ -69,7 +75,11 @@ export default function PaperSectionEditorPane({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <label htmlFor="edit-paper-section-title" className="text-[10px] font-black uppercase tracking-wider text-slate-400">{labels.sectionTitle}</label>
-                  <input id="edit-paper-section-title" aria-label={labels.sectionTitle} value={selectedSection.sectionTitle || ''} onChange={event => onUpdateSection({ sectionTitle: event.target.value })} readOnly={sectionStructureLocked || projectReadOnly} className="mt-1 w-full border-b-2 border-slate-200 px-0 py-2 text-2xl font-bold text-slate-900 outline-none focus:border-indigo-500 read-only:opacity-60" />
+                  <input id="edit-paper-section-title" aria-label={labels.sectionTitle} value={selectedSection.sectionTitle || ''} onChange={event => onUpdateSection({ sectionTitle: event.target.value })} readOnly={selectedLocked} className="mt-1 w-full border-b-2 border-slate-200 px-0 py-2 text-2xl font-bold text-slate-900 outline-none focus:border-indigo-500 read-only:opacity-60" />
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span data-testid={`assignee-badge-${selectedSection.id}`} className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${assigneeName ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-500'}`}>{assigneeName || labels.unassigned}</span>
+                    <span data-testid={`standard-badge-${selectedSection.id}`} className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${standardConfigured ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>{standardConfigured ? labels.standardConfigured : labels.standardNotConfigured}</span>
+                  </div>
                 </div>
               </div>
 
@@ -79,7 +89,6 @@ export default function PaperSectionEditorPane({
                 selectedStudentId={selectedStudentId}
                 studentMembers={studentMembers}
                 assignableMembers={assignableMembers}
-                selectedBulkIds={selectedBulkIds}
                 bulkAssignments={bulkAssignments}
                 bulkTouchedIds={bulkTouchedIds}
                 bulkOpen={bulkOpen}
@@ -89,9 +98,9 @@ export default function PaperSectionEditorPane({
                 ct={ct}
                 onUpdateSection={changes => onUpdateSection(changes)}
                 onToggleBulkEditor={onToggleBulkEditor}
-                onToggleBulkSection={onToggleBulkSection}
                 onUpdateBulkAssignment={onUpdateBulkAssignment}
                 onApplyBulkAssignment={onApplyBulkAssignment}
+                onAssignBulkToStudent={onAssignBulkToStudent}
                 onClearAllAssignments={onClearAllAssignments}
               />
 
@@ -99,7 +108,7 @@ export default function PaperSectionEditorPane({
                 selectedSection={selectedSection}
                 standardSection={standardSection}
                 sectionEvals={sectionEvals}
-                sectionStructureLocked={sectionStructureLocked}
+                sectionLocked={selectedLocked}
                 projectReadOnly={projectReadOnly}
                 labels={{ ...labels, close: closeLabel }}
                 ct={ct}
@@ -117,8 +126,7 @@ export default function PaperSectionEditorPane({
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
         <div className="min-h-5">
-          {saveNotice && <p data-testid="paper-save-notice" role="status" className="text-[10px] font-bold text-emerald-600">{labels.changesSaved}</p>}
-          {!saveNotice && <p className="text-[10px] italic text-slate-500">{dirty ? labels.sectionsUnsaved : labels.noUnsavedChanges}</p>}
+          <p className="text-[10px] italic text-slate-500">{dirty ? labels.sectionsUnsaved : labels.noUnsavedChanges}</p>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={onDiscard} disabled={!dirty || sectionStructureSaving} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-600 disabled:cursor-not-allowed disabled:opacity-50">{labels.discardChanges}</button>

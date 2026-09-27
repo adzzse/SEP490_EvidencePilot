@@ -36,7 +36,10 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     Page<AuditLog> findByActorIdAndActionAndSeverityOrderByOccurredAtDesc(
             UUID actorId, String action, AuditSeverity severity, Pageable pageable);
 
-// Phase 1.5: DB-level daily aggregation — preserves wordDelta→wordsAdded/Removed fallback for legacy rows
+// Phase 1.5: DB-level daily aggregation — preserves wordDelta→wordsAdded/Removed fallback for legacy rows.
+// Matches both PROJECT rows and the live PaperSection writer (PaperProcessingServiceImpl
+// records SECTION_CONTENT_UPDATED per section so the activity feed can resolve it);
+// the section arm is scoped to this project via paper_sections → documents.
     @Query(value = """
             SELECT
               actor_id,
@@ -53,8 +56,11 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
               GROUP_CONCAT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.sectionTitle')) SEPARATOR '||') as titles
             FROM audit_logs
             WHERE action = 'SECTION_CONTENT_UPDATED'
-              AND entity_type = 'PROJECT'
-              AND entity_id = :projectId
+              AND ((entity_type = 'PROJECT' AND entity_id = :projectId)
+                OR (entity_type = 'PaperSection' AND entity_id IN (
+                  SELECT ps.id FROM paper_sections ps
+                  JOIN documents d ON d.id = ps.document_id
+                  WHERE d.project_id = :projectId)))
               AND occurred_at >= :fromInclusive
               AND occurred_at < :toExclusive
             GROUP BY actor_id, d
@@ -78,8 +84,11 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
               GROUP_CONCAT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.sectionTitle')) SEPARATOR '||') as titles
             FROM audit_logs
             WHERE action = 'SECTION_CONTENT_UPDATED'
-              AND entity_type = 'PROJECT'
-              AND entity_id = :projectId
+              AND ((entity_type = 'PROJECT' AND entity_id = :projectId)
+                OR (entity_type = 'PaperSection' AND entity_id IN (
+                  SELECT ps.id FROM paper_sections ps
+                  JOIN documents d ON d.id = ps.document_id
+                  WHERE d.project_id = :projectId)))
             GROUP BY actor_id, DATE(occurred_at)
             ORDER BY actor_id, d
             """, nativeQuery = true)

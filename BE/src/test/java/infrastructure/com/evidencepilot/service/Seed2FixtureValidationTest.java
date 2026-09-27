@@ -26,6 +26,7 @@ class Seed2FixtureValidationTest {
                 mock(com.evidencepilot.repository.DocumentTextRepository.class),
                 mock(com.evidencepilot.repository.DocumentChunkRepository.class),
                 mock(com.evidencepilot.repository.PaperSectionRepository.class),
+                mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
                 mock(DocumentServiceImpl.class),
                 mock(MediaAssetService.class),
                 mock(PaperProcessingServiceImpl.class),
@@ -50,11 +51,13 @@ class Seed2FixtureValidationTest {
             }
         }
         assertThat(parsed.errors()).as(String.join("; ", parsed.errors())).isEmpty();
-        assertThat(parsed.sheets()).containsOnlyKeys("users", "projects", "members", "sources", "papers");
+        assertThat(parsed.sheets()).containsOnlyKeys("users", "projects", "members", "sources", "papers", "sections", "feedback_requests");
         assertThat(parsed.sheets().get("users")).hasSize(2);
         assertThat(parsed.sheets().get("projects")).hasSize(2);
         assertThat(parsed.sheets().get("members")).hasSize(4);
         assertThat(parsed.sheets().get("sources")).hasSize(1);
         assertThat(parsed.sheets().get("papers")).hasSize(2);
+        assertThat(parsed.sheets().get("sections")).hasSize(2);
+        assertThat(parsed.sheets().get("feedback_requests")).hasSize(1);
     }
 }

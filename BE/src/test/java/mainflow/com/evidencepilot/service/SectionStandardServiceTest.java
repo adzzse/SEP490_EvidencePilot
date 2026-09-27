@@ -211,6 +211,24 @@ class SectionStandardServiceTest {
     }
 
     @Test
+    void saveConfigRejectsAssignedSectionButAllowsUnassignedSibling() {
+        PaperSection assigned = section();
+        assigned.setAssignedUser(user(UserRole.STUDENT));
+        User instructor = user(UserRole.INSTRUCTOR);
+        when(paperSectionRepository.findByIdWithDocument(assigned.getId())).thenReturn(Optional.of(assigned));
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(currentUserService.isInstructor(instructor)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.saveConfig(
+                assigned.getDocument().getId(), assigned.getId(), List.of("Has thesis")))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(error -> assertThat(((ResponseStatusException) error).getStatusCode())
+                        .isEqualTo(HttpStatus.CONFLICT));
+
+        verify(evaluationRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void instructorCanClearAllStandardRequirements() {
         PaperSection section = section();
         User instructor = user(UserRole.INSTRUCTOR);

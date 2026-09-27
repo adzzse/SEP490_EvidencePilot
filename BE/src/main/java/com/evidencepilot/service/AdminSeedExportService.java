@@ -3,16 +3,22 @@ package com.evidencepilot.service;
 import com.evidencepilot.client.openalex.DoiUtils;
 import com.evidencepilot.model.Collection;
 import com.evidencepilot.model.Document;
+import com.evidencepilot.model.FeedbackRequest;
+import com.evidencepilot.model.FeedbackStatus;
+import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.DocumentType;
-import com.evidencepilot.model.enums.ProjectRole;
+import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.CollectionDocumentRepository;
 import com.evidencepilot.repository.CollectionRepository;
 import com.evidencepilot.repository.DocumentRepository;
+import com.evidencepilot.repository.DocumentTextRepository;
+import com.evidencepilot.repository.FeedbackRequestRepository;
+import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.ProjectCollectionRepository;
@@ -59,6 +65,9 @@ public class AdminSeedExportService {
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository memberRepository;
     private final DocumentRepository documentRepository;
+    private final DocumentTextRepository documentTextRepository;
+    private final PaperSectionRepository paperSectionRepository;
+    private final FeedbackRequestRepository feedbackRequestRepository;
     private final CollectionRepository collectionRepository;
     private final CollectionDocumentRepository collectionDocumentRepository;
     private final DocumentObjectStorage documentObjectStorage;
@@ -296,30 +305,78 @@ public class AdminSeedExportService {
                     String.join("; ", dois)));
         }
 
-        if (projectCollectionRepository != null) {
-            for (var link : projectCollectionRepository.findAll()) {
-                if (link.getProject() == null || link.getCollection() == null
-                        || !projectIds.contains(link.getProject().getId())
-                        || (projectId != null && !projectId.equals(link.getProject().getId()))
-                        || !link.getCollection().isActive()) continue;
-                String collectionTitle = exportedCollectionTitlesById.get(link.getCollection().getId());
-                if (collectionTitle == null) continue;
-                projectCollectionRows.add(List.of(
-                        link.getProject().getTitle(), collectionTitle));
+        // Sections + returned-review requests: emitted in import format (titles and
+        // content, never IDs) so a reimport rebuilds live rows and a fresh snapshot
+        // instead of carrying stale foreign keys.
+        List<List<String>> sectionRows = new ArrayList<>();
+        int skippedSections = 0;
+        for (Document paper : inScopePapers) {
+            if (paper.getProject() == null) continue;
+            List<PaperSection> paperSections;
+            try {
+                paperSections = paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paper.getId());
+            } catch (RuntimeException e) {
+                log.warn("Seed export: unreadable sections for paper {}", paper.getId());
+                continue;
+            }
+            for (PaperSection section : paperSections) {
+                if (section == null || !section.isActive()) continue;
+                String title = nullToEmpty(section.getSectionTitle());
+                String content = nullToEmpty(section.getContentTex());
+                if (title.isBlank() || content.isBlank()) {
+                    skippedSections++;
+                    continue;
+                }
+                if (content.length() > 32767) content = content.substring(0, 32767);
+                User assignee = section.getAssignedUser();
+                sectionRows.add(List.of(
+                        paper.getProject().getTitle(),
+                        title,
+                        String.valueOf(section.getSectionOrder()),
+                        content,
+                        assignee == null || assignee.getEmail() == null ? "" : assignee.getEmail().toLowerCase(Locale.ROOT)));
             }
         }
 
-        validateExportCaps(userRows, projects, keptMemberRows, sourceRows, paperRows,
-                collectionRows, projectCollectionRows);
+        List<List<String>> feedbackRows = new ArrayList<>();
+        int skippedFeedbackRequests = 0;
+        for (Project project : projects) {
+            if (project.getStatus() != ProjectStatus.RETURNED) continue;
+            FeedbackRequest returned;
+            try {
+                returned = feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(project.getId()).stream()
+                        .filter(request -> request.getStatus() == FeedbackStatus.RETURNED)
+                        .findFirst().orElse(null);
+            } catch (RuntimeException e) {
+                log.warn("Seed export: unreadable feedback requests for project {}", project.getId());
+                continue;
+            }
+            if (returned == null
+                    || returned.getInstructor() == null || returned.getInstructor().getEmail() == null
+                    || !keptEmails.contains(returned.getInstructor().getEmail().toLowerCase(Locale.ROOT))
+                    || returned.getStudent() == null || returned.getStudent().getEmail() == null
+                    || !keptEmails.contains(returned.getStudent().getEmail().toLowerCase(Locale.ROOT))) {
+                skippedFeedbackRequests++;
+                continue;
+            }
+            feedbackRows.add(List.of(
+                    project.getTitle(),
+                    returned.getInstructor().getEmail().toLowerCase(Locale.ROOT),
+                    returned.getStudent().getEmail().toLowerCase(Locale.ROOT),
+                    returned.getRequestedAt() == null ? "" : returned.getRequestedAt().toString(),
+                    returned.getReturnedAt() == null ? "" : returned.getReturnedAt().toString()));
+        }
 
         String summary = "Backup bundle exported " + LocalDateTime.now()
                 + ": " + userRows.size() + " users, " + projects.size() + " projects, "
                 + keptMemberRows.size() + " members, " + sourceRows.size() + " sources, "
-                + paperRows.size() + " papers, " + collectionRows.size() + " collections"
+                + paperRows.size() + " papers, " + collectionRows.size() + " collections, "
+                + sectionRows.size() + " sections, " + feedbackRows.size() + " feedback_requests"
                 + " (skipped — unrestorable via seed: " + skippedUsers + " users, "
                 + (candidates.size() - projects.size()) + " projects, "
                 + skippedMembers + " members, " + skippedSources + " sources, "
-                + skippedPapers + " papers, " + skippedCollections + " collections).";
+                + skippedPapers + " papers, " + skippedCollections + " collections, "
+                + skippedSections + " sections, " + skippedFeedbackRequests + " feedback_requests).";
         byte[] xlsx;
         try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             sheet(wb, "README", List.of("key", "value"), List.of(
@@ -338,7 +395,8 @@ public class AdminSeedExportService {
             sheet(wb, "sources", List.of("project_title", "doi"), sourceRows);
             sheet(wb, "papers", List.of("project_title", "paper_file"), paperRows);
             sheet(wb, "collections", List.of("collection_title", "description", "owner_email", "source_dois"), collectionRows);
-            sheet(wb, "project_collections", List.of("project_title", "collection_title"), projectCollectionRows);
+            sheet(wb, "sections", List.of("project_title", "section_title", "section_order", "content_tex", "assigned_user_email"), sectionRows);
+            sheet(wb, "feedback_requests", List.of("project_title", "reviewer_email", "student_email", "requested_at", "returned_at"), feedbackRows);
             wb.write(out);
             xlsx = out.toByteArray();
         } catch (IOException e) {

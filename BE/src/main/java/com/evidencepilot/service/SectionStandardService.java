@@ -282,12 +282,11 @@ public class SectionStandardService {
                     "Only instructors can configure section standards");
         }
         currentUserService.requireProjectWriteAccess(currentUser, section.getDocument().getProject());
-        boolean structureLocked = paperSectionRepository
-                .findByDocumentIdOrderBySectionOrderAsc(documentId).stream()
-                .anyMatch(candidate -> candidate.isActive() && candidate.getAssignedUser() != null);
-        if (structureLocked) {
+        // ponytail: per-section lock — a sibling's assignment must not freeze
+        // this section's standards. Only the assigned row itself is locked.
+        if (section.getAssignedUser() != null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Section standards are locked while one or more sections are assigned");
+                    "Section standards are locked while this section is assigned");
         }
 
         List<String> normalized;

@@ -146,6 +146,23 @@ class FeedbackControllerTest {
     }
 
     @Test
+    void setThreadState_bindsState() throws Exception {
+        UUID itemId = UUID.randomUUID();
+        mockMvc.perform(patch("/api/instructor-feedback/{id}/thread-state", itemId)
+                        .param("state", "resolved"))
+                .andExpect(status().isOk());
+        verify(service).setThreadState(itemId, com.evidencepilot.model.enums.FeedbackThreadState.RESOLVED);
+    }
+
+    @Test
+    void setThreadState_rejectsUnknownState() throws Exception {
+        mockMvc.perform(patch("/api/instructor-feedback/{id}/thread-state", UUID.randomUUID())
+                        .param("state", "DONE"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(service);
+    }
+
+    @Test
     void retiredConversationRoutesAreNotAvailable() throws Exception {
         UUID itemId = UUID.randomUUID();
         UUID replyId = UUID.randomUUID();

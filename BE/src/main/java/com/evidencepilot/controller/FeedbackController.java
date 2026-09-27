@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDate;
@@ -205,6 +206,30 @@ public class FeedbackController {
             @Parameter(description = "Instructor feedback item UUID") @PathVariable UUID id) {
         feedbackService.deleteFeedbackItem(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Set feedback thread state",
+            description = "Marks a feedback thread RESOLVED, REJECTED, or back to OPEN. "
+                    + "Assigned instructor or admin only; works on any request status.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Thread state updated"),
+            @ApiResponse(responseCode = "400", description = "Invalid state value"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Not the assigned instructor"),
+            @ApiResponse(responseCode = "404", description = "Feedback thread not found"),
+            @ApiResponse(responseCode = "409", description = "Project is read-only")
+    })
+    @PatchMapping("/instructor-feedback/{id}/thread-state")
+    public InstructorFeedbackResponseDto setThreadState(
+            @Parameter(description = "Instructor feedback thread UUID") @PathVariable UUID id,
+            @Parameter(description = "New state: OPEN, RESOLVED, or REJECTED") @RequestParam String state) {
+        com.evidencepilot.model.enums.FeedbackThreadState parsed;
+        try {
+            parsed = com.evidencepilot.model.enums.FeedbackThreadState.valueOf(state.toUpperCase());
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid thread state: " + state);
+        }
+        return feedbackService.setThreadState(id, parsed);
     }
 
     @Operation(summary = "Get a single feedback thread",

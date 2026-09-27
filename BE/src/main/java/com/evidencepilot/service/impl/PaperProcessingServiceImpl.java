@@ -374,7 +374,25 @@ public class PaperProcessingServiceImpl {
         }
         if (structureChange) {
             requireInstructorDocumentWriteAccess(documentId);
-            requireSectionStructureUnlocked(documentId);
+            if (mergeIntoId != null) {
+                // Destructive merge keeps the global gate.
+                requireSectionStructureUnlocked(documentId);
+            } else if (title != null) {
+                // ponytail: per-section title lock — siblings with work must not
+                // freeze this row. Pure order-only moves stay allowed.
+                PaperSection target = paperSectionRepository
+                        .findByDocumentIdOrderBySectionOrderAsc(documentId).stream()
+                        .filter(candidate -> sectionId.equals(candidate.getId()))
+                        .findFirst()
+                        .orElseThrow(() -> new ResourceNotFoundException(sectionId, "PaperSection"));
+                if (!title.isBlank() && !title.equals(target.getSectionTitle())
+                        && hasMeaningfulWork(target)) {
+                    throw new ResponseStatusException(
+                            HttpStatus.CONFLICT,
+                            "SECTION_STRUCTURE_LOCKED: this section contains current work or history. "
+                            + "Title changes are only available for setup-only sections.");
+                }
+            }
         } else {
             requireDocumentWriteAccess(documentId);
         }
@@ -527,8 +545,15 @@ public class PaperProcessingServiceImpl {
     @Transactional
     public void deleteSection(UUID documentId, UUID sectionId) {
         Document document = requireInstructorDocumentWriteAccess(documentId);
-        requireSectionStructureUnlocked(documentId);
         PaperSection section = requireSectionInDocument(sectionId, documentId);
+        // ponytail: per-section delete lock — siblings with work must not
+        // freeze this row. Only the deleted row's own work/history blocks it.
+        if (hasMeaningfulWork(section)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "SECTION_STRUCTURE_LOCKED: this section contains current work or history. "
+                    + "Structural changes are only available for setup-only sections.");
+        }
         if (hasFeedback(section)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
@@ -543,7 +568,8 @@ public class PaperProcessingServiceImpl {
     @Transactional
     public PaperSectionResponse createSection(UUID documentId, String title, UUID parentSectionId) {
         Document document = requireInstructorDocumentWriteAccess(documentId);
-        requireSectionStructureUnlocked(documentId);
+        // ponytail: appending a row never touches assigned work, so no
+        // structure gate here (instructor + project write access above apply).
         if (parentSectionId != null) {
             requireSectionInDocument(parentSectionId, documentId);
         }
@@ -855,6 +881,27 @@ public class PaperProcessingServiceImpl {
         }
     }
 
+    // ponytail: per-section title lock for batch saves — only a renamed row
+    // carrying work/history blocks the batch. Pure order-only moves stay
+    // allowed so unassigned rows remain adjustable next to assigned ones.
+    private void requireRenamedSectionsUnlocked(
+            List<com.evidencepilot.dto.request.SectionBatchItem> items,
+            Map<UUID, PaperSection> persistedById) {
+        for (var item : items) {
+            PaperSection current = persistedById.get(item.id());
+            if (current == null || !current.isActive()) continue;
+            if (item.sectionTitle() != null && !item.sectionTitle().trim().isEmpty()
+                    && !item.sectionTitle().trim().equals(current.getSectionTitle())
+                    && hasMeaningfulWork(current)) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "SECTION_STRUCTURE_LOCKED: section " + item.id()
+                        + " contains current work or history. "
+                        + "Title changes are only available for setup-only sections.");
+            }
+        }
+    }
+
     private boolean hasMeaningfulWork(PaperSection section) {
         // Imported paper/template text is setup data; student ownership and history are tracked separately.
         if (section.getAssignedUser() != null) return true;
@@ -987,7 +1034,7 @@ public class PaperProcessingServiceImpl {
         }
         if (hasStructuralChange) {
             requireInstructorDocumentWriteAccess(documentId);
-            requireSectionStructureUnlocked(persisted);
+            requireRenamedSectionsUnlocked(items, persistedById);
         } else if (hasAssignChange) {
             requireInstructorDocumentWriteAccess(documentId);
         } else {

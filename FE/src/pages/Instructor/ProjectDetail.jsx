@@ -101,12 +101,16 @@ export default function ProjectDetail() {
     standardRequirements: t('instructor.projectDetail.standardRequirements'),
     noStandardRequirements: t('instructor.projectDetail.noStandardRequirements'),
     changesSaved: t('instructor.projectDetail.changesSaved'),
+    saveChangesFailed: t('instructor.projectDetail.reorderSectionsFailed'),
+    assignmentsApplied: t('instructor.projectDetail.assignmentsApplied'),
+    assignmentsApplyFailed: t('instructor.projectDetail.assignmentsApplyFailed'),
     configStandard: t('instructor.projectDetail.configStandard'),
     standards: t('instructor.projectDetail.standards'),
     referenceSharedEditors: t('instructor.projectDetail.referenceSharedEditors'),
     bulkAssign: t('instructor.projectDetail.bulkAssign'),
     bulkAssignHint: t('instructor.projectDetail.bulkAssignHint'),
     bulkAssignmentStudent: t('instructor.projectDetail.bulkAssignmentStudent'),
+    bulkAssignAll: t('instructor.projectDetail.bulkAssignAll'),
     selectStudent: t('instructor.projectDetail.selectStudent'),
     applyAssignment: t('instructor.projectDetail.applyAssignment'),
     unassignAll: t('instructor.projectDetail.unassignAll'),
@@ -151,19 +155,13 @@ export default function ProjectDetail() {
   const [selectedPaper, setSelectedPaper] = useState(null);
   const [feedbackRequests, setFeedbackRequests] = useState([]);
   const [progressReport, setProgressReport] = useState(null);
-  const [checkpointDiff, setCheckpointDiff] = useState(null);
   const [reportSectionId, setReportSectionId] = useState(null);
   const [reportMemberId, setReportMemberId] = useState('ALL');
   const [reportFrom, setReportFrom] = useState(() => reportDate(29));
   const [reportTo, setReportTo] = useState(() => reportDate(0));
+  const [progressQuery, setProgressQuery] = useState('');
+  const [progressSort, setProgressSort] = useState({ key: 'name', dir: 1 });
   const [users, setUsers] = useState([]);
-  const [showAddMember, setShowAddMember] = useState(false);
-  const [newMemberId, setNewMemberId] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState('MEMBER');
-  const [memberQuery, setMemberQuery] = useState('');
-  const [memberSuggestionsOpen, setMemberSuggestionsOpen] = useState(false);
-  const [highlightedStudentIndex, setHighlightedStudentIndex] = useState(0);
-  const [suggestionPage, setSuggestionPage] = useState(0);
   const [advancedPage, setAdvancedPage] = useState(0);
   const [updatingMemberId, setUpdatingMemberId] = useState(null);
 
@@ -206,7 +204,6 @@ export default function ProjectDetail() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [addSourceLoading, setAddSourceLoading] = useState(false);
   const [shareLoadingId, setShareLoadingId] = useState(null);
-  const [pendingAssign, setPendingAssign] = useState(null); // { sectionId, userId, userName }
   const [statusPending, setStatusPending] = useState(null);
   // Phase 2: Assign Students local state
   const [selectedMemberId, setSelectedMemberId] = useState(null);
@@ -355,18 +352,14 @@ export default function ProjectDetail() {
         else if (diffDays <= 84) resolution = 'week';
       }
 
-      const [progRes, diffRes] = await Promise.all([
-        api.get(`/api/projects/${id}/progress-report`, {
-          params: {
-            memberFilter: reportMemberId,
-            ...(reportFrom && reportTo ? { from: reportFrom, to: reportTo } : {}),
-            resolution,
-          },
-        }).catch(() => null),
-        api.get(`/api/projects/${id}/checkpoints/diff`).catch(() => null),
-      ]);
+      const progRes = await api.get(`/api/projects/${id}/progress-report`, {
+        params: {
+          memberFilter: reportMemberId,
+          ...(reportFrom && reportTo ? { from: reportFrom, to: reportTo } : {}),
+          resolution,
+        },
+      }).catch(() => null);
       setProgressReport(progRes?.data || null);
-      setCheckpointDiff(diffRes?.data || null);
     } catch { }
   }, [id, reportFrom, reportMemberId, reportTo]);
 
@@ -431,36 +424,66 @@ export default function ProjectDetail() {
     }
   }), [id, loadCollections, loadFeedback, loadPapers, loadProject, loadSections, loadSources, subscribeToEntityChanges]);
 
-  const sectionDiff = useMemo(() => {
-    if (!checkpointDiff) return null;
-    return {
-      ...checkpointDiff,
-      sectionWordDeltas: (checkpointDiff.sectionWordDeltas || [])
-        .filter(d => !reportSectionId || String(d.sectionId) === String(reportSectionId)),
-    };
-  }, [checkpointDiff, reportSectionId]);
+  // ponytail: attention + table derive from report sections (all papers) and
+  // contributions. Edited-title matching is approximate (titles can repeat).
+  const reportSections = useMemo(() => progressReport?.sections || [], [progressReport]);
+  const reportContributions = useMemo(() => progressReport?.contributions || [], [progressReport]);
 
-  const contributionBuckets = useMemo(() => {
-    if (!progressReport?.contributions) return [];
-    
-    // Aggregate by member instead of date
-    return progressReport.contributions.map(c => ({
-      label: c.userName || t('unknown'),
-      count: c.saveCount || 0
+  const attention = useMemo(() => {
+    const awaitingReview = project?.status === 'SUBMITTED_FOR_REVIEW' ? reportSections.length : 0;
+    const openFeedback = reportSections.reduce((sum, s) => sum + (s.feedbackOpen || 0), 0);
+    const unassigned = reportSections.filter(s => !s.assignedUserId);
+    const editedTitles = new Set();
+    reportContributions.forEach(c => (c.editedSections || []).forEach(title => editedTitles.add(title)));
+    const untouched = reportSections.filter(s => !editedTitles.has(s.sectionTitle));
+    return { awaitingReview, openFeedback, unassigned, untouched };
+  }, [project, reportSections, reportContributions]);
+
+  const progressRows = useMemo(() => {
+    const q = progressQuery.trim().toLowerCase();
+    let rows = reportContributions;
+    if (reportSectionId) {
+      const assignees = new Set(reportSections.filter(s => String(s.sectionId) === String(reportSectionId)).map(s => String(s.assignedUserId)));
+      rows = rows.filter(c => assignees.has(String(c.userId)));
+    }
+    if (q) rows = rows.filter(c => (c.userName || '').toLowerCase().includes(q));
+    const valueOf = (c) => {
+      switch (progressSort.key) {
+        case 'assigned': return c.assignedSectionCount || 0;
+        case 'saves': return c.saveCount || 0;
+        case 'lastEdit': return c.lastEditedAt ? new Date(c.lastEditedAt).getTime() : -1;
+        case 'open': return c.feedbackOpen || 0;
+        default: return (c.userName || '').toLowerCase();
+      }
+    };
+    return [...rows].sort((a, b) => {
+      const diff = typeof valueOf(a) === 'string'
+        ? valueOf(a).localeCompare(valueOf(b))
+        : valueOf(a) - valueOf(b);
+      return diff * progressSort.dir;
+    });
+  }, [reportContributions, reportSections, reportSectionId, progressQuery, progressSort]);
+
+  const dailyBuckets = useMemo(() => {
+    // ponytail: the chart answers "when were edits recorded" — saves per day,
+    // summed across the visible contributions. Exact values in tooltips/labels.
+    let visible = reportContributions;
+    if (reportSectionId) {
+      const assignees = new Set(reportSections.filter(s => String(s.sectionId) === String(reportSectionId)).map(s => String(s.assignedUserId)));
+      visible = visible.filter(c => assignees.has(String(c.userId)));
+    }
+    const byDate = new Map();
+    visible.forEach(c => (c.dailyWordDeltas || []).forEach(day => {
+      const current = byDate.get(day.date) || { saves: 0, words: 0 };
+      byDate.set(day.date, { saves: current.saves + (day.saveCount || 0), words: current.words + (day.wordDelta || 0) });
     }));
-  }, [progressReport, t]);
+    return [...byDate.entries()]
+      .sort(([a], [b]) => String(a).localeCompare(String(b)))
+      .map(([date, totals]) => ({ date, label: date, count: totals.saves, words: totals.words }));
+  }, [reportContributions, reportSections, reportSectionId]);
 
   // Full match list (uncapped) + paged slice for the combobox — previously the
   // list silently stopped at 8 with no way to reach the rest.
-  const suggestionList = useMemo(
-    () => getStudentSuggestions(users, members, memberQuery, Number.MAX_SAFE_INTEGER),
-    [users, members, memberQuery],
-  );
-  const suggestionPaging = useMemo(
-    () => paginateStudents(suggestionList, suggestionPage),
-    [suggestionList, suggestionPage],
-  );
-  const studentSuggestions = suggestionPaging.items;
   const studentMembers = useMemo(
     () => members.filter(member => member.userRole === 'STUDENT'),
     [members],
@@ -499,6 +522,7 @@ export default function ProjectDetail() {
   useEffect(() => {
     if (activeTab === 'review') loadFeedback();
     if (activeTab === 'progress') loadProgressReport();
+    if (activeTab === 'assign-member' || activeTab === 'settings') { loadFeedback(); loadProgressReport(); }
   }, [activeTab, loadFeedback, loadProgressReport]);
 
   // Phase 1: migrate old 'settings' tab key to 'assign-member'
@@ -826,43 +850,73 @@ export default function ProjectDetail() {
   };
 
   // Single batch endpoint — replaces Promise.all N-transaction trap.
+  const persistSectionBatch = async (nextSections) => {
+    const payload = {
+      sections: nextSections.map(s => ({
+        id: s.id,
+        sectionOrder: s.sectionOrder,
+        sectionTitle: s.sectionTitle,
+        assignedUserId: s.assignedUserId || null,
+        contentTex: s.contentTex,
+        expectedRevision: s.revision ?? s.optVersion ?? null,
+      }))
+    };
+    const { data } = await api.put(`/api/papers/${selectedPaper.id}/sections/batch`, payload);
+    setSections(data || []);
+    setDraftSections(data || []);
+    await loadProject(false);
+    return data;
+  };
+
+  // ponytail: result objects let the modal pop its own toast (global toasts
+  // hide from the AX tree while aria-modal is open; the portal host stays).
   const handleSaveAllSections = async () => {
-    if (!selectedPaper || !anyDirty || pendingDelete) return false;
+    if (!selectedPaper || !anyDirty || pendingDelete) return { ok: false, conflict: false, message: '' };
     setSectionStructureSaving(true);
     setConflictSectionId(null);
     try {
-      const payload = {
-        sections: draftSections.map(s => ({
-          id: s.id,
-          sectionOrder: s.sectionOrder,
-          sectionTitle: s.sectionTitle,
-          assignedUserId: s.assignedUserId || null,
-          contentTex: s.contentTex,
-          expectedRevision: s.revision ?? s.optVersion ?? null,
-        }))
-      };
-      const { data } = await api.put(`/api/papers/${selectedPaper.id}/sections/batch`, payload);
-      setSections(data || []);
-      setDraftSections(data || []);
-      await loadProject(false);
-      return true;
+      await persistSectionBatch(draftSections);
+      return { ok: true };
     } catch (err) {
       const fieldErrors = err?.response?.data?.fieldErrors;
       const sid = fieldErrors?.sectionId || err?.response?.data?.details?.sectionId;
       if (err?.response?.status === 409 && sid) {
         setConflictSectionId(String(sid));
-      } else {
-        alert(err?.response?.data?.message || t('instructor.projectDetail.reorderSectionsFailed'));
+        return { ok: false, conflict: true, message: '' };
       }
-      return false;
+      return { ok: false, conflict: false, message: err?.response?.data?.message || t('instructor.projectDetail.reorderSectionsFailed') };
+    } finally {
+      setSectionStructureSaving(false);
+    }
+  };
+
+  // ponytail: assignments persist immediately via one batch PUT (no Save click).
+  // Payload builds from the live draft so unsaved title/content edits ride along.
+  const handleApplyAssignmentsNow = async (nextSections) => {
+    if (!selectedPaper || sectionStructureSaving) return { ok: false, conflict: false, message: '' };
+    setSectionStructureSaving(true);
+    setConflictSectionId(null);
+    setDraftSections(nextSections);
+    try {
+      await persistSectionBatch(nextSections);
+      return { ok: true };
+    } catch (err) {
+      const fieldErrors = err?.response?.data?.fieldErrors;
+      const sid = fieldErrors?.sectionId || err?.response?.data?.details?.sectionId;
+      if (err?.response?.status === 409 && sid) {
+        setConflictSectionId(String(sid));
+        return { ok: false, conflict: true, message: '' };
+      }
+      return { ok: false, conflict: false, message: err?.response?.data?.message || t('instructor.projectDetail.assignmentsApplyFailed') };
     } finally {
       setSectionStructureSaving(false);
     }
   };
 
   const handleAddSection = async () => {
-    const structureLockedNow = sections.some(section => section.assignedUserId)
-      || ['SUBMITTED_FOR_REVIEW', 'APPROVED', 'ARCHIVED', 'PENDING_DELETE'].includes(project?.status);
+    // ponytail: status-only gate; per-section assigned checks live in the
+    // edit modal + BE guards. Appending a section never touches assigned work.
+    const structureLockedNow = ['SUBMITTED_FOR_REVIEW', 'APPROVED', 'ARCHIVED', 'PENDING_DELETE'].includes(project?.status);
     if (!selectedPaper || structureLockedNow || sectionStructureSaving) return;
     setSectionStructureSaving(true);
     try {
@@ -913,13 +967,23 @@ export default function ProjectDetail() {
     });
   };
 
+  // ponytail: surface the backend block reason — a bare count misdirects
+  // (SOURCE_NOT_READY is extraction state, not paper/review usage).
+  const unshareBlockedMessage = (blocked) => {
+    const reasons = [...new Set((blocked || []).map(entry => entry?.reason).filter(Boolean))];
+    if (reasons.includes('SOURCE_NOT_READY')) {
+      return `${t('instructor.projectDetail.removeSourceNotReady')}: ${blocked.length}`;
+    }
+    return `${t('instructor.projectDetail.removeSourceBlocked')}: ${blocked.length}`;
+  };
+
   const handleRemoveSource = async (sourceId) => {
     try {
       await api.post(`/api/sources/projects/${id}/unshare`, { sourceIds: [sourceId] });
     } catch (err) {
       const blocked = err?.response?.data?.blocked || [];
       alert(blocked.length > 0
-        ? `${t('instructor.projectDetail.removeSourceBlocked')}: ${blocked.length}`
+        ? unshareBlockedMessage(blocked)
         : (err?.response?.data?.message || t('instructor.projectDetail.removeSourceFailed')));
     }
     await loadSources();
@@ -942,26 +1006,10 @@ export default function ProjectDetail() {
     } catch (err) {
       const blocked = err?.response?.data?.blocked || [];
       alert(blocked.length > 0
-        ? `${t('instructor.projectDetail.removeSourceBlocked')}: ${blocked.length}`
+        ? unshareBlockedMessage(blocked)
         : (err?.response?.data?.message || t('instructor.projectDetail.removeSourceFailed')));
       await loadSources();
     }
-  };
-
-  const handleAssignSection = async (sectionId, userId) => {
-    const section = displaySections.find(s => String(s.id) === String(sectionId));
-    if (!userId) return handleConfirmAssign(null, sectionId);
-    if (!section?.assignedUserId) {
-      const member = projectMembers.find(m => String(m.userId) === String(userId));
-      setPendingAssign({ sectionId, userId, userName: studentDisplayName(member ?? {}) });
-      return;
-    }
-    handleConfirmAssign(userId, sectionId);
-  };
-
-  const handleConfirmAssign = async (userId, sectionId) => {
-    setPendingAssign(null);
-    setDraftSections(prev => prev.map(s => String(s.id) === String(sectionId) ? { ...s, assignedUserId: userId || null } : s));
   };
 
   const handleReloadConflictSection = async (sectionId) => {
@@ -972,52 +1020,6 @@ export default function ProjectDetail() {
       setDraftSections(prev => prev.map(s => String(s.id) === String(sectionId) ? { ...s, ...fresh } : s));
       setConflictSectionId(null);
     } catch { alert(t('instructor.projectDetail.operationFailed')); }
-  };
-
-  const closeAddMemberModal = () => {
-    setShowAddMember(false);
-    setNewMemberId('');
-    setNewMemberRole('MEMBER');
-    setMemberQuery('');
-    setMemberSuggestionsOpen(false);
-    setHighlightedStudentIndex(0);
-    setSuggestionPage(0);
-  };
-
-  const selectStudent = (student) => {
-    setNewMemberId(student.id);
-    setMemberQuery(studentDisplayName(student));
-    setMemberSuggestionsOpen(false);
-  };
-
-  const handleStudentSearchKeyDown = (event) => {
-    if (event.key === 'Escape') {
-      event.stopPropagation();
-      setMemberSuggestionsOpen(false);
-      return;
-    }
-    if (!studentSuggestions.length) return;
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      setMemberSuggestionsOpen(true);
-      setHighlightedStudentIndex(index => Math.min(index + 1, studentSuggestions.length - 1));
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setMemberSuggestionsOpen(true);
-      setHighlightedStudentIndex(index => Math.max(index - 1, 0));
-    } else if (event.key === 'Enter' && memberSuggestionsOpen) {
-      event.preventDefault();
-      selectStudent(studentSuggestions[highlightedStudentIndex]);
-    }
-  };
-
-  const handleAddMember = async () => {
-    if (!newMemberId) return;
-    try {
-      await api.post(`/api/projects/${id}/members`, null, { params: { userId: newMemberId, role: newMemberRole } });
-      closeAddMemberModal();
-      loadProject();
-    } catch { alert(t('instructor.projectDetail.addMemberFailed')); }
   };
 
   // Phase 3: Advanced Add Multiple
@@ -1051,11 +1053,11 @@ export default function ProjectDetail() {
     }
   };
 
-  const handleUnassignAll = () => {
-    setDraftSections(current => current.map(section => (
+  const handleUnassignAll = () => handleApplyAssignmentsNow(
+    draftSections.map(section => (
       section.sectionType === 'REFERENCE' ? section : { ...section, assignedUserId: null }
-    )));
-  };
+    )),
+  );
 
   const handleDeleteProject = () => {
     if (!project || deletingProject) return;
@@ -1219,6 +1221,9 @@ export default function ProjectDetail() {
   // Keep source controls aligned with the backend read-only guard for frozen
   // and scheduled projects.
   const canModifySources = !projectReadOnly;
+  // ponytail: global freeze stays for whole-paper setup ops (re-extract /
+  // reset-standard are destructive). The edit-paper modal uses per-section
+  // locks instead — only the assigned section locks title/standards/delete.
   const sectionStructureLocked = hasAssignedSections || projectReadOnly;
   const standardViewSection = displaySections.find(section => String(section.id) === String(standardViewSectionId)) || null;
   const projectActionState = {
@@ -1531,9 +1536,9 @@ export default function ProjectDetail() {
               <div className="mb-4 flex flex-wrap items-start justify-between gap-3 shrink-0">
                 <div>
                   <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t('instructor.projectDetail.projectSections')}</h2>
-                  {selectedPaper && sectionStructureLocked && (
+                  {selectedPaper && projectReadOnly && (
                     <p className="text-[10px] text-amber-700 mt-1">
-                      {projectReadOnly ? t('instructor.projectDetail.projectReadOnly') : t('instructor.projectDetail.sectionStructureLocked')}
+                      {t('instructor.projectDetail.projectReadOnly')}
                     </p>
                   )}
                 </div>
@@ -1597,7 +1602,18 @@ export default function ProjectDetail() {
                           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-xs font-black text-[var(--brand-foreground)]">{index + 1}</span>
                           <div className="min-w-0">
                             <p className="truncate text-xs font-bold text-[var(--text-primary)]">{section.sectionTitle || t('untitled')}</p>
-                            <p className="truncate text-[10px] text-[var(--text-tertiary)]">{section.sectionType === 'REFERENCE' ? t('instructor.projectDetail.referenceSharedEditors') : (assignedMember ? studentDisplayName(assignedMember) : t('instructor.projectDetail.unassigned'))}</p>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {section.sectionType === 'REFERENCE' ? (
+                                <span className="text-[10px] italic text-[var(--text-tertiary)]">{t('instructor.projectDetail.referenceSharedEditors')}</span>
+                              ) : (
+                                <span data-testid={`tab-assignee-badge-${section.id}`} className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${assignedMember ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-500'}`}>
+                                  {assignedMember ? studentDisplayName(assignedMember) : t('instructor.projectDetail.unassigned')}
+                                </span>
+                              )}
+                              <span data-testid={`tab-standard-badge-${section.id}`} className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${evaluation?.requirements?.length ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
+                                {evaluation?.requirements?.length ? t('instructor.projectDetail.standardConfigured') : t('instructor.projectDetail.standardNotConfigured')}
+                              </span>
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
@@ -1709,74 +1725,152 @@ export default function ProjectDetail() {
                       ))}
                     </select>
                   </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
+                    {t('instructor.projectDetail.sectionFilter')}
+                    <select
+                      value={reportSectionId || 'ALL'}
+                      onChange={event => setReportSectionId(event.target.value === 'ALL' ? null : event.target.value)}
+                      className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                    >
+                      <option value="ALL">{t('instructor.projectDetail.allSections')}</option>
+                      {(progressReport?.sections || []).map(section => (
+                        <option key={section.sectionId} value={section.sectionId}>{section.sectionTitle}</option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
               </div>
               <p className="mb-4 text-xs text-[var(--text-tertiary)]">{t('instructor.projectDetail.contributionEvidenceNote')}</p>
               {!progressReport ? (
                 <p className="text-xs italic text-[var(--text-tertiary)]">{t('loading')}</p>
-              ) : (progressReport.contributions || []).length === 0 ? (
-                <p className="text-xs italic text-[var(--text-tertiary)]">{t('instructor.projectDetail.noContributionData')}</p>
               ) : (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {(progressReport.contributions || []).map(contribution => (
-                    <div key={contribution.userId} className="rounded-xl bg-[var(--surface-secondary)] p-4 text-xs">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <p className="font-bold text-[var(--text-primary)]">{contribution.userName}</p>
-                        <span className="text-[10px] text-[var(--text-tertiary)]">
-                          {t('instructor.projectDetail.lastRecordedEdit')}: {contribution.lastEditedAt
-                            ? formatDateTime(contribution.lastEditedAt, i18n.language)
-                            : '—'}
-                        </span>
+                <div className="space-y-4">
+                  <div aria-label={t('instructor.projectDetail.attentionNeeded')}>
+                    <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{t('instructor.projectDetail.attentionNeeded')}</p>
+                    {(attention.awaitingReview + attention.openFeedback + attention.unassigned.length + attention.untouched.length) === 0 ? (
+                      <p className="text-xs italic text-[var(--text-tertiary)]">{t('instructor.projectDetail.noAttention')}</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {attention.awaitingReview > 0 && (
+                          <button type="button" onClick={() => setActiveTab('review')} className="flex w-full items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs hover:bg-amber-100">
+                            <span className="font-bold text-amber-900">{t('instructor.projectDetail.attentionReview', { count: attention.awaitingReview })}</span>
+                            <span className="text-[10px] font-bold text-amber-700">{t('instructor.projectDetail.memberView')} →</span>
+                          </button>
+                        )}
+                        {attention.openFeedback > 0 && (
+                          <button type="button" onClick={() => setActiveTab('review')} className="flex w-full items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs hover:bg-amber-100">
+                            <span className="font-bold text-amber-900">{t('instructor.projectDetail.attentionFeedback', { count: attention.openFeedback })}</span>
+                            <span className="text-[10px] font-bold text-amber-700">{t('instructor.projectDetail.memberView')} →</span>
+                          </button>
+                        )}
+                        {attention.unassigned.length > 0 && (
+                          <button type="button" onClick={() => setActiveTab('sections')} className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-2 text-left text-xs hover:bg-[var(--surface-tertiary)]">
+                            <span className="font-bold text-[var(--text-primary)]">{t('instructor.projectDetail.attentionUnassigned', { count: attention.unassigned.length })}</span>
+                            <span className="text-[10px] font-bold text-[var(--brand-foreground)]">{t('instructor.projectDetail.memberView')} →</span>
+                          </button>
+                        )}
+                        {attention.untouched.length > 0 && (
+                          <button type="button" onClick={() => setActiveTab('sections')} className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-2 text-left text-xs hover:bg-[var(--surface-tertiary)]">
+                            <span className="font-bold text-[var(--text-primary)]">{t('instructor.projectDetail.attentionNoEdits', { count: attention.untouched.length })}</span>
+                            <span className="text-[10px] font-bold text-[var(--brand-foreground)]">{t('instructor.projectDetail.memberView')} →</span>
+                          </button>
+                        )}
                       </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                        {[
-                          { label: t('instructor.projectDetail.assignedSections'), value: contribution.assignedSectionCount },
-                          { label: t('instructor.projectDetail.currentWords'), value: contribution.currentWordCount },
-                          { label: t('instructor.projectDetail.recordedSaves'), value: contribution.saveCount },
-                          { label: t('instructor.projectDetail.wordsAdded'), value: contribution.wordsAdded ?? Math.max(contribution.wordDelta, 0) },
-                          { label: t('instructor.projectDetail.wordsRemoved'), value: contribution.wordsRemoved ?? Math.max(-contribution.wordDelta, 0) },
-                          { label: t('instructor.projectDetail.netWordChange'), value: contribution.wordDelta > 0 ? `+${contribution.wordDelta}` : contribution.wordDelta },
-                        ].map(stat => (
-                          <div key={stat.label} className="rounded-lg bg-[var(--surface)] p-2 text-center">
-                            <p className="text-base font-black text-[var(--brand-foreground)]">{stat.value}</p>
-                            <p className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{stat.label}</p>
-                          </div>
-                        ))}
+                    )}
+                  </div>
+                  <div>
+                    <input
+                      type="search"
+                      value={progressQuery}
+                      onChange={event => setProgressQuery(event.target.value)}
+                      placeholder={t('instructor.projectDetail.tableSearchStudents')}
+                      aria-label={t('instructor.projectDetail.tableSearchStudents')}
+                      className="mb-2 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                    />
+                    {progressRows.length === 0 ? (
+                      <p className="text-xs italic text-[var(--text-tertiary)]">{progressReport.contributions?.length ? t('instructor.projectDetail.noStudentsFound') : t('instructor.projectDetail.noContributionData')}</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+                        <table className="w-full min-w-[560px] text-xs">
+                          <thead>
+                            <tr className="bg-[var(--surface-secondary)] text-left text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
+                              {[
+                                { key: 'name', label: t('instructor.projectDetail.thStudent') },
+                                { key: 'assigned', label: t('instructor.projectDetail.thAssigned') },
+                                { key: 'saves', label: t('instructor.projectDetail.thSaves') },
+                                { key: 'lastEdit', label: t('instructor.projectDetail.thLastEdit') },
+                                { key: 'open', label: t('instructor.projectDetail.thOpenFeedback') },
+                              ].map(col => (
+                                <th key={col.key} className="px-3 py-2 font-bold">
+                                  <button type="button" onClick={() => setProgressSort(current => current.key === col.key ? { key: col.key, dir: -current.dir } : { key: col.key, dir: 1 })} className="hover:text-[var(--text-primary)]">
+                                    {col.label}{progressSort.key === col.key ? (progressSort.dir === 1 ? ' ▲' : ' ▼') : ''}
+                                  </button>
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[var(--border-light)]">
+                            {progressRows.map(c => (
+                              <tr key={c.userId} className="hover:bg-[var(--surface-secondary)]">
+                                <td className="px-3 py-2">
+                                  <button type="button" onClick={() => setReportMemberId(String(c.userId))} className="font-bold text-[var(--brand-foreground)] hover:underline" title={c.userName}>{c.userName}</button>
+                                  <span className="block text-[10px] text-[var(--text-tertiary)]">
+                                    {t('instructor.projectDetail.feedbackSummary').replace('{{resolved}}', c.feedbackResolved).replace('{{total}}', c.feedbackResolved + c.feedbackOpen)}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">{c.assignedSectionCount}</td>
+                                <td className="px-3 py-2">{c.saveCount}</td>
+                                <td className="px-3 py-2 text-[var(--text-secondary)]">{c.lastEditedAt ? formatDateTime(c.lastEditedAt, i18n.language) : '—'}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${c.feedbackOpen ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'}`}>{c.feedbackOpen}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                      <p className="mt-3 text-[10px] text-[var(--text-tertiary)]">
-                        {t('instructor.projectDetail.feedbackSummary')
-                          .replace('{{resolved}}', contribution.feedbackResolved)
-                          .replace('{{total}}', contribution.feedbackResolved + contribution.feedbackOpen)}
-                      </p>
-                      {contribution.editedSections?.length > 0 && (
-                        <p className="mt-2 text-[10px] text-[var(--text-tertiary)]">
-                          <span className="font-bold">{t('instructor.projectDetail.editedSections')}:</span> {contribution.editedSections.join(' · ')}
-                        </p>
-                      )}
-                      {contribution.dailyWordDeltas?.length > 0 ? (
-                        <div className="mt-3 max-h-32 space-y-1 overflow-y-auto pr-1">
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{t('instructor.projectDetail.dailyEditHistory')}</p>
-                          {contribution.dailyWordDeltas.map(day => (
-                            <div key={day.date} className="flex items-center justify-between rounded bg-[var(--surface)] px-2 py-1 text-[10px]">
-                              <span>{formatDate(`${day.date}T00:00:00Z`, i18n.language)}</span>
-                              <span className="text-[var(--text-secondary)]">
-                                {day.saveCount} {t('instructor.projectDetail.savesShort')} · +{day.wordsAdded ?? Math.max(day.wordDelta, 0)}/-{day.wordsRemoved ?? Math.max(-day.wordDelta, 0)} {t('instructor.projectDetail.wordsShort')} · {day.wordDelta > 0 ? `+${day.wordDelta}` : day.wordDelta} {t('instructor.projectDetail.netWordChange').toLowerCase()}
-                              </span>
-                            </div>
-                          ))}
+                    )}
+                  </div>
+                  {reportMemberId !== 'ALL' && (() => {
+                    const detail = reportContributions.find(c => String(c.userId) === String(reportMemberId));
+                    if (!detail) return null;
+                    return (
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] p-3 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="font-bold text-[var(--text-primary)]">{detail.userName}</p>
+                          <button type="button" onClick={() => setReportMemberId('ALL')} className="text-[10px] font-bold text-[var(--brand-foreground)] hover:underline">{t('instructor.projectDetail.allStudents')}</button>
                         </div>
-                      ) : (
-                        <p className="mt-3 text-[10px] italic text-[var(--text-tertiary)]">{t('instructor.projectDetail.noRecordedEdits')}</p>
-                      )}
-                    </div>
-                  ))}
+                        {(detail.editedSections?.length > 0) && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {detail.editedSections.map(title => (
+                              <button key={title} type="button" onClick={() => setActiveTab('sections')} className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-800 hover:bg-indigo-100">{title}</button>
+                            ))}
+                          </div>
+                        )}
+                        {(detail.dailyWordDeltas?.length > 0) ? (
+                          <div className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1">
+                            {detail.dailyWordDeltas.map(day => (
+                              <div key={day.date} className="flex items-center justify-between rounded bg-[var(--surface)] px-2 py-1 text-[10px]">
+                                <span>{formatDate(`${day.date}T00:00:00Z`, i18n.language)}</span>
+                                <span className="text-[var(--text-secondary)]">
+                                  {day.saveCount} {t('instructor.projectDetail.savesShort')} · +{day.wordsAdded ?? Math.max(day.wordDelta, 0)}/-{day.wordsRemoved ?? Math.max(-day.wordDelta, 0)} {t('instructor.projectDetail.wordsShort')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-[10px] italic text-[var(--text-tertiary)]">{t('instructor.projectDetail.noRecordedEdits')}</p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-1 h-full overflow-y-auto">
-              <h2 className="mb-3 text-sm font-bold text-[var(--brand-foreground)]">{t('instructor.projectDetail.dailyEditHistory')}</h2>
+              <h2 className="mb-3 text-sm font-bold text-[var(--brand-foreground)]">{t('instructor.projectDetail.dailySeriesTitle')}</h2>
               <p className="mb-3 text-[10px] text-[var(--text-tertiary)]">{t('instructor.projectDetail.contributionEvidenceNote')}</p>
-              <ContributionGraph buckets={contributionBuckets} emptyLabel={t('instructor.projectDetail.noContributionData')} ariaLabel={t('instructor.projectDetail.dailyEditHistory')} />
+              <ContributionGraph buckets={dailyBuckets} emptyLabel={t('instructor.projectDetail.noContributionData')} ariaLabel={t('instructor.projectDetail.dailySeriesTitle')} />
             </div>
           </div>
         )}
@@ -1787,12 +1881,12 @@ export default function ProjectDetail() {
             {/* Left: Members list with search — expanded from 33% to 40% so search fits without horizontal scroll */}
             <div id="project-members" className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-2 h-full overflow-y-auto">
               <div className="mb-3">
-                <ActionExpandHeader title={t('instructor.projectDetail.members')} placeholder={t('instructor.projectDetail.searchStudent')} searchValue={memberSearch} onSearch={setMemberSearch} onAdd={() => { setShowAdvancedAdd(true); loadUsers(); }} addLabel={t('instructor.projectDetail.add')} />
+                <ActionExpandHeader title={t('instructor.projectDetail.members')} placeholder={t('instructor.projectDetail.searchStudent')} searchValue={memberSearch} onSearch={setMemberSearch} onAdd={() => { setShowAdvancedAdd(true); loadUsers(); }} addLabel={t('instructor.projectDetail.add')} hideAdd={projectReadOnly} />
               </div>
               {filteredMembers.length === 0 ? (
                 <p className="text-xs italic text-[var(--text-tertiary)]">{memberSearch ? t('instructor.projectDetail.noStudentsFound') : t('instructor.projectDetail.noStudentsAssigned')}</p>
               ) : (
-                <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-1">
+                <div className="space-y-1 pr-1">
                   {filteredMembers.map(m => {
                     const isSelected = selectedMember && String(selectedMember.userId||selectedMember.id) === String(m.userId||m.id);
                     return (
@@ -1828,13 +1922,54 @@ export default function ProjectDetail() {
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">{t(`instructor.projectDetail.userRole.${USER_ROLES.includes(selectedMember.userRole) ? selectedMember.userRole : 'UNKNOWN'}`)}</span>
                         <span className="rounded bg-[var(--surface-tertiary)] px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)]">{t(`instructor.projectDetail.projectRole.${PROJECT_ROLES.includes(selectedMember.role) ? selectedMember.role : 'UNKNOWN'}`)}</span>
-                        <StatusBadge status={project.status} />
                       </div>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div><span className="block text-[10px] font-bold uppercase text-[var(--text-tertiary)]">{t('instructor.projectDetail.studentCode')}</span><span className="text-[11px]">{selectedMember.studentCode || '-'}</span></div>
                   </div>
+                  {(() => {
+                    // ponytail: report sections span all papers; fall back to the
+                    // selected paper's draft-state sections before the report loads.
+                    const pool = (progressReport?.sections?.length
+                      ? progressReport.sections.map(s => ({ id: s.sectionId, sectionTitle: s.sectionTitle, assignedUserId: s.assignedUserId }))
+                      : sections);
+                    const memberSections = pool.filter(s => String(s.assignedUserId) === String(selectedMember.userId));
+                    const perf = (progressReport?.contributions || []).find(c => String(c.userId) === String(selectedMember.userId));
+                    const openFb = feedbackRequests.filter(fb => String(fb.studentId) === String(selectedMember.userId) && (fb.status === 'PENDING' || fb.status === 'RETURNED'));
+                    return (
+                      <div className="space-y-3 border-t border-[var(--border-light)] pt-4 text-xs">
+                        <div>
+                          <p className="mb-1 text-[10px] font-bold uppercase text-[var(--text-tertiary)]">{t('instructor.projectDetail.memberAssignedSections')} ({memberSections.length})</p>
+                          {memberSections.length === 0 ? (
+                            <p className="text-xs italic text-[var(--text-tertiary)]">{t('instructor.projectDetail.noAssignedSections')}</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {memberSections.map(s => (
+                                <button key={s.id} type="button" onClick={() => setActiveTab('sections')} className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-800 hover:bg-indigo-100">{s.sectionTitle || t('untitled')}</button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold uppercase text-[var(--text-tertiary)]">{t('instructor.projectDetail.lastRecordedEdit')}</p>
+                          {perf?.lastEditedAt ? (
+                            <p className="mt-0.5 text-xs text-[var(--text-primary)]">{formatDateTime(perf.lastEditedAt, i18n.language)} <span className="text-[var(--text-tertiary)]">· {t('instructor.projectDetail.memberLastEditNote')}</span></p>
+                          ) : (
+                            <p className="mt-0.5 text-xs italic text-[var(--text-tertiary)]">{t('instructor.projectDetail.memberNoActivity')}</p>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${openFb.length ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'}`}>{t('instructor.projectDetail.memberOpenFeedback')}: {openFb.length}</span>
+                          {openFb.length > 0 && (
+                            <button type="button" onClick={() => setActiveTab('review')} className="text-[11px] font-bold text-[var(--brand-foreground)] hover:underline">{t('instructor.projectDetail.memberView')}</button>
+                          )}
+                          <button type="button" onClick={() => { setShowEditPaper(true); }} className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--brand-foreground)] hover:bg-[var(--brand-soft)]">{t('instructor.projectDetail.memberAssignSections')}</button>
+                          <button type="button" onClick={() => { setReportMemberId(String(selectedMember.userId)); setActiveTab('progress'); }} className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--brand-foreground)] hover:bg-[var(--brand-soft)]">{t('instructor.projectDetail.memberViewProgress')}</button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {selectedMember.role !== 'INSTRUCTOR' && (
                     <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border-light)] pt-4">
                       <span className="text-xs font-semibold text-[var(--text-secondary)]">{t('instructor.projectDetail.editMemberRole')}:</span>
@@ -1842,7 +1977,7 @@ export default function ProjectDetail() {
                         <option value="MEMBER">{t('instructor.projectDetail.memberRole')}</option>
                         <option value="LEADER">{t('instructor.projectDetail.leaderRole')}</option>
                       </select>
-                      <DeleteConfirm message={t('instructor.projectDetail.removeMemberConfirm')} onConfirm={()=>{handleRemoveMember(selectedMember.userId); setSelectedMemberId(null)}} triggerLabel={t('instructor.projectDetail.remove')} confirmLabel={t('instructor.projectDetail.remove')} cancelLabel={t('cancel')} className="ml-auto rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-100">{t('instructor.projectDetail.remove')}</DeleteConfirm>
+                      <DeleteConfirm message={t('instructor.projectDetail.removeMemberConfirm')} onConfirm={()=>{handleRemoveMember(selectedMember.userId); setSelectedMemberId(null)}} triggerLabel={t('instructor.projectDetail.remove')} confirmLabel={t('instructor.projectDetail.remove')} cancelLabel={t('cancel')} disabled={projectReadOnly} className="ml-auto rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-100 disabled:opacity-50">{t('instructor.projectDetail.remove')}</DeleteConfirm>
                     </div>
                   )}
                 </div>
@@ -1852,86 +1987,6 @@ export default function ProjectDetail() {
         )}
         </div>
       </main>
-
-      <Modal open={showAddMember} onClose={closeAddMemberModal} title={t('instructor.projectDetail.addStudents')} className="!overflow-visible">
-        <div className="space-y-4">
-          <div className="relative">
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 fill-none stroke-[var(--text-tertiary)]" strokeWidth="2">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" />
-            </svg>
-            <input
-              autoFocus
-              type="search"
-              role="combobox"
-              autoComplete="off"
-              value={memberQuery}
-              placeholder={t('instructor.projectDetail.searchStudent')}
-              aria-label={t('instructor.projectDetail.searchStudent')}
-              aria-autocomplete="list"
-              aria-expanded={memberSuggestionsOpen}
-              aria-controls="student-suggestions"
-              aria-activedescendant={memberSuggestionsOpen && studentSuggestions[highlightedStudentIndex]
-                ? `student-suggestion-${studentSuggestions[highlightedStudentIndex].id}`
-                : undefined}
-              onFocus={() => setMemberSuggestionsOpen(true)}
-              onBlur={() => setMemberSuggestionsOpen(false)}
-              onChange={event => {
-                setMemberQuery(event.target.value);
-                setNewMemberId('');
-                setHighlightedStudentIndex(0);
-                setSuggestionPage(0);
-                setMemberSuggestionsOpen(true);
-              }}
-              onKeyDown={handleStudentSearchKeyDown}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-2 pl-9 pr-3 text-xs outline-none transition focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand-soft)]"
-            />
-            {memberSuggestionsOpen && (
-              <div id="student-suggestions" role="listbox" className="absolute z-10 mt-1 max-h-96 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1 shadow-lg">
-                {suggestionList.length === 0 ? (
-                  <p className="px-3 py-3 text-xs italic text-[var(--text-tertiary)]">{t('instructor.projectDetail.noStudentsFound')}</p>
-                ) : studentSuggestions.map((student, index) => (
-                  <button
-                    id={`student-suggestion-${student.id}`}
-                    key={student.id}
-                    type="button"
-                    role="option"
-                    aria-selected={newMemberId === student.id}
-                    onMouseDown={event => event.preventDefault()}
-                    onMouseEnter={() => setHighlightedStudentIndex(index)}
-                    onClick={() => selectStudent(student)}
-                    className={`flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2 text-left transition-colors ${index === highlightedStudentIndex ? 'bg-[var(--brand-soft)]' : 'hover:bg-[var(--surface-secondary)]'}`}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs font-semibold text-[var(--text-primary)]">{studentDisplayName(student)}</span>
-                      <span className="block truncate text-[10px] text-[var(--text-tertiary)]">{student.email}</span>
-                    </span>
-                    {student.studentCode && <span className="shrink-0 rounded bg-[var(--surface-tertiary)] px-2 py-1 font-mono text-[10px] font-semibold text-[var(--text-secondary)]">{student.studentCode}</span>}
-                  </button>
-                ))}
-                {suggestionPaging.totalPages > 1 && (
-                  <div className="flex items-center justify-between gap-2 border-t border-[var(--border-light)] px-3 py-1.5 text-[10px] font-semibold text-[var(--text-secondary)]">
-                    <span>{t('instructor.projectDetail.suggestionPager', { shown: studentSuggestions.length, total: suggestionPaging.total })}</span>
-                    <span className="flex items-center gap-1">
-                      <span>{t('instructor.projectDetail.page')} {suggestionPaging.page + 1}/{suggestionPaging.totalPages}</span>
-                      <button type="button" disabled={suggestionPaging.page === 0} onMouseDown={event => event.preventDefault()} onClick={() => { setSuggestionPage(p => Math.max(0, p - 1)); setHighlightedStudentIndex(0); }} className="rounded px-1.5 py-0.5 hover:bg-[var(--surface-secondary)] disabled:opacity-40">{t('instructor.projectDetail.prev')}</button>
-                      <button type="button" disabled={suggestionPaging.page >= suggestionPaging.totalPages - 1} onMouseDown={event => event.preventDefault()} onClick={() => { setSuggestionPage(p => p + 1); setHighlightedStudentIndex(0); }} className="rounded px-1.5 py-0.5 hover:bg-[var(--surface-secondary)] disabled:opacity-40">{t('instructor.projectDetail.next')}</button>
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          <select value={newMemberRole} onChange={e => setNewMemberRole(e.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none">
-            <option value="MEMBER">{t('instructor.projectDetail.memberRole')}</option>
-            <option value="LEADER">{t('instructor.projectDetail.leaderRole')}</option>
-          </select>
-          <div className="flex justify-end gap-2">
-            <button onClick={closeAddMemberModal} className="rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:opacity-80">{t('cancel')}</button>
-            <button onClick={handleAddMember} disabled={!newMemberId} className="rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)] disabled:opacity-50">{t('save')}</button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Phase 3: Add Students — with local search */}
       <Modal open={showAdvancedAdd} onClose={()=>{setShowAdvancedAdd(false); setAdvancedSelectedIds([]); setAdvancedSearch(''); setAdvancedPage(0);}} title={t('instructor.projectDetail.addStudents')}>
@@ -1968,19 +2023,6 @@ export default function ProjectDetail() {
           <div className="flex justify-end gap-2">
             <button onClick={()=>{setShowAdvancedAdd(false); setAdvancedSelectedIds([]); setAdvancedSearch(''); setAdvancedPage(0);}} className="rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-xs font-semibold">{t('cancel')}</button>
             <button onClick={handleAdvancedAddMultiple} disabled={advancedSelectedIds.length===0} className="rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{t('instructor.projectDetail.add')} {advancedSelectedIds.length ? `(${advancedSelectedIds.length})` : ''}</button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal open={!!pendingAssign} onClose={() => setPendingAssign(null)} title={t('instructor.projectDetail.assignSection')}>
-        <div className="space-y-4 text-xs">
-          <p className="text-[var(--text-secondary)]">{t('instructor.projectDetail.assignSectionQuestion', { student: pendingAssign?.userName || '' })}</p>
-          <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            {t('instructor.projectDetail.assignSectionWarning')}
-          </p>
-          <div className="flex justify-end gap-2">
-            <button onClick={() => setPendingAssign(null)} className="rounded-lg bg-[var(--surface-tertiary)] px-4 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:opacity-80">{t('cancel')}</button>
-            <button onClick={() => handleConfirmAssign(pendingAssign?.userId, pendingAssign?.sectionId)} className="rounded-lg bg-[var(--brand)] px-4 py-2 text-xs font-bold text-white hover:bg-[var(--brand-hover)]">{t('confirm')}</button>
           </div>
         </div>
       </Modal>
@@ -2079,7 +2121,10 @@ export default function ProjectDetail() {
         projectMembers={projectMembers}
         users={users}
         projectReadOnly={projectReadOnly}
-        sectionStructureLocked={sectionStructureLocked}
+        // ponytail: status-only — per-section assigned locks are enforced
+        // inside the modal + BE. Setup-level sectionStructureLocked stays
+        // global (whole-paper ops are destructive).
+        sectionStructureLocked={projectReadOnly}
         sectionStructureSaving={sectionStructureSaving}
         conflictSectionId={conflictSectionId}
         onClose={() => setShowEditPaper(false)}
@@ -2094,6 +2139,7 @@ export default function ProjectDetail() {
         onReloadConflict={handleReloadConflictSection}
         onSaveStandard={saveSectionStandard}
         onUnassignAll={handleUnassignAll}
+        onApplyAssignmentsNow={handleApplyAssignmentsNow}
         t={paperEditorT}
         ct={ct}
       />

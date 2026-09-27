@@ -33,8 +33,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ProjectSourceUnshareService {
 
-    private static final Set<ProcessingStatus> SAFE_EXTRACTION_STATUSES = Set.of(
-            ProcessingStatus.READY, ProcessingStatus.COMPLETED);
+    // rationale: removal (unlike sharing) needs no extracted content — metadata-only
+    // (METADATA_FETCHED) and failed rows carry nothing downstream, so the paper
+    // reference and evidence guards below are the real safety net for them.
+    // In-flight UPLOADED/QUEUED/PROCESSING/PENDING_UPLOAD stay blocked so
+    // extraction workers are never orphaned mid-pipeline.
+    private static final Set<ProcessingStatus> REMOVABLE_STATUSES = Set.of(
+            ProcessingStatus.READY, ProcessingStatus.COMPLETED,
+            ProcessingStatus.METADATA_FETCHED, ProcessingStatus.FAILED);
     private static final Set<ProjectStatus> CORPUS_LOCKED_STATUSES = Set.of(
             ProjectStatus.SUBMITTED_FOR_REVIEW,
             ProjectStatus.APPROVED,
@@ -142,7 +148,7 @@ public class ProjectSourceUnshareService {
     }
 
     private String safetyBlock(UUID projectId, Document source) {
-        if (!SAFE_EXTRACTION_STATUSES.contains(source.getProcessingStatus())) {
+        if (!REMOVABLE_STATUSES.contains(source.getProcessingStatus())) {
             return "SOURCE_NOT_READY";
         }
         if (!paperReferenceRepository.findActiveForProjectForUpdate(projectId, source.getId()).isEmpty()) {

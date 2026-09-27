@@ -28,6 +28,7 @@ export default function EditPaperSectionModal({
   onReloadConflict,
   onSaveStandard,
   onUnassignAll,
+  onApplyAssignmentsNow,
   t: labels,
   ct,
 }) {
@@ -44,7 +45,24 @@ export default function EditPaperSectionModal({
   const [renameTitle, setRenameTitle] = useState('');
   const [paperRenameOpen, setPaperRenameOpen] = useState(false);
   const [paperRenameTitle, setPaperRenameTitle] = useState('');
-  const [saveNotice, setSaveNotice] = useState(false);
+  // ponytail: portal-local popup — the global top-right toast host sits outside
+  // aria-modal, so Chromium hides it from the AX tree while this dialog is open.
+  const [notice, setNotice] = useState(null);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = setTimeout(() => setNotice(null), 3000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  const flashResult = (result, successMessage, failureMessage) => {
+    if (!result || result.ok) {
+      setNotice({ type: 'success', message: successMessage });
+      return true;
+    }
+    if (!result.conflict) setNotice({ type: 'error', message: result.message || failureMessage });
+    return false;
+  };
 
   const dirty = JSON.stringify(sections) !== JSON.stringify(serverSections);
   const selectedSection = useMemo(
@@ -100,12 +118,11 @@ export default function EditPaperSectionModal({
       setStandardSectionId(null);
       setRenameSectionId(null);
       setPaperRenameOpen(false);
-      setSaveNotice(false);
+      setNotice(null);
     }
   }, [open]);
 
   const updateSection = (sectionId, changes) => {
-    setSaveNotice(false);
     onDraftChange(sections.map(section => String(section.id) === String(sectionId)
       ? { ...section, ...changes }
       : section));
@@ -117,20 +134,14 @@ export default function EditPaperSectionModal({
     setSelectedBulkIds(current => selected
       ? current.filter(selectedId => selectedId !== id)
       : [...current, id]);
-    setBulkTouchedIds(current => current.includes(id) ? current : [...current, id]);
-    if (selected) setBulkAssignments(current => ({ ...current, [id]: '' }));
   };
 
   const toggleBulkEditor = () => {
     if (!bulkOpen) {
-      const assignments = Object.fromEntries(sections
+      setBulkAssignments(Object.fromEntries(sections
         .filter(section => section.sectionType !== 'REFERENCE')
-        .map(section => [String(section.id), section.assignedUserId || '']));
-      setBulkAssignments(assignments);
+        .map(section => [String(section.id), section.assignedUserId || ''])));
       setBulkTouchedIds([]);
-      setSelectedBulkIds(sections
-        .filter(section => section.sectionType !== 'REFERENCE' && section.assignedUserId)
-        .map(section => String(section.id)));
     }
     setBulkOpen(value => !value);
   };
@@ -141,13 +152,32 @@ export default function EditPaperSectionModal({
     setBulkTouchedIds(current => current.includes(id) ? current : [...current, id]);
   };
 
-  const applyBulkAssignment = () => {
+  const applyBulkAssignment = async () => {
     if (bulkTouchedIds.length === 0) return;
-    setSaveNotice(false);
-    onDraftChange(sections.map(section => bulkTouchedIds.includes(String(section.id)) && section.sectionType !== 'REFERENCE'
+    // ponytail: assignments persist immediately (single batch PUT in parent) —
+    // no Save click needed. Parent syncs server truth back into the draft.
+    const next = sections.map(section => bulkTouchedIds.includes(String(section.id)) && section.sectionType !== 'REFERENCE'
       ? { ...section, assignedUserId: bulkAssignments[String(section.id)] || null }
-      : section));
-    setBulkTouchedIds([]);
+      : section);
+    const applied = await onApplyAssignmentsNow?.(next);
+    if (flashResult(applied, labels.assignmentsApplied, labels.assignmentsApplyFailed)) {
+      setBulkTouchedIds([]);
+      setBulkAssignments(Object.fromEntries(next
+        .filter(section => section.sectionType !== 'REFERENCE')
+        .map(section => [String(section.id), section.assignedUserId || ''])));
+    }
+  };
+
+  const assignBulkToStudent = (userId) => {
+    if (!userId) return;
+    // ponytail: no select step — assign-all covers every assignable row.
+    const ids = sections
+      .filter(section => section.sectionType !== 'REFERENCE')
+      .map(section => String(section.id));
+    if (ids.length === 0) return;
+    if (ids.length === 0) return;
+    setBulkAssignments(current => ({ ...current, ...Object.fromEntries(ids.map(id => [String(id), userId])) }));
+    setBulkTouchedIds(current => [...new Set([...current, ...ids.map(id => String(id))])]);
   };
 
   const startRename = (section) => {
@@ -182,11 +212,13 @@ export default function EditPaperSectionModal({
     await Promise.all(sectionIds.map(sectionId => onDeleteSection(sectionId)));
   };
 
-  const clearAllAssignments = () => {
-    onUnassignAll?.();
-    setBulkAssignments({});
-    setBulkTouchedIds([]);
-    setSelectedBulkIds([]);
+  const clearAllAssignments = async () => {
+    const cleared = await onUnassignAll?.();
+    if (flashResult(cleared, labels.assignmentsApplied, labels.assignmentsApplyFailed)) {
+      setBulkAssignments({});
+      setBulkTouchedIds([]);
+      setSelectedBulkIds([]);
+    }
   };
 
   const handleDrop = (fromIndex, toIndex) => {
@@ -203,10 +235,7 @@ export default function EditPaperSectionModal({
   };
 
   const handleSave = async () => {
-    const saved = await onSave();
-    if (saved !== false) {
-      setSaveNotice(true);
-    }
+    flashResult(await onSave(), labels.changesSaved, labels.saveChangesFailed);
   };
 
   if (!open) return null;
@@ -220,6 +249,20 @@ export default function EditPaperSectionModal({
       onClick={event => { if (event.target === event.currentTarget) requestClose(); }}
     >
       <div className="relative flex h-[92vh] w-[94vw] max-h-none max-w-none overflow-hidden rounded-2xl border border-(--border) bg-(--surface) shadow-2xl">
+        {notice && (
+          <div
+            role="status"
+            data-testid="paper-save-notice"
+            className={`absolute right-4 top-4 z-[70] flex max-w-xs items-start gap-2 rounded-xl border px-3 py-2 text-xs font-semibold shadow-lg ${
+              notice.type === 'error'
+                ? 'border-rose-200 bg-rose-50 text-rose-700'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            <span className="flex-1">{notice.message}</span>
+            <button type="button" onClick={() => setNotice(null)} aria-label={t('close')} className="shrink-0 opacity-60 hover:opacity-100">×</button>
+          </div>
+        )}
         <PaperSectionSidebar
           paper={paper}
           sections={sections}
@@ -263,16 +306,13 @@ export default function EditPaperSectionModal({
           assignableMembers={assignableMembers}
           studentMembers={studentMembers}
           selectedStudentId={selectedStudentId}
-          selectedBulkIds={selectedBulkIds}
           bulkAssignments={bulkAssignments}
           bulkTouchedIds={bulkTouchedIds}
           bulkOpen={bulkOpen}
           mode={mode}
           dirty={dirty}
-          saveNotice={saveNotice}
           standardSection={standardSection}
           projectReadOnly={projectReadOnly}
-          sectionStructureLocked={sectionStructureLocked}
           sectionStructureSaving={sectionStructureSaving}
           labels={labels}
           ct={ct}
@@ -281,9 +321,9 @@ export default function EditPaperSectionModal({
           onRequestClose={requestClose}
           onUpdateSection={changes => selectedSection && updateSection(selectedSection.id, changes)}
           onToggleBulkEditor={toggleBulkEditor}
-          onToggleBulkSection={toggleBulkSection}
           onUpdateBulkAssignment={updateBulkAssignment}
           onApplyBulkAssignment={applyBulkAssignment}
+          onAssignBulkToStudent={assignBulkToStudent}
           onClearAllAssignments={clearAllAssignments}
           onOpenStandard={setStandardSectionId}
           onCloseStandard={() => setStandardSectionId(null)}
