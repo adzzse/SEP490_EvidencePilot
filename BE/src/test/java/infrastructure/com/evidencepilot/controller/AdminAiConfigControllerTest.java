@@ -117,6 +117,23 @@ class AdminAiConfigControllerTest {
                 .andExpect(jsonPath("$.modelIds[0]").value("model-a"));
     }
 
+    @Test void catalogMayOfferMoreModelsThanTheSelectedChain() throws Exception {
+        authenticate(UserRole.ADMIN);
+        var catalog = new AiModelClient.GenerationCatalog(1, "remote",
+                List.of("model-a", "model-b", "model-c", "model-d", "model-e"),
+                List.of("model-a", "model-b", "model-c"), "a".repeat(64), 8000, 48000);
+        when(configService.configuration()).thenReturn(Optional.empty());
+        when(aiModelClient.generationCatalog()).thenReturn(catalog);
+        when(configService.candidate(catalog, catalog.defaultModels())).thenReturn(
+                new AiModelClient.GenerationSelection(0, "remote", catalog.defaultModels(),
+                        "a".repeat(64), "c".repeat(64)));
+
+        mvc.perform(get("/api/admin/ai/configuration").header("Authorization", "Bearer fixture"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.catalog.allowedModels.length()").value(5))
+                .andExpect(jsonPath("$.modelIds.length()").value(3));
+    }
+
     private void authenticate(UserRole role) {
         var user = new User();
         user.setId(UUID.randomUUID());

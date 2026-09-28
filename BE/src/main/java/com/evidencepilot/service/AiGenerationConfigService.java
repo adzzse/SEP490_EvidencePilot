@@ -117,7 +117,7 @@ public class AiGenerationConfigService {
     private void validateCatalog(AiModelClient.GenerationCatalog catalog) {
         if (catalog == null || catalog.protocolVersion() != 1 || catalog.provider() == null
                 || catalog.provider().isBlank() || catalog.allowedModels() == null
-                || catalog.allowedModels().isEmpty() || catalog.allowedModels().size() > 3
+                || catalog.allowedModels().isEmpty()
                 || catalog.allowedModels().stream().distinct().count() != catalog.allowedModels().size()
                 || catalog.allowedModels().stream().anyMatch(model -> model == null || model.isBlank() || model.length() > 255)
                 || catalog.defaultModels() == null || catalog.defaultModels().isEmpty()

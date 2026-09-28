@@ -124,6 +124,43 @@ class AdminExcelSeedServiceTest {
     }
 
     @Test
+    void v1ReturnedWorkbookParsesSectionsAndFeedbackRequests() throws Exception {
+        byte[] workbook;
+        try (var wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new ByteArrayInputStream(service().buildTemplate()));
+             var out = new java.io.ByteArrayOutputStream()) {
+            wb.removeSheetAt(wb.getSheetIndex("README"));
+            wb.removeSheetAt(wb.getSheetIndex("project_collections"));
+            wb.getSheet("projects").getRow(1).getCell(2).setCellValue("RETURNED");
+            var sections = wb.createSheet("sections");
+            var sectionHeaders = sections.createRow(0);
+            var section = sections.createRow(1);
+            String[] sectionValues = {"EP-DEMO-Retrieval", "Introduction", "0", "Seeded content.", "demo01@example.test"};
+            String[] sectionColumns = {"project_title", "section_title", "section_order", "content_tex", "assigned_user_email"};
+            for (int i = 0; i < sectionColumns.length; i++) {
+                sectionHeaders.createCell(i).setCellValue(sectionColumns[i]);
+                section.createCell(i).setCellValue(sectionValues[i]);
+            }
+            var feedback = wb.createSheet("feedback_requests");
+            var feedbackHeaders = feedback.createRow(0);
+            var request = feedback.createRow(1);
+            String[] feedbackValues = {"EP-DEMO-Retrieval", "prof@example.test", "demo01@example.test"};
+            String[] feedbackColumns = {"project_title", "reviewer_email", "student_email"};
+            for (int i = 0; i < feedbackColumns.length; i++) {
+                feedbackHeaders.createCell(i).setCellValue(feedbackColumns[i]);
+                request.createCell(i).setCellValue(feedbackValues[i]);
+            }
+            wb.write(out);
+            workbook = out.toByteArray();
+        }
+
+        var parsed = service().parse(new ByteArrayInputStream(workbook), workbook.length);
+        assertThat(parsed.formatVersion()).isEqualTo(1);
+        assertThat(parsed.errors()).isEmpty();
+        assertThat(parsed.sheets().get("sections")).hasSize(1);
+        assertThat(parsed.sheets().get("feedback_requests")).hasSize(1);
+    }
+
+    @Test
     void v2ReviewStatusRequiresLeaderAndPaperFile() {
         Map<String, List<Map<String, String>>> sheets = new HashMap<>();
         sheets.put("users", List.of(

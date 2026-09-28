@@ -166,10 +166,14 @@ class AdminSeedExportServiceTest {
         when(memberships.findByCollectionId(collection.getId())).thenReturn(List.of(membership));
         when(storage.exists("objects/paper.pdf")).thenReturn(true);
 
-        AdminSeedExportService.SeedBundle bundle =
-                exportService(projects, members, documents, texts, sections,
-                        mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
-                        collections, memberships, storage).buildBundle(null);
+        var projectCollections = mock(com.evidencepilot.repository.ProjectCollectionRepository.class);
+        when(projectCollections.findAll()).thenReturn(List.of(projectCollection));
+        var exporter = exportService(projects, members, documents, texts, sections,
+                mock(com.evidencepilot.repository.FeedbackRequestRepository.class),
+                collections, memberships, storage);
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                exporter, "projectCollectionRepository", projectCollections);
+        AdminSeedExportService.SeedBundle bundle = exporter.buildBundle(null);
 
         assertThat(bundle.paperFiles()).singleElement().satisfies(file ->
                 assertThat(file.zipPath()).startsWith("papers/"));
@@ -178,6 +182,7 @@ class AdminSeedExportServiceTest {
         try (var in = new ByteArrayInputStream(bundle.xlsx())) {
             parsed = seedService().parse(in, bundle.xlsx().length);
         }
+        assertThat(parsed.formatVersion()).isEqualTo(2);
         assertThat(parsed.errors()).as(String.join("; ", parsed.errors())).isEmpty();
         assertThat(parsed.sheets().get("users")).hasSize(2);
         assertThat(parsed.sheets().get("projects")).hasSize(1);
@@ -365,6 +370,7 @@ class AdminSeedExportServiceTest {
         try (var in = new ByteArrayInputStream(bundle.xlsx())) {
             parsed = seedService().parse(in, bundle.xlsx().length);
         }
+        assertThat(parsed.formatVersion()).isEqualTo(1);
         assertThat(parsed.errors()).as(String.join("; ", parsed.errors())).isEmpty();
         assertThat(parsed.sheets().get("sections")).hasSize(2);
         assertThat(parsed.sheets().get("feedback_requests")).hasSize(1);

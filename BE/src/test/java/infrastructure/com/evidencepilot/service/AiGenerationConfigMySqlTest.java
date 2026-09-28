@@ -106,6 +106,18 @@ class AiGenerationConfigMySqlTest {
         verifyNoInteractions(auditService);
     }
 
+    @Test void selectionCanUseAFifthAllowedModel() {
+        var catalog = new AiModelClient.GenerationCatalog(1, "remote",
+                List.of("model-a", "model-b", "model-c", "model-d", "model-e"),
+                List.of("model-a"), "a".repeat(64), 8000, 48000);
+        var initial = service.initialize(catalog);
+
+        var selected = service.update(catalog, List.of("model-e"), initial.revision(), actor);
+
+        assertThat(selected.modelIds()).containsExactly("model-e");
+        assertThat(service.current().orElseThrow().modelIds()).containsExactly("model-e");
+    }
+
     private String updateAfter(CyclicBarrier barrier, long revision, List<String> models) throws Exception {
         barrier.await(10, TimeUnit.SECONDS);
         try {
