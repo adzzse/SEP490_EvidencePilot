@@ -99,7 +99,7 @@ export default function Dropdown({
           aria-label={ariaLabel}
           ref={listRef}
           onKeyDown={onListKeyDown}
-          className="absolute z-30 mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+          className="absolute z-30 mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           style={{ maxHeight: maxVisibleRows * 32 }}
         >
           {options.map((option, index) => {

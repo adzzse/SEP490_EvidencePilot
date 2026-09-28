@@ -434,7 +434,9 @@ public class PaperController {
 
     @Operation(summary = "Generate AI citation review for a section",
             description = "Queues Citation Review for one saved section and returns a jobId. "
-                    + "Poll GET /api/jobs/{jobId} for the result.")
+                    + "Poll GET /api/jobs/{jobId} for the result. "
+                    + "Students use the section write path; the assigned instructor may "
+                    + "re-run it on submitted evidence while their request is PENDING.")
     @ApiResponses({
             @ApiResponse(responseCode = "202", description = "Review queued"),
             @ApiResponse(responseCode = "400", description = "Citation Review is not applicable to this section"),
@@ -448,7 +450,7 @@ public class PaperController {
             @Parameter(description = "Section UUID") @PathVariable UUID sectionId) {
         User currentUser = currentUserService.requireCurrentUser();
         PaperSection section = requireReviewSection(documentId, sectionId);
-        currentUserService.requireSectionContentWriteAccess(currentUser, section);
+        currentUserService.requireCitationReviewRunAccess(currentUser, section);
         String reviewInputFingerprint = sectionCitationReviewService.prepareReview(section);
         return ResponseEntity.accepted().body(aiEvaluationService.submitSectionCitationReview(
                 section.getDocument().getProject().getId(),
@@ -468,7 +470,8 @@ public class PaperController {
         currentUserService.requireProjectAccess(currentUser, section.getDocument().getProject());
         String fingerprint = sectionCitationReviewService.reviewInputFingerprint(section);
         return aiEvaluationService.findSectionCitationReviewState(
-                        section.getDocument().getProject().getId(), documentId, sectionId, fingerprint)
+                        section.getDocument().getProject().getId(), documentId, sectionId, fingerprint,
+                        currentUser.getId())
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }

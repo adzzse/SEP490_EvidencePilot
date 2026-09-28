@@ -121,6 +121,74 @@ class CurrentUserServiceImplAccessTest {
                 .doesNotThrowAnyException();
     }
 
+    @Test
+    void instructorRunAllowedOnSubmittedEvidenceWithPendingRequest() {
+        Project project = project(ProjectStatus.SUBMITTED_FOR_REVIEW);
+        User instructor = user(UserRole.INSTRUCTOR);
+
+        PaperSection section = section(project);
+        org.mockito.Mockito.when(feedbackRequestRepository.existsByProjectIdAndInstructorId(
+                project.getId(), instructor.getId())).thenReturn(true);
+        org.mockito.Mockito.when(feedbackRequestRepository.existsByProjectIdAndStatus(
+                project.getId(), com.evidencepilot.model.FeedbackStatus.PENDING)).thenReturn(true);
+
+        assertThatCode(() -> currentUserService.requireCitationReviewRunAccess(instructor, section))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void instructorRunRejectedWithoutPendingRequest() {
+        Project project = project(ProjectStatus.SUBMITTED_FOR_REVIEW);
+        User instructor = user(UserRole.INSTRUCTOR);
+
+        PaperSection section = section(project);
+        org.mockito.Mockito.when(feedbackRequestRepository.existsByProjectIdAndInstructorId(
+                project.getId(), instructor.getId())).thenReturn(true);
+        org.mockito.Mockito.when(feedbackRequestRepository.existsByProjectIdAndStatus(
+                project.getId(), com.evidencepilot.model.FeedbackStatus.PENDING)).thenReturn(false);
+
+        assertThatThrownBy(() -> currentUserService.requireCitationReviewRunAccess(instructor, section))
+                .isInstanceOf(ApiException.class)
+                .matches(e -> ((ApiException) e).getStatusCode().value() == HttpStatus.FORBIDDEN.value());
+    }
+
+    @Test
+    void instructorRunRejectedOnReadOnlyProject() {
+        Project project = project(ProjectStatus.APPROVED);
+        User instructor = user(UserRole.INSTRUCTOR);
+        addMember(project, instructor, ProjectRole.INSTRUCTOR);
+
+        assertThatThrownBy(() -> currentUserService.requireCitationReviewRunAccess(instructor, section(project)))
+                .isInstanceOf(ApiException.class)
+                .matches(e -> ((ApiException) e).getStatusCode().value() == HttpStatus.CONFLICT.value());
+    }
+
+    @Test
+    void assignedStudentRunAllowedOnEditableProject() {
+        Project project = project(ProjectStatus.IN_PROGRESS);
+        User student = user(UserRole.STUDENT);
+        addMember(project, student, ProjectRole.MEMBER);
+
+        PaperSection section = section(project);
+        section.setAssignedUser(student);
+
+        assertThatCode(() -> currentUserService.requireCitationReviewRunAccess(student, section))
+                .doesNotThrowAnyException();
+    }
+
+    private PaperSection section(Project project) {
+        Document paper = new Document();
+        paper.setId(UUID.randomUUID());
+        paper.setProject(project);
+
+        PaperSection section = new PaperSection();
+        section.setId(UUID.randomUUID());
+        section.setDocument(paper);
+        section.setActive(true);
+        section.setSectionType(PaperSectionType.STANDARD);
+        return section;
+    }
+
     private User user(UserRole role) {
         User user = new User();
         user.setId(UUID.randomUUID());

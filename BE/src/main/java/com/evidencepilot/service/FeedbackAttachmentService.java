@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -20,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -103,6 +104,31 @@ public class FeedbackAttachmentService {
 
     public String readUrl(FeedbackAttachment attachment) {
         return objectStorage.presignedGetUrl(attachment.getStorageKey(), GET_URL_TTL_MINUTES);
+    }
+
+    /**
+     * Removes the cloned object after the surrounding transaction commits,
+     * mirroring MediaAssetService.deleteAfterCommit — a missing object is
+     * already gone, never a failure.
+     */
+    public void deleteObjectAfterCommit(String storageKey) {
+        Runnable cleanup = () -> {
+            try {
+                objectStorage.delete(storageKey);
+            } catch (RuntimeException e) {
+                log.warn("Failed to delete detached feedback object {}", storageKey, e);
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    cleanup.run();
+                }
+            });
+        } else {
+            cleanup.run();
+        }
     }
 
     /**

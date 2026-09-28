@@ -296,6 +296,7 @@ class ComparisonSourceTest {
                 baselineRepository,
                 new FeedbackAnchorService(instructorFeedbackRepository, mapper),
                 org.mockito.Mockito.mock(FeedbackAttachmentService.class),
+                org.mockito.Mockito.mock(com.evidencepilot.repository.FeedbackAttachmentRepository.class),
                 org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class));
     }
 

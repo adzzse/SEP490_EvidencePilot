@@ -277,7 +277,18 @@ public class AdminExcelSeedService {
                             List.of("limits", "xlsx <= 10MiB; 200 rows/sheet; members <= 500"),
                             List.of("silent_accounts", "send_invitation FALSE or blank creates ACTIVE accounts through the existing local/test seed policy"),
                             List.of("status", "SUBMITTED_FOR_REVIEW, APPROVED, ARCHIVED are applied only after paper extraction and handoff readiness"),
-                            List.of("source", "sources.doi is required and resolved through OpenAlex; missing OA PDF may remain METADATA_FETCHED")));
+                            List.of("source", "sources.doi is required and resolved through OpenAlex; missing OA PDF may remain METADATA_FETCHED"),
+                            List.of("Bundle = seed.xlsx + papers/<slug>/ folders only. Fill users→projects→members→sources→papers→collections. Reference by email/project_title/doi. Sections come from extraction (file papers) or the standard (paper_standard papers) — no sections sheet."),
+                            List.of("papers.paper_folder must equal the <slug> in papers.paper_file (^[a-z0-9-]{1,80}$). Main file must be named <slug>.pdf|.docx|.tex after its folder; images/ goes beside it."),
+                            List.of("Precedence: paper_file, then paper_standard, then content_tex. Max 1 paper per project. xlsx<=10MiB, bounded ZIP spooled to disk, 200 rows/sheet (members: 500)."),
+                            List.of("paper_standard (IEEE|ACM|...) creates a standard-template paper like Instructor Page choose-standard: leave paper_file and content_tex blank, sections are generated."),
+                            List.of("users.send_invitation: TRUE requests a set-password invitation; FALSE or blank sends nothing and requires explicitly enabled dev/test bypass. Production rejects silent rows."),
+                            List.of("Project titles are aliases for this import only; existing titles are rejected. Use writable initial states, never seed a submitted review."),
+                            List.of("RETURNED projects need one feedback_requests row plus sections rows: the resubmit guard compares live content against the RETURNED request snapshot, and a bare status blocks resubmission forever."),
+                            List.of("sections rows seed live sections when the paper is READY, and always feed the feedback snapshot; section_order must be an integer, title and content_tex non-blank."),
+                            List.of("File papers: wait until extraction is READY, then apply content/assignment using existing paper section APIs/UI. Do not re-upload this bundle to update an existing project."),
+                            List.of("Standard templates generate their own section orders; conflicting section rows are reported, never overwritten."),
+                            List.of("sources.doi is required and resolved live via OpenAlex (metadata + PDF win over sheet columns); rows without OA PDF import as METADATA_FETCHED for later file attach.")));
             sheet(wb, "users", List.of("email", "first_name", "last_name", "role", "student_code", "send_invitation"),
                     List.of(List.of("demo01@example.test", "An", "Nguyen", "STUDENT", "AB123456", "FALSE"),
                             List.of("prof@example.test", "Binh", "Tran", "INSTRUCTOR", "", "FALSE")));
@@ -343,21 +354,23 @@ public class AdminExcelSeedService {
         int formatVersion = FORMAT_V1;
         try (Workbook wb = new XSSFWorkbook(in)) {
             formatVersion = readFormatVersion(wb.getSheet("README"), errors);
-            int maxSheets = formatVersion == FORMAT_V2 ? 8 : 9;
+            // rationale: sections + feedback_requests seed genuine returned-review
+            // state; parsed whenever present, in either format.
+            List<String> sheetNames = new ArrayList<>(formatVersion == FORMAT_V2 ? SHEETS_V2 : SHEETS_V1);
+            sheetNames.add("sections");
+            sheetNames.add("feedback_requests");
+            int maxSheets = sheetNames.size() + 1;
             if (wb.getNumberOfSheets() > maxSheets) {
-                errors.add(formatVersion == FORMAT_V2
-                        ? "too many sheets (max README + 7 data sheets)"
-                        : "too many sheets (max README + 8 data sheets)");
+                errors.add("too many sheets (max README + " + sheetNames.size() + " data sheets)");
             }
             if (formatVersion == FORMAT_V2) {
-                Set<String> allowed = new java.util.HashSet<>(SHEETS_V2);
+                Set<String> allowed = new java.util.HashSet<>(sheetNames);
                 allowed.add("README");
                 for (int index = 0; index < wb.getNumberOfSheets(); index++) {
                     String sheetName = wb.getSheetName(index);
                     if (!allowed.contains(sheetName)) errors.add("unsupported v2 sheet: " + sheetName);
                 }
             }
-            List<String> sheetNames = formatVersion == FORMAT_V2 ? SHEETS_V2 : SHEETS_V1;
             for (String name : sheetNames) {
                 Sheet s = wb.getSheet(name);
                 if (s == null) continue;
@@ -746,7 +759,9 @@ public class AdminExcelSeedService {
             String rawStatus = row.getOrDefault("status", "CREATED").trim().toUpperCase(Locale.ROOT);
             try {
                 ProjectStatus status = ProjectStatus.valueOf(rawStatus.isBlank() ? "CREATED" : rawStatus);
-                if (status == ProjectStatus.RETURNED || status == ProjectStatus.PENDING_DELETE) {
+                // rationale: RETURNED is seedable (sections + feedback_requests rows
+                // rebuild the returned snapshot); only PENDING_DELETE is unrestorable.
+                if (status == ProjectStatus.PENDING_DELETE) {
                     errors.add(at + "status is not supported in seed_format_version=2: " + rawStatus);
                 } else {
                     statuses.put(title, status);
@@ -1072,7 +1087,7 @@ public class AdminExcelSeedService {
         try {
             job.result = Map.of("users", 0, "projects", 0, "members", 0, "sources", 0,
                     "collections", 0, "project_collections", 0, "papers", 0, "sections", 0,
-                    "review_states", 0);
+                    "feedback_requests", 0);
             if (parsed.formatVersion() == FORMAT_V2) runV2(job, parsed, bundle);
             else {
                 var userRows = parsed.sheets().getOrDefault("users", List.of());

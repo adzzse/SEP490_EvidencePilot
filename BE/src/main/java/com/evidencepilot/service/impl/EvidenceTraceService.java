@@ -2,6 +2,8 @@ package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.request.TraceDecisionRequest;
 import com.evidencepilot.dto.request.TraceReviewRequest;
+import com.evidencepilot.dto.response.CitationArchiveRoundResponse;
+import com.evidencepilot.dto.response.CitationArchivesResponse;
 import com.evidencepilot.dto.response.EvidenceTraceResponse;
 import com.evidencepilot.dto.response.SectionCitationReviewResponse;
 import com.evidencepilot.exception.ResourceNotFoundException;
@@ -9,16 +11,20 @@ import com.evidencepilot.model.CitationReviewRound;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.DocumentChunk;
 import com.evidencepilot.model.EvidenceRevisionTrace;
+import com.evidencepilot.model.FeedbackRequest;
 import com.evidencepilot.model.PaperSection;
+import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.InstructorJudgment;
 import com.evidencepilot.model.enums.StudentAction;
 import com.evidencepilot.model.enums.TraceOutcome;
+import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.prompt.TraceRecheckPrompt;
 import com.evidencepilot.repository.CitationReviewRoundRepository;
 import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.EvidenceRevisionTraceRepository;
+import com.evidencepilot.repository.FeedbackRequestRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.AiModelClient;
@@ -36,11 +42,16 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -51,6 +62,7 @@ public class EvidenceTraceService {
 
     private final CitationReviewRoundRepository roundRepository;
     private final EvidenceRevisionTraceRepository traceRepository;
+    private final FeedbackRequestRepository feedbackRequestRepository;
     private final PaperSectionRepository paperSectionRepository;
     private final UserRepository userRepository;
     private final DocumentRepository documentRepository;
@@ -284,6 +296,97 @@ public class EvidenceTraceService {
         return traceRepository.findBySectionIdOrderByCreatedAtDesc(section.getId()).stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    /**
+     * Sealed per-origin archives for one review request — no writes anywhere.
+     * A request's window runs from the previous request's terminal timestamp
+     * (exclusive) to its own terminal timestamp (inclusive, open when still
+     * PENDING), so Return/Approve naturally seals the cycle: later runs land
+     * in the next window. Rounds group by requester role (student runs vs
+     * instructor runs) with their finding traces attached.
+     */
+    @Transactional(readOnly = true)
+    public CitationArchivesResponse archivesForRequest(UUID requestId, UUID sectionId) {
+        User viewer = currentUserService.requireCurrentUser();
+        FeedbackRequest request = feedbackRequestRepository.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException(requestId, "FeedbackRequest"));
+        Project project = request.getProject();
+        currentUserService.requireEvidenceTraceReviewAccess(viewer, project);
+        List<FeedbackRequest> ordered = feedbackRequestRepository
+                .findByProjectIdOrderByRequestedAtDesc(project.getId()).stream()
+                .sorted(Comparator.comparing(FeedbackRequest::getRequestedAt,
+                                Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(requestRow -> String.valueOf(requestRow.getId())))
+                .toList();
+        int position = -1;
+        for (int index = 0; index < ordered.size(); index++) {
+            if (ordered.get(index).getId().equals(requestId)) {
+                position = index;
+                break;
+            }
+        }
+        if (position < 0) {
+            throw new ResourceNotFoundException(requestId, "FeedbackRequest");
+        }
+        LocalDateTime lower = null;
+        for (int index = 0; index < position; index++) {
+            lower = maxTimestamp(lower, terminalTimestamp(ordered.get(index)));
+        }
+        LocalDateTime upper = terminalTimestamp(request);
+        boolean hasSuccessor = position < ordered.size() - 1;
+        final LocalDateTime lowerBound = lower;
+        final LocalDateTime upperBound = upper;
+        List<CitationReviewRound> rounds = roundRepository.findBySectionIdOrderByCreatedAtDesc(sectionId).stream()
+                .filter(round -> round.getSection() != null && sectionId.equals(round.getSection().getId()))
+                .filter(round -> round.getProject() != null && project.getId().equals(round.getProject().getId()))
+                .filter(round -> round.getCreatedAt() == null
+                        || ((lowerBound == null || round.getCreatedAt().isAfter(lowerBound))
+                                && (upperBound == null || !round.getCreatedAt().isAfter(upperBound))))
+                .toList();
+        Set<UUID> requesterIds = rounds.stream()
+                .map(round -> round.getRequestedBy() == null ? null : round.getRequestedBy().getId())
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<UUID, UserRole> rolesById = new LinkedHashMap<>();
+        userRepository.findAllById(requesterIds)
+                .forEach(user -> rolesById.put(user.getId(), user.getRole()));
+        List<CitationArchiveRoundResponse> student = new ArrayList<>();
+        List<CitationArchiveRoundResponse> instructor = new ArrayList<>();
+        for (CitationReviewRound round : rounds) {
+            UserRole role = rolesById.get(round.getRequestedBy() == null
+                    ? null : round.getRequestedBy().getId());
+            List<EvidenceTraceResponse> findings = traceRepository
+                    .findByRoundIdOrderByFindingIndex(round.getId()).stream()
+                    .map(this::toResponse)
+                    .toList();
+            CitationArchiveRoundResponse entry = new CitationArchiveRoundResponse(
+                    round.getId(),
+                    UserRole.STUDENT.equals(role) ? "STUDENT" : "INSTRUCTOR",
+                    round.getRequestedBy() == null ? null : round.getRequestedBy().getId(),
+                    round.getCreatedAt(),
+                    round.getSectionVersion(),
+                    findings);
+            if (UserRole.STUDENT.equals(role)) {
+                student.add(entry);
+            } else {
+                instructor.add(entry);
+            }
+        }
+        return new CitationArchivesResponse(requestId, upperBound != null, hasSuccessor, student, instructor);
+    }
+
+    private static LocalDateTime terminalTimestamp(FeedbackRequest request) {
+        return Stream.of(request.getReturnedAt(), request.getReviewedAt())
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+    }
+
+    private static LocalDateTime maxTimestamp(LocalDateTime left, LocalDateTime right) {
+        if (left == null) return right;
+        if (right == null) return left;
+        return left.isAfter(right) ? left : right;
     }
 
     @Transactional

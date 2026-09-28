@@ -24,7 +24,7 @@ import { InstructorReviewGuide } from '../../components/Instructor/InstructorFee
 import useProjectFeedback from '../../hooks/useProjectFeedback.js';
 import { feedbackKeys } from '../../services/feedbackKeys.js';
 import { usePaperReferences } from '../../hooks/usePaperReferences.js';
-import { normalizeSource } from '../../utils/student/feedbackAnchors.js';
+import { normalizeSource, sourceFingerprint } from '../../utils/student/feedbackAnchors.js';
 import { isAbstractSectionTitle } from '../../utils/formatters/latexHtml.js';
 import useUndoDelete from '../../components/ui/UndoDelete.jsx';
 import Modal from '../../components/ui/Modal.jsx';
@@ -490,7 +490,8 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       && aiReviewRequestRef.current === requestId) {
       shownFindings.current = job.result.findings.length;
       setAiReviewResult(job.result);
-      setAiReviewedContent(codeContentRef.current);
+      // rationale: review mode has no draft buffer — snapshot content is the baseline.
+      setAiReviewedContent(isReview ? displayContent : codeContentRef.current);
     }
   };
 
@@ -503,6 +504,14 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     clearReviewJob(selectedSectionId);
     setAiReviewResult(job.result);
     setAiReviewedContent(reviewedContent);
+    // rationale: the run finished and findings are in hand — stop the
+    // instructor cooldown instead of letting it linger. Cached loads and
+    // student runs never arm it, so this is a review-only no-op for them.
+    if (isReview) {
+      writeTask(reviewCooldownKey, null);
+      setLastReviewRunAt(0);
+      setCooldownNow(Date.now());
+    }
     showToast(job.result?.complete
       ? t('aiReviewComplete')
       : t('aiReviewPartial', {
@@ -808,17 +817,36 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       candidates: aiSourceMatches?.[index] || [],
     }));
   }, [aiReviewResult, aiSourceMatches, isReviewVisible]);
-  const isAiReviewStale = Boolean(aiReviewResult && codeContent !== aiReviewedContent);
+  const isAiReviewStale = Boolean(aiReviewResult && (isReview ? displayContent : codeContent) !== aiReviewedContent);
+
+  // rationale: declared before handleFindingClick — that callback lists it as
+  // a dep, and reading the binding earlier would throw a TDZ error at render.
+  const locateReviewFinding = (finding) => {
+    const content = isReview ? (displayContent || '') : codeContentRef.current;
+    if (content.slice(finding.startOffset, finding.endOffset) === finding.excerpt) {
+      return { start: finding.startOffset, end: finding.endOffset };
+    }
+    const start = content.indexOf(finding.excerpt);
+    if (start < 0 || content.indexOf(finding.excerpt, start + 1) >= 0) return null;
+    return { start, end: start + finding.excerpt.length };
+  };
 
   const handleFindingClick = useCallback((findingIndex, coords) => {
-    if (!aiReviewResult?.findings?.[findingIndex]) return;
+    const finding = aiReviewResult?.findings?.[findingIndex];
+    if (!finding) return;
     // rationale: null coords (unrendered line) still opens — the card centers itself.
     setReviewOverlay({
       open: true,
       findingIndex,
       anchor: coords ? { left: coords.left, top: coords.top, bottom: coords.bottom } : null,
     });
-  }, [aiReviewResult]);
+    // rationale: opening the drawer arms that passage in the Feedback composer
+    // (create mode only — edits are never retargeted).
+    if (isReview) {
+      const range = locateReviewFinding(finding);
+      if (range) review.workflow.armFindingPassage?.(range);
+    }
+  }, [aiReviewResult, isReview, locateReviewFinding]);
 
   // Paper-scoped References.
   const paperRefs = usePaperReferences(selectedPaper?.id, user?.id);
@@ -1497,15 +1525,25 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     }
   };
 
-  const locateReviewFinding = (finding) => {
-    const content = codeContentRef.current;
-    if (content.slice(finding.startOffset, finding.endOffset) === finding.excerpt) {
-      return { start: finding.startOffset, end: finding.endOffset };
+  // rationale: instructor reference check — same check, no saves, no edits.
+  // Results render in the existing read-only Sources panel.
+  const handleRunReviewReferenceCheck = async () => {
+    if (!isReview || !selectedPaper || !currentSection || currentSection.sectionType !== 'REFERENCE') return;
+    try {
+      await paperRefs.runCheck();
+    } catch {
+      // usePaperReferences owns the visible error state.
     }
-    const start = content.indexOf(finding.excerpt);
-    if (start < 0 || content.indexOf(finding.excerpt, start + 1) >= 0) return null;
-    return { start, end: start + finding.excerpt.length };
   };
+
+  // rationale: the Result tab needs data on arrival — auto-run once per
+  // References section when nothing cached; errors stay for manual retry.
+  useEffect(() => {
+    if (!isReview || !selectedPaper?.id || !currentSection || currentSection.sectionType !== 'REFERENCE') return;
+    if (paperRefs.check || paperRefs.checkLoading || paperRefs.checkError) return;
+    handleRunReviewReferenceCheck().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReview, selectedPaper?.id, selectedSectionId, paperRefs.check, paperRefs.checkLoading, paperRefs.checkError]);
 
   const openReviewFinding = (requestedIndex = 0) => {
     const findings = aiReviewResult?.findings || [];
@@ -1518,6 +1556,9 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     if (!isReviewVisible) setIsReviewVisible(true);
     const range = locateReviewFinding(findings[findingIndex]);
     if (!range) { showToast(t('reviewExcerptChanged')); return; }
+    // rationale: drawer open arms the passage in the Feedback composer so the
+    // Line x–y context renders deterministically (create mode only).
+    if (isReview) review.workflow.armFindingPassage?.(range);
     const revealed = editorRef.current?.revealRange(range.start, range.end, (coords) => {
       if (coords) handleFindingClick(findingIndex, coords);
       else setReviewOverlay({ open: true, findingIndex, anchor: null });
@@ -1528,6 +1569,106 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   const handleOpenCitationReview = () => openReviewFinding(
     isReviewOverlayOpen ? reviewOverlay.findingIndex + 1 : 0,
   );
+
+  // rationale: instructor run — same POST+poll as the student flow but against
+  // the submitted snapshot, with no draft saves and no editability gate. The
+  // result feeds the same floating card; inserting writes a feedback draft.
+  const handleRunReviewCitation = async () => {
+    if (!isReview || !selectedPaper?.id || !selectedSectionId) return;
+    if (aiReviewJobRef.current) return;
+    if (review.workflow.isHistoricalRound) { showToast(t('instructor.review.historicalRoundNotice')); return; }
+    if (review.workflow.activeRequest?.status !== 'PENDING') { showToast(t('instructor.review.citationRunNeedsPending')); return; }
+    if (reviewCitationRunBlocked === 'locked') { showToast(t('projectLocked')); return; }
+    if (cooldownRemainingSec > 0) { showToast(t('instructor.review.citationCooldown', { remaining: formatCooldown(cooldownRemainingSec) })); return; }
+    if (isAbstractSectionTitle(currentSection?.sectionTitle)) { showToast(t('citationReviewNotApplicableAbstract')); return; }
+    aiReviewJobRef.current = 'submitting';
+    setLoadingAiReview(true);
+    setAiReviewProgress(null);
+    setAiReviewResult(null);
+    const requestId = ++aiReviewRequestRef.current;
+    try {
+      setAiReviewError(null);
+      setAiSourceMatches({});
+      setAiSourcesError('');
+      const reviewedContent = displayContent || '';
+      const { data: submit } = await api.post(
+        `/api/papers/${selectedPaper.id}/sections/${selectedSectionId}/review`);
+      if (aiReviewRequestRef.current !== requestId) return;
+      writeTask(reviewCooldownKey, Date.now());
+      setLastReviewRunAt(Date.now());
+      setCooldownNow(Date.now());
+      aiReviewJobRef.current = submit.jobId;
+      storeReviewJob(selectedSectionId, submit.jobId);
+      const shownFindings = { current: 0 };
+      const job = await pollAiJob(
+        submit.jobId,
+        () => aiReviewRequestRef.current !== requestId,
+        trackReviewProgress(requestId, shownFindings),
+      );
+      await finishReviewPoll(job, requestId, reviewedContent);
+      openReviewFinding(0);
+    } catch (error) {
+      if (aiReviewRequestRef.current !== requestId) return;
+      const status = error.response?.status || error.status;
+      const message = status === 429 ? t('aiProviderRateLimited')
+        : status === 503 ? t('aiWorkerUnavailable')
+          : status === 502 ? t('aiInvalidResponse')
+            : (status === 403 || status === 409) ? t('projectLocked')
+              : t('aiReviewFailed');
+      setAiReviewError({ status, message });
+      showToast(message);
+    } finally {
+      clearReviewJob(selectedSectionId);
+      aiReviewJobRef.current = null;
+      setLoadingAiReview(false);
+      setAiReviewProgress(null);
+    }
+  };
+
+  // rationale: "Use as Feedback" — locks the finding passage as the draft
+  // anchor and prefills the composer from the card output (claim, similarity
+  // scores, source names), so the instructor edits prose instead of copying.
+  const handleUseAsFeedback = async (finding, candidate) => {
+    if (!isReview || !review?.workflow || !finding) return;
+    if (!review.workflow.canCreateRoot) { showToast(t('instructor.review.citationReadOnly')); return; }
+    if (!review.workflow.canCreateRoot) { showToast(t('instructor.review.citationReadOnly')); return; }
+    const range = locateReviewFinding(finding);
+    if (!range) { showToast(t('reviewExcerptChanged')); return; }
+    const source = normalizeSource(displayContent || '');
+    const version = currentSection?.version;
+    if (!Number.isInteger(version)) { showToast(t('reviewExcerptChanged')); return; }
+    const candidates = candidate ? [candidate]
+      : (aiSourceMatches?.[reviewOverlay.findingIndex] || []);
+    const parts = candidates
+      .filter(c => c && (c.sourceTitle || c.title || c.citationKey))
+      .map(c => {
+        const score = Number.isFinite(c.similarityScore) ? ` ${Math.round(c.similarityScore * 100)}%` : '';
+        return `${score} from ${c.sourceTitle || c.title || c.citationKey}`;
+      });
+    const relation = finding.relation || finding.type || '';
+    const lines = [
+      `This claim is ${relation}${parts.length ? ` —${parts.join(',')}` : ''}.`,
+      finding.excerpt ? `Passage: “${finding.excerpt}”` : '',
+      finding.rationale || '',
+    ].filter(Boolean);
+    try {
+      review.workflow.updateFeedbackDraft({
+        anchor: {
+          from: range.start,
+          to: range.end,
+          contentVersion: version,
+          fingerprint: await sourceFingerprint(source),
+        },
+        content: lines.join('\n'),
+        lineReference: '',
+      });
+    } catch {
+      showToast(t('reviewExcerptChanged'));
+      return;
+    }
+    closeReviewOverlay();
+    showToast(t('useAsFeedbackAdded'));
+  };
 
   const handleOpenReviewPassage = ({ documentId, chunkId, quote, fileName }) => {
     if (!documentId || !chunkId) return;
@@ -1568,11 +1709,14 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   };
 
   useEffect(() => {
-    if (isReview || !selectedPaper?.id || !selectedSectionId) return;
+    if (!selectedPaper?.id || !selectedSectionId) return;
     const requestId = ++aiReviewRequestRef.current;
     setAiReviewResult(null);
     setAiReviewError(null);
     setAiReviewedContent('');
+    // rationale: read-only cached fetch — safe in review mode (GET only, no
+    // draft saves, no POST). Instructor runs post explicitly via header.
+    const reviewedSnapshot = isReview ? displayContent : codeContentRef.current;
     getWithRetry(api, `/api/papers/${selectedPaper.id}/sections/${selectedSectionId}/review`,
       () => aiReviewRequestRef.current !== requestId)
       .then(async response => {
@@ -1592,7 +1736,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
           }
           if (reload.review) {
             setAiReviewResult(reload.review);
-            setAiReviewedContent(codeContentRef.current);
+            setAiReviewedContent(reviewedSnapshot);
           }
           if (reload.errorCode || reload.errorMessage) {
             setAiReviewError({
@@ -1616,7 +1760,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
             () => aiReviewRequestRef.current !== requestId,
             trackReviewProgress(requestId, shownFindings),
           );
-          await finishReviewPoll(polled, requestId, codeContentRef.current);
+          await finishReviewPoll(polled, requestId, reviewedSnapshot);
         } catch {
           if (aiReviewRequestRef.current !== requestId) return;
           aiReviewJobRef.current = null;
@@ -1786,6 +1930,50 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       : aiReviewError?.message,
   };
 
+  // rationale: run is a constrained action — latest round only, active PENDING
+  // request only, never on closed projects. Viewing cached findings and
+  // Use-as-Feedback stay available whenever the instructor can access them.
+  const REVIEW_RUN_CLOSED_STATUSES = ['APPROVED', 'ARCHIVED', 'PENDING_DELETE'];
+  const reviewCitationRunBlocked = !isReview ? null : (
+    review.workflow.isHistoricalRound ? 'historical'
+    : REVIEW_RUN_CLOSED_STATUSES.includes(project?.status) || project?.deletionScheduledAt ? 'locked'
+    : review.workflow.activeRequest?.status !== 'PENDING' ? 'no-pending'
+    : null);
+  // rationale: instructor runs never touch paper content, but each run costs an
+  // AI job — one run per section per 5 minutes, persisted across reloads.
+  const REVIEW_RUN_COOLDOWN_MS = 5 * 60 * 1000;
+  const reviewCooldownKey = taskKey(api, user?.id, 'instructor-citation-cooldown', project?.id, selectedPaper?.id, selectedSectionId);
+  const [lastReviewRunAt, setLastReviewRunAt] = useState(() => Number(readTask(reviewCooldownKey)) || 0);
+  const [cooldownNow, setCooldownNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (isReview) {
+      setLastReviewRunAt(Number(readTask(reviewCooldownKey)) || 0);
+      setCooldownNow(Date.now());
+    }
+  }, [isReview, reviewCooldownKey]);
+  const cooldownRemainingMs = isReview && lastReviewRunAt
+    ? Math.max(0, lastReviewRunAt + REVIEW_RUN_COOLDOWN_MS - cooldownNow)
+    : 0;
+  useEffect(() => {
+    if (!isReview || cooldownRemainingMs <= 0) return undefined;
+    const id = setInterval(() => setCooldownNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isReview, cooldownRemainingMs > 0]);
+  const cooldownRemainingSec = Math.ceil(cooldownRemainingMs / 1000);
+  const formatCooldown = totalSec => `${Math.floor(totalSec / 60)}:${String(totalSec % 60).padStart(2, '0')}`;
+  // rationale: a Returned request is a read-only review request — the Citation
+  // button + badge go disabled with a tooltip (review workspace only); the
+  // eye highlight toggle stays available as pure view preference.
+  const reviewCitationReadOnly = isReview && review.workflow.activeRequest?.status === 'RETURNED';
+  const handleReviewCitationButton = () => {
+    if ((aiReviewResult?.findings || []).length) { handleOpenCitationReview(); return; }
+    if (reviewCitationRunBlocked === 'historical') { showToast(t('instructor.review.historicalRoundNotice')); return; }
+    if (reviewCitationRunBlocked === 'locked') { showToast(t('projectLocked')); return; }
+    if (reviewCitationRunBlocked === 'no-pending') { showToast(t('instructor.review.citationRunNeedsPending')); return; }
+    if (cooldownRemainingSec > 0) { showToast(t('instructor.review.citationCooldown', { remaining: formatCooldown(cooldownRemainingSec) })); return; }
+    handleRunReviewCitation();
+  };
+
   if (projectLoadError) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-(--surface-secondary)">
@@ -1842,7 +2030,22 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
         review={isReview ? review.workflow : null} reviewSection={isReview ? currentSection : null}
         notifications={notifications} unreadCount={unreadCount} showNotifications={showNotifications} setShowNotifications={setShowNotifications} onMarkNotificationRead={handleMarkNotificationRead} onMarkAllNotificationsRead={handleMarkAllNotificationsRead} onOpenNotification={handleOpenNotification}
         showExportMenu={showExportMenu} setShowExportMenu={setShowExportMenu} handleExportTexArchive={handleExportTexArchive} handleExportTraceabilityJson={handleExportTraceabilityJson} handleExportTraceabilityCsv={handleExportTraceabilityCsv} tourSteps={isReview ? undefined : tourSteps} tourKey="student-workspace"
-        reviewAction={reviewAction} />
+        reviewAction={reviewAction}
+        reviewTools={isReview ? {
+          isReferenceSection: currentSection?.sectionType === 'REFERENCE',
+          onRunCitationReview: handleReviewCitationButton,
+          onOpenCitationReview: handleOpenCitationReview,
+          citationBusy: loadingAiReview,
+          citationCount: (aiReviewResult?.findings || []).length,
+          citationDisabled: !selectedPaper?.id || !selectedSectionId,
+          citationError: aiReviewError?.message || null,
+          runBlockedReason: reviewCitationRunBlocked,
+          cooldownRemainingSec,
+          citationReadOnly: reviewCitationReadOnly,
+          onRunReferenceCheck: handleRunReviewReferenceCheck,
+          referenceBusy: paperRefs.checkLoading,
+          referenceDisabled: !selectedPaper?.id || currentSection?.sectionType !== 'REFERENCE',
+        } : null} />
 
       {project?.deletionScheduledAt && (
         <div className="px-4 py-2 shrink-0">
@@ -1873,7 +2076,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
           <SourceLibraryContent sources={sources} project={project} isLocked={isLocked} setViewerFile={setViewerFile} fetchSources={fetchSources} onOpenSourceMap={openSourceMap} paperReferences={paperReferences} referencesLoading={paperRefs.loading} referencesError={paperRefs.error} referenceCheck={paperRefs.check} referenceCheckLoading={paperRefs.checkLoading} referenceCheckError={paperRefs.checkError} onRetryReferenceCheck={paperRefs.runCheck} referenceSourceIds={referenceSourceIds} canMutateReferences={canMutateReferences} onAddReference={handleAddReference} onRemoveReference={handleRemoveReference} onReferencesChanged={refreshReferences} showToast={showToast} readOnly compact />
         ) : null} />
 
-        <EditorPanel onViewFullPaper={() => setShowFullPaperPreview(true)} review={isReview ? review.workflow : null} projectId={projectId} compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={isReview || isLocked ? undefined : handleSaveDraft} insertLatexTag={isReview ? undefined : insertLatexTag} insertSymbol={isReview ? undefined : insertSymbol} handleFindReplace={isReview ? undefined : handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} isLocked={isLocked} findings={editorFindings} onFindingClick={handleFindingClick} onOpenSourceMap={openSourceMap} onRunCitationReview={handleRunAiReview} onOpenCitationReview={handleOpenCitationReview} reviewBusy={loadingAiReview} reviewProgress={aiReviewProgress} reviewFindingsCount={(aiReviewResult?.findings || []).length} reviewError={aiReviewError?.message} onEditorUserScroll={handleReviewScrollClose} isReviewVisible={isReviewVisible} onToggleReviewVisible={toggleReviewVisible} citationIndex={citationIndex}
+        <EditorPanel onViewFullPaper={() => setShowFullPaperPreview(true)} review={isReview ? review.workflow : null} projectId={projectId} compact={isCompactWorkspace} editorRef={editorRef} selectedPaper={selectedPaper} selectedSectionId={selectedSectionId} assignedSections={assignedSections} canEditCurrentSection={canEditCurrentSection} currentSection={currentSection} displayContent={displayContent} updateCode={isLocked ? undefined : updateCode} editorWidth={editorWidth} onEditorResizeStart={handleMouseDown} saveStatus={saveStatus} lastSaved={lastSaved} handleSaveDraft={isReview || isLocked ? undefined : handleSaveDraft} insertLatexTag={isReview ? undefined : insertLatexTag} insertSymbol={isReview ? undefined : insertSymbol} handleFindReplace={isReview ? undefined : handleFindReplace} handleDownloadTex={handleDownloadTex} showSymbolMenu={showSymbolMenu} setShowSymbolMenu={setShowSymbolMenu} showTextSizeMenu={showTextSizeMenu} setShowTextSizeMenu={setShowTextSizeMenu} showSearchPanel={showSearchPanel} setShowSearchPanel={setShowSearchPanel} searchQuery={searchQuery} setSearchQuery={setSearchQuery} replaceQuery={replaceQuery} setReplaceQuery={setReplaceQuery} textSize={textSize} setTextSize={setTextSize} showToast={showToast} mediaAssets={mediaAssets} isLocked={isLocked} findings={editorFindings} onFindingClick={handleFindingClick} onOpenSourceMap={openSourceMap} onRunCitationReview={handleRunAiReview} onOpenCitationReview={handleOpenCitationReview} reviewBusy={loadingAiReview} reviewProgress={aiReviewProgress} reviewFindingsCount={(aiReviewResult?.findings || []).length} reviewError={aiReviewError?.message} onEditorUserScroll={handleReviewScrollClose} isReviewVisible={isReviewVisible} onToggleReviewVisible={toggleReviewVisible} citationIndex={citationIndex} submittedFindings={isReview ? (aiReviewResult?.findings || []) : undefined} submittedFindingsStale={isReview ? isAiReviewStale : false} citationReadOnly={reviewCitationReadOnly} referenceData={isReview ? { references: paperReferences, loading: paperRefs.loading, error: paperRefs.error, check: paperRefs.check, checkLoading: paperRefs.checkLoading, checkError: paperRefs.checkError, onRetryReferenceCheck: handleRunReviewReferenceCheck } : undefined}
           feedback={isReview ? undefined : feedback} feedbackOpen={feedbackOpen} setFeedbackOpen={setStudentFeedbackOpen} activeFeedbackId={activeFeedbackId} onSelectFeedback={isReview ? item => { review.workflow.selectFeedback(item); setActiveTab('Review'); setIsDrawerOpen(true); if (isCompactWorkspace) setIsFileTreeOpen(false); } : handleSelectFeedback}
           feedbackRequestId={feedbackRequestId} setFeedbackRequestId={setFeedbackRequestId} feedbackScope={feedbackScope} setFeedbackScope={setFeedbackScope} userProjectRole={project?.currentUserRole} currentUserId={user?.id}           paperReferences={paperReferences} />
 
@@ -2064,8 +2267,9 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
         sourcesLoading={loadingAiSources}
         sourcesError={aiSourcesError}
         isStale={isAiReviewStale}
-        canInsertCitation={canEditCurrentSection && !isLocked}
+        canInsertCitation={!isReview && canEditCurrentSection && !isLocked}
         onInsertCitation={handleInsertReviewCitation}
+        onUseAsFeedback={isReview ? handleUseAsFeedback : undefined}
         onOpenPassage={handleOpenReviewPassage}
         onPrevious={() => openReviewFinding(reviewOverlay.findingIndex - 1)}
         onNext={() => openReviewFinding(reviewOverlay.findingIndex + 1)}

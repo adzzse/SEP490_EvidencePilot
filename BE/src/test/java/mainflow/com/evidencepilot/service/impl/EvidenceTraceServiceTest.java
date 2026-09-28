@@ -6,12 +6,15 @@ import com.evidencepilot.dto.response.SectionCitationReviewResponse;
 import com.evidencepilot.model.CitationReviewRound;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.EvidenceRevisionTrace;
+import com.evidencepilot.model.FeedbackRequest;
+import com.evidencepilot.model.FeedbackStatus;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.InstructorJudgment;
 import com.evidencepilot.model.enums.StudentAction;
 import com.evidencepilot.model.enums.TraceOutcome;
+import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.CitationReviewRoundRepository;
 import com.evidencepilot.repository.DocumentChunkRepository;
 import com.evidencepilot.repository.DocumentRepository;
@@ -46,6 +49,8 @@ class EvidenceTraceServiceTest {
             mock(CitationReviewRoundRepository.class);
     private final EvidenceRevisionTraceRepository traceRepository =
             mock(EvidenceRevisionTraceRepository.class);
+    private final com.evidencepilot.repository.FeedbackRequestRepository feedbackRequestRepository =
+            mock(com.evidencepilot.repository.FeedbackRequestRepository.class);
     private final PaperSectionRepository paperSectionRepository =
             mock(PaperSectionRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
@@ -78,6 +83,7 @@ class EvidenceTraceServiceTest {
         service = new EvidenceTraceService(
                 roundRepository,
                 traceRepository,
+                feedbackRequestRepository,
                 paperSectionRepository,
                 userRepository,
                 documentRepository,
@@ -520,5 +526,147 @@ class EvidenceTraceServiceTest {
             PaperSection section,
             CitationReviewRound round,
             EvidenceRevisionTrace trace) {
+    }
+
+    @Test
+    void archivesForRequest_groupsCycleRoundsByOrigin() {
+        LocalDateTime now = LocalDateTime.now();
+        Project project = new Project();
+        project.setId(UUID.randomUUID());
+        User student = user(UserRole.STUDENT);
+        User instructor = user(UserRole.INSTRUCTOR);
+        Document document = new Document();
+        document.setId(UUID.randomUUID());
+        document.setProject(project);
+        PaperSection section = new PaperSection();
+        section.setId(UUID.randomUUID());
+        section.setDocument(document);
+        section.setVersion(3);
+        FeedbackRequest oldRequest = feedbackRequest(project, FeedbackStatus.RETURNED,
+                now.minusDays(10), now.minusDays(9), null);
+        FeedbackRequest activeRequest = feedbackRequest(project, FeedbackStatus.PENDING,
+                now.minusDays(1), null, null);
+        CitationReviewRound oldStudentRound = archiveRound(project, section, student, now.minusDays(11));
+        CitationReviewRound studentRound = archiveRound(project, section, student, now.minusDays(8));
+        CitationReviewRound instructorRound = archiveRound(project, section, instructor, now.minusHours(12));
+        EvidenceRevisionTrace studentTrace = archiveTrace(studentRound, section, "student claim");
+        EvidenceRevisionTrace instructorTrace = archiveTrace(instructorRound, section, "instructor claim");
+        EvidenceRevisionTrace oldTrace = archiveTrace(oldStudentRound, section, "old claim");
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(feedbackRequestRepository.findById(activeRequest.getId()))
+                .thenReturn(Optional.of(activeRequest));
+        when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(project.getId()))
+                .thenReturn(List.of(activeRequest, oldRequest));
+        when(roundRepository.findBySectionIdOrderByCreatedAtDesc(section.getId()))
+                .thenReturn(List.of(instructorRound, studentRound, oldStudentRound));
+        when(traceRepository.findByRoundIdOrderByFindingIndex(studentRound.getId()))
+                .thenReturn(List.of(studentTrace));
+        when(traceRepository.findByRoundIdOrderByFindingIndex(instructorRound.getId()))
+                .thenReturn(List.of(instructorTrace));
+        when(traceRepository.findByRoundIdOrderByFindingIndex(oldStudentRound.getId()))
+                .thenReturn(List.of(oldTrace));
+        when(userRepository.findAllById(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(student, instructor));
+
+        var archives = service.archivesForRequest(activeRequest.getId(), section.getId());
+
+        assertThat(archives.requestId()).isEqualTo(activeRequest.getId());
+        assertThat(archives.sealed()).isFalse();
+        assertThat(archives.hasSuccessor()).isFalse();
+        assertThat(archives.student()).hasSize(1);
+        assertThat(archives.student().get(0).roundId()).isEqualTo(studentRound.getId());
+        assertThat(archives.student().get(0).findings()).extracting("excerpt")
+                .containsExactly("student claim");
+        assertThat(archives.instructor()).hasSize(1);
+        assertThat(archives.instructor().get(0).roundId()).isEqualTo(instructorRound.getId());
+        assertThat(archives.instructor().get(0).findings()).extracting("excerpt")
+                .containsExactly("instructor claim");
+    }
+
+    @Test
+    void archivesForRequest_keepsPreviousCycleSealedAndHiddenFromSuccessor() {
+        LocalDateTime now = LocalDateTime.now();
+        Project project = new Project();
+        project.setId(UUID.randomUUID());
+        User student = user(UserRole.STUDENT);
+        User instructor = user(UserRole.INSTRUCTOR);
+        Document document = new Document();
+        document.setId(UUID.randomUUID());
+        document.setProject(project);
+        PaperSection section = new PaperSection();
+        section.setId(UUID.randomUUID());
+        section.setDocument(document);
+        section.setVersion(3);
+        FeedbackRequest oldRequest = feedbackRequest(project, FeedbackStatus.RETURNED,
+                now.minusDays(10), now.minusDays(9), null);
+        FeedbackRequest activeRequest = feedbackRequest(project, FeedbackStatus.PENDING,
+                now.minusDays(1), null, null);
+        CitationReviewRound oldStudentRound = archiveRound(project, section, student, now.minusDays(11));
+        CitationReviewRound studentRound = archiveRound(project, section, student, now.minusDays(8));
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(feedbackRequestRepository.findById(oldRequest.getId()))
+                .thenReturn(Optional.of(oldRequest));
+        when(feedbackRequestRepository.findByProjectIdOrderByRequestedAtDesc(project.getId()))
+                .thenReturn(List.of(activeRequest, oldRequest));
+        when(roundRepository.findBySectionIdOrderByCreatedAtDesc(section.getId()))
+                .thenReturn(List.of(studentRound, oldStudentRound));
+        when(traceRepository.findByRoundIdOrderByFindingIndex(studentRound.getId()))
+                .thenReturn(List.of(archiveTrace(studentRound, section, "new claim")));
+        when(traceRepository.findByRoundIdOrderByFindingIndex(oldStudentRound.getId()))
+                .thenReturn(List.of(archiveTrace(oldStudentRound, section, "old claim")));
+        when(userRepository.findAllById(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(student, instructor));
+
+        var sealed = service.archivesForRequest(oldRequest.getId(), section.getId());
+
+        assertThat(sealed.sealed()).isTrue();
+        assertThat(sealed.hasSuccessor()).isTrue();
+        assertThat(sealed.student()).hasSize(1);
+        assertThat(sealed.student().get(0).findings()).extracting("excerpt")
+                .containsExactly("old claim");
+        assertThat(sealed.instructor()).isEmpty();
+    }
+
+    private User user(UserRole role) {
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        user.setRole(role);
+        return user;
+    }
+
+    private FeedbackRequest feedbackRequest(Project project, FeedbackStatus status,
+            LocalDateTime requestedAt, LocalDateTime returnedAt, LocalDateTime reviewedAt) {
+        FeedbackRequest request = new FeedbackRequest();
+        request.setId(UUID.randomUUID());
+        request.setProject(project);
+        request.setStatus(status);
+        request.setRequestedAt(requestedAt);
+        request.setReturnedAt(returnedAt);
+        request.setReviewedAt(reviewedAt);
+        return request;
+    }
+
+    private CitationReviewRound archiveRound(Project project, PaperSection section, User requester,
+            LocalDateTime createdAt) {
+        CitationReviewRound round = new CitationReviewRound();
+        round.setId(UUID.randomUUID());
+        round.setProject(project);
+        round.setSection(section);
+        round.setRequestedBy(requester);
+        round.setSectionVersion(section.getVersion());
+        round.setCreatedAt(createdAt);
+        return round;
+    }
+
+    private EvidenceRevisionTrace archiveTrace(CitationReviewRound round, PaperSection section, String excerpt) {
+        EvidenceRevisionTrace trace = new EvidenceRevisionTrace();
+        trace.setId(UUID.randomUUID());
+        trace.setRound(round);
+        trace.setSection(section);
+        trace.setFindingIndex(0);
+        trace.setExcerpt(excerpt);
+        trace.setRationale("rationale");
+        trace.setCreatedAt(round.getCreatedAt());
+        return trace;
     }
 }

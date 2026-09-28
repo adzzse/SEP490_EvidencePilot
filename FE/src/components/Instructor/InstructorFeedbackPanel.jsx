@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '../index';
 import SectionEvidenceTab from './review/SectionEvidenceTab.jsx';
+import PaperReferencesPanel from '../Student/PaperReferencesPanel.jsx';
 import FeedbackThreadsTab from './review/FeedbackThreadsTab.jsx';
 import FeedbackCard from './review/FeedbackCard.jsx';
 import ReviewOverviewBlock from './review/ReviewOverviewBlock.jsx';
@@ -34,10 +35,13 @@ export function InstructorReviewGuide({ review, selectedSection, plain = false }
   </section>;
 }
 
-export default function InstructorFeedbackPanel({ review, selectedSection, projectId, focusSignal = 0, composerFocusToken = 0 }) {
+export default function InstructorFeedbackPanel({ review, selectedSection, projectId, focusSignal = 0, composerFocusToken = 0, submittedFindings = [], submittedFindingsStale = false, referenceData = null }) {
   const { t } = useTranslation();
   const { activeRequest, isHistoricalRound, errorMessage, successMessage, transitioningRequestId, pendingTransition, setPendingTransition, requestLocked, canReturn, canApprove, handleTransitionStatus } = review;
   const [panelTab, setPanelTab] = useState('feedback');
+  // rationale: References sections show the reference check result instead of
+  // evidence findings — same tab slot, relabeled.
+  const isReferenceSection = selectedSection?.sectionType === 'REFERENCE';
   useEffect(() => {
     if (focusSignal > 0) setPanelTab('feedback');
   }, [focusSignal]);
@@ -63,7 +67,7 @@ export default function InstructorFeedbackPanel({ review, selectedSection, proje
         {[
           { id: 'overview', label: t('instructor.review.overviewTab') },
           { id: 'feedback', label: t('instructor.review.feedbackTab') },
-          { id: 'findings', label: t('instructor.review.findingsTab') },
+          { id: 'findings', label: isReferenceSection ? t('instructor.review.resultTab') : t('instructor.review.findingsTab') },
           { id: 'history', label: t('instructor.review.historyTab') },
         ].map(tab => (
           <button key={tab.id} onClick={() => setPanelTab(tab.id)}
@@ -84,7 +88,20 @@ export default function InstructorFeedbackPanel({ review, selectedSection, proje
 
 
         {panelTab === 'findings' && (
-          <SectionEvidenceTab review={review} selectedSection={selectedSection} />
+          isReferenceSection ? (
+            <PaperReferencesPanel
+              references={referenceData?.references || []}
+              loading={!!referenceData?.loading}
+              error={referenceData?.error || ''}
+              referenceCheck={referenceData?.check || null}
+              referenceCheckLoading={!!referenceData?.checkLoading}
+              referenceCheckError={referenceData?.checkError || ''}
+              onRetryReferenceCheck={referenceData?.onRetryReferenceCheck}
+              canMutate={false}
+            />
+          ) : (
+            <SectionEvidenceTab review={review} selectedSection={selectedSection} submittedFindings={submittedFindings} submittedFindingsStale={submittedFindingsStale} />
+          )
         )}
 
         {panelTab === 'history' && (() => {
@@ -93,15 +110,35 @@ export default function InstructorFeedbackPanel({ review, selectedSection, proje
           // read-only. updatedAt never orders.
           const previous = selectPreviousCards(
             review.feedbackItems, review.orderedRequests, review.activeRequestId, selectedSection?.id);
-          if (previous.length === 0) {
-            return (
-              <p className="py-2 text-center text-[11px] italic text-(--text-tertiary)">{t('studentFeedback.empty')}</p>
-            );
-          }
+          const visible = !!review.showPrevFeedback;
+          const toggle = () => review.setShowPrevFeedback?.(!visible);
           return (
-            <ul className="space-y-2">
-              {previous.map(item => <FeedbackCard key={item.id} item={item} readOnly />)}
-            </ul>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-(--border-light) bg-(--surface-secondary) px-3 py-2">
+                <p className="text-[11px] font-bold text-(--text-secondary)">
+                  {previous.length > 0
+                    ? t('instructor.review.historyCount', { count: previous.length })
+                    : t('studentFeedback.empty')}
+                </p>
+                {previous.length > 0 && (
+                  <button type="button" onClick={toggle} aria-pressed={visible}
+                    title={visible ? t('hideReviewHighlights') : t('showReviewHighlights')}
+                    aria-label={visible ? t('hideReviewHighlights') : t('showReviewHighlights')}
+                    className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${visible ? 'text-amber-600 hover:bg-(--surface-tertiary)' : 'text-(--text-tertiary) hover:bg-(--surface-tertiary)'}`}>
+                    {visible ? (
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                    ) : (
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>
+                    )}
+                  </button>
+                )}
+              </div>
+              {visible && previous.length > 0 && (
+                <ul className="space-y-2">
+                  {previous.map(item => <FeedbackCard key={item.id} item={item} readOnly />)}
+                </ul>
+              )}
+            </div>
           );
         })()}
 

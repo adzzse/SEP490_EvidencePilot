@@ -13,6 +13,7 @@ import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.ReviewGuide;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
+import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.prompt.SectionSuggestionPrompt;
 import com.evidencepilot.repository.AiEvaluationJobRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
@@ -35,6 +36,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -125,27 +128,61 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
 
     @Override
     public Optional<SectionCitationReviewStateResponse> findSectionCitationReviewState(
-            UUID projectId, UUID documentId, UUID sectionId, String inputFingerprint) {
-        Optional<AiEvaluationJob> job = jobRepository
-                .findFirstByProjectIdAndKindAndDocumentIdAndSectionIdAndInputFingerprintOrderByCreatedAtDesc(
+            UUID projectId, UUID documentId, UUID sectionId, String inputFingerprint, UUID requesterId) {
+        List<AiEvaluationJob> jobs = jobRepository
+                .findByProjectIdAndKindAndDocumentIdAndSectionIdAndInputFingerprintOrderByCreatedAtDesc(
                         projectId, AiEvaluationJob.KIND_SECTION_CITATION_REVIEW,
                         documentId, sectionId, inputFingerprint);
-        if (job.isPresent()) {
-            AiEvaluationJob value = job.get();
-            SectionCitationReviewResponse review = readCitationReview(value.getResultJson())
-                    .or(() -> sectionCitationReviewService.cached(documentId, sectionId))
-                    .orElse(null);
-            boolean failed = AiEvaluationJob.STATUS_FAILED.equals(value.getStatus());
-            return Optional.of(new SectionCitationReviewStateResponse(
-                    value.getId(), citationReviewStatus(value.getStatus()),
-                    value.getProgressCurrent(), value.getProgressTotal(),
-                    review != null && review.complete(), review,
-                    failed ? "CITATION_REVIEW_FAILED" : null,
-                    failed ? value.getErrorMessage() : null));
+        if (jobs.isEmpty()) {
+            return sectionCitationReviewService.cached(documentId, sectionId)
+                    .map(review -> new SectionCitationReviewStateResponse(
+                            null, "COMPLETE", 0, 0, review.complete(), review, null, null));
         }
-        return sectionCitationReviewService.cached(documentId, sectionId)
-                .map(review -> new SectionCitationReviewStateResponse(
-                        null, "COMPLETE", 0, 0, review.complete(), review, null, null));
+        // rationale: jobs are content-keyed and shared across roles — an
+        // instructor re-run must not replace what the student sees. Prefer the
+        // latest job requested by someone with the caller's role; fall back to
+        // latest overall when the caller has no job of their own.
+        AiEvaluationJob value = preferSameRole(jobs, requesterId).orElse(jobs.get(0));
+        SectionCitationReviewResponse review = readCitationReview(value.getResultJson())
+                .or(() -> sectionCitationReviewService.cached(documentId, sectionId))
+                .orElse(null);
+        boolean failed = AiEvaluationJob.STATUS_FAILED.equals(value.getStatus());
+        return Optional.of(new SectionCitationReviewStateResponse(
+                value.getId(), citationReviewStatus(value.getStatus()),
+                value.getProgressCurrent(), value.getProgressTotal(),
+                review != null && review.complete(), review,
+                failed ? "CITATION_REVIEW_FAILED" : null,
+                failed ? value.getErrorMessage() : null));
+    }
+
+    private Optional<AiEvaluationJob> preferSameRole(List<AiEvaluationJob> jobs, UUID requesterId) {
+        if (requesterId == null) return Optional.empty();
+        Optional<User> requester = userRepository.findById(requesterId);
+        if (requester.isEmpty() || requester.get().getRole() == null) return Optional.empty();
+        UserRole role = requester.get().getRole();
+        Set<UUID> candidateIds = new LinkedHashSet<>();
+        Map<UUID, UUID> jobRequester = new LinkedHashMap<>();
+        for (AiEvaluationJob job : jobs) {
+            requestedByOf(job).ifPresent(id -> {
+                candidateIds.add(id);
+                jobRequester.putIfAbsent(job.getId(), id);
+            });
+        }
+        Map<UUID, UserRole> rolesById = new LinkedHashMap<>();
+        userRepository.findAllById(candidateIds).forEach(user -> rolesById.put(user.getId(), user.getRole()));
+        return jobs.stream()
+                .filter(job -> role.equals(rolesById.get(jobRequester.get(job.getId()))))
+                .findFirst();
+    }
+
+    private Optional<UUID> requestedByOf(AiEvaluationJob job) {
+        if (job.getPayloadJson() == null || job.getPayloadJson().isBlank()) return Optional.empty();
+        try {
+            String raw = objectMapper.readTree(job.getPayloadJson()).path("requestedByUserId").asText(null);
+            return raw == null ? Optional.empty() : Optional.of(UUID.fromString(raw));
+        } catch (IllegalArgumentException | com.fasterxml.jackson.core.JsonProcessingException exception) {
+            return Optional.empty();
+        }
     }
 
     @Override

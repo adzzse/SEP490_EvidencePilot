@@ -54,6 +54,19 @@ export default function MediaAssetPicker({ projectId, labels, value = [], onChan
 
   return (
     <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        {labels.heading && (
+          <p className="text-[10px] font-bold uppercase tracking-wide text-(--text-tertiary)">{labels.heading}</p>
+        )}
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => setOpen(true)}
+          className="shrink-0 rounded-lg border border-(--border) bg-(--surface) px-2.5 py-1.5 text-[10px] font-bold text-(--text-secondary) disabled:opacity-50"
+        >
+          {labels.selectMedia}{value.length > 0 ? ` (${value.length})` : ''}
+        </button>
+      </div>
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {value.map(entry => (
@@ -74,14 +87,6 @@ export default function MediaAssetPicker({ projectId, labels, value = [], onChan
           ))}
         </div>
       )}
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen(true)}
-        className="rounded-lg border border-(--border) bg-(--surface) px-2.5 py-1.5 text-[10px] font-bold text-(--text-secondary) disabled:opacity-50"
-      >
-        {labels.selectMedia}{value.length > 0 ? ` (${value.length})` : ''}
-      </button>
       <Modal open={open} onClose={() => setOpen(false)} title={labels.title} wide>
         <div className="space-y-3 p-1 text-xs">
           {loading && <p role="status" className="py-4 text-center text-(--text-secondary)">{t('loading')}</p>}

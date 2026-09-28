@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import LatexEditor from '../features/LatexEditor';
 import FeedbackPanel from './FeedbackPanel.jsx';
 import PreviewPane from '../features/PreviewPane';
@@ -45,6 +44,9 @@ export default function EditorPanel({
   userProjectRole = 'MEMBER', currentUserId = null,
   citationIndex = {},
   paperReferences = [],
+  submittedFindings = [], submittedFindingsStale = false,
+  citationReadOnly = false,
+  referenceData = null,
 }) {
   const { t } = useTranslation();
   const citationNumbers = useMemo(() => buildCitationNumbers(paperReferences), [paperReferences]);
@@ -99,19 +101,24 @@ export default function EditorPanel({
   const previewVisible = (narrow ? showPreview : true) && (!feedbackOpen || threePanes);
   useEffect(() => { scrollFractionRef.current = { editor: 0, preview: 0 }; pendingRestoreRef.current = null; setShowPreview(false); }, [selectedSectionId, review?.activeFeedbackId]);
   useEffect(() => { if (feedbackOpen) setShowPreview(false); }, [feedbackOpen]);
-  // rationale: highlights never flatten history. Instructor sees the active
-  // request (drafts included) plus the immediately previous returned round's
-  // carry-over for this section — never N-2. Student sees the loaded round.
+  // rationale: history hidden by default — active request only until the
+  // instructor eyes it on in the History tab. Student sees the loaded round.
   const sectionFeedback = useMemo(() => {
     const pool = review?.feedbackItems || feedback?.items || [];
     if (!review) return pool.filter(item => String(item.sectionId) === String(selectedSectionId));
     const scope = { sectionId: selectedSectionId };
     const active = selectFeedbackForRound(pool, { ...scope, requestId: review.activeRequestId, publishedOnly: false });
+    if (!review.showPrevFeedback) return active;
     const prev = previousRequest(review.orderedRequests, review.activeRequestId);
     if (!prev) return active;
     const seen = new Set(active.map(item => String(item.id)));
     return [...active, ...selectFeedbackForRound(pool, { ...scope, requestId: prev.id }).filter(item => !seen.has(String(item.id)))];
-  }, [review?.feedbackItems, feedback?.items, selectedSectionId, review?.activeRequestId, review?.orderedRequests]);
+  }, [review?.feedbackItems, feedback?.items, selectedSectionId, review?.activeRequestId, review?.orderedRequests, review?.showPrevFeedback]);
+  const historyIds = useMemo(() => {
+    if (!review?.showPrevFeedback) return new Set();
+    const activeIds = new Set(selectFeedbackForRound(review.feedbackItems || [], { sectionId: selectedSectionId, requestId: review.activeRequestId, publishedOnly: false }).map(item => String(item.id)));
+    return new Set((sectionFeedback || []).filter(item => !activeIds.has(String(item.id))).map(item => String(item.id)));
+  }, [sectionFeedback, review?.feedbackItems, review?.activeRequestId, review?.showPrevFeedback, selectedSectionId]);
   useEffect(() => {
     const observer = new ResizeObserver(entries => { setAvailableWidth(entries[0].contentRect.width); });
     if (containerRef.current) observer.observe(containerRef.current);
@@ -160,6 +167,17 @@ export default function EditorPanel({
     setFab(null);
     setComposerFocusToken(token => token + 1);
   }, [review]);
+  // rationale: opening a citation finding arms that passage (see
+  // armFindingPassage) and brings the Feedback tab forward so the Line x–y
+  // context renders deterministically. Student path unaffected (no review).
+  const openCitationDrawer = useCallback(() => {
+    onOpenCitationReview?.();
+    if (review) setComposerFocusToken(token => token + 1);
+  }, [onOpenCitationReview, review]);
+  const openCitationFinding = useCallback((findingIndex, coords) => {
+    onFindingClick?.(findingIndex, coords);
+    if (review) setComposerFocusToken(token => token + 1);
+  }, [onFindingClick, review]);
   // rationale: the same floating affordance confirms a new passage while
   // adjusting an edit (chat icon, draft-only) and creates from a fresh
   // selection (message-plus). Ordinary edit-mode selections raise nothing —
@@ -172,11 +190,30 @@ export default function EditorPanel({
   }, [review]);
   const handleEditorSelection = useCallback(sel => {
     if (!review) { setFab(null); return; }
-    if (review.isAdjustingPassage) { setFab(sel ? { ...sel, mode: 'confirm' } : null); return; }
+    // rationale: locked or read-only (Returned) requests show highlights only —
+    // no FAB, no arming; the highlight alone is the affordance.
+    if (review.requestLocked || citationReadOnly) { setFab(null); return; }
+    // rationale: mirror the live range into the workflow so the edit card can
+    // preview the passage under the cursor while adjusting (pre-confirm).
+    review.setLiveSelection?.(sel && sel.to > sel.from ? { from: sel.from, to: sel.to } : null);
+    if (!sel?.coords || !containerRef.current) {
+      if (review.isAdjustingPassage) { setFab(sel ? { ...sel, mode: 'confirm' } : null); return; }
+      if (review.editingFeedbackId) { setFab(null); return; }
+      setFab(sel);
+      if (sel) review?.autoCaptureSelection?.();
+      return;
+    }
+    // rationale: pill lives inside the editor/Preview container (absolute,
+    // clipped by overflow) so it sticks to the highlight tail and can never
+    // overlay the file tree or the right panel. Viewport coords → container.
+    const box = containerRef.current.getBoundingClientRect();
+    const rel = { x: sel.coords.left - box.left, y: sel.coords.bottom - box.top };
+    const withRel = { ...sel, rel };
+    if (review.isAdjustingPassage) { setFab(sel ? { ...withRel, mode: 'confirm' } : null); return; }
     if (review.editingFeedbackId) { setFab(null); return; }
-    setFab(sel);
+    setFab(withRel);
     if (sel) review?.autoCaptureSelection?.();
-  }, [review]);
+  }, [review, citationReadOnly]);
   const closeFeedback = () => {
     setFeedbackOpen(false);
     containerRef.current?.querySelector('[data-tour="editor-feedback"]')?.focus();
@@ -184,7 +221,7 @@ export default function EditorPanel({
 
   // Sync by source anchors so tall preview blocks (especially tables) can move at their own rate.
   const syncScrollRef = useRef(null);
-  const editorScrollBridge = useCallback(() => { syncScrollRef.current?.('editor'); }, []);
+  const editorScrollBridge = useCallback(() => { syncScrollRef.current?.('editor'); setFab(null); }, []);
   const previewScrollBridge = useCallback(() => { syncScrollRef.current?.('preview'); setFab(null); }, []);
   const layoutBridge = useCallback(() => { syncScrollRef.current?.(); }, []);
 
@@ -244,7 +281,7 @@ export default function EditorPanel({
   }, [editorRef, selectedSectionId, previewVisible]);
 
   return (
-    <div ref={containerRef} id="editor-preview-container" role={review ? 'region' : undefined} aria-label={review ? review.viewMode === 'working' ? t('instructor.review.workingCopy') : t('feedbackSubmittedPaper') : undefined} className="flex-1 min-w-0 flex flex-col overflow-hidden bg-(--surface-tertiary)/50 p-2 gap-2">
+    <div ref={containerRef} id="editor-preview-container" role={review ? 'region' : undefined} aria-label={review ? review.viewMode === 'working' ? t('instructor.review.workingCopy') : t('feedbackSubmittedPaper') : undefined} className="relative flex-1 min-w-0 flex flex-col overflow-hidden bg-(--surface-tertiary)/50 p-2 gap-2">
       {review && review.viewMode === 'submitted' && (review.snapshotState === 'LOADING' || review.snapshotState === 'LEGACY_NO_SNAPSHOT' || review.snapshotState === 'LOAD_ERROR') && <div className="shrink-0 text-xs">
         {review.snapshotState === 'LOADING' && <p role="status">{t('loading')}</p>}
         {review.snapshotState === 'LEGACY_NO_SNAPSHOT' && <p role="alert">{t('instructor.review.legacySnapshotNotice')}</p>}
@@ -259,6 +296,34 @@ export default function EditorPanel({
             {currentSection && <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1 py-0.5 rounded shrink-0">v{currentSection.version || 1}</span>}
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
+            {!reviewBusy && reviewFindingsCount > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={onToggleReviewVisible}
+                  title={isReviewVisible ? t('hideReviewHighlights') : t('showReviewHighlights')}
+                  aria-pressed={isReviewVisible}
+                  className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${isReviewVisible ? 'text-amber-600 hover:bg-(--surface-tertiary)' : 'text-(--text-tertiary) hover:bg-(--surface-tertiary)'}`}
+                >
+                  {isReviewVisible ? (
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={openCitationDrawer}
+                  disabled={citationReadOnly}
+                  title={citationReadOnly ? t('instructor.review.citationReadOnly') : t('openCitationReviewFindings', { count: reviewFindingsCount })}
+                  aria-label={citationReadOnly ? t('instructor.review.citationReadOnly') : t('openCitationReviewFindings', { count: reviewFindingsCount })}
+                  className="flex items-center gap-1 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-black text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 16v-4M12 8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  {reviewFindingsCount}
+                </button>
+              </>
+            )}
             {review && (
               <>
                 <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold text-(--text-secondary) cursor-pointer select-none">
@@ -292,33 +357,6 @@ export default function EditorPanel({
                   ? `${Math.round(((reviewProgress.current || 0) / reviewProgress.total) * 100)}%`
                   : '…'}
               </span>
-            )}
-            {!reviewBusy && reviewFindingsCount > 0 && (
-              <>
-                <button
-                  type="button"
-                  onClick={onToggleReviewVisible}
-                  title={isReviewVisible ? t('hideReviewHighlights') : t('showReviewHighlights')}
-                  aria-pressed={isReviewVisible}
-                  className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${isReviewVisible ? 'text-amber-600 hover:bg-(--surface-tertiary)' : 'text-(--text-tertiary) hover:bg-(--surface-tertiary)'}`}
-                >
-                  {isReviewVisible ? (
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                  ) : (
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" /></svg>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={onOpenCitationReview}
-                  title={t('openCitationReviewFindings', { count: reviewFindingsCount })}
-                  aria-label={t('openCitationReviewFindings', { count: reviewFindingsCount })}
-                  className="flex items-center gap-1 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-black text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors cursor-pointer"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 16v-4M12 8h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  {reviewFindingsCount}
-                </button>
-              </>
             )}
             {!review && <div className="flex rounded-lg border border-(--border) bg-(--surface-tertiary) p-0.5 shrink-0 text-[11px]" aria-label={t('studentFeedback.view')}>
               {narrow && <button type="button" aria-pressed={!showPreview} onClick={() => setShowPreview(false)} className={`rounded-md px-2 py-1 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${!showPreview ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-secondary)'}`}>{t('student.workspace.latexLabel')}</button>}
@@ -433,8 +471,8 @@ export default function EditorPanel({
         )}
         <div className="flex-1 min-h-0 overflow-hidden">
           <LatexEditor key={review ? `${review.viewMode}-${review.activeRequestId}-${selectedSectionId}` : selectedSectionId || 'no-section'} ref={editorRef} content={displayContent} savedContent={currentSection?.contentTex || ''} savedVersion={currentSection?.version}
-            feedbackItems={sectionFeedback} activeFeedbackId={review?.activeFeedbackId || activeFeedbackId} feedbackVisible={Boolean(review) || feedbackOpen} onFeedbackClick={handleFeedbackClick}
-            onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={onFindingClick} onScroll={editorScrollBridge} onSelection={review ? handleEditorSelection : undefined} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} mediaAssets={mediaAssets} changeRanges={review?.changeRanges || []} />
+            feedbackItems={sectionFeedback} historyIds={historyIds} isAdjustingPassage={Boolean(review?.isAdjustingPassage)} selectingTone={review ? 'feedback' : 'default'} activeFeedbackId={review?.activeFeedbackId || activeFeedbackId} feedbackVisible={Boolean(review) || feedbackOpen} onFeedbackClick={handleFeedbackClick}
+            onChange={isOwnSection && !isLocked ? updateCode : undefined} readOnly={!isOwnSection || isLocked} fontSize={textSize} findings={findings} onFindingClick={openCitationFinding} onScroll={editorScrollBridge} onSelection={review ? handleEditorSelection : undefined} onLayoutChange={layoutBridge} onUserScroll={onEditorUserScroll} citationIndex={citationIndex} mediaAssets={mediaAssets} changeRanges={review?.changeRanges || []} />
         </div>
       </div>
       <div onMouseDown={onEditorResizeStart} className={`${review || narrow || threePanes ? 'hidden' : 'flex'} w-1.5 hover:bg-indigo-500 cursor-col-resize self-stretch transition-all shrink-0 z-10 relative group items-center justify-center border-l border-r border-(--border)`} title={t('dragToResize')}>
@@ -452,6 +490,11 @@ export default function EditorPanel({
             {t('preview')}
           </div>
           <div className="flex items-center gap-1">
+            <span className="flex shrink-0 items-center gap-0.5">
+              <button onClick={() => setPreviewZoom(p => Math.min(200, p + 10))} className="text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary) px-1.5 py-0.5 rounded transition-colors">+</button>
+              <span className="text-xs font-mono text-(--text-primary) min-w-[36px] text-center">{previewZoom}%</span>
+              <button onClick={() => setPreviewZoom(p => Math.max(50, p - 10))} className="text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary) px-1.5 py-0.5 rounded transition-colors">−</button>
+            </span>
             {review && (
               <label className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold text-(--text-secondary) cursor-pointer select-none">
                 <input
@@ -483,9 +526,6 @@ export default function EditorPanel({
             {!review && <button type="button" onClick={onOpenSourceMap} className="w-7 h-7 flex items-center justify-center rounded transition-colors hover:bg-(--surface-secondary) text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)" title={t('sourceMap.title')} aria-label={t('sourceMap.title')} aria-haspopup="dialog">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m7 7 10 10M7 17 17 7M7 7h10v10H7z" /><circle cx="7" cy="7" r="2" /><circle cx="17" cy="7" r="2" /><circle cx="7" cy="17" r="2" /><circle cx="17" cy="17" r="2" /></svg>
             </button>}
-            <button onClick={() => setPreviewZoom(p => Math.min(200, p + 10))} className="text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary) px-1.5 py-0.5 rounded transition-colors">+</button>
-            <span className="text-xs font-mono text-(--text-primary) min-w-[36px] text-center">{previewZoom}%</span>
-            <button onClick={() => setPreviewZoom(p => Math.max(50, p - 10))} className="text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--surface-secondary) px-1.5 py-0.5 rounded transition-colors">−</button>
           </div>
         </div>
         <div className="flex-1 min-h-0 relative overflow-hidden">
@@ -538,29 +578,29 @@ export default function EditorPanel({
           </div>
         </div>
       )}
-      {review && fab?.coords && createPortal(
+      {review && fab?.rel && (
         <button
           type="button"
-          aria-label={t(fab.mode === 'confirm' ? 'instructor.review.useThisPassage' : 'instructor.review.addComment')}
-          title={t(fab.mode === 'confirm' ? 'instructor.review.useThisPassage' : 'instructor.review.addComment')}
+          aria-label={t(fab.mode === 'confirm' ? 'instructor.review.confirmEditedFeedback' : 'instructor.review.addFeedback')}
+          title={t(fab.mode === 'confirm' ? 'instructor.review.confirmEditedFeedback' : 'instructor.review.addFeedback')}
           onMouseDown={event => event.preventDefault()}
           onClick={fab.mode === 'confirm' ? confirmPassageFromFab : openComposerFromFab}
           style={{
-            position: 'fixed',
-            left: fab.coords.right,
-            top: fab.coords.top - 25,
+            position: 'absolute',
+            left: Math.min(Math.max(fab.rel.x - 90, 8), Math.max((containerRef.current?.clientWidth || 300) - 190, 8)),
+            top: Math.max(fab.rel.y + 6, 8),
           }}
-          className="z-50 flex h-5 w-5 items-center justify-center rounded text-teal-700/80 hover:bg-teal-50 hover:text-teal-700 focus-visible:ring-2 focus-visible:ring-teal-300 dark:text-teal-300/80 dark:hover:bg-teal-950 dark:hover:text-teal-300"
+          className="z-30 flex min-h-9 items-center gap-1.5 rounded-xl bg-teal-600 px-3 py-2 text-[11px] font-black text-white shadow-xl hover:bg-teal-700 focus-visible:ring-2 focus-visible:ring-teal-300"
         >
           {fab.mode === 'confirm'
             ? <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m9.5 12 1.8 1.8 3.4-3.6" /></svg>
             : <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /><path strokeLinecap="round" strokeWidth="2" d="M18.5 13.5v5M16 16h5" /></svg>}
-        </button>,
-        document.body,
+          <span>{t(fab.mode === 'confirm' ? 'instructor.review.confirmEditedFeedback' : 'instructor.review.addFeedback')}</span>
+        </button>
       )}
       {review && (
-        <div className="w-[340px] xl:w-[380px] max-w-full shrink-0 min-h-0 overflow-y-auto overflow-x-hidden rounded-xl border border-(--border) bg-(--surface) shadow-sm p-2">
-          <InstructorFeedbackPanel review={review} selectedSection={currentSection} onSelectFeedback={onSelectFeedback} projectId={projectId} focusSignal={composerFocusToken} composerFocusToken={composerFocusToken} />
+        <div className="w-[340px] xl:w-[380px] max-w-full shrink-0 min-h-0 overflow-y-auto overflow-x-hidden hide-scrollbar rounded-xl border border-(--border) bg-(--surface) shadow-sm p-2">
+          <InstructorFeedbackPanel review={review} selectedSection={currentSection} onSelectFeedback={onSelectFeedback} projectId={projectId} focusSignal={composerFocusToken} composerFocusToken={composerFocusToken} submittedFindings={submittedFindings} submittedFindingsStale={submittedFindingsStale} referenceData={referenceData} />
         </div>
       )}
       </div>

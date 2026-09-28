@@ -45,6 +45,7 @@ export default function InlineCitationCard({
   isStale = false,
   canInsertCitation = true,
   onInsertCitation,
+  onUseAsFeedback = null,
   onOpenPassage,
   onPrevious,
   onNext,
@@ -188,7 +189,16 @@ export default function InlineCitationCard({
           >
             {t('openPassage')}
           </button>
-          {candidate && (
+          {candidate && onUseAsFeedback && (
+            <button
+              type="button"
+              onClick={() => onUseAsFeedback(finding, candidate)}
+              className="rounded bg-teal-600 px-2 py-1.5 text-[11px] font-bold text-white transition-colors hover:bg-teal-700 focus-visible:ring-2 focus-visible:ring-teal-300 focus-visible:ring-offset-2 cursor-pointer"
+            >
+              {t('useAsFeedback')}
+            </button>
+          )}
+          {candidate && !onUseAsFeedback && (
             <button
               type="button"
               onClick={() => onInsertCitation(finding, candidate)}

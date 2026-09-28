@@ -74,6 +74,8 @@ class FeedbackServiceImplTest {
     @Mock private ProjectCollectionService projectCollectionService;
     @Mock private SubmissionReadinessService submissionReadinessService;
     @Mock private ApplicationEventPublisher events;
+    @Mock private com.evidencepilot.service.FeedbackAttachmentService feedbackAttachmentService;
+    @Mock private com.evidencepilot.repository.FeedbackAttachmentRepository feedbackAttachmentRepository;
 
     @Test
     void instructorQueueUsesScopedFiltersAndReturnsStablePageMetadata() {
@@ -303,6 +305,50 @@ class FeedbackServiceImplTest {
     }
 
     private record Fixture(PaperSection section, InstructorFeedback root) {
+    }
+
+    @Test
+    void draftAttachmentDetachRemovesRowAndStoredCopy() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(instructor, student, ProjectStatus.SUBMITTED_FOR_REVIEW);
+        FeedbackRequest request = request(project, instructor, student, FeedbackStatus.PENDING);
+        PaperSection section = section(project, student);
+        InstructorFeedback root = feedback(request, section, instructor, false);
+        com.evidencepilot.model.FeedbackAttachment row = new com.evidencepilot.model.FeedbackAttachment();
+        row.setId(UUID.randomUUID());
+        row.setFeedback(root);
+        row.setStorageKey("feedback/x/clone.png");
+        root.setAttachments(new java.util.ArrayList<>(List.of(row)));
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(feedbackAttachmentRepository.findById(row.getId())).thenReturn(Optional.of(row));
+
+        InstructorFeedbackResponseDto view = service().detachAttachment(row.getId());
+
+        assertThat(view.attachments()).isEmpty();
+        verify(feedbackAttachmentRepository).delete(row);
+        verify(feedbackAttachmentService).deleteObjectAfterCommit("feedback/x/clone.png");
+    }
+
+    @Test
+    void publishedAttachmentDetachIsRejected() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        User student = user(UserRole.STUDENT);
+        Project project = project(instructor, student, ProjectStatus.RETURNED);
+        FeedbackRequest request = request(project, instructor, student, FeedbackStatus.RETURNED);
+        PaperSection section = section(project, student);
+        InstructorFeedback root = feedback(request, section, instructor, true);
+        com.evidencepilot.model.FeedbackAttachment row = new com.evidencepilot.model.FeedbackAttachment();
+        row.setId(UUID.randomUUID());
+        row.setFeedback(root);
+        row.setStorageKey("feedback/x/clone.png");
+        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
+        when(feedbackAttachmentRepository.findById(row.getId())).thenReturn(Optional.of(row));
+
+        assertThatThrownBy(() -> service().detachAttachment(row.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Published feedback is immutable");
+        verify(feedbackAttachmentRepository, never()).delete(any());
     }
 
     private Fixture draftFixture() {
@@ -686,7 +732,8 @@ class FeedbackServiceImplTest {
                 mapper,
                 org.mockito.Mockito.mock(com.evidencepilot.repository.AssignmentSectionBaselineRepository.class),
                 new FeedbackAnchorService(instructorFeedbackRepository, mapper),
-                org.mockito.Mockito.mock(com.evidencepilot.service.FeedbackAttachmentService.class),
+                feedbackAttachmentService,
+                feedbackAttachmentRepository,
                 events);
     }
 

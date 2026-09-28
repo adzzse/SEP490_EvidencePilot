@@ -90,6 +90,8 @@ export default function useInstructorReview({ projectId, enabled }) {
   // rationale: project evidence traces shared by Evidence tab + overview (single fetch, client-side scoping)
   const [evidenceTraces, setEvidenceTraces] = useState([]);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
+  // rationale: previous-round feedback hidden by default; History eye toggles it.
+  const [showPrevFeedback, setShowPrevFeedback] = useState(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -518,10 +520,38 @@ export default function useInstructorReview({ projectId, enabled }) {
     }
   }, [enabled, canCreateRoot, selectedSection]);
 
+  // rationale: opening a citation finding arms that passage as the create-mode
+  // draft target directly (same anchor contract, no reliance on the async
+  // selection→capture chain), so the Feedback composer context renders
+  // deterministically. Active edits are never touched.
+  const armFindingPassage = useCallback(async ({ from, to }) => {
+    if (!enabled || !canCreateRoot || !selectedSection || editingFeedbackId) return false;
+    const source = normalizeSource(selectedSection.contentTex || '');
+    if (!Number.isInteger(from) || !Number.isInteger(to) || to <= from
+      || to > source.length || !Number.isInteger(selectedSection.version)) return false;
+    try {
+      updateFeedbackDraft({
+        anchor: {
+          from,
+          to,
+          contentVersion: selectedSection.version,
+          fingerprint: await sourceFingerprint(source),
+        }, lineReference: ''
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [enabled, canCreateRoot, selectedSection, editingFeedbackId]);
+
   // rationale: passage-adjust intent shared by the edit card (which starts it)
   // and the EditorPanel FAB (which confirms it). Confirming writes the draft
   // only — Update persists, Cancel discards. No auto-remap anywhere.
   const [passageAdjust, setPassageAdjust] = useState(null);
+  // rationale: live editor selection mirror — lets the edit card preview the
+  // passage under the cursor while adjusting, before anything is confirmed.
+  const [liveSelection, setLiveSelection] = useState(null);
+  useEffect(() => { setLiveSelection(null); }, [selectedSectionId, activeRequestId]);
   const startPassageAdjust = useCallback(feedbackId => {
     if (enabled) setPassageAdjust({ feedbackId });
   }, [enabled]);
@@ -572,14 +602,16 @@ export default function useInstructorReview({ projectId, enabled }) {
     setPassageAdjust(null);
   };
 
-  const handleDeleteFeedback = async (itemId) => {    const sid = String(itemId);
-    const item = feedbackItems.find(f => String(f.id) === sid);
-    setFeedbackItems(prev => prev.filter(f => String(f.id) !== sid));
+  const handleDeleteFeedback = async (itemId) => {    const sid = String(itemId);    const item = feedbackItems.find(f => String(f.id) === sid);
+    // rationale: removal happens at commit, not upfront — the card stays
+    // visible during the undo window so Undo restores instantly with no
+    // refetch (matches every other startDelete caller).
     startDelete({
       ...undoStrings,
       entityName: item?.content || item?.text || itemId,
       entityDetails: itemId,
     }, async () => {
+      setFeedbackItems(prev => prev.filter(f => String(f.id) !== sid));
       try {
         await api.delete(`/api/instructor-feedback/${itemId}`);
         loadFeedback();
@@ -587,7 +619,21 @@ export default function useInstructorReview({ projectId, enabled }) {
         setErrorMessage(err?.response?.data?.message || t('instructor.review.deleteFeedbackFailed'));
         loadFeedback();
       }
-    }, () => { loadFeedback(); });
+    });
+  };
+
+  const handleDetachAttachment = async (attachmentId) => {
+    if (!enabled || !attachmentId) return false;
+    setErrorMessage('');
+    try {
+      const { data } = await api.delete(`/api/feedback-attachments/${attachmentId}`);
+      if (data?.id) mergeThread(data);
+      else loadFeedback();
+      return true;
+    } catch (err) {
+      setErrorMessage(err?.response?.data?.message || t('instructor.review.deleteFeedbackFailed'));
+      return false;
+    }
   };
 
   const handleResolveThread = async (itemId, targetState) => {
@@ -725,6 +771,23 @@ export default function useInstructorReview({ projectId, enabled }) {
 
   useEffect(() => { reloadEvidence(); }, [reloadEvidence]);
 
+  // rationale: sealed per-origin archives for the active request — fetched
+  // alongside everything else, scoped by request window server-side. Silent
+  // failure falls back to the snapshot-trace view (never blocks Findings).
+  const [citationArchives, setCitationArchives] = useState(null);
+  useEffect(() => {
+    if (!enabled || !activeRequestId || !selectedSectionId) {
+      setCitationArchives(null);
+      return undefined;
+    }
+    let cancelled = false;
+    api.get(`/api/feedback-requests/${activeRequestId}/citation-archives`,
+      { params: { sectionId: selectedSectionId } })
+      .then(response => { if (!cancelled) setCitationArchives(response.data || null); })
+      .catch(() => { if (!cancelled) setCitationArchives(null); });
+    return () => { cancelled = true; };
+  }, [enabled, activeRequestId, selectedSectionId]);
+
   const submitTraceJudgment = async (traceId, judgment, instructorFeedback) => {
     if (!enabled || !projectId || !traceId || !judgment) return;
     setErrorMessage('');
@@ -808,13 +871,17 @@ export default function useInstructorReview({ projectId, enabled }) {
     captureSourceSelection,
     autoCaptureSelection,
     commitPreviewSelection,
+    armFindingPassage,
     isAdjustingPassage: !!passageAdjust,
     startPassageAdjust,
     cancelPassageAdjust,
     confirmPassageSelection,
+    liveSelection,
+    setLiveSelection,
     handleEditFeedback,
     handleCancelEdit,
     handleDeleteFeedback,
+    handleDetachAttachment,
     handleResolveThread,
     selectFeedback,
     handleTransitionStatus,
@@ -827,6 +894,9 @@ export default function useInstructorReview({ projectId, enabled }) {
     evidenceLoading,
     reloadEvidence,
     submitTraceJudgment,
+    citationArchives,
+    showPrevFeedback,
+    setShowPrevFeedback,
   };
 
   return { workspace, workflow };

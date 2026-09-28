@@ -24,11 +24,13 @@ class FeedbackControllerTest {
 
     private final FeedbackServiceImpl service = mock(FeedbackServiceImpl.class);
     private final SubmissionReadinessService submissionReadinessService = mock(SubmissionReadinessService.class);
+    private final com.evidencepilot.service.impl.EvidenceTraceService evidenceTraceService =
+            mock(com.evidencepilot.service.impl.EvidenceTraceService.class);
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = standaloneSetup(new FeedbackController(service, submissionReadinessService)).build();
+        mockMvc = standaloneSetup(new FeedbackController(service, submissionReadinessService, evidenceTraceService)).build();
     }
 
     @Test
@@ -205,5 +207,25 @@ class FeedbackControllerTest {
         mockMvc.perform(get("/api/feedback-requests/{id}/comparison-source", UUID.randomUUID()))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(service);
+    }
+
+    @Test
+    void citationArchives_bindsRequestAndSection() throws Exception {
+        UUID requestId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        when(evidenceTraceService.archivesForRequest(eq(requestId), eq(sectionId)))
+                .thenReturn(new com.evidencepilot.dto.response.CitationArchivesResponse(
+                        requestId, false, false, java.util.List.of(), java.util.List.of()));
+        mockMvc.perform(get("/api/feedback-requests/{id}/citation-archives", requestId)
+                        .param("sectionId", sectionId.toString()))
+                .andExpect(status().isOk());
+        verify(evidenceTraceService).archivesForRequest(requestId, sectionId);
+    }
+
+    @Test
+    void citationArchives_requiresSectionId() throws Exception {
+        mockMvc.perform(get("/api/feedback-requests/{id}/citation-archives", UUID.randomUUID()))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(evidenceTraceService);
     }
 }

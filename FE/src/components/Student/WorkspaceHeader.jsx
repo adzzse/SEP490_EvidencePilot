@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
@@ -9,12 +9,9 @@ import NotificationBell from '../ui/NotificationBell.jsx';
 import ProfileModal from '../ui/ProfileModal.jsx';
 import StatusBadge from '../ui/StatusBadge.jsx';
 import SectionStandardsTab from '../Instructor/review/SectionStandardsTab.jsx';
-import AiSuggestionDrawer from '../Instructor/review/AiSuggestionDrawer.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
-import api from '../../services/api.js';
-import { taskKey, readTask, writeTask } from '../../utils/taskState.js';
 
-export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onMarkAllNotificationsRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, reviewAction = null, reviewRound = null, reviewGuide = null, review = null, reviewSection = null }) {
+export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onMarkAllNotificationsRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, reviewAction = null, reviewRound = null, reviewGuide = null, review = null, reviewSection = null, reviewTools = null }) {
   const { user } = useAuth();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
@@ -25,13 +22,6 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
   const [showRoundMenu, setShowRoundMenu] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [showStandards, setShowStandards] = useState(false);
-  const aiDrawerKey = taskKey(api, user?.id, 'suggestion-drawer', project?.id);
-  const [showAiDrawer, setAiDrawer] = useState(false);
-  const setShowAiDrawer = open => {
-    setAiDrawer(open);
-    writeTask(aiDrawerKey, open);
-  };
-  useEffect(() => { setAiDrawer(Boolean(readTask(aiDrawerKey))); }, [aiDrawerKey]);
   const [showMobileStandards, setShowMobileStandards] = useState(false);
   const isReview = workspaceMode === 'review';
   const activeRound = reviewRound?.orderedRequests?.find(r => String(r.id) === String(reviewRound.activeRequestId)) || reviewRound?.orderedRequests?.[0] || null;
@@ -126,9 +116,8 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
             <button onClick={() => language !== 'vi' && toggleLanguage()} className={`px-2 py-1 rounded-md transition ${language === 'vi' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>VN</button>
           </div>
           {isReview && review && (
-            <>
               <div className="relative">
-                <button type="button" onClick={() => { setShowStandards(!showStandards); setShowAiDrawer(false); setShowGuide(false); setShowRoundMenu(false); setShowMoreMenu(false); }} className="flex h-8 items-center gap-1 rounded-lg border border-(--border) bg-(--surface) px-2 text-xs font-bold text-(--text-secondary) transition-colors hover:text-(--text-primary)" title={t('instructor.review.standardsTab')} aria-label={t('instructor.review.standardsTab')} aria-expanded={showStandards}>
+                <button type="button" onClick={() => { setShowStandards(!showStandards); setShowGuide(false); setShowRoundMenu(false); setShowMoreMenu(false); }} className="flex h-8 items-center gap-1 rounded-lg border border-(--border) bg-(--surface) px-2 text-xs font-bold text-(--text-secondary) transition-colors hover:text-(--text-primary)" title={t('instructor.review.standardsTab')} aria-label={t('instructor.review.standardsTab')} aria-expanded={showStandards}>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   <span className="hidden lg:inline">{t('instructor.review.standardsTab')}</span>
                 </button>
@@ -144,11 +133,6 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
                   </div>
                 )}
               </div>
-              <button type="button" onClick={() => { setShowAiDrawer(!showAiDrawer); setShowStandards(false); setShowGuide(false); setShowRoundMenu(false); setShowMoreMenu(false); }} className="flex h-8 items-center gap-1 rounded-lg border border-(--border) bg-(--surface) px-2 text-xs font-bold text-(--text-secondary) transition-colors hover:text-(--text-primary)" title={t('instructor.review.aiSuggestionTab')} aria-label={t('instructor.review.aiSuggestionTab')} aria-expanded={showAiDrawer}>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-                <span className="hidden lg:inline">{t('instructor.review.aiSuggestionTab')}</span>
-              </button>
-            </>
           )}
           {workspaceMode !== 'review' && reviewAction && (
             <span className="inline-flex items-center gap-1" title={reviewAction.busy ? t('reviewing') : reviewAction.description}>
@@ -166,6 +150,37 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
               )}
             </span>
           )}
+          {isReview && reviewTools && (
+            <span className="inline-flex items-center gap-1.5">
+              {reviewTools.isReferenceSection ? (
+                <button type="button" onClick={reviewTools.onRunReferenceCheck} disabled={reviewTools.referenceDisabled || reviewTools.referenceBusy}
+                  aria-label={t('refCheckAction')}
+                  title={t('refCheckDescription')}
+                  className="flex h-8 items-center gap-1 rounded-lg border border-(--border) bg-(--surface) px-2 text-xs font-bold text-(--text-secondary) transition-colors hover:text-(--text-primary) disabled:opacity-50">
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                  <span className="hidden lg:inline">{reviewTools.referenceBusy ? t('loading') : t('refCheckAction')}</span>
+                </button>
+              ) : (
+                <>
+                  <button type="button" onClick={reviewTools.onRunCitationReview} disabled={reviewTools.citationDisabled || reviewTools.citationBusy || reviewTools.citationReadOnly}
+                    aria-label={t('citationReview')}
+                    title={reviewTools.citationError
+                      || (reviewTools.citationReadOnly ? t('instructor.review.citationReadOnly')
+                      : reviewTools.citationCount === 0 && reviewTools.cooldownRemainingSec > 0
+                        ? t('instructor.review.citationCooldown', { remaining: `${Math.floor(reviewTools.cooldownRemainingSec / 60)}:${String(reviewTools.cooldownRemainingSec % 60).padStart(2, '0')}` })
+                      : reviewTools.citationCount === 0 && reviewTools.runBlockedReason === 'historical' ? t('instructor.review.historicalRoundNotice')
+                      : reviewTools.citationCount === 0 && reviewTools.runBlockedReason === 'no-pending' ? t('instructor.review.citationRunNeedsPending')
+                      : reviewTools.citationCount === 0 && reviewTools.runBlockedReason === 'locked' ? t('projectLocked')
+                      : t('citationReviewDescription'))}
+                    className="flex h-8 items-center gap-1 rounded-lg bg-(--brand) px-2 text-xs font-bold text-(--on-brand) transition-colors hover:bg-(--brand-hover) disabled:opacity-50">
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                    <span className="hidden lg:inline">{reviewTools.citationBusy ? t('loading') : t('citationReview')}</span>
+                  </button>
+                </>
+              )}
+            </span>
+          )}
+          {workspaceMode !== 'review' && (
           <div className="relative">
             <button data-tour="header-export" onClick={() => { if (canExport) setShowExportMenu(!showExportMenu); }} disabled={!canExport} className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 lg:px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed" title={canExport ? t('export') : t('exportLocked')}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
@@ -173,6 +188,7 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
             </button>
             {showExportMenu && <div className="absolute right-0 top-full mt-2 w-60 bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999]">{exportMenu}</div>}
           </div>
+          )}
           <button type="button" data-tour="header-avatar" onClick={() => setShowProfile(true)} className="flex items-center gap-2 rounded-lg hover:bg-(--surface-secondary) p-1 transition-colors" title={t('profile')}>
             <div className="w-8 h-8 bg-(--brand) text-(--on-brand) rounded-full text-xs flex items-center justify-center font-bold shrink-0">
               {user?.avatarUrl ? (
@@ -194,7 +210,8 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
             <div className="absolute right-0 top-full mt-2 w-[min(18rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] overflow-hidden">
               {workspaceMode !== 'review' && <button onClick={() => runMobileAction(onShowHistory)} disabled={historyDisabled} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{t('versionHistory')}</button>}
               {workspaceMode !== 'review' && reviewAction && <button onClick={() => runMobileAction(reviewAction.onClick)} disabled={reviewAction.disabled || reviewAction.busy} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{reviewAction.busy ? t('loading') : reviewAction.label}</button>}
-              {isReview && review && <button onClick={() => { setShowAiDrawer(true); setShowMoreMenu(false); }} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{t('instructor.review.aiSuggestionTab')}</button>}
+              {isReview && reviewTools && !reviewTools.isReferenceSection && <button onClick={() => runMobileAction(reviewTools.onRunCitationReview)} disabled={reviewTools.citationDisabled || reviewTools.citationBusy || reviewTools.citationReadOnly} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{t('citationReview')}</button>}
+              {isReview && reviewTools && reviewTools.isReferenceSection && <button onClick={() => runMobileAction(reviewTools.onRunReferenceCheck)} disabled={reviewTools.referenceDisabled || reviewTools.referenceBusy} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{t('refCheckAction')}</button>}
               {isReview && review && <button onClick={() => setShowMobileStandards(!showMobileStandards)} aria-expanded={showMobileStandards} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{t('instructor.review.standardsTab')}</button>}
               {isReview && review && showMobileStandards && (
                 <div className="px-4 pb-3">
@@ -209,20 +226,11 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
                   <button onClick={() => { if (language !== 'vi') toggleLanguage(); setShowMoreMenu(false); }} className={`px-2.5 py-1 rounded-md transition ${language === 'vi' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>VN</button>
                 </div>
               </div>
-              {canExport && <div className="border-t border-(--border)"><p className="px-4 pt-3 text-[10px] font-bold uppercase tracking-wider text-emerald-700">{t('export')}</p>{exportMenu}</div>}
+              {canExport && workspaceMode !== 'review' && <div className="border-t border-(--border)"><p className="px-4 pt-3 text-[10px] font-bold uppercase tracking-wider text-emerald-700">{t('export')}</p>{exportMenu}</div>}
             </div>
           )}
         </div>
       </div>
-      {isReview && review && showAiDrawer && (
-        <div className="fixed right-0 top-14 bottom-0 w-[min(24rem,calc(100vw-1rem))] bg-(--surface) border-l border-(--border) shadow-xl z-[99999] overflow-y-auto p-3" role="complementary" aria-label={t('instructor.review.aiSuggestionTab')}>
-          <div className="sticky top-0 bg-(--surface) pb-2 flex justify-between items-center">
-            <span className="text-xs font-bold text-(--text-primary)">{t('instructor.review.aiSuggestionTab')}</span>
-            <button type="button" onClick={() => setShowAiDrawer(false)} className={iconButton} aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
-          </div>
-          <AiSuggestionDrawer review={review} />
-        </div>
-      )}
     </header>
   );
 }

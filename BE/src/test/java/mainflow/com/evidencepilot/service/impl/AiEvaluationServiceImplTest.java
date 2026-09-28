@@ -10,6 +10,7 @@ import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ReviewGuide;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
+import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.dto.response.SectionStandardEvaluationResponse;
 import com.evidencepilot.repository.AiEvaluationJobRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
@@ -237,6 +238,48 @@ class AiEvaluationServiceImplTest {
         verify(rabbitTemplate, never()).convertAndSend(
                 eq(com.evidencepilot.config.infrastructure.RabbitMQConfig.AI_EVALUATION_QUEUE),
                 any(Map.class));
+    }
+
+    @Test
+    void findSectionCitationReviewState_prefersCallerRoleOverLatest() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        User student = user(com.evidencepilot.model.enums.UserRole.STUDENT);
+        User instructor = user(com.evidencepilot.model.enums.UserRole.INSTRUCTOR);
+        AiEvaluationJob studentJob = reviewJob(projectId, documentId, sectionId, "fp",
+                student.getId(), "student-summary");
+        AiEvaluationJob instructorJob = reviewJob(projectId, documentId, sectionId, "fp",
+                instructor.getId(), "instructor-summary");
+        when(jobRepository.findByProjectIdAndKindAndDocumentIdAndSectionIdAndInputFingerprintOrderByCreatedAtDesc(
+                eq(projectId), eq(AiEvaluationJob.KIND_SECTION_CITATION_REVIEW),
+                eq(documentId), eq(sectionId), eq("fp")))
+                .thenReturn(List.of(instructorJob, studentJob));
+        when(userRepository.findById(student.getId())).thenReturn(Optional.of(student));
+        when(userRepository.findById(instructor.getId())).thenReturn(Optional.of(instructor));
+        when(userRepository.findAllById(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenAnswer(invocation -> {
+                    java.util.Collection<UUID> ids = invocation.getArgument(0);
+                    return ids.stream()
+                            .map(id -> id.equals(student.getId()) ? student
+                                    : id.equals(instructor.getId()) ? instructor : null)
+                            .filter(java.util.Objects::nonNull)
+                            .toList();
+                });
+
+        var studentView = service().findSectionCitationReviewState(
+                projectId, documentId, sectionId, "fp", student.getId());
+        var instructorView = service().findSectionCitationReviewState(
+                projectId, documentId, sectionId, "fp", instructor.getId());
+        var unknownView = service().findSectionCitationReviewState(
+                projectId, documentId, sectionId, "fp", UUID.randomUUID());
+
+        assertThat(studentView).isPresent();
+        assertThat(studentView.get().review().summary()).isEqualTo("student-summary");
+        assertThat(instructorView).isPresent();
+        assertThat(instructorView.get().review().summary()).isEqualTo("instructor-summary");
+        assertThat(unknownView).isPresent();
+        assertThat(unknownView.get().review().summary()).isEqualTo("instructor-summary");
     }
 
     @Test
@@ -671,6 +714,36 @@ class AiEvaluationServiceImplTest {
         job.setKind(AiEvaluationJob.KIND_SECTION_CITATION_REVIEW);
         job.setPayloadJson(payloadJson);
         job.setStatus(AiEvaluationJob.STATUS_PENDING);
+        return job;
+    }
+
+    private User user(UserRole role) {
+        User user = new User();
+        user.setId(UUID.randomUUID());
+        user.setRole(role);
+        return user;
+    }
+
+    private AiEvaluationJob reviewJob(UUID projectId, UUID documentId, UUID sectionId,
+            String fingerprint, UUID requestedById, String summary) throws Exception {
+        AiEvaluationJob job = new AiEvaluationJob();
+        job.setId(UUID.randomUUID());
+        job.setProjectId(projectId);
+        job.setDocumentId(documentId);
+        job.setSectionId(sectionId);
+        job.setInputFingerprint(fingerprint);
+        job.setKind(AiEvaluationJob.KIND_SECTION_CITATION_REVIEW);
+        job.setStatus(AiEvaluationJob.STATUS_SUCCESS);
+        job.setPayloadJson(objectMapper.writeValueAsString(Map.of(
+                "documentId", documentId,
+                "projectId", projectId,
+                "sectionId", sectionId,
+                "reviewInputFingerprint", fingerprint,
+                "requestedByUserId", requestedById)));
+        job.setResultJson(objectMapper.writeValueAsString(new SectionCitationReviewResponse(
+                "section-citation-v1", "citation-rules-v1", sectionId, 1,
+                fingerprint, "content-fingerprint", LocalDateTime.now(),
+                "provider", "model", true, summary, List.of(), List.of())));
         return job;
     }
 }

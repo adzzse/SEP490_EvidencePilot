@@ -20,7 +20,7 @@ public interface AiEvaluationService {
             UUID requestedByUserId);
 
     Optional<SectionCitationReviewStateResponse> findSectionCitationReviewState(
-            UUID projectId, UUID documentId, UUID sectionId, String inputFingerprint);
+            UUID projectId, UUID documentId, UUID sectionId, String inputFingerprint, UUID requesterId);
 
     JobSubmitResponse submitSectionSuggestion(
             UUID projectId,

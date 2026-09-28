@@ -122,8 +122,6 @@ export default function ReviewOverviewBlock({ review }) {
         <div className="grid grid-cols-2 gap-2">
           <Metric label={t('sectionConfirmations')} value={`${metrics.confirmed} / ${metrics.total}`} />
           <Metric label={t('instructor.evidenceTrace.findingsLabel')} value={metrics.findings} />
-          <Metric label={t('instructor.evidenceTrace.pendingInstructor')} value={metrics.pending} />
-          <Metric label={t('instructor.evidenceTrace.unaddressedLabel')} value={metrics.unaddressed} />
         </div>
       </div>
 
@@ -132,7 +130,7 @@ export default function ReviewOverviewBlock({ review }) {
           <span>{t('confirmationOverview')}</span>
           <span className="text-[10px] font-normal text-(--text-tertiary)">{metrics.confirmed} / {metrics.total}</span>
         </summary>
-        <div className="mt-2 max-h-[34vh] space-y-2 overflow-y-auto overscroll-contain pr-1">
+        <div className="mt-2 max-h-[34vh] space-y-2 overflow-y-auto overscroll-contain pr-1 hide-scrollbar">
           {sectionRecords.length === 0 && <p className="text-(--text-tertiary)">—</p>}
           {sectionRecords.map(section => {
             const confirmation = confirmationFor(section);

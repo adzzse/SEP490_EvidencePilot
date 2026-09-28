@@ -26,6 +26,10 @@ public interface AiEvaluationJobRepository extends JpaRepository<AiEvaluationJob
     findFirstByProjectIdAndKindAndDocumentIdAndSectionIdAndInputFingerprintOrderByCreatedAtDesc(
             UUID projectId, String kind, UUID documentId, UUID sectionId, String inputFingerprint);
 
+    List<AiEvaluationJob>
+    findByProjectIdAndKindAndDocumentIdAndSectionIdAndInputFingerprintOrderByCreatedAtDesc(
+            UUID projectId, String kind, UUID documentId, UUID sectionId, String inputFingerprint);
+
     @Modifying
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Query("""

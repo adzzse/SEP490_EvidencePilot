@@ -322,8 +322,8 @@ test('Review Requests opens the linked Review Request Workspace', async ({ page 
   const state = await setup(page);
   await page.goto(`${baseUrl}/instructor/requests`);
 
-  await expect(page.getByRole('link', { name: 'Review', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Review', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Open review', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Open review', exact: true }).click();
 
   await expect(page).toHaveURL(new RegExp(`/instructor/requests/${projectId}\\?review=${requestId}$`));
   await expect(page.locator('.cm-content')).toContainText('Review workspace fixture content.', { timeout: 15000 });

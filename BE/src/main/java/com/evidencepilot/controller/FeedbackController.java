@@ -3,6 +3,7 @@ package com.evidencepilot.controller;
 import com.evidencepilot.dto.request.InstructorFeedbackRequest;
 import com.evidencepilot.dto.request.SubmitReviewRequest;
 import com.evidencepilot.dto.response.ComparisonSourceDto;
+import com.evidencepilot.dto.response.CitationArchivesResponse;
 import com.evidencepilot.dto.response.FeedbackRequestResponseDto;
 import com.evidencepilot.dto.response.FeedbackRequestPageResponse;
 import com.evidencepilot.dto.response.InstructorFeedbackResponseDto;
@@ -44,6 +45,7 @@ public class FeedbackController {
 
     private final FeedbackServiceImpl feedbackService;
     private final SubmissionReadinessService submissionReadinessService;
+    private final com.evidencepilot.service.impl.EvidenceTraceService evidenceTraceService;
 
     @Operation(summary = "List feedback requests",
             description = "Returns all feedback requests scoped to the current user. "
@@ -102,6 +104,23 @@ public class FeedbackController {
     @GetMapping("/feedback-requests/{id}/submission-snapshot")
     public ReviewSubmissionSnapshotResponse getSubmissionSnapshot(@PathVariable UUID id) {
         return feedbackService.getSubmissionSnapshot(id);
+    }
+
+    @Operation(summary = "Sealed per-origin citation archives for a review request",
+            description = "Rounds in the request's seal window grouped by runner role "
+                    + "(student runs vs instructor runs) with their finding traces. "
+                    + "Read-only; no writes anywhere.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Archives returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Not the assigned instructor"),
+            @ApiResponse(responseCode = "404", description = "Feedback request not found")
+    })
+    @GetMapping("/feedback-requests/{id}/citation-archives")
+    public CitationArchivesResponse citationArchives(
+            @Parameter(description = "Feedback request UUID") @PathVariable UUID id,
+            @Parameter(description = "Paper section UUID") @RequestParam UUID sectionId) {
+        return evidenceTraceService.archivesForRequest(id, sectionId);
     }
 
     @Operation(summary = "Get review section snapshots",
@@ -206,6 +225,22 @@ public class FeedbackController {
             @Parameter(description = "Instructor feedback item UUID") @PathVariable UUID id) {
         feedbackService.deleteFeedbackItem(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Detach an attachment from feedback",
+            description = "Author-instructor only, draft feedback only; removes the image "
+                    + "from the thread and deletes its stored copy.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Attachment detached, updated thread returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
+            @ApiResponse(responseCode = "403", description = "Not the author instructor"),
+            @ApiResponse(responseCode = "404", description = "Attachment not found"),
+            @ApiResponse(responseCode = "409", description = "Feedback is published and immutable")
+    })
+    @DeleteMapping("/feedback-attachments/{id}")
+    public InstructorFeedbackResponseDto detachAttachment(
+            @Parameter(description = "Feedback attachment UUID") @PathVariable UUID id) {
+        return feedbackService.detachAttachment(id);
     }
 
     @Operation(summary = "Set feedback thread state",

@@ -1,6 +1,7 @@
 package com.evidencepilot.service.impl;
 
 import com.evidencepilot.exception.ApiException;
+import com.evidencepilot.model.FeedbackStatus;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMember;
@@ -262,5 +263,50 @@ public class CurrentUserServiceImpl {
             return;
         }
         requireSectionAssignment(currentUser, section);
+    }
+
+    /**
+     * Who may queue a citation review. Students use the normal section write
+     * path. Instructors never touch paper content, so the assigned instructor
+     * may re-run AI on frozen submitted evidence while their request is
+     * PENDING — read-only projects and inactive sections stay closed for
+     * everyone, and the FE throttles instructor runs to one per 5 minutes.
+     */
+    public void requireCitationReviewRunAccess(User currentUser, PaperSection section) {
+        Project project = section.getDocument().getProject();
+        requireProjectMutationAllowed(project);
+        if (project.getStatus().isReadOnly()) {
+            throw new ApiException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    ApiException.PROJECT_TRANSITION_INVALID,
+                    "Project is read-only.");
+        }
+        if (!section.isActive()) {
+            throw new ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "Section is inactive.");
+        }
+        if (isAdmin(currentUser)) {
+            return;
+        }
+        try {
+            requireSectionContentWriteAccess(currentUser, section);
+            return;
+        } catch (RuntimeException ignored) {
+            // fall through to the instructor review path below
+        }
+        if (isInstructor(currentUser)
+                && project.getStatus() == ProjectStatus.SUBMITTED_FOR_REVIEW
+                && project.getId() != null
+                && feedbackRequestRepository.existsByProjectIdAndInstructorId(
+                        project.getId(), currentUser.getId())
+                && feedbackRequestRepository.existsByProjectIdAndStatus(
+                        project.getId(), FeedbackStatus.PENDING)) {
+            return;
+        }
+        throw new ApiException(
+                org.springframework.http.HttpStatus.FORBIDDEN,
+                ApiException.PROJECT_ROLE_REQUIRED,
+                "Citation review run access denied");
     }
 }

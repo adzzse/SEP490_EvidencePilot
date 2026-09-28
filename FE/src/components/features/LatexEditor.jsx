@@ -25,13 +25,17 @@ const setReviewRanges = StateEffect.define();
 const setChangeRanges = StateEffect.define();
 const setFeedbackItems = StateEffect.define();
 const setFeedbackActive = StateEffect.define();
+const setFeedbackHistory = StateEffect.define();
+const setFeedbackAdjusting = StateEffect.define();
 const hydrateSource = Annotation.define();
 const feedbackRanges = StateField.define({
-  create: () => ({ items: [], activeId: null, visible: false, decorations: Decoration.none }),
+  create: () => ({ items: [], activeId: null, visible: false, historyIds: null, adjusting: false, decorations: Decoration.none }),
   update(value, transaction) {
     let items = value.items;
     let activeId = value.activeId;
     let visible = value.visible;
+    let historyIds = value.historyIds;
+    let adjusting = value.adjusting;
     if (transaction.docChanged) {
       const spans = changeSpans(transaction.changes);
       const text = transaction.newDoc.toString();
@@ -40,15 +44,19 @@ const feedbackRanges = StateField.define({
     for (const effect of transaction.effects) {
       if (effect.is(setFeedbackItems)) items = effect.value;
       if (effect.is(setFeedbackActive)) ({ activeId, visible } = effect.value);
+      if (effect.is(setFeedbackHistory)) historyIds = effect.value;
+      if (effect.is(setFeedbackAdjusting)) adjusting = effect.value;
     }
-    if (items === value.items && activeId === value.activeId && visible === value.visible) return value;
+    if (items === value.items && activeId === value.activeId && visible === value.visible && historyIds === value.historyIds && adjusting === value.adjusting) return value;
     const decorations = visible ? Decoration.set(items.flatMap(item => {
       const { from, to } = item.anchor.current;
       if (from == null || to == null || from < 0 || to <= from || to > transaction.newDoc.length) return [];
-      return [Decoration.mark({ class: `cm-feedback-range${item.id === activeId ? ' cm-feedback-active' : ''}`,
+      const isHistory = historyIds?.has?.(String(item.id));
+      const cls = `cm-feedback-range${item.id === activeId ? ' cm-feedback-active' : ''}${isHistory ? ' cm-feedback-history' : ''}${adjusting && item.id === activeId ? ' cm-feedback-adjusting' : ''}`;
+      return [Decoration.mark({ class: cls,
         attributes: { 'data-feedback-id': String(item.id) } }).range(from, to)];
     }), true) : Decoration.none;
-    return { items, activeId, visible, decorations };
+    return { items, activeId, visible, historyIds, adjusting, decorations };
   },
   provide: field => EditorView.decorations.from(field, value => value.decorations),
 });
@@ -253,7 +261,7 @@ function buildCiteMask(view, citationIndexRef) {
 }
 
 const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = content, savedVersion,
-  feedbackItems, activeFeedbackId, feedbackVisible = false, onFeedbackClick,
+  feedbackItems, historyIds = null, isAdjustingPassage = false, selectingTone = 'default', activeFeedbackId, feedbackVisible = false, onFeedbackClick,
   onChange, onSelection, readOnly = false, fontSize = 14, findings = [], onFindingClick, onScroll, onLayoutChange, onUserScroll, citationIndex = {}, mediaAssets = [], changeRanges = [] }, ref) {
   const containerRef = useRef(null);
   const viewRef = useRef(null);
@@ -517,11 +525,13 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
       // FAB channel: emit on selectionSet (coords valid this frame), null on
       // collapse/doc change. Coordinates are single-frame truth — the parent
       // must treat them as stale on the next scroll/selection event.
+      // rationale: coords come from the selection END so the pill sticks to
+      // the highlight tail, never the start.
       if (update.selectionSet || update.docChanged) {
         const sel = update.state.selection.main;
         selectionRef.current?.(sel.empty
           ? null
-          : { from: sel.from, to: sel.to, coords: update.view.coordsAtPos(sel.from) });
+          : { from: sel.from, to: sel.to, coords: update.view.coordsAtPos(sel.to) });
       }
     });
 
@@ -591,7 +601,9 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
           '.cm-content *, .cm-line *': { color: isDark ? '#f8fafc !important' : '#000000 !important' },
           '.cm-activeLine': { backgroundColor: 'transparent !important' },
           '.cm-activeLineGutter': { backgroundColor: isDark ? '#0f172a !important' : '#ffffff !important' },
-          '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: 'rgba(99, 102, 241, 0.35) !important' },
+          // rationale: violet selecting tone is review-only; the student
+          // workspace keeps the original indigo selection.
+          '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: selectingTone === 'feedback' ? 'rgba(139, 92, 246, 0.35) !important' : 'rgba(99, 102, 241, 0.35) !important' },
           '.cm-lintRange': { wordBreak: 'break-word', overflowWrap: 'anywhere', maxWidth: '100%' },
           '.cm-lintRange-warning': { backgroundColor: 'transparent', borderBottom: '2px solid #eab308' },
           '.cm-lintRange-error': { backgroundColor: 'transparent', borderBottom: '2px solid #ef4444' },
@@ -606,6 +618,8 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
           '.cm-feedback-range': { backgroundColor: 'rgba(20, 184, 166, 0.16)', boxShadow: 'inset 0 -2px #0d9488', cursor: 'pointer' },
           '.cm-change-added': { backgroundColor: '#dcfce7', borderRadius: '2px' },
           '.cm-feedback-active': { backgroundColor: 'rgba(20, 184, 166, 0.3)', outline: '1px solid #0d9488' },
+          '.cm-feedback-history': { backgroundColor: 'rgba(148, 163, 184, 0.22)', boxShadow: 'inset 0 -2px #94a3b8' },
+          '.cm-feedback-adjusting': { outline: '2px dashed #0f766e', outlineOffset: '1px', cursor: 'ew-resize' },
           '.cm-finding-widget': {
             display: 'inline-flex',
             alignItems: 'center',
@@ -676,7 +690,7 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
         viewRef.current.destroy();
       }
     };
-  }, [readOnly, fontSize, isDark]);
+  }, [readOnly, fontSize, isDark, selectingTone]);
 
   useEffect(() => {
     const saved = normalizeSource(savedContent);
@@ -719,6 +733,14 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
   useEffect(() => {
     viewRef.current?.dispatch({ effects: setFeedbackActive.of({ activeId: activeFeedbackId, visible: feedbackVisible }) });
   }, [activeFeedbackId, feedbackVisible]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: setFeedbackHistory.of(historyIds) });
+  }, [historyIds]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: setFeedbackAdjusting.of(isAdjustingPassage) });
+  }, [isAdjustingPassage]);
 
   // Update review ranges when findings change
   useEffect(() => {

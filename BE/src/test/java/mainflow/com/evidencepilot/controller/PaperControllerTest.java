@@ -394,7 +394,7 @@ class PaperControllerTest {
         mockMvc.perform(post("/api/papers/{documentId}/sections/{sectionId}/review", documentId, sectionId))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.jobId").value(jobId.toString()));
-        verify(currentUserService).requireSectionContentWriteAccess(user, section);
+        verify(currentUserService).requireCitationReviewRunAccess(user, section);
         verify(aiEvaluationService).submitSectionCitationReview(
                 projectId, documentId, sectionId, "fingerprint", userId);
     }
@@ -417,7 +417,7 @@ class PaperControllerTest {
         when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(paperSectionRepository.findByIdWithDocument(sectionId)).thenReturn(Optional.of(section));
         doThrow(new ResponseStatusException(HttpStatus.FORBIDDEN, "no access"))
-                .when(currentUserService).requireSectionContentWriteAccess(user, section);
+                .when(currentUserService).requireCitationReviewRunAccess(user, section);
 
         mockMvc.perform(post("/api/papers/{documentId}/sections/{sectionId}/review", documentId, sectionId))
                 .andExpect(status().isForbidden());

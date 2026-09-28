@@ -13,7 +13,9 @@ import com.evidencepilot.dto.response.ReviewSectionSnapshotDto;
 import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.model.AssignmentSectionBaseline;
 import com.evidencepilot.model.ReviewSectionSnapshot;
+import com.evidencepilot.model.FeedbackAttachment;
 import com.evidencepilot.model.FeedbackRequest;
+import com.evidencepilot.repository.FeedbackAttachmentRepository;
 import com.evidencepilot.model.FeedbackStatus;
 import com.evidencepilot.model.InstructorFeedback;
 import com.evidencepilot.model.PaperSection;
@@ -83,6 +85,7 @@ public class FeedbackServiceImpl {
     private final AssignmentSectionBaselineRepository assignmentSectionBaselineRepository;
     private final FeedbackAnchorService feedbackAnchorService;
     private final FeedbackAttachmentService feedbackAttachmentService;
+    private final FeedbackAttachmentRepository feedbackAttachmentRepository;
     private final ApplicationEventPublisher events;
 
     @Transactional(readOnly = true)
@@ -285,6 +288,31 @@ public class FeedbackServiceImpl {
         FeedbackRequest request = feedback.getRequest();
         instructorFeedbackRepository.delete(feedback);
         publishFeedbackChanged(request, "UPDATED");
+    }
+
+    /**
+     * Detaches one image from its feedback thread. Same authorship and
+     * draft-editability guards as updating the thread — published feedback is
+     * immutable. The cloned storage object is removed after commit.
+     */
+    @Transactional
+    public InstructorFeedbackResponseDto detachAttachment(UUID attachmentId) {
+        User currentUser = currentUserService.requireCurrentUser();
+        FeedbackAttachment row = feedbackAttachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> notFound("Feedback attachment", attachmentId));
+        InstructorFeedback feedback = row.getFeedback();
+        if (!isAdmin(currentUser) && !sameUser(feedback.getInstructor(), currentUser)) {
+            throw forbidden("Feedback access denied.");
+        }
+        requireRootDraftEditable(feedback);
+        feedbackAttachmentRepository.delete(row);
+        feedbackAttachmentRepository.flush();
+        if (feedback.getAttachments() != null) {
+            feedback.getAttachments().removeIf(a -> Objects.equals(a.getId(), attachmentId));
+        }
+        feedbackAttachmentService.deleteObjectAfterCommit(row.getStorageKey());
+        publishFeedbackChanged(feedback.getRequest(), "UPDATED");
+        return response(feedback, currentUser);
     }
 
     /**

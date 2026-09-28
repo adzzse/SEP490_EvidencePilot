@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import MediaAssetPicker from '../../features/MediaAssetPicker.jsx';
 import FeedbackCard, { AttachmentThumbs, ReplyList } from './FeedbackCard.jsx';
-import { findOverlaps } from '../../../utils/instructor/feedbackOverlap.js';
 import { normalizeSource, selectionLines } from '../../../utils/student/feedbackAnchors.js';
 
 export default function FeedbackThreadsTab({ review, selectedSection, projectId, composerFocusToken = 0 }) {
@@ -11,7 +10,7 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
     feedbackItems, activeRequestId, canCreateRoot,
     feedbackDraft, selectedAnchor, editingFeedbackId, updateFeedbackDraft,
     savingFeedback, activeFeedbackId, handleSubmitFeedback,
-    handleEditFeedback, handleCancelEdit, handleDeleteFeedback, handleResolveThread,
+    handleEditFeedback, handleCancelEdit, handleDeleteFeedback, handleDetachAttachment, handleResolveThread,
     selectFeedback, errorMessage, successMessage,
     isAdjustingPassage, startPassageAdjust, cancelPassageAdjust,
   } = review;
@@ -45,7 +44,33 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
     : passageLines.first === passageLines.last
       ? t('instructor.review.selectionLine', { line: passageLines.first })
       : t('instructor.review.selectionLines', { from: passageLines.first, to: passageLines.last });
+  // rationale: replace-pending-anchor — the card shows the EXACT pending text
+  // sliced from the same normalized source the offsets measure, so the
+  // instructor verifies "ChatGPT" vs "(generative …)" before confirming.
+  // A new highlight mid-edit replaces this pending anchor on confirm; it
+  // never spawns a second thread (FAB is suppressed outside adjust mode).
+  const pendingPassageText = useMemo(() => {
+    if (!selectedAnchor || !selectedSection) return '';
+    const source = normalizeSource(selectedSection.contentTex || '');
+    if (!Number.isInteger(selectedAnchor.from) || !Number.isInteger(selectedAnchor.to)) return '';
+    if (selectedAnchor.from < 0 || selectedAnchor.to > source.length || selectedAnchor.to <= selectedAnchor.from) return '';
+    const text = source.slice(selectedAnchor.from, selectedAnchor.to);
+    return text.length > 280 ? `${text.slice(0, 280)}…` : text;
+  }, [selectedAnchor, selectedSection]);
+  // rationale: while adjusting, the quote follows the live cursor selection
+  // (pre-confirm preview); otherwise it shows the armed draft anchor.
+  const livePassageText = useMemo(() => {
+    if (!isAdjustingPassage || !selectedSection) return '';
+    const live = review.liveSelection;
+    if (!live || !Number.isInteger(live.from) || !Number.isInteger(live.to) || live.to <= live.from) return '';
+    const source = normalizeSource(selectedSection.contentTex || '');
+    if (live.from < 0 || live.to > source.length) return '';
+    const text = source.slice(live.from, live.to);
+    return text.length > 280 ? `${text.slice(0, 280)}…` : text;
+  }, [isAdjustingPassage, selectedSection, review.liveSelection]);
+  const visiblePassageText = (isAdjustingPassage && livePassageText) || pendingPassageText;
   const mediaLabels = useMemo(() => ({
+    heading: t('instructor.review.attachments'),
     selectMedia: t('instructor.review.addMedia'),
     title: t('instructor.review.mediaTitle'),
     empty: t('instructor.review.mediaEmpty'),
@@ -58,19 +83,6 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
     .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || ''))),
     [feedbackItems, activeRequestId, selectedSection?.id]);
 
-  // rationale: overlap is valid — warn only, never block. The item under edit
-  // is excluded so its own passage is not reported as a duplicate.
-  const overlap = useMemo(() => {
-    if (!selectedAnchor) return { count: 0, exactDuplicate: false, ids: [] };
-    const others = (feedbackItems || []).filter(item => String(item.id) !== String(editingFeedbackId));
-    return findOverlaps(selectedAnchor, others, { requestId: activeRequestId, sectionId: selectedSection?.id });
-  }, [selectedAnchor, feedbackItems, editingFeedbackId, activeRequestId, selectedSection?.id]);
-
-  const viewFirstOverlap = () => {
-    const first = (feedbackItems || []).find(item => String(item.id) === String(overlap.ids[0]));
-    if (first) selectFeedback(first);
-  };
-
   const submitThread = async event => {
     event.preventDefault();
     const ids = (pendingAttachments[pendingKey] || []).map(entry => entry.id);
@@ -81,32 +93,10 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
   // rationale: one form, two homes — top composer is create-only, the editing
   // card renders this same form inline. Called as a plain function (not a
   // component) so focus and DOM identity survive re-renders.
-  const composerForm = mode => (
+  const composerForm = (mode, editingItem = null) => (
     <form onSubmit={submitThread} className="space-y-2 rounded-xl border border-(--border-light) bg-(--surface-secondary)/50 p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {mode === 'edit' && (
-          <div data-testid="passage-controls" className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => (isAdjustingPassage ? cancelPassageAdjust() : startPassageAdjust(editingFeedbackId))}
-              disabled={savingFeedback}
-              aria-pressed={mode === 'edit' && isAdjustingPassage}
-              className="rounded-lg bg-teal-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-teal-700 disabled:opacity-50"
-            >
-              {t('instructor.review.changePassage')}
-            </button>
-            {selectedAnchor && !isAdjustingPassage && (
-              <button
-                type="button"
-                onClick={() => updateFeedbackDraft({ anchor: null })}
-                disabled={savingFeedback}
-                className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-rose-700 disabled:opacity-50"
-              >
-                {t('instructor.review.removePassage')}
-              </button>
-            )}
-          </div>
-        )}
+      {!(mode === 'create' && (!selectedAnchor || activeFeedbackId)) && (
+      <div className="flex items-center justify-between gap-2">
         {!(mode === 'edit' && isAdjustingPassage) ? (
           <span className="text-[10px] font-semibold text-(--text-secondary)">
             {passageLabel}
@@ -116,20 +106,25 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
             {passageLabel} · {t('instructor.review.adjustPassageHint')}
           </span>
         )}
+        {mode === 'edit' && (
+          <div data-testid="passage-controls" className="shrink-0">
+            <button
+              type="button"
+              onClick={() => (isAdjustingPassage ? cancelPassageAdjust() : startPassageAdjust(editingFeedbackId))}
+              disabled={savingFeedback}
+              aria-pressed={mode === 'edit' && isAdjustingPassage}
+              className="rounded-lg bg-teal-600 px-2.5 py-1.5 text-[10px] font-black text-white hover:bg-teal-700 disabled:opacity-50"
+            >
+              {t(isAdjustingPassage ? 'instructor.review.confirmEditedFeedback' : 'instructor.review.changePassage')}
+            </button>
+          </div>
+        )}
       </div>
-      {selectedAnchor && overlap.count > 0 && (
-        <p role="note" className="text-[10px] font-semibold text-(--text-secondary)">
-          {overlap.exactDuplicate
-            ? t('instructor.review.overlapExact')
-            : t('instructor.review.overlapNotice', { count: overlap.count })}{' '}
-          <button
-            type="button"
-            onClick={viewFirstOverlap}
-            className="font-black text-teal-700 underline hover:text-teal-800 dark:text-teal-300"
-          >
-            {t('instructor.review.overlapView')}
-          </button>
-        </p>
+      )}
+      {visiblePassageText && (mode !== 'edit' || isAdjustingPassage) && (mode !== 'create' || !activeFeedbackId) && (
+        <blockquote className="rounded-lg border-l-2 border-teal-600 bg-(--surface) px-2.5 py-2 text-[11px] italic leading-relaxed text-(--text-primary)">
+          “{visiblePassageText}”
+        </blockquote>
       )}
       <textarea
         ref={composerRef}
@@ -140,9 +135,7 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
         disabled={savingFeedback}
         className="w-full rounded-lg border border-(--border) bg-(--surface) px-2.5 py-2 text-xs text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)"
       />
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-wide text-(--text-tertiary)">{t('instructor.review.attachments')}</p>
-        <div className="mt-1">
+      <div className="mt-1 space-y-1.5">
           <MediaAssetPicker
             projectId={projectId}
             labels={mediaLabels}
@@ -150,8 +143,14 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
             onChange={entries => setPendingAttachments(prev => ({ ...prev, [pendingKey]: entries }))}
             disabled={savingFeedback}
           />
+          {mode === 'edit' && (editingItem?.attachments?.length > 0) && (
+            <AttachmentThumbs
+              attachments={editingItem.attachments}
+              disabled={savingFeedback}
+              onRemove={attachment => handleDetachAttachment(attachment.id)}
+            />
+          )}
         </div>
-      </div>
       <div className="flex gap-2">
         <button
           type="submit"
@@ -161,14 +160,24 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
           {savingFeedback ? t('saving') : mode === 'edit' ? t('instructor.review.updateFeedback') : t('instructor.review.saveFeedback')}
         </button>
         {mode === 'edit' && (
-          <button
-            type="button"
-            onClick={handleCancelEdit}
-            disabled={savingFeedback}
-            className="rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-[11px] font-bold text-(--text-secondary) disabled:opacity-50"
-          >
-            {t('cancel')}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              disabled={savingFeedback}
+              className="rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-[11px] font-bold text-(--text-secondary) disabled:opacity-50"
+            >
+              {t('cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={() => { handleDeleteFeedback(editingFeedbackId); handleCancelEdit(); }}
+              disabled={savingFeedback}
+              className="rounded-lg border border-rose-200 px-3 py-2 text-[11px] font-bold text-rose-600 disabled:opacity-50"
+            >
+              {t('delete')}
+            </button>
+          </>
         )}
       </div>
     </form>
@@ -197,8 +206,7 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
               key={item.id}
               className="rounded-xl border border-teal-600 bg-(--surface) p-3 text-xs ring-1 ring-teal-600"
             >
-              {composerForm('edit')}
-              <AttachmentThumbs attachments={item.attachments} />
+              {composerForm('edit', item)}
               <ReplyList replies={item.replies} language={i18n.language} />
             </li>
           ) : (
@@ -207,7 +215,7 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
               item={item}
               active={active}
               onSelect={selectFeedback}
-              actions={(
+              actions={((item.canEdit || item.canDelete) && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {item.canEdit && (
                     <button
@@ -225,23 +233,8 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
                       {t('delete')}
                     </button>
                   )}
-                  {(item.canEdit || item.canDelete) && (item.threadState === 'RESOLVED' || item.threadState === 'REJECTED' ? (
-                    <button
-                      type="button" disabled={busy} onClick={() => handleResolveThread(item.id, 'OPEN')}
-                      className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-bold text-slate-600 disabled:opacity-50"
-                    >
-                      {t('instructor.review.reopenThread')}
-                    </button>
-                  ) : (
-                    <button
-                      type="button" disabled={busy} onClick={() => handleResolveThread(item.id, 'RESOLVED')}
-                      className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700 disabled:opacity-50"
-                    >
-                      {t('instructor.review.resolveThread')}
-                    </button>
-                  ))}
                 </div>
-              )}
+              )) || null}
             />
           );
         })}

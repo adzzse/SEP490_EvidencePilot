@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDateTime } from '../../../utils/formatters/date.js';
+import AttachmentViewerModal from './AttachmentViewerModal.jsx';
 
 const LOCATION_KEYS = new Set(['ATTACHED', 'MODIFIED', 'DETACHED', 'SECTION', 'UNLOCATED']);
 
@@ -52,16 +54,45 @@ export default function FeedbackCard({ item, active = false, onSelect, readOnly 
   );
 }
 
-export function AttachmentThumbs({ attachments }) {
+export function AttachmentThumbs({ attachments, onRemove, disabled }) {
+  const [viewerIndex, setViewerIndex] = useState(null);
   if (!(attachments || []).length) return null;
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
-      {attachments.map(attachment => (
-        <a key={attachment.id} href={attachment.url} target="_blank" rel="noreferrer" title={attachment.mimeType}>
-          <img src={attachment.url} alt="" loading="lazy" decoding="async" className="h-14 w-14 rounded-lg border border-(--border) object-cover" />
-        </a>
-      ))}
-    </div>
+    <>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {attachments.map((attachment, idx) => (
+          <span key={attachment.id} className="relative shrink-0" title={attachment.texFilename || attachment.mimeType}>
+            <button
+              type="button"
+              onClick={() => setViewerIndex(idx)}
+              disabled={disabled}
+              className="block rounded-lg focus-visible:ring-2 focus-visible:ring-(--brand) disabled:opacity-50"
+            >
+              <img src={attachment.url} alt="" loading="lazy" decoding="async" className="h-14 w-14 rounded-lg border border-(--border) object-cover" />
+            </button>
+            {onRemove && (
+              <button
+                type="button"
+                onClick={() => onRemove(attachment)}
+                disabled={disabled}
+                aria-label="Remove attachment"
+                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-[10px] font-black text-white disabled:opacity-50"
+              >
+                ×
+              </button>
+            )}
+          </span>
+        ))}
+      </div>
+      {viewerIndex != null && (
+        <AttachmentViewerModal
+          attachments={attachments}
+          index={viewerIndex}
+          onClose={() => setViewerIndex(null)}
+          onIndex={setViewerIndex}
+        />
+      )}
+    </>
   );
 }
 
