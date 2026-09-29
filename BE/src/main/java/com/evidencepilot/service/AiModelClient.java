@@ -31,10 +31,20 @@ public interface AiModelClient {
 
     record GenerationCatalog(int protocolVersion, String provider,
             List<String> allowedModels, List<String> defaultModels,
-            String catalogFingerprint, int maxSystemChars, int maxPromptChars) {
+            String catalogFingerprint, int maxSystemChars, int maxPromptChars,
+            List<String> jsonModels, List<String> schemaModels) {
         public GenerationCatalog {
             allowedModels = List.copyOf(allowedModels);
             defaultModels = List.copyOf(defaultModels);
+            jsonModels = List.copyOf(jsonModels);
+            schemaModels = List.copyOf(schemaModels);
+        }
+
+        public GenerationCatalog(int protocolVersion, String provider,
+                List<String> allowedModels, List<String> defaultModels,
+                String catalogFingerprint, int maxSystemChars, int maxPromptChars) {
+            this(protocolVersion, provider, allowedModels, defaultModels,
+                    catalogFingerprint, maxSystemChars, maxPromptChars, List.of(), List.of());
         }
     }
 

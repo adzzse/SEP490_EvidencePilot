@@ -89,6 +89,8 @@ class AiGenerationClientTest {
                     "provider", "remote",
                     "allowed_models", List.of("model-0", "model-1", "model-2", "model-3", "model-4"),
                     "default_models", List.of("model-0", "model-1", "model-2"),
+                    "json_models", List.of("model-0", "model-1", "model-3"),
+                    "schema_models", List.of("model-0", "model-1"),
                     "catalog_fingerprint", CATALOG,
                     "limits", Map.of("system_chars", 8000, "prompt_chars", 48000, "chain_length", 3)));
             exchange.getResponseHeaders().set("Content-Type", "application/json");
@@ -99,6 +101,8 @@ class AiGenerationClientTest {
         var catalog = client.generationCatalog();
         assertThat(catalog.allowedModels()).hasSize(5);
         assertThat(catalog.defaultModels()).containsExactly("model-0", "model-1", "model-2");
+        assertThat(catalog.jsonModels()).containsExactly("model-0", "model-1", "model-3");
+        assertThat(catalog.schemaModels()).containsExactly("model-0", "model-1");
     }
 
     @ParameterizedTest

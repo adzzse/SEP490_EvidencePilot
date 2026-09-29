@@ -118,6 +118,7 @@ public class AiModelClientImpl implements AiModelClient {
         if (value == null || !value.isObject() || value.path("protocol_version").asInt(-1) != 1
                 || !jsonText(value.get("provider")) || !stringArray(value.get("allowed_models"))
                 || !stringArray(value.get("default_models")) || value.get("default_models").size() > 3
+                || !stringList(value.get("json_models")) || !stringList(value.get("schema_models"))
                 || !jsonText(value.get("catalog_fingerprint"))
                 || !value.get("catalog_fingerprint").textValue().matches("[0-9a-f]{64}")
                 || limits == null || !limits.isObject() || limits.path("chain_length").asInt(-1) != 3
@@ -127,9 +128,15 @@ public class AiModelClientImpl implements AiModelClient {
         }
         List<String> allowed = strings(value.get("allowed_models"));
         List<String> defaults = strings(value.get("default_models"));
+        List<String> jsonModels = strings(value.get("json_models"));
+        List<String> schemaModels = strings(value.get("schema_models"));
         if (allowed.stream().distinct().count() != allowed.size()
                 || defaults.stream().distinct().count() != defaults.size()
-                || !allowed.containsAll(defaults) || allowed.stream().anyMatch(model -> model.length() > 255)
+                || jsonModels.stream().distinct().count() != jsonModels.size()
+                || schemaModels.stream().distinct().count() != schemaModels.size()
+                || !allowed.containsAll(defaults) || !allowed.containsAll(jsonModels)
+                || !jsonModels.containsAll(schemaModels)
+                || allowed.stream().anyMatch(model -> model.length() > 255)
                 || limits.get("system_chars").intValue() != 8000
                 || limits.get("prompt_chars").intValue() != 48000) {
             throw new AiApiException("/ai/generation-config", 502,
@@ -137,7 +144,7 @@ public class AiModelClientImpl implements AiModelClient {
         }
         return new GenerationCatalog(1, value.get("provider").textValue(), allowed, defaults,
                 value.get("catalog_fingerprint").textValue(), limits.get("system_chars").intValue(),
-                limits.get("prompt_chars").intValue());
+                limits.get("prompt_chars").intValue(), jsonModels, schemaModels);
     }
 
     @Override
@@ -319,7 +326,11 @@ public class AiModelClientImpl implements AiModelClient {
     }
 
     private static boolean stringArray(JsonNode value) {
-        return value != null && value.isArray() && !value.isEmpty()
+        return stringList(value) && !value.isEmpty();
+    }
+
+    private static boolean stringList(JsonNode value) {
+        return value != null && value.isArray()
                 && java.util.stream.StreamSupport.stream(value.spliterator(), false).allMatch(AiModelClientImpl::jsonText);
     }
 
