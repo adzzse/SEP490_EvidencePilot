@@ -2,11 +2,13 @@ package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.request.CollectionCategoryRequest;
 import com.evidencepilot.dto.response.CollectionCategoryResponse;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.CollectionCategory;
 import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.service.AuditService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +27,7 @@ public class CollectionCategoryServiceImpl {
     private final CollectionCategoryRepository collectionCategoryRepository;
     private final CurrentUserServiceImpl currentUserService;
     private final AuditService auditService;
+    private final ApplicationEventPublisher events;
 
     public List<CollectionCategoryResponse> getActiveCategories() {
         return collectionCategoryRepository.findByActiveTrueOrderByNameAsc().stream()
@@ -56,6 +59,8 @@ public class CollectionCategoryServiceImpl {
         category = collectionCategoryRepository.save(category);
         auditService.record("COLLECTION_CATEGORY_CREATED", "COLLECTION_CATEGORY", category.getId(),
                 currentUserService.requireCurrentUser(), null, safeValue(category));
+        // Live update (2-way): instructor collection forms refetch via the CATEGORY feed.
+        events.publishEvent(new EntityChangedEvent("CATEGORY", category.getId(), "CREATED", null));
         return CollectionCategoryResponse.from(category);
     }
 
@@ -77,6 +82,7 @@ public class CollectionCategoryServiceImpl {
         category = collectionCategoryRepository.save(category);
         auditService.record("COLLECTION_CATEGORY_UPDATED", "COLLECTION_CATEGORY", category.getId(),
                 currentUserService.requireCurrentUser(), oldValue, safeValue(category));
+        events.publishEvent(new EntityChangedEvent("CATEGORY", category.getId(), "UPDATED", null));
         return CollectionCategoryResponse.from(category);
     }
 
@@ -89,6 +95,7 @@ public class CollectionCategoryServiceImpl {
         collectionCategoryRepository.save(category);
         auditService.record("COLLECTION_CATEGORY_DELETED", "COLLECTION_CATEGORY", category.getId(),
                 currentUserService.requireCurrentUser(), oldValue, safeValue(category));
+        events.publishEvent(new EntityChangedEvent("CATEGORY", category.getId(), "DELETED", null));
     }
 
     private Map<String, Object> safeValue(CollectionCategory category) {

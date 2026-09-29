@@ -390,6 +390,8 @@ public class ProjectServiceImpl {
         member.setJoinedAt(LocalDateTime.now());
         projectMemberRepository.save(member);
 
+        auditService.record("PROJECT_MEMBER_ADDED", "PROJECT", project.getId(), currentUser,
+                null, Map.of("userId", userId.toString(), "role", memberRole.name()));
         events.publishEvent(new EntityChangedEvent("PROJECT", project.getId(), "STATUS_CHANGED", null));
         systemNotificationService.createNotification(
                 user,
@@ -424,8 +426,12 @@ public class ProjectServiceImpl {
             requireAnotherLeader(projectId);
         }
 
+        ProjectRole previousRole = member.getRole();
         member.setRole(role);
         projectMemberRepository.save(member);
+        auditService.record("PROJECT_MEMBER_ROLE_CHANGED", "PROJECT", project.getId(), currentUser,
+                Map.of("userId", userId.toString(), "role", previousRole.name()),
+                Map.of("userId", userId.toString(), "role", role.name()));
         systemNotificationService.createNotification(
                 member.getUser(),
                 currentUser,
@@ -465,6 +471,8 @@ public class ProjectServiceImpl {
                 project.getId(),
                 currentUser.getEmail() + " removed you from project \"" + project.getTitle() + "\"."));
         projectMemberRepository.deleteAll(members);
+        auditService.record("PROJECT_MEMBER_REMOVED", "PROJECT", project.getId(), currentUser,
+                Map.of("userId", userId.toString(), "role", target.getRole().name()), null);
         events.publishEvent(new EntityChangedEvent("PROJECT", project.getId(), "STATUS_CHANGED", null));
     }
 

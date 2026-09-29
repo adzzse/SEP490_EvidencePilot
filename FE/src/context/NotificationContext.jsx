@@ -3,12 +3,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import api from '../services/api.js';
 import { useAuth } from './AuthContext';
 import { subscribeToNotifications, subscribeToEntityEvents } from '../services/notificationSocket.js';
+import { isSelfAccountChangeEvent } from '../utils/authz.js';
 import { feedbackKeys } from '../services/feedbackKeys.js';
 
 const NotificationContext = createContext(null);
 
 export function NotificationProvider({ children }) {
-  const { token } = useAuth();
+  const { token, user, verifySession } = useAuth();
   const queryClient = useQueryClient();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -100,6 +101,10 @@ export function NotificationProvider({ children }) {
       });
       if (entity === 'USER') {
         queryClient.invalidateQueries({ queryKey: ['users'] });
+        // P0b: best-effort self-revocation notice; enforcement stays server-side.
+        // verifySession success is a no-op; a 401/403 flows through the global
+        // api interceptor (logout + redirect). Never log out on this event alone.
+        if (isSelfAccountChangeEvent(evt, user?.id)) verifySession().catch(() => {});
         return;
       }
       if (entity === 'PROJECT') {
@@ -123,8 +128,36 @@ export function NotificationProvider({ children }) {
       if (entity === 'COLLECTION') {
         queryClient.invalidateQueries({ queryKey: ['collections'] });
       }
+      // Live update (2-way): category changes refresh collection forms, which
+      // refetch their own options via subscribeToEntityChanges; collections
+      // using react-query keys stay consistent through this branch.
+      if (entity === 'CATEGORY') {
+        queryClient.invalidateQueries({ queryKey: ['collections'] });
+        queryClient.invalidateQueries({ queryKey: ['categories'] });
+      }
     });
     return unsubscribe;
+  }, [token, restReadyToken, queryClient, user?.id, verifySession]);
+
+  // Phase D: reconcile anything missed while hidden/offline (sleep, network
+  // drop, WS gap). React Query dedupes identical in-flight fetches, so a
+  // visibility burst is cheap; per-event invalidation stays the primary path
+  // and no extra coalescing layer is added (nothing measured needed it).
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return undefined;
+    if (!token || restReadyToken !== token) return undefined;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      queryClient.invalidateQueries({ queryKey: ['extractionQueue'] });
+      queryClient.invalidateQueries({ queryKey: feedbackKeys.all });
+      queryClient.invalidateQueries({ queryKey: ['collections'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [token, restReadyToken, queryClient]);
 
   const markRead = useCallback(async (id) => {

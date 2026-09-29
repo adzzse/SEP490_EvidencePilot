@@ -205,9 +205,9 @@ export default function Projects() {
           <div className="bg-(--surface) border border-(--border) rounded-2xl p-5 shadow-xs flex items-center justify-between">
             <div>
               <span className="text-[11px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('student.projects.inProgress')}</span>
-              <span className="text-3xl font-black text-amber-600 dark:text-amber-400 mt-1 block">{stats.inProgress}</span>
+              <span className="text-3xl font-black text-amber-700 dark:text-amber-400 mt-1 block">{stats.inProgress}</span>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 flex items-center justify-center text-amber-700 dark:text-amber-400 shrink-0">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -218,9 +218,9 @@ export default function Projects() {
           <div className="bg-(--surface) border border-(--border) rounded-2xl p-5 shadow-xs flex items-center justify-between">
             <div>
               <span className="text-[11px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('student.projects.completed')}</span>
-              <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400 mt-1 block">{stats.completed}</span>
+              <span className="text-3xl font-black text-emerald-700 dark:text-emerald-400 mt-1 block">{stats.completed}</span>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 flex items-center justify-center text-emerald-700 dark:text-emerald-400 shrink-0">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -356,7 +356,7 @@ export default function Projects() {
                       e.stopPropagation();
                       openProject(project.id);
                     }}
-                    className="w-full py-2.5 px-4 bg-[#0c162e] hover:bg-[#152447] text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-2.5 px-4 bg-(--brand) hover:bg-(--brand-hover) text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <span>{getCtaText(project.status)}</span>
                     <span aria-hidden="true">&rarr;</span>
@@ -390,10 +390,10 @@ export default function Projects() {
                         <div className="font-bold text-sm text-(--text-primary)">{project.title}</div>
                         <div className="text-xs text-(--text-secondary) truncate max-w-md mt-0.5">{project.description || t('student.projects.noDescription')}</div>
                       </td>
-                      <td className="px-6 py-4 font-mono font-semibold text-slate-500">
+                      <td className="px-6 py-4 font-mono font-semibold text-slate-500 dark:text-(--text-secondary)">
                         {project.targetStandard || '—'}
                       </td>
-                      <td className="px-6 py-4 font-semibold text-slate-500">
+                      <td className="px-6 py-4 font-semibold text-slate-500 dark:text-(--text-secondary)">
                         {project.currentUserRole || '—'}
                       </td>
                       <td className="px-6 py-4">
@@ -405,7 +405,7 @@ export default function Projects() {
                             e.stopPropagation();
                             openProject(project.id);
                           }}
-                          className="px-3.5 py-1.5 bg-[#0c162e] hover:bg-[#152447] text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer inline-flex items-center gap-1"
+                          className="px-3.5 py-1.5 bg-(--brand) hover:bg-(--brand-hover) text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer inline-flex items-center gap-1"
                         >
                           <span>{getCtaText(project.status)}</span>
                           <span aria-hidden="true">&rarr;</span>
@@ -436,7 +436,7 @@ export default function Projects() {
                 onClick={() => setPage(p => Math.max(0, p - 1))}
                 disabled={safePage === 0}
                 aria-label={t('student.projects.previousPage')}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-500 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xs cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xs cursor-pointer"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -460,7 +460,7 @@ export default function Projects() {
                     aria-label={t('student.projects.pageLabel', { page: item + 1 })}
                     className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition cursor-pointer ${
                       isActive
-                        ? 'bg-[#0c162e] text-white shadow-xs'
+                        ? 'bg-(--brand) text-white shadow-xs'
                         : 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
                     }`}
                   >
@@ -474,7 +474,7 @@ export default function Projects() {
                 onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                 disabled={safePage >= totalPages - 1}
                 aria-label={t('student.projects.nextPage')}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-500 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xs cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xs cursor-pointer"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />

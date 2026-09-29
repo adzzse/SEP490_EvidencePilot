@@ -2,10 +2,12 @@ package com.evidencepilot.service;
 
 import com.evidencepilot.service.impl.EmailOtpServiceImpl;
 import com.evidencepilot.dto.request.UserProfileUpdateRequest;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.model.User;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.impl.UserServiceImpl;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
@@ -13,13 +15,15 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 class UserServiceImplTest {
 
     private final UserRepository users = mock(UserRepository.class);
     private final EmailOtpServiceImpl emailOtp = mock(EmailOtpServiceImpl.class);
-    private final UserServiceImpl service = new UserServiceImpl(users, emailOtp);
+    private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+    private final UserServiceImpl service = new UserServiceImpl(users, emailOtp, events);
 
     @Test
     void findUserById_mapsExistingUser() {
@@ -57,6 +61,8 @@ class UserServiceImplTest {
         assertThat(response.getFirstName()).isEqualTo("New");
         assertThat(response.getLastName()).isEqualTo("Kept");
         verifyNoInteractions(emailOtp);
+        verify(events).publishEvent(argThat((Object e) -> e instanceof EntityChangedEvent evt
+                && "USER".equals(evt.entity()) && "UPDATED".equals(evt.action())));
     }
 
     @Test

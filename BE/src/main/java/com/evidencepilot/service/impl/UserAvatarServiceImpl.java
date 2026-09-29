@@ -9,12 +9,14 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.evidencepilot.exception.ResourceNotFoundException;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.model.User;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.DocumentObjectStorage;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +27,7 @@ public class UserAvatarServiceImpl {
 
     private final UserRepository userRepository;
     private final DocumentObjectStorage objectStorage;
+    private final ApplicationEventPublisher events;
 
     @Transactional
     public String uploadAvatar(UUID userId, MultipartFile file) {
@@ -54,6 +57,8 @@ public class UserAvatarServiceImpl {
 
         user.setAvatarKey(key);
         userRepository.save(user);
+        // Live update (2-way): admin Users tab refreshes via the USER entity feed.
+        events.publishEvent(new EntityChangedEvent("USER", userId, "UPDATED", null));
         return resolveAvatarUrl(user);
     }
 

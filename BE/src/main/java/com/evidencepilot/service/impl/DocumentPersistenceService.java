@@ -75,11 +75,17 @@ public class DocumentPersistenceService {
 
     @Transactional
     public Document markDocumentAsUploaded(UUID documentId, String fileUrl, String fileHashSha256) {
+        return markDocumentAsUploaded(documentId, fileUrl, fileHashSha256, null);
+    }
+
+    @Transactional
+    public Document markDocumentAsUploaded(UUID documentId, String fileUrl, String fileHashSha256, Long fileSizeBytes) {
         Document document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException(documentId, "Document"));
         document.setProcessingStatus(ProcessingStatus.UPLOADED);
         document.setFileUrl(fileUrl);
         document.setFileHashSha256(fileHashSha256);
+        if (fileSizeBytes != null) document.setFileSizeBytes(fileSizeBytes);
         Document saved = documentRepository.save(document);
         eventPublisher.publishEvent(new DocumentUploadedEvent(saved.getId()));
         eventPublisher.publishEvent(new EntityChangedEvent(

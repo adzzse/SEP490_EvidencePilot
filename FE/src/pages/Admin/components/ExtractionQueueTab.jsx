@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Modal from '../../../components/ui/Modal.jsx';
 import { PageSkeleton, JsonTree } from './shared.jsx';
 import SearchBar from '../../../components/ui/SearchBar.jsx';
+import { formatDate, formatDateTimeSeconds } from '../../../utils/formatters/date.js';
 import { useToast } from '../../../components/ui/Toast.jsx';
 import { useNotification } from '../../../context/NotificationContext.jsx';
 import { useTranslation } from 'react-i18next';
@@ -39,6 +40,17 @@ function QueueSection({ api }) {
   const [detailDoc, setDetailDoc] = useState(null);
   const [externalUpdates, setExternalUpdates] = useState(0);
   const seenEventIds = useRef(new Set());
+  // Collapsing sticky header: when the title block scrolls out of view, the
+  // compact bar (title + status badges + refresh) sticks to the top.
+  const titleRef = useRef(null);
+  const [compactHeader, setCompactHeader] = useState(false);
+  useEffect(() => {
+    const el = titleRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return undefined;
+    const observer = new IntersectionObserver(([entry]) => setCompactHeader(!entry.isIntersecting), { threshold: 0 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const queueQuery = useQuery({
     queryKey: ['extractionQueue', { dateFrom, dateTo }],
@@ -124,7 +136,8 @@ function QueueSection({ api }) {
       errorType: d.processingError || '—',
       attempts: '—',
       createdAt: d.createdAt || null,
-      timestamp: d.createdAt ? d.createdAt.replace('T', ' ').slice(0, 19) : '—',
+      // Shared formatter: Asia/Ho_Chi_Minh, HH:mm:ss dd/MM/yyyy (was raw UTC + ISO layout).
+      timestamp: d.createdAt ? formatDateTimeSeconds(d.createdAt) : '—',
       status: tabForListKey(listKey),
       listKey,
     };
@@ -132,7 +145,9 @@ function QueueSection({ api }) {
 
   function matchesFilters(row, filters) {
     if (filters.activeTab !== 'All' && row.status !== filters.activeTab) return false;
-    const day = row.createdAt ? row.createdAt.slice(0, 10) : '';
+    // Compare in Vietnam calendar days (was UTC date part — off by one near midnight).
+    const vnDay = row.createdAt ? formatDate(row.createdAt) : '';
+    const day = /^\d{2}\/\d{2}\/\d{4}$/.test(vnDay) ? vnDay.split('/').reverse().join('-') : '';
     if (filters.dateFrom && day < filters.dateFrom) return false;
     if (filters.dateTo && day > filters.dateTo) return false;
     const needle = filters.searchQuery.trim().toLowerCase();
@@ -180,7 +195,7 @@ function QueueSection({ api }) {
     project: d.projectName || '—',
     errorType: d.processingError || '—',
     attempts: d.attempts ? `${d.attempts} / 3` : '—',
-    timestamp: d.createdAt ? d.createdAt.replace('T', ' ').slice(0, 19) : '—',
+    timestamp: d.createdAt ? formatDateTimeSeconds(d.createdAt) : '—',
     createdAt: d.createdAt || null,
     status
   });
@@ -223,9 +238,29 @@ function QueueSection({ api }) {
   };
 
   return (
-    <div className="p-8 space-y-6 bg-(--page-bg)">
+    <div className="px-8 pb-8 space-y-6 bg-(--page-bg)">
+      {/* Compact sticky header: expands once the title block scrolls away */}
+      <div className={`sticky top-0 z-10 -mx-8 px-8 overflow-hidden bg-(--page-bg)/95 backdrop-blur transition-all duration-200 ${compactHeader ? 'max-h-16 opacity-100 border-b border-(--border)' : 'max-h-0 opacity-0 border-b border-transparent'}`}>
+        <div className="py-3 flex items-center gap-2.5 flex-wrap">
+          <span className="text-sm font-extrabold text-(--text-primary)">{t('admin.extractionQueue')}</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-(--brand-soft) dark:text-(--brand-foreground)">{t('admin.totalInQueue')}: {totalInQueue}</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-(--success-soft) dark:text-(--success)">{t('admin.tabReady')}: {readyCount}</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-(--warning-soft) dark:text-(--warning)">{t('admin.tabProcessing')}: {processingCount}</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-(--danger-soft) dark:text-(--danger)">{t('admin.tabFailed')}: {failedCount}</span>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-white bg-(--brand) hover:bg-(--brand-hover) rounded-xl transition shadow-sm disabled:opacity-50 cursor-pointer"
+          >
+            <svg className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>{refreshing ? t('admin.refreshing') : t('admin.refreshQueue')}</span>
+          </button>
+        </div>
+      </div>
       {/* Title Area */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-(--border) pb-5">
+      <div ref={titleRef} className="pt-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-(--border) pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-(--brand-foreground) tracking-tight">{t('admin.extractionQueue')}</h1>
           <p className="text-(--text-secondary) text-xs mt-1">{t('admin.queueSub')}</p>
@@ -243,7 +278,7 @@ function QueueSection({ api }) {
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#0c162e] hover:bg-[#152447] rounded-xl transition shadow-sm disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-(--brand) hover:bg-(--brand-hover) rounded-xl transition shadow-sm disabled:opacity-50"
           >
             <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />

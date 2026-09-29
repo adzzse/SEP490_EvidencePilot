@@ -8,7 +8,7 @@ import SourceGraph from './SourceGraph.jsx';
 import FileViewerModal from './FileViewerModal.jsx';
 
 const PROCESSING_STATUSES = new Set(['PENDING_UPLOAD', 'UPLOADED', 'METADATA_FETCHED', 'PDF_DOWNLOADED', 'QUEUED', 'PROCESSING', 'RAW_EXTRACTED', 'READY', 'COMPLETED', 'PARTIAL', 'FAILED']);
-const SOURCE_MAP_LIMITATIONS = new Set(['SAVED_METADATA_ONLY', 'SOURCES_WITHOUT_DOI', 'AMBIGUOUS_SOURCE_DOI']);
+const SOURCE_MAP_LIMITATIONS = new Set(['SAVED_METADATA_ONLY', 'SOURCES_WITHOUT_DOI', 'AMBIGUOUS_SOURCE_DOI', 'EXTERNAL_REFERENCES_LIMITED']);
 
 export default function VisualSourceMap({ projectId, onClose }) {
   const { t } = useTranslation();
@@ -52,9 +52,10 @@ export default function VisualSourceMap({ projectId, onClose }) {
 
   const graph = useMemo(() => state.data ? projectGraph(state.data) : null, [state.data]);
   const sources = state.data?.nodes.filter(node => node.type === 'SOURCE') || [];
+  const references = state.data?.nodes.filter(node => node.type === 'REFERENCE') || [];
   const citations = state.data?.edges.filter(edge => edge.type === 'CITES') || [];
   const selected = state.data?.nodes.find(node => node.id === selectedId);
-  const selectedSource = selected?.type === 'SOURCE' ? selected : null;
+  const selectedSource = selected?.type === 'SOURCE' || selected?.type === 'REFERENCE' ? selected : null;
   const normalizedSearch = search.trim().toLowerCase();
   const filteredSources = sources.filter(node =>
     `${node.title || ''} ${node.doi || ''} ${sourceAuthors(node.authors)} ${node.publicationYear || ''}`.toLowerCase().includes(normalizedSearch));
@@ -69,7 +70,7 @@ export default function VisualSourceMap({ projectId, onClose }) {
       <h3 className="text-xs font-bold text-(--text-primary)">{t(`sourceMap.${direction}`)} ({related.length})</h3>
       {related.length === 0 ? <p className="text-xs text-(--text-tertiary)">{t('sourceMap.noRecordedLinks')}</p>
         : <ul className="space-y-1">{related.map(edge => {
-          const node = sources.find(source => source.id === (direction === 'outgoing' ? edge.targetId : edge.sourceId));
+          const node = state.data.nodes.find(source => source.id === (direction === 'outgoing' ? edge.targetId : edge.sourceId));
           return <li key={node.id}><button type="button" onClick={() => selectSource(node.id)}
             className="w-full rounded-lg border border-(--border) bg-(--surface-secondary) px-3 py-2 text-left text-xs text-(--text-primary) hover:border-(--brand) focus-visible:ring-2 focus-visible:ring-(--brand) cursor-pointer">
             {nodeTitle(node)}
@@ -108,7 +109,7 @@ export default function VisualSourceMap({ projectId, onClose }) {
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
-              <div className="relative min-h-[220px] flex-1 overflow-hidden">
+              <div className="relative min-h-[max(220px,50dvh)] flex-1 overflow-hidden">
                 <SourceGraph ref={graphRef} data={graph} isDark={theme === 'dark'} search={search} searchMode="highlight"
                   selectedId={selectedId} onSelect={setSelectedId} id="project-source-map-canvas"
                   label={t('sourceMap.graphLabel')} describedBy="project-source-map-legend" />
@@ -128,7 +129,9 @@ export default function VisualSourceMap({ projectId, onClose }) {
                   {selectedSource.fileAvailable ? <button type="button" className={buttonClass} onClick={() => {
                     viewerOpener.current = document.activeElement;
                     setViewerSource(selectedSource);
-                  }}>{t('sourceMap.openSource')}</button> : <p className="text-xs text-(--text-tertiary)">{t('sourceMap.fileUnavailable')}</p>}
+                  }}>{t('sourceMap.openSource')}</button> : selectedSource.type === 'REFERENCE'
+                    ? <p className="text-xs text-(--text-tertiary)">{t('sourceMap.externalReference')}</p>
+                    : <p className="text-xs text-(--text-tertiary)">{t('sourceMap.fileUnavailable')}</p>}
                   {relationList('outgoing')}
                   {relationList('incoming')}
                 </> : <>
@@ -154,6 +157,7 @@ export default function VisualSourceMap({ projectId, onClose }) {
               <div id="project-source-map-legend" className="flex flex-wrap items-center gap-x-5 gap-y-1 font-semibold">
                 <span><span aria-hidden="true" className="mr-1.5 text-emerald-600">◆</span>{t('sourceMap.project')}</span>
                 <span><span aria-hidden="true" className="mr-1.5 text-violet-500">●</span>{t('sourceMap.source')}</span>
+                {references.length > 0 && <span><span aria-hidden="true" className="mr-1.5 text-slate-400">●</span>{t('sourceMap.externalReference')}</span>}
                 <span><span aria-hidden="true" className="mr-1.5">┄</span>{t('sourceMap.membership')}</span>
                 <span><span aria-hidden="true" className="mr-1.5 text-violet-500">→</span>{t('sourceMap.citation')}</span>
               </div>

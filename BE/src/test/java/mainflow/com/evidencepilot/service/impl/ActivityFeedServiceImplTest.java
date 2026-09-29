@@ -276,8 +276,7 @@ class ActivityFeedServiceImplTest {
     }
 
     @Test
-    void limitClampedToOneHundred() {
-        User u = user(UserRole.INSTRUCTOR);
+    void limitClampedToOneHundred() {        User u = user(UserRole.INSTRUCTOR);
         when(userRepository.findById(u.getId())).thenReturn(Optional.of(u));
         when(auditLogRepository.findByActorIdOrderByOccurredAtDesc(any(), any()))
                 .thenReturn(new PageImpl<>(List.of()));
@@ -287,5 +286,210 @@ class ActivityFeedServiceImplTest {
         org.mockito.Mockito.verify(auditLogRepository)
                 .findByActorIdOrderByOccurredAtDesc(org.mockito.ArgumentMatchers.eq(u.getId()),
                         org.mockito.ArgumentMatchers.argThat(p -> p.getPageSize() == 100));
+    }
+
+    @Test
+    void admin_userActionRow_linksToAdminConsole() {
+        User admin = user(UserRole.ADMIN);
+        UUID targetId = UUID.randomUUID();
+        User target = user(UserRole.STUDENT);
+        target.setId(targetId);
+        target.setFirstName("An");
+        target.setLastName("Nguyen");
+        when(userRepository.findById(admin.getId())).thenReturn(Optional.of(admin));
+        when(auditLogRepository.findByActorIdOrderByOccurredAtDesc(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(log("USER_STATUS_UPDATED", "USER", targetId))));
+        when(userRepository.findById(targetId)).thenReturn(Optional.of(target));
+
+        ActivityFeedResponse resp = service.getMyActivity(admin.getId(), 10);
+
+        assertThat(resp.role()).isEqualTo(UserRole.ADMIN);
+        assertThat(resp.items()).hasSize(1);
+        assertThat(resp.items().get(0).type()).isEqualTo("user");
+        assertThat(resp.items().get(0).title()).isEqualTo("An Nguyen");
+        assertThat(resp.items().get(0).subtitle()).isEqualTo("Status updated");
+        assertThat(resp.items().get(0).link()).isEqualTo("/admin/dashboard?tab=users");
+    }
+
+    @Test
+    void admin_projectRow_usesInstructorLink() {
+        User admin = user(UserRole.ADMIN);
+        UUID pid = UUID.randomUUID();
+        when(userRepository.findById(admin.getId())).thenReturn(Optional.of(admin));
+        when(auditLogRepository.findByActorIdOrderByOccurredAtDesc(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(log("PROJECT_CREATED", "PROJECT", pid))));
+        Project p = new Project();
+        p.setId(pid);
+        p.setTitle("Seed Project");
+        p.setActive(true);
+        when(projectRepository.findById(pid)).thenReturn(Optional.of(p));
+
+        ActivityFeedResponse resp = service.getMyActivity(admin.getId(), 10);
+
+        assertThat(resp.items()).hasSize(1);
+        assertThat(resp.items().get(0).type()).isEqualTo("project");
+        assertThat(resp.items().get(0).link()).isEqualTo("/admin/dashboard?tab=projects");
+    }
+
+    @Test
+    void admin_skipsInstructorOwnedObjectsWithoutAdminTab() {        User admin = user(UserRole.ADMIN);
+        UUID cid = UUID.randomUUID();
+        UUID docId = UUID.randomUUID();
+        when(userRepository.findById(admin.getId())).thenReturn(Optional.of(admin));
+        when(auditLogRepository.findByActorIdOrderByOccurredAtDesc(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(
+                        log("COLLECTION_CREATED", "COLLECTION", cid),
+                        log("DOCUMENT_UPLOADED", "DOCUMENT", docId))));
+
+        ActivityFeedResponse resp = service.getMyActivity(admin.getId(), 10);
+
+        assertThat(resp.items()).isEmpty();
+    }
+
+    @Test
+    void admin_configRow_linksToAdminConsole() {
+        User admin = user(UserRole.ADMIN);
+        when(userRepository.findById(admin.getId())).thenReturn(Optional.of(admin));
+        when(auditLogRepository.findByActorIdOrderByOccurredAtDesc(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(log("AI_GENERATION_CONFIG_CHANGED", "AI_GENERATION_CONFIG", null))));
+
+        ActivityFeedResponse resp = service.getMyActivity(admin.getId(), 10);
+
+        assertThat(resp.items()).hasSize(1);
+        assertThat(resp.items().get(0).type()).isEqualTo("config");
+        assertThat(resp.items().get(0).link()).isEqualTo("/admin/dashboard?tab=prompts");
+    }
+
+    @Test
+    void admin_categoryRow_linksToSettingsTab() {
+        User admin = user(UserRole.ADMIN);
+        UUID cid = UUID.randomUUID();
+        when(userRepository.findById(admin.getId())).thenReturn(Optional.of(admin));
+        when(auditLogRepository.findByActorIdOrderByOccurredAtDesc(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(log("COLLECTION_CATEGORY_CREATED", "COLLECTION_CATEGORY", cid))));
+        CollectionCategory c = new CollectionCategory();
+        c.setId(cid);
+        c.setName("Methods");
+        when(collectionCategoryRepository.findById(cid)).thenReturn(Optional.of(c));
+
+        ActivityFeedResponse resp = service.getMyActivity(admin.getId(), 10);
+
+        assertThat(resp.items()).hasSize(1);
+        assertThat(resp.items().get(0).title()).isEqualTo("Methods");
+        assertThat(resp.items().get(0).link()).isEqualTo("/admin/dashboard?tab=settings");
+    }
+
+    // Role gate: an activity row must never navigate outside the viewer's own
+    // role pages (regression: admin rows once linked to /instructor/...).
+    @Test
+    void adminLinksNeverLeaveAdminConsole() {
+        User admin = user(UserRole.ADMIN);
+        UUID pid = UUID.randomUUID();
+        UUID cid = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        User target = user(UserRole.STUDENT);
+        target.setId(targetId);
+        Project p = new Project();
+        p.setId(pid);
+        p.setTitle("P");
+        p.setActive(true);
+        CollectionCategory c = new CollectionCategory();
+        c.setId(cid);
+        c.setName("C");
+        when(userRepository.findById(admin.getId())).thenReturn(Optional.of(admin));
+        when(auditLogRepository.findByActorIdOrderByOccurredAtDesc(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(
+                        log("PROJECT_CREATED", "PROJECT", pid),
+                        log("COLLECTION_CATEGORY_CREATED", "COLLECTION_CATEGORY", cid),
+                        log("USER_STATUS_UPDATED", "USER", targetId),
+                        log("AI_GENERATION_CONFIG_CHANGED", "AI_GENERATION_CONFIG", null),
+                        log("COLLECTION_CREATED", "COLLECTION", UUID.randomUUID()),
+                        log("DOCUMENT_UPLOADED", "DOCUMENT", UUID.randomUUID()))));
+        when(projectRepository.findById(pid)).thenReturn(Optional.of(p));
+        when(collectionCategoryRepository.findById(cid)).thenReturn(Optional.of(c));
+        when(userRepository.findById(targetId)).thenReturn(Optional.of(target));
+
+        ActivityFeedResponse resp = service.getMyActivity(admin.getId(), 10);
+
+        assertThat(resp.items()).isNotEmpty();
+        assertThat(resp.items()).allSatisfy(item ->
+                assertThat(item.link()).startsWith("/admin/"));
+    }
+
+    @Test
+    void instructorLinksNeverLeaveInstructorPages() {
+        User instructor = user(UserRole.INSTRUCTOR);
+        UUID pid = UUID.randomUUID();
+        UUID cid = UUID.randomUUID();
+        UUID catId = UUID.randomUUID();
+        UUID docId = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        Project p = new Project();
+        p.setId(pid);
+        p.setTitle("P");
+        p.setActive(true);
+        com.evidencepilot.model.Collection c = new com.evidencepilot.model.Collection();
+        c.setId(cid);
+        c.setTitle("C");
+        c.setActive(true);
+        CollectionCategory cat = new CollectionCategory();
+        cat.setId(catId);
+        cat.setName("K");
+        Document doc = new Document();
+        doc.setId(docId);
+        doc.setActive(true);
+        doc.setProject(p);
+        PaperSection section = new PaperSection();
+        section.setId(sectionId);
+        section.setDocument(doc);
+        when(userRepository.findById(instructor.getId())).thenReturn(Optional.of(instructor));
+        when(auditLogRepository.findByActorIdOrderByOccurredAtDesc(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(
+                        log("PROJECT_CREATED", "PROJECT", pid),
+                        log("COLLECTION_CREATED", "COLLECTION", cid),
+                        log("COLLECTION_CATEGORY_CREATED", "COLLECTION_CATEGORY", catId),
+                        log("DOCUMENT_UPLOADED", "DOCUMENT", docId),
+                        log("SECTION_CONTENT_UPDATED", "PaperSection", sectionId))));
+        when(projectRepository.findById(pid)).thenReturn(Optional.of(p));
+        when(collectionRepository.findById(cid)).thenReturn(Optional.of(c));
+        when(documentRepository.findByCollectionId(cid)).thenReturn(List.of());
+        when(collectionCategoryRepository.findById(catId)).thenReturn(Optional.of(cat));
+        when(documentRepository.findById(docId)).thenReturn(Optional.of(doc));
+        when(paperSectionRepository.findById(sectionId)).thenReturn(Optional.of(section));
+
+        ActivityFeedResponse resp = service.getMyActivity(instructor.getId(), 10);
+
+        assertThat(resp.items()).hasSize(5);
+        assertThat(resp.items()).allSatisfy(item ->
+                assertThat(item.link()).startsWith("/instructor/"));
+    }
+
+    @Test
+    void studentLinksNeverLeaveStudentPages() {
+        User student = user(UserRole.STUDENT);
+        UUID pid = UUID.randomUUID();
+        UUID sectionId = UUID.randomUUID();
+        Project p = new Project();
+        p.setId(pid);
+        p.setTitle("P");
+        p.setActive(true);
+        Document doc = new Document();
+        doc.setProject(p);
+        PaperSection section = new PaperSection();
+        section.setId(sectionId);
+        section.setDocument(doc);
+        when(userRepository.findById(student.getId())).thenReturn(Optional.of(student));
+        when(auditLogRepository.findByActorIdOrderByOccurredAtDesc(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(
+                        log("PROJECT_UPDATED", "PROJECT", pid),
+                        log("SECTION_CONTENT_UPDATED", "PaperSection", sectionId))));
+        when(projectRepository.findById(pid)).thenReturn(Optional.of(p));
+        when(paperSectionRepository.findById(sectionId)).thenReturn(Optional.of(section));
+
+        ActivityFeedResponse resp = service.getMyActivity(student.getId(), 10);
+
+        assertThat(resp.items()).hasSize(2);
+        assertThat(resp.items()).allSatisfy(item ->
+                assertThat(item.link()).startsWith("/student/"));
     }
 }

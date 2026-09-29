@@ -84,6 +84,39 @@ class DocumentPersistenceServiceTest {
     }
 
     @Test
+    void uploadCommitsWhenAuditFails() {
+        UUID id = UUID.randomUUID();
+        Document document = new Document();
+        document.setId(id);
+        when(documents.findById(id)).thenReturn(Optional.of(document));
+        when(documents.save(document)).thenReturn(document);
+        doThrow(new RuntimeException("audit store down")).when(audit)
+                .record(any(), any(), any(), any(), any(), any());
+
+        Document saved = service.markDocumentAsUploaded(id, "file-key", "hash");
+
+        assertThat(saved.getId()).isEqualTo(id);
+        assertThat(saved.getFileUrl()).isEqualTo("file-key");
+        verify(documents).save(document);
+    }
+
+    @Test
+    void markDocumentAsUploaded_persistsDownloadedSizeOnFreshEntity() {
+        UUID id = UUID.randomUUID();
+        Document reloaded = new Document();
+        reloaded.setId(id);
+        reloaded.setFileSizeBytes(0L);
+        when(documents.findById(id)).thenReturn(Optional.of(reloaded));
+        when(documents.save(reloaded)).thenReturn(reloaded);
+
+        Document saved = service.markDocumentAsUploaded(id, "sources/raw/file.pdf", "abc123", 321L);
+
+        assertThat(saved.getFileSizeBytes()).isEqualTo(321L);
+        assertThat(saved.getProcessingStatus()).isEqualTo(ProcessingStatus.UPLOADED);
+        assertThat(saved.getFileUrl()).isEqualTo("sources/raw/file.pdf");
+    }
+
+    @Test
     void markDocumentAsUploaded_rejectsMissingDocument() {
         UUID id = UUID.randomUUID();
         assertThatThrownBy(() -> service.markDocumentAsUploaded(id, "key", "hash"))

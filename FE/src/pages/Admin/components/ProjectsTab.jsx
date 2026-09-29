@@ -4,6 +4,7 @@ import { useAdminTour } from '../../../hooks/useAdminTour.js';
 import { useToast } from '../../../components/ui/Toast.jsx';
 import { useTranslation } from 'react-i18next';
 import Tabs from '../../../components/ui/Tabs.jsx';
+import Dropdown from '../../../components/ui/Dropdown.jsx';
 import ProjectAvatar from '../../../components/ui/ProjectAvatar.jsx';
 import { useLanguage } from '../../../context/LanguageContext';
 
@@ -30,13 +31,6 @@ function ProjectsSection({ api }) {
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [instructorFilter, setInstructorFilter] = useState('');
-
-  const [activeProject, setActiveProject] = useState(null);
-  const [showMembersModal, setShowMembersModal] = useState(false);
-  const [selectedUser, setSelectedUser] = useState('');
-  const [selectedRole, setSelectedRole] = useState('MEMBER');
-  const [updatingMemberId, setUpdatingMemberId] = useState(null);
-  const [memberErr, setMemberErr] = useState('');
 
   const [detailProject, setDetailProject] = useState(null);
   const [detailTab, setDetailTab] = useState('members');
@@ -81,18 +75,6 @@ function ProjectsSection({ api }) {
     enabled: !!detailProject,
   });
 
-  const membersQuery = useQuery({
-    queryKey: ['project', activeProject?.id, 'members-modal'],
-    queryFn: ({ signal }) => api.get(`/api/projects/${activeProject.id}/members`, { signal }).then(r => r.data || []),
-    enabled: showMembersModal && !!activeProject,
-  });
-
-  const allUsersQuery = useQuery({
-    queryKey: ['users', 'all-students'],
-    queryFn: ({ signal }) => api.get('/api/admin/users?size=100', { signal }).then(r => r.data?.content || []),
-    enabled: showMembersModal,
-  });
-
   const unarchiveMutation = useMutation({
     mutationFn: (p) => api.patch(`/api/admin/projects/${p.id}/unarchive`),
     onSuccess: () => {
@@ -100,39 +82,6 @@ function ProjectsSection({ api }) {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
     onError: (e) => toast.error(e.response?.data?.message || t('admin.unarchiveFailed')),
-  });
-
-  const addMemberMutation = useMutation({
-    mutationFn: ({ projectId, userId, role }) =>
-      api.post(`/api/projects/${projectId}/members`, null, { params: { userId, role } }),
-    onSuccess: () => {
-      toast.success(t('admin.memberAdded'));
-      setSelectedUser('');
-      queryClient.invalidateQueries({ queryKey: ['project', activeProject.id, 'members-modal'] });
-      queryClient.invalidateQueries({ queryKey: ['project', activeProject.id, 'members'] });
-    },
-    onError: (e) => setMemberErr(e.response?.data?.message || t('admin.memberAddFailed')),
-  });
-
-  const removeMemberMutation = useMutation({
-    mutationFn: ({ projectId, userId }) => api.delete(`/api/projects/${projectId}/members/${userId}`),
-    onSuccess: () => {
-      toast.success(t('admin.memberRemoved'));
-      queryClient.invalidateQueries({ queryKey: ['project', activeProject.id, 'members-modal'] });
-      queryClient.invalidateQueries({ queryKey: ['project', activeProject.id, 'members'] });
-    },
-    onError: (e) => setMemberErr(e.response?.data?.message || t('admin.memberRemoveFailed')),
-  });
-
-  const updateRoleMutation = useMutation({
-    mutationFn: ({ projectId, userId, role }) =>
-      api.patch(`/api/projects/${projectId}/members/${userId}`, null, { params: { role } }),
-    onSuccess: () => {
-      toast.success(t('admin.memberRoleUpdated'));
-      queryClient.invalidateQueries({ queryKey: ['project', activeProject.id, 'members-modal'] });
-    },
-    onError: (e) => setMemberErr(e.response?.data?.message || e.response?.data?.detail || t('admin.memberRoleUpdateFailed')),
-    onSettled: () => setUpdatingMemberId(null),
   });
 
   const projectsTourSteps = useCallback(() => [
@@ -180,8 +129,6 @@ function ProjectsSection({ api }) {
   const detailDocs = detailDocsQuery.data || [];
   const detailSections = detailSectionsQuery.data || [];
   const sourceDocs = detailDocs.filter((d) => d.docType === 'SOURCE');
-  const members = membersQuery.data || [];
-  const allUsers = allUsersQuery.data || [];
 
   return (
     <div className="p-8 space-y-6 bg-(--page-bg)">
@@ -206,19 +153,20 @@ function ProjectsSection({ api }) {
             className="flex-1 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--brand)"
           />
 
-          <select
+          <Dropdown
             value={instructorFilter}
-            onChange={(e) => { setInstructorFilter(e.target.value); setPage(0); }}
-            aria-label={t('admin.filterByInstructor')}
-            className="w-44 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none cursor-pointer"
-          >
-            <option value="">{t('admin.allInstructors')}</option>
-            {instructors.map((u) => (
-              <option key={u.id} value={u.email}>
-                {u.firstName} {u.lastName} ({u.email})
-              </option>
-            ))}
-          </select>
+            onChange={(v) => { setInstructorFilter(v); setPage(0); }}
+            ariaLabel={t('admin.filterByInstructor')}
+            className="w-44"
+            maxVisibleRows={5}
+            options={[
+              { value: '', label: t('admin.allInstructors') },
+              ...instructors.map((u) => ({
+                value: u.email,
+                label: `${u.firstName} ${u.lastName} (${u.email})`,
+              })),
+            ]}
+          />
 
           <select
             value={statusFilter}
@@ -291,14 +239,6 @@ function ProjectsSection({ api }) {
                         </svg>
                       </button>
 
-                      <button onClick={() => { setActiveProject(p); setShowMembersModal(true); setSelectedUser(''); setMemberErr(''); }} title={t('admin.manageMembers')} className="p-1.5 rounded-lg hover:bg-(--surface-tertiary) text-blue-600 hover:text-blue-800 transition cursor-pointer">
-                        <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                          <circle cx="9" cy="7" r="4" />
-                          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                        </svg>
-                      </button>
 
                       {p.status === 'ARCHIVED' && (
                         <button onClick={() => unarchiveMutation.mutate(p)} title={t('admin.unarchiveTitle')} className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 hover:text-emerald-800 transition cursor-pointer">
@@ -484,106 +424,7 @@ function ProjectsSection({ api }) {
         </div>
       )}
 
-      {/* Membership Management Modal — flat, no nested modals */}
-      {showMembersModal && activeProject && (
-        <div className="fixed inset-0 z-55 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-(--surface) rounded-2xl shadow-2xl w-full max-w-lg border border-gray-150 overflow-hidden transform scale-100 transition-all duration-300">
-            <div className="bg-(--surface-secondary) border-b border-gray-150 px-6 py-4 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-(--text-primary) text-sm">{t('admin.manageWorkspaceMembers')}</h3>
-                <p className="text-(--text-tertiary) text-[10px] mt-0.5 truncate max-w-xs">{activeProject.title}</p>
-              </div>
-              <button onClick={() => setShowMembersModal(false)} className="text-(--text-tertiary) hover:text-(--text-secondary) transition cursor-pointer">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
 
-            <div className="p-6 space-y-5">
-              <form
-                onSubmit={(e) => { e.preventDefault(); if (!selectedUser) { setMemberErr(t('admin.selectUserFirst')); return; } setMemberErr(''); addMemberMutation.mutate({ projectId: activeProject.id, userId: selectedUser, role: selectedRole }); }}
-                className="bg-(--surface-secondary)/50 border border-(--border) rounded-xl p-4.5 space-y-3"
-              >
-                <span className="text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider block">{t('admin.addWorkspaceMember')}</span>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <select value={selectedUser} onChange={e => setSelectedUser(e.target.value)} className="flex-1 px-3 py-2 bg-(--surface) border border-gray-255 rounded-xl font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs cursor-pointer">
-                    <option value="">{t('admin.chooseUserAccounts')}</option>
-                    {allUsers
-                      .filter(u => u.role === 'STUDENT' && !members.some(m => m.userId === u.id))
-                      .map(u => (
-                        <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email} - {u.role})</option>
-                      ))}
-                  </select>
-                  <select value={selectedRole} onChange={e => setSelectedRole(e.target.value)} className="w-full sm:w-36 px-3 py-2 bg-(--surface) border border-gray-255 rounded-xl font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs cursor-pointer">
-                    <option value="MEMBER">{t('admin.member')}</option>
-                    <option value="LEADER">{t('admin.leader')}</option>
-                  </select>
-                  <button type="submit" disabled={addMemberMutation.isPending} className="px-4 py-2 bg-[#0c162e] hover:bg-[#152447] text-white rounded-xl text-xs font-bold transition shadow-sm shrink-0 cursor-pointer disabled:opacity-50">
-                    {t('admin.add')}
-                  </button>
-                </div>
-              </form>
-
-              {memberErr && <div className="text-xs text-rose-700 bg-rose-50 p-2.5 rounded-lg border border-rose-100 font-semibold">{memberErr}</div>}
-
-              <div className="space-y-2">
-                <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('admin.currentMembers', { n: members.length })}</span>
-                {membersQuery.isLoading ? (
-                  <div className="animate-pulse space-y-2 py-4">
-                    <div className="h-8 bg-gray-200 rounded w-full" />
-                    <div className="h-8 bg-gray-200 rounded w-full" />
-                  </div>
-                ) : members.length === 0 ? (
-                  <div className="text-xs text-(--text-tertiary) py-6 text-center italic border border-dashed border-gray-255 rounded-xl bg-(--surface-secondary)/20">{t('admin.noMembersWorkspace')}</div>
-                ) : (
-                  <div className="divide-y divide-gray-150 border border-(--border) rounded-xl max-h-56 overflow-y-auto bg-(--surface)">
-                    {members.map(m => (
-                      <div key={m.id} className="px-4 py-2.5 flex items-center justify-between hover:bg-(--surface-secondary)/50 transition text-xs">
-                        <div className="min-w-0">
-                          <p className="font-bold text-(--text-primary) truncate">{m.firstName} {m.lastName}</p>
-                          <p className="text-[10px] text-(--text-tertiary) font-mono mt-0.5 truncate">{m.email}</p>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          {m.role === 'INSTRUCTOR' ? (
-                            <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-amber-50 text-amber-700 border-amber-100">{m.role}</span>
-                          ) : (
-                            <select
-                              value={m.role}
-                              onChange={e => { setUpdatingMemberId(m.userId); updateRoleMutation.mutate({ projectId: activeProject.id, userId: m.userId, role: e.target.value }); }}
-                              disabled={updatingMemberId !== null || updateRoleMutation.isPending}
-                              className="cursor-pointer rounded-lg border border-(--border) bg-(--surface) px-2 py-1 text-[10px] font-bold text-(--text-secondary) outline-none transition focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              <option value="MEMBER">{t('admin.member')}</option>
-                              <option value="LEADER">{t('admin.leader')}</option>
-                            </select>
-                          )}
-                          {m.role !== 'INSTRUCTOR' && (
-                            <button
-                              onClick={() => removeMemberMutation.mutate({ projectId: activeProject.id, userId: m.userId })}
-                              disabled={removeMemberMutation.isPending}
-                              title={t('admin.delete')}
-                              className="p-1 text-(--text-tertiary) hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer disabled:opacity-50"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-(--surface-secondary) px-6 py-3.5 border-t border-gray-150 flex items-center justify-end">
-              <button onClick={() => setShowMembersModal(false)} className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer">{t('admin.close')}</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

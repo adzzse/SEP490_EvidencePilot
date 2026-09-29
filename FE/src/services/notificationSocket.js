@@ -43,7 +43,9 @@ function connect(token) {
         }
       });
       if (entitySubscribers.size > 0) {
-        entitySubscription = nextClient.subscribe('/topic/entities', message => {
+        // Phase 0: recipient-scoped queue. The server fans entity events out
+        // per user (see EntityEventAudience); /topic/entities no longer exists.
+        entitySubscription = nextClient.subscribe('/user/queue/entities', message => {
           try {
             const evt = JSON.parse(message.body);
             entitySubscribers.forEach(({ handler }) => handler(evt));
@@ -64,6 +66,15 @@ if (typeof window !== 'undefined') {
   window.addEventListener('auth:refreshed', () => {
     connect(localStorage.getItem('token'));
   });
+  // P0b: a revoked/expired session must not keep a live socket on a dead token.
+  // Enforcement never depends on this — the server re-checks every WS frame —
+  // but a lingering client would reconnect every 5s and keep receiving broadcasts.
+  window.addEventListener('auth:expired', () => disconnectWebSocket());
+  window.addEventListener('auth:revoked', () => disconnectWebSocket());
+}
+
+export function disconnectWebSocket() {
+  disconnect();
 }
 
 export function subscribeToNotifications(token, handler, options = {}) {

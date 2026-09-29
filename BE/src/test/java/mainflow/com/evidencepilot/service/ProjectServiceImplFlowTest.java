@@ -29,7 +29,11 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -104,6 +108,8 @@ class ProjectServiceImplFlowTest {
         verify(projectMemberRepository).save(memberCaptor.capture());
         assertThat(memberCaptor.getValue().getUser()).isEqualTo(student);
         assertThat(memberCaptor.getValue().getRole()).isEqualTo(ProjectRole.MEMBER);
+        verify(auditService).record(eq("PROJECT_MEMBER_ADDED"), eq("PROJECT"), eq(project.getId()),
+                eq(instructor), isNull(), anyMap());
     }
 
     @Test
@@ -118,6 +124,7 @@ class ProjectServiceImplFlowTest {
 
         assertThatThrownBy(() -> service().addMember(project.getId(), otherInstructor.getId(), ProjectRole.MEMBER))
                 .isInstanceOf(ResponseStatusException.class);
+        verifyNoInteractions(auditService);
     }
 
     @Test
@@ -196,6 +203,8 @@ class ProjectServiceImplFlowTest {
                 student, instructor, "PROJECT_MEMBER_REMOVED", project.getId(),
                 instructor.getEmail() + " removed you from project \"" + project.getTitle() + "\".");
         verify(projectMemberRepository).deleteAll(List.of(member));
+        verify(auditService).record(eq("PROJECT_MEMBER_REMOVED"), eq("PROJECT"), eq(project.getId()),
+                eq(instructor), anyMap(), isNull());
     }
 
     private ProjectServiceImpl service() {

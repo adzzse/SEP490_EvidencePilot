@@ -56,15 +56,20 @@ class ProjectSourceMapServiceTest {
 
         var result = service.getSourceMap(project.getId());
 
-        assertThat(result.nodes()).hasSize(3);
+        assertThat(result.nodes()).hasSize(4);
         assertThat(result.edges()).filteredOn(edge -> edge.type().equals("PROJECT_SOURCE")).hasSize(2);
-        assertThat(result.edges()).filteredOn(edge -> edge.type().equals("CITES")).hasSize(2);
+        assertThat(result.edges()).filteredOn(edge -> edge.type().equals("CITES")).hasSize(3);
         assertThat(result.edges()).anySatisfy(edge -> {
             assertThat(edge.sourceId()).isEqualTo("source:" + a.getId());
             assertThat(edge.targetId()).isEqualTo("source:" + b.getId());
             assertThat(edge.referenceIds()).containsExactly(ab.getId(), ba.getId());
         });
         assertThat(result.nodes()).noneMatch(node -> outside.getId().equals(node.documentId()));
+        assertThat(result.nodes()).anySatisfy(node -> {
+            assertThat(node.type()).isEqualTo("REFERENCE");
+            assertThat(node.doi()).isEqualTo(outside.getDoi());
+            assertThat(node.fileAvailable()).isFalse();
+        });
         verify(references).findForDocuments(java.util.Set.of(a.getId(), b.getId()));
     }
 
@@ -107,9 +112,10 @@ class ProjectSourceMapServiceTest {
 
         var result = service.getSourceMap(project.getId());
 
-        assertThat(result.nodes()).hasSize(106);
-        assertThat(result.edges()).hasSize(106);
+        assertThat(result.nodes()).hasSize(126);
+        assertThat(result.edges()).hasSize(126);
         assertThat(result.edges().getLast().targetId()).isEqualTo("source:" + documents.getLast().getId());
+        assertThat(result.limitations()).contains("EXTERNAL_REFERENCES_LIMITED");
         verify(references, times(1)).findForDocuments(any());
     }
 

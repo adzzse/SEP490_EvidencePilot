@@ -8,14 +8,22 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
 public class EntityChangedBroadcaster {
 
-    public static final String DESTINATION = "/topic/entities";
+    /**
+     * Phase 0: per-recipient user destination. The former global
+     * {@code /topic/entities} broadcast leaked unrelated projects to every
+     * authenticated session; recipients now come from {@link EntityEventAudience}.
+     * Clients subscribe to {@code /user/queue/entities}.
+     */
+    public static final String USER_DESTINATION = "/queue/entities";
 
     private final SimpMessagingTemplate messagingTemplate;
+    private final EntityEventAudience audience;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onCommit(EntityChangedEvent event) {
@@ -29,6 +37,8 @@ public class EntityChangedBroadcaster {
         if (event.projectId() != null) {
             payload.put("projectId", event.projectId().toString());
         }
-        messagingTemplate.convertAndSend(DESTINATION, payload);
+        for (UUID recipient : audience.recipients(event)) {
+            messagingTemplate.convertAndSendToUser(recipient.toString(), USER_DESTINATION, payload);
+        }
     }
 }

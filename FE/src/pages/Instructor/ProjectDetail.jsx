@@ -155,6 +155,8 @@ export default function ProjectDetail() {
   const [selectedPaper, setSelectedPaper] = useState(null);
   const [feedbackRequests, setFeedbackRequests] = useState([]);
   const [progressReport, setProgressReport] = useState(null);
+  const [progressReportError, setProgressReportError] = useState(false);
+  const progressReportRequestRef = useRef(0);
   const [reportSectionId, setReportSectionId] = useState(null);
   const [reportMemberId, setReportMemberId] = useState('ALL');
   const [reportFrom, setReportFrom] = useState(() => reportDate(29));
@@ -345,6 +347,9 @@ export default function ProjectDetail() {
   }, [id]);
 
   const loadProgressReport = useCallback(async () => {
+    const requestId = ++progressReportRequestRef.current;
+    setProgressReport(null);
+    setProgressReportError(false);
     try {
       let resolution = 'month';
       if (reportFrom && reportTo) {
@@ -359,9 +364,11 @@ export default function ProjectDetail() {
           ...(reportFrom && reportTo ? { from: reportFrom, to: reportTo } : {}),
           resolution,
         },
-      }).catch(() => null);
-      setProgressReport(progRes?.data || null);
-    } catch { }
+      });
+      if (requestId === progressReportRequestRef.current) setProgressReport(progRes.data);
+    } catch {
+      if (requestId === progressReportRequestRef.current) setProgressReportError(true);
+    }
   }, [id, reportFrom, reportMemberId, reportTo]);
 
   const loadUsers = useCallback(async () => {
@@ -1683,13 +1690,15 @@ export default function ProjectDetail() {
           </div>
         )}
 
-        {/* Tab: Project Process Report — Phase 4: GitHub graph right panel */}
+        {/* Tab: Project Process Report */}
         {activeTab === 'progress' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full overflow-hidden">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-2 h-full overflow-y-auto">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t('instructor.projectDetail.contributionEvidence')}</h2>
-                <div className="flex flex-wrap items-center gap-2">
+          <div className="h-full overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-5">
+              <div className="mb-4 space-y-3">
+                <div>
+                  <h2 className="text-sm font-bold text-[var(--brand-foreground)]">{t('instructor.projectDetail.contributionEvidence')}</h2>
+                  <p className="mt-1 text-xs text-[var(--text-tertiary)]">{t('instructor.projectDetail.contributionEvidenceNote')}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 rounded-xl bg-[var(--surface-secondary)] p-2">
                   <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
                     {t('instructor.projectDetail.fromLabel')}
                     <input
@@ -1757,8 +1766,14 @@ export default function ProjectDetail() {
                   </label>
                 </div>
               </div>
-              <p className="mb-4 text-xs text-[var(--text-tertiary)]">{t('instructor.projectDetail.contributionEvidenceNote')}</p>
-              {!progressReport ? (
+              {progressReportError ? (
+                <div role="alert" className="space-y-2 text-xs text-[var(--text-secondary)]">
+                  <p>{t('instructor.projectDetail.progressLoadFailed')}</p>
+                  <button type="button" onClick={loadProgressReport} className="font-bold text-[var(--brand-foreground)] hover:underline">
+                    {t('instructor.projectDetail.progressRetry')}
+                  </button>
+                </div>
+              ) : !progressReport ? (
                 <p className="text-xs italic text-[var(--text-tertiary)]">{t('loading')}</p>
               ) : (
                 <div className="space-y-4">
@@ -1767,29 +1782,25 @@ export default function ProjectDetail() {
                     {(attention.awaitingReview + attention.openFeedback + attention.unassigned.length + attention.untouched.length) === 0 ? (
                       <p className="text-xs italic text-[var(--text-tertiary)]">{t('instructor.projectDetail.noAttention')}</p>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="flex flex-wrap gap-2">
                         {attention.awaitingReview > 0 && (
-                          <button type="button" onClick={() => setActiveTab('review')} className="flex w-full items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs hover:bg-amber-100">
+                          <button type="button" onClick={() => setActiveTab('review')} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-left text-xs hover:bg-amber-100">
                             <span className="font-bold text-amber-900">{t('instructor.projectDetail.attentionReview', { count: attention.awaitingReview })}</span>
-                            <span className="text-[10px] font-bold text-amber-700">{t('instructor.projectDetail.memberView')} →</span>
                           </button>
                         )}
                         {attention.openFeedback > 0 && (
-                          <button type="button" onClick={() => setActiveTab('review')} className="flex w-full items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs hover:bg-amber-100">
+                          <button type="button" onClick={() => setActiveTab('review')} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-left text-xs hover:bg-amber-100">
                             <span className="font-bold text-amber-900">{t('instructor.projectDetail.attentionFeedback', { count: attention.openFeedback })}</span>
-                            <span className="text-[10px] font-bold text-amber-700">{t('instructor.projectDetail.memberView')} →</span>
                           </button>
                         )}
                         {attention.unassigned.length > 0 && (
-                          <button type="button" onClick={() => setActiveTab('sections')} className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-2 text-left text-xs hover:bg-[var(--surface-tertiary)]">
+                          <button type="button" onClick={() => setActiveTab('sections')} className="rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-1.5 text-left text-xs hover:bg-[var(--surface-tertiary)]">
                             <span className="font-bold text-[var(--text-primary)]">{t('instructor.projectDetail.attentionUnassigned', { count: attention.unassigned.length })}</span>
-                            <span className="text-[10px] font-bold text-[var(--brand-foreground)]">{t('instructor.projectDetail.memberView')} →</span>
                           </button>
                         )}
                         {attention.untouched.length > 0 && (
-                          <button type="button" onClick={() => setActiveTab('sections')} className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-2 text-left text-xs hover:bg-[var(--surface-tertiary)]">
+                          <button type="button" onClick={() => setActiveTab('sections')} className="rounded-lg border border-[var(--border)] bg-[var(--surface-secondary)] px-3 py-1.5 text-left text-xs hover:bg-[var(--surface-tertiary)]">
                             <span className="font-bold text-[var(--text-primary)]">{t('instructor.projectDetail.attentionNoEdits', { count: attention.untouched.length })}</span>
-                            <span className="text-[10px] font-bold text-[var(--brand-foreground)]">{t('instructor.projectDetail.memberView')} →</span>
                           </button>
                         )}
                       </div>
@@ -1831,9 +1842,6 @@ export default function ProjectDetail() {
                               <tr key={c.userId} className="hover:bg-[var(--surface-secondary)]">
                                 <td className="px-3 py-2">
                                   <button type="button" onClick={() => setReportMemberId(String(c.userId))} className="font-bold text-[var(--brand-foreground)] hover:underline" title={c.userName}>{c.userName}</button>
-                                  <span className="block text-[10px] text-[var(--text-tertiary)]">
-                                    {t('instructor.projectDetail.feedbackSummary').replace('{{resolved}}', c.feedbackResolved).replace('{{total}}', c.feedbackResolved + c.feedbackOpen)}
-                                  </span>
                                 </td>
                                 <td className="px-3 py-2">{c.assignedSectionCount}</td>
                                 <td className="px-3 py-2">{c.saveCount}</td>
@@ -1883,12 +1891,10 @@ export default function ProjectDetail() {
                   })()}
                 </div>
               )}
-            </div>
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm sm:p-6 lg:col-span-1 h-full overflow-y-auto">
-              <h2 className="mb-3 text-sm font-bold text-[var(--brand-foreground)]">{t('instructor.projectDetail.dailySeriesTitle')}</h2>
-              <p className="mb-3 text-[10px] text-[var(--text-tertiary)]">{t('instructor.projectDetail.contributionEvidenceNote')}</p>
-              <ContributionGraph buckets={dailyBuckets} emptyLabel={t('instructor.projectDetail.noContributionData')} ariaLabel={t('instructor.projectDetail.dailySeriesTitle')} />
-            </div>
+              <div className="mt-5 border-t border-[var(--border-light)] pt-4">
+                <h3 className="mb-3 text-xs font-bold text-[var(--text-primary)]">{t('instructor.projectDetail.dailySeriesTitle')}</h3>
+                <ContributionGraph buckets={dailyBuckets} emptyLabel={t('instructor.projectDetail.noContributionData')} ariaLabel={t('instructor.projectDetail.dailySeriesTitle')} />
+              </div>
           </div>
         )}
 
@@ -2221,7 +2227,7 @@ export default function ProjectDetail() {
               const r = await api.get(`/api/projects/${id}/traceability`);
               const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: 'application/json' });
               const url = URL.createObjectURL(blob);
-              const a = document.createElement('a'); a.href = url; a.download = `traceability-${project?.title || 'export'}.json`;
+              const a = document.createElement('a'); a.href = url; a.download = `project-data-${project?.title || 'export'}.json`;
               a.click(); URL.revokeObjectURL(url);
               setShowExportModal(false);
             } catch { alert(t('instructor.projectDetail.exportFailed')); }
@@ -2233,7 +2239,7 @@ export default function ProjectDetail() {
             try {
               const r = await api.get(`/api/projects/${id}/traceability/csv`, { responseType: 'blob' });
               const url = URL.createObjectURL(r.data);
-              const a = document.createElement('a'); a.href = url; a.download = `traceability-${project?.title || 'export'}.csv`;
+              const a = document.createElement('a'); a.href = url; a.download = `project-data-csv-${project?.title || 'export'}.zip`;
               a.click(); URL.revokeObjectURL(url);
               setShowExportModal(false);
             } catch { alert(t('instructor.projectDetail.exportFailed')); }

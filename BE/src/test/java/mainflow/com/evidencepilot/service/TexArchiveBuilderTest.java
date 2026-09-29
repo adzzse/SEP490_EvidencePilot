@@ -3,17 +3,24 @@ package com.evidencepilot.service;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
+import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.PaperStandard;
+import com.evidencepilot.model.enums.ProjectStatus;
+import com.evidencepilot.dto.response.TraceabilityExportResponse;
+import com.evidencepilot.dto.response.ProgressReportResponse;
+import com.evidencepilot.dto.response.FeedbackReplyResponseDto;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.service.impl.SourceMatchingService;
+import com.evidencepilot.service.impl.TraceabilityExportServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,14 +41,18 @@ class TexArchiveBuilderTest {
         PaperSectionRepository sections = mock(PaperSectionRepository.class);
         TexArchiveMediaWriter media = mock(TexArchiveMediaWriter.class);
         SourceMatchingService sourceMatchingService = mock(SourceMatchingService.class);
+        TraceabilityExportServiceImpl projectDataService = mock(TraceabilityExportServiceImpl.class);
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
         TexArchiveBuilder builder = new TexArchiveBuilder(
                 projects,
                 documents,
                 sections,
                 mock(com.evidencepilot.repository.DocumentMetadataRepository.class),
-                new PaperStandardService(mock(AiModelClient.class), new ObjectMapper()),
+                new PaperStandardService(mock(AiModelClient.class), mapper),
                 media,
-                sourceMatchingService);
+                sourceMatchingService,
+                projectDataService,
+                mapper);
         UUID projectId = UUID.randomUUID();
         Document source = new Document();
         source.setId(UUID.randomUUID());
@@ -82,10 +93,20 @@ class TexArchiveBuilderTest {
         when(sections.findByDocumentIdOrderBySectionOrderAsc(paper.getId()))
                 .thenReturn(List.of(section));
         when(sourceMatchingService.referenceSources(paper.getId())).thenReturn(List.of(uncitedReference, source));
+        var reply = new FeedbackReplyResponseDto(UUID.randomUUID(), UUID.randomUUID(), null,
+                "STUDENT", "Student One", "A published reply", null, null);
+        User viewer = new User();
+        viewer.setId(UUID.randomUUID());
+        when(projectDataService.buildDataForArchive(projectId, viewer)).thenReturn(new TraceabilityExportResponse(
+                projectId, "AI_Project", null, ProjectStatus.IN_PROGRESS, PaperStandard.IEEE, Instant.now(),
+                List.of(new TraceabilityExportResponse.TraceabilityPaper(paper.getId(), "Paper")),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(reply), List.of(), List.of(),
+                List.of(new ProgressReportResponse.MemberContribution(UUID.randomUUID(), "Student One", 1, 100,
+                        3, 20, 30, 10, null, 0, 0, List.of("Introduction"), List.of()))));
         var archive = Files.createTempFile("tex-builder-test-", ".zip");
 
         try {
-            builder.write(projectId, archive);
+            builder.write(projectId, archive, viewer);
             try (ZipFile zip = new ZipFile(archive.toFile(), StandardCharsets.UTF_8)) {
                 String main = text(zip, "main.tex");
                 assertThat(main)
@@ -103,6 +124,11 @@ class TexArchiveBuilderTest {
                         .isLessThan(text(zip, "references.tex").indexOf("\\bibitem{" + citationKey + "}"));
                 assertThat(text(zip, "references.tex")).contains("Declared but uncited");
                 assertThat(text(zip, "CITATION_WARNINGS.md")).contains(unselectedKey);
+                assertThat(text(zip, "project-summary.tex")).contains("Member progress", "Student One", "3 saves", "A published reply");
+                verify(projectDataService).writeFeedbackAttachments(org.mockito.ArgumentMatchers.eq(projectId),
+                        org.mockito.ArgumentMatchers.eq(viewer), any());
+                assertThat(text(zip, "data/project-data.json")).contains("memberProgress", "Student One");
+                assertThat(text(zip, "data/member-progress.csv")).contains("Student One");
             }
             verify(media).writeProjectMedia(any(), any());
             verify(sourceMatchingService, org.mockito.Mockito.never()).activeSources(any());

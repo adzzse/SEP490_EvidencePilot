@@ -88,9 +88,9 @@ export default function Dropdown({
         disabled={disabled}
         onClick={() => setOpen(wasOpen => !wasOpen)}
         onKeyDown={onButtonKeyDown}
-        className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-left text-xs outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-70"
+        className="flex w-full items-center justify-between gap-2 rounded-lg border border-(--border) bg-(--surface) px-2 py-1.5 text-left text-xs outline-none focus:border-(--focus) disabled:cursor-not-allowed disabled:bg-(--surface-secondary) disabled:opacity-70"
       >
-        <span className="min-w-0 flex-1 truncate text-slate-800">{selected ? selected.label : (placeholder || '')}</span>
+        <span className="min-w-0 flex-1 truncate text-(--text-primary)">{selected ? selected.label : (placeholder || '')}</span>
         <svg aria-hidden="true" viewBox="0 0 24 24" className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg>
       </button>
       {open && !disabled && (
@@ -99,7 +99,7 @@ export default function Dropdown({
           aria-label={ariaLabel}
           ref={listRef}
           onKeyDown={onListKeyDown}
-          className="absolute z-30 mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="absolute z-30 mt-1 max-h-40 w-full overflow-y-auto rounded-lg border border-(--border) bg-(--surface) py-1 shadow-lg [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           style={{ maxHeight: maxVisibleRows * 32 }}
         >
           {options.map((option, index) => {
@@ -113,7 +113,7 @@ export default function Dropdown({
                 aria-selected={isSelected}
                 onClick={() => choose(index)}
                 onMouseEnter={() => setActiveIndex(index)}
-                className={`cursor-pointer truncate px-2 py-1.5 text-xs ${isActive ? 'bg-indigo-50 text-indigo-900' : 'text-slate-700'} ${isSelected ? 'font-bold' : ''}`}
+                className={`cursor-pointer truncate px-2 py-1.5 text-xs ${isActive ? 'bg-(--brand-soft) text-(--brand-foreground)' : 'text-(--text-secondary)'} ${isSelected ? 'font-bold' : ''}`}
               >
                 {option.label}
               </li>

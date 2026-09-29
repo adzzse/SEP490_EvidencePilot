@@ -18,6 +18,7 @@ import java.io.ByteArrayInputStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
@@ -1161,7 +1162,7 @@ class AdminExcelSeedServiceTest {
             if (d.getId() == null) d.setId(java.util.UUID.randomUUID());
             return d;
         });
-        when(t.persistence().markDocumentAsUploaded(any(), any(), any()))
+        when(t.persistence().markDocumentAsUploaded(any(), any(), any(), anyLong()))
                 .thenReturn(new com.evidencepilot.model.Document());
         var job = new AdminExcelSeedService.SeedJob();
         int n = t.service().commitSources(List.of(
@@ -1201,7 +1202,7 @@ class AdminExcelSeedServiceTest {
             if (d.getId() == null) d.setId(java.util.UUID.randomUUID());
             return d;
         });
-        when(t.persistence().markDocumentAsUploaded(any(), any(), any()))
+        when(t.persistence().markDocumentAsUploaded(any(), any(), any(), anyLong()))
                 .thenReturn(new com.evidencepilot.model.Document());
         var job = new AdminExcelSeedService.SeedJob();
         int n = t.service().commitSources(List.of(
@@ -1267,7 +1268,7 @@ class AdminExcelSeedServiceTest {
             if (d.getId() == null) d.setId(java.util.UUID.randomUUID());
             return d;
         });
-        when(t.persistence().markDocumentAsUploaded(any(), any(), any()))
+        when(t.persistence().markDocumentAsUploaded(any(), any(), any(), anyLong()))
                 .thenReturn(new com.evidencepilot.model.Document());
         var job = new AdminExcelSeedService.SeedJob();
         int n = t.service().commitSources(List.of(
@@ -1279,7 +1280,7 @@ class AdminExcelSeedServiceTest {
         verify(t.openAlex(), times(1)).fetchWork(anyString());
         verify(t.openAlex(), times(1)).downloadPdf(anyString());
         verify(t.storage(), times(2)).writeWithSha256(anyString(), any(byte[].class), anyString());
-        verify(t.persistence(), times(2)).markDocumentAsUploaded(any(), any(), any());
+        verify(t.persistence(), times(2)).markDocumentAsUploaded(any(), any(), any(), eq(19L));
     }
 
     @Test

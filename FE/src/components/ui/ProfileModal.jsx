@@ -13,7 +13,7 @@ export default function ProfileModal({ open, onClose }) {
       closeLabel={t('shell.profileModal.close')}
       wide
     >
-      <ProfileContent embedded />
+      <ProfileContent embedded onNavigate={onClose} />
     </Modal>
   );
 }

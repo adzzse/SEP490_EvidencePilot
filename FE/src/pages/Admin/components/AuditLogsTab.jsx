@@ -3,6 +3,7 @@ import { useAdminTour } from '../../../hooks/useAdminTour.js';
 import Modal from '../../../components/ui/Modal.jsx';
 import { ErrorBlock, JsonTree } from './shared.jsx';
 import SearchBar from '../../../components/ui/SearchBar.jsx';
+import { formatDateTimeSeconds } from '../../../utils/formatters/date.js';
 import { useTranslation } from 'react-i18next';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -232,8 +233,8 @@ function AuditLogsSection({ api }) {
               )) : filteredLogs.length === 0 ? (
                 <tr><td colSpan={6} className="px-6 py-12 text-center text-(--text-tertiary) font-medium">{t('admin.noLogs')}</td></tr>
               ) : filteredLogs.map((log, i) => {
-                const dateObj = new Date(log.occurredAt);
-                const formattedDate = dateObj.toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' }) + `, ` + dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+                // Shared formatter: Asia/Ho_Chi_Minh, HH:mm:ss dd/MM/yyyy (was US-style + browser TZ).
+                const formattedDate = formatDateTimeSeconds(log.occurredAt);
 
                 return (
                   <tr key={log.actorId + log.occurredAt + i} className="hover:bg-(--surface-secondary)/50 transition">
@@ -318,7 +319,7 @@ function AuditLogsSection({ api }) {
               </div>
               <div>
                 <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider block">{t('admin.timestamp')}</span>
-                <span className="font-bold text-(--text-primary)">{new Date(detailLog.occurredAt).toLocaleString()}</span>
+                <span className="font-bold text-(--text-primary)">{formatDateTimeSeconds(detailLog.occurredAt)}</span>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-4">

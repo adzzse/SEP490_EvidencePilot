@@ -87,3 +87,14 @@ test('label-only lines emit no anchor', () => {
   assert.equal(blockStarts(html).length, 1);
   assert.match(html, /Visible text\./);
 });
+
+test('blank lines around an inline bold title reserve a visible preview line without moving source anchors', () => {
+  const latex = 'Previous paragraph.\n\n\\textbf{2.2 Chatbots}\n\nNext paragraph.';
+  const html = renderLatexToHtml(latex);
+  const blocks = splitLatexBlocks(latex);
+
+  assert.deepEqual(blocks.map(block => block.type), ['paragraph', 'paragraph', 'paragraph']);
+  assert.deepEqual(blockStarts(html), blocks.map(block => block.start));
+  assert.equal((html.match(/style="margin-bottom:1.625em"/g) || []).length, 2);
+  assert.match(html, /<strong>2\.2 Chatbots<\/strong>/);
+});

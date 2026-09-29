@@ -48,8 +48,106 @@ public class ActivityFeedServiceImpl {
         var page = auditLogRepository.findByActorIdOrderByOccurredAtDesc(userId, PageRequest.of(0, safeLimit));
         var items = user.getRole() == UserRole.INSTRUCTOR
                 ? projectInstructor(userId, page.getContent())
+                : user.getRole() == UserRole.ADMIN
+                ? projectAdmin(page.getContent())
                 : projectStudent(userId, page.getContent());
         return new ActivityFeedResponse(user.getRole(), items);
+    }
+
+    /**
+     * Phase B: admins see their own completed actions, each linked inside the
+     * admin console only (users/projects/settings/prompts tabs) — never to
+     * instructor or student pages. Instructor-owned objects without an admin
+     * tab (collections, documents) are intentionally not recorded here; they
+     * remain in the audit log.
+     */
+    private List<ActivityFeedItem> projectAdmin(List<AuditLog> rows) {
+        List<ActivityFeedItem> items = new ArrayList<>();
+        for (AuditLog log : rows) {
+            if (items.size() >= 50) break;
+            switch (log.getEntityType()) {
+                case "PROJECT" -> asAdminProjectItem(log).ifPresent(items::add);
+                case "COLLECTION_CATEGORY" -> asAdminCategoryItem(log).ifPresent(items::add);
+                case "USER" -> asUserItem(log).ifPresent(items::add);
+                case "AI_GENERATION_CONFIG", "PromptTemplate" ->
+                        asAdminConfigItem(log, "/admin/dashboard?tab=prompts").ifPresent(items::add);
+                default -> { /* skip */ }
+            }
+        }
+        return items;
+    }
+
+    private Optional<ActivityFeedItem> asAdminProjectItem(AuditLog log) {
+        if (log.getEntityId() == null) return Optional.empty();
+        Project p = projectRepository.findById(log.getEntityId()).orElse(null);
+        if (p == null || !p.isActive()) return Optional.empty();
+        long members = p.getProjectMembers() != null ? p.getProjectMembers().size() : 0L;
+        return Optional.of(new ActivityFeedItem(
+                "project",
+                p.getId(),
+                p.getId(),
+                p.getTitle(),
+                actionLabel(log.getAction()),
+                null,
+                members,
+                p.getStatus() != null ? p.getStatus().name() : null,
+                "/admin/dashboard?tab=projects",
+                log.getOccurredAt()
+        ));
+    }
+
+    private Optional<ActivityFeedItem> asAdminCategoryItem(AuditLog log) {
+        if (log.getEntityId() == null) return Optional.empty();
+        CollectionCategory category = collectionCategoryRepository.findById(log.getEntityId()).orElse(null);
+        String title = category != null ? category.getName() : "Source Category";
+        return Optional.of(new ActivityFeedItem(
+                "collection",
+                log.getEntityId(),
+                null,
+                title,
+                actionLabel(log.getAction()),
+                null,
+                null,
+                null,
+                "/admin/dashboard?tab=settings",
+                log.getOccurredAt()
+        ));
+    }
+
+    private Optional<ActivityFeedItem> asUserItem(AuditLog log) {
+        if (log.getEntityId() == null) return Optional.empty();
+        var target = userRepository.findById(log.getEntityId()).orElse(null);
+        if (target == null) return Optional.empty();
+        String name = ((target.getFirstName() == null ? "" : target.getFirstName() + " ")
+                + (target.getLastName() == null ? "" : target.getLastName())).trim();
+        if (name.isEmpty()) name = target.getEmail();
+        return Optional.of(new ActivityFeedItem(
+                "user",
+                target.getId(),
+                null,
+                name,
+                actionLabel(log.getAction()),
+                null,
+                null,
+                target.getAccountStatus() != null ? target.getAccountStatus().name() : null,
+                "/admin/dashboard?tab=users",
+                log.getOccurredAt()
+        ));
+    }
+
+    private Optional<ActivityFeedItem> asAdminConfigItem(AuditLog log, String link) {
+        return Optional.of(new ActivityFeedItem(
+                "config",
+                log.getEntityId(),
+                null,
+                actionLabel(log.getAction()),
+                log.getEntityType(),
+                null,
+                null,
+                null,
+                link,
+                log.getOccurredAt()
+        ));
     }
 
     private List<ActivityFeedItem> projectInstructor(UUID userId, List<AuditLog> rows) {
@@ -248,6 +346,15 @@ public class ActivityFeedServiceImpl {
             case "COLLECTION_CREATED" -> "Created";
             case "COLLECTION_UPDATED" -> "Updated";
             case "COLLECTION_DELETED" -> "Deleted";
+            case "USER_CREATED" -> "User created";
+            case "USER_IMPORTED" -> "Users imported";
+            case "USER_STATUS_UPDATED" -> "Status updated";
+            case "USER_DELETED" -> "User deleted";
+            case "INVITATION_ISSUED" -> "Invitation issued";
+            case "INVITATION_ACCEPTED" -> "Invitation accepted";
+            case "INVITATION_EXPIRED" -> "Invitation expired";
+            case "AI_GENERATION_CONFIG_CHANGED" -> "AI config changed";
+            case "PROMPT_TEMPLATE_ACTIVATED" -> "Prompt activated";
             case "AI_SECTION_CITATION_REVIEW" -> "Citation reviewed";
             default -> action;
         };

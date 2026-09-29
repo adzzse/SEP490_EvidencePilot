@@ -7,7 +7,7 @@ const baseUrl = 'http://localhost:5173';
 const SEC1 = 'Member section text.';
 const CONTENT = (body) => [body, ...Array.from({ length: 20 }, (_, i) => `Filler line ${i}.`)].join('\n\n');
 
-async function setupStudent(page, { role, userId }) {
+async function setupStudent(page, { role, userId, status = 'RETURNED' }) {
   const projectId = 'student-proj';
   const paperId = 'student-paper';
   const state = { errors: [], feedbackCalls: [] };
@@ -55,13 +55,16 @@ async function setupStudent(page, { role, userId }) {
     } else if (path === '/api/notifications/unread-count') {
       json = { count: 0 };
     } else if (path === '/api/projects') {
-      json = { content: [{ id: projectId, title: 'Student fixture', status: 'RETURNED', currentUserRole: role }], last: true };
+      json = { content: [{ id: projectId, title: 'Student fixture', status, currentUserRole: role }], last: true };
     } else if (path === `/api/projects/${projectId}`) {
-      json = { id: projectId, title: 'Student fixture', status: 'RETURNED', currentUserRole: role };
+      json = { id: projectId, title: 'Student fixture', status, currentUserRole: role };
     } else if (path === `/api/projects/${projectId}/papers`) {
       json = [{ id: paperId, title: 'Student paper', originalFilename: 'student.tex', processingStatus: 'READY' }];
     } else if (path === `/api/projects/${projectId}/sources`) {
       json = { content: [], last: true };
+    } else if (path === `/api/projects/${projectId}/source-map`) {
+      json = { project: { id: projectId, title: 'Student fixture' },
+        nodes: [{ id: projectId, type: 'PROJECT', title: 'Student fixture' }], edges: [], limitations: [] };
     } else if (path === `/api/papers/${paperId}/sections`) {
       json = [
         { id: 'sec-1', documentId: paperId, sectionTitle: 'Introduction', sectionOrder: 0,
@@ -95,6 +98,80 @@ async function setupStudent(page, { role, userId }) {
 
   return { projectId, state };
 }
+
+test('Student export downloads project JSON and CSV table ZIP', async ({ page }) => {
+  const { projectId, state } = await setupStudent(page, { role: 'MEMBER', userId: 'member-1', status: 'APPROVED' });
+  await page.route(`**/api/projects/${projectId}/traceability`, route => route.fulfill({ json: {
+    projectTitle: 'Student fixture', papers: [], sources: [], memberProgress: [{ userId: 'member-1', saveCount: 2 }],
+  } }));
+  await page.route(`**/api/projects/${projectId}/traceability/csv`, route => route.fulfill({
+    contentType: 'application/zip', body: Buffer.from([80, 75, 3, 4]),
+  }));
+  await page.goto(`${baseUrl}/student/projects/${projectId}`);
+  await expect(page.locator('[data-tour="header-export"]')).toBeEnabled();
+  for (const [label, filename] of [
+    ['Project data (JSON)', 'project-data-Student fixture.json'],
+    ['Project data (CSV tables)', 'project-data-csv-Student fixture.zip'],
+  ]) {
+    await page.locator('[data-tour="header-export"]').click();
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: label, exact: true }).click();
+    expect((await download).suggestedFilename()).toBe(filename);
+  }
+  expect(state.errors).toEqual([]);
+});
+
+test('Student Source Map shows saved links and gives the graph more height on mobile', async ({ page }) => {
+  const { projectId, state } = await setupStudent(page, { role: 'MEMBER', userId: 'member-1' });
+  await page.route(`**/api/projects/${projectId}/source-map`, route => route.fulfill({ json: {
+    project: { id: projectId, title: 'Student fixture' },
+    nodes: [
+      { id: `project:${projectId}`, type: 'PROJECT', title: 'Student fixture' },
+      { id: 'source:a', type: 'SOURCE', documentId: 'a', title: 'Source A', doi: '10.1/a', fileAvailable: true },
+      { id: 'source:b', type: 'SOURCE', documentId: 'b', title: 'Source B', doi: '10.1/b', fileAvailable: true },
+      { id: 'reference:c', type: 'REFERENCE', title: 'Outside C', doi: '10.1/c', fileAvailable: false },
+    ],
+    edges: [
+      { sourceId: `project:${projectId}`, targetId: 'source:a', type: 'PROJECT_SOURCE' },
+      { sourceId: `project:${projectId}`, targetId: 'source:b', type: 'PROJECT_SOURCE' },
+      { sourceId: 'source:a', targetId: 'source:b', type: 'CITES' },
+      { sourceId: 'source:b', targetId: 'reference:c', type: 'CITES' },
+    ],
+    limitations: ['SAVED_METADATA_ONLY'],
+  } }));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseUrl}/student/projects/${projectId}`);
+  await expect(page.locator('.cm-content')).toContainText('Member section text.', { timeout: 15000 });
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.locator('button[aria-label="Source Map"]:visible').first().click();
+
+  const dialog = page.getByRole('dialog', { name: 'Source Map' });
+  await expect(dialog.getByRole('region', { name: 'Project sources and citation relationships' })).toBeVisible();
+  const graph = await dialog.locator('#project-source-map-canvas').boundingBox();
+  console.log(`mobile source graph: ${Math.round(graph.width)}x${Math.round(graph.height)}`);
+  expect(graph.height).toBeGreaterThan(410);
+  await expect(dialog.getByRole('button', { name: 'Fit graph' })).toBeVisible();
+  await expect(dialog.getByText('2 sources · 2 citation relationships')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Source B' }).last().click();
+  await expect(dialog.getByRole('region', { name: 'Project sources and citation relationships' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Outside C' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Outside C' }).click();
+  await expect(dialog.getByText('Reference outside project', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'All project sources' }).click();
+  await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('source-map-mobile.png') });
+  const sourceList = dialog.getByRole('heading', { name: 'Sources (2)' });
+  await sourceList.scrollIntoViewIfNeeded();
+  await expect(sourceList).toBeInViewport();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const desktopGraph = await dialog.locator('#project-source-map-canvas').boundingBox();
+  console.log(`desktop source graph: ${Math.round(desktopGraph.width)}x${Math.round(desktopGraph.height)}`);
+  expect(desktopGraph.height).toBeGreaterThan(500);
+  await expect(dialog.getByRole('button', { name: 'Fit graph' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('source-map-desktop.png') });
+  expect(state.errors).toEqual([]);
+});
 
 async function openStudentFeedback(page, projectId, expectedText = 'Member section text.') {
   await page.goto(`${baseUrl}/student/projects/${projectId}`);

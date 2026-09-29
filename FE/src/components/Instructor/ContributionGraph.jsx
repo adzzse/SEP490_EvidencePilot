@@ -6,13 +6,13 @@ export default function ContributionGraph({ buckets = [], emptyLabel, ariaLabel 
   const max = Math.max(...buckets.map(b => b.count || 0), 0);
 
   return (
-    <div className="w-full flex flex-col h-full min-h-[200px]" role="group" aria-label={ariaLabel}>
-      <div className="flex-1 flex items-end gap-1 mb-2 relative h-40">
+    <div className="w-full overflow-x-auto" role="group" aria-label={ariaLabel}>
+      <div className="relative mb-2 flex h-28 items-end gap-1">
         {buckets.map((b, i) => {
           const count = b.count || 0;
           const percentage = (count / (max || 1)) * 100;
           return (
-            <div key={`${b.label || b.date}-${i}`} className="group relative flex-1 flex flex-col justify-end h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]" tabIndex={0} aria-label={`${b.label || b.date}: ${count}`}>
+            <div key={`${b.label || b.date}-${i}`} className="group relative flex h-full min-w-6 max-w-8 flex-1 flex-col justify-end focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus)]" tabIndex={0} aria-label={`${b.label || b.date}: ${count}`}>
               <div
                 className="w-full bg-[var(--brand)] rounded-t-sm transition-all hover:bg-[var(--brand-hover)]"
                 style={{ height: `${percentage}%`, minHeight: count > 0 ? '4px' : '0' }}
@@ -24,10 +24,10 @@ export default function ContributionGraph({ buckets = [], emptyLabel, ariaLabel 
           );
         })}
       </div>
-      <div className="flex gap-1 text-[10px] text-[var(--text-tertiary)] border-t border-[var(--border)] pt-2 mt-auto">
+      <div className="flex gap-1 border-t border-[var(--border)] pt-2 text-[10px] text-[var(--text-tertiary)]">
         {buckets.map((b, i) => (
-          <span key={`${b.label || b.date}-${i}`} className="flex-1 min-w-0 truncate text-center" title={b.label || b.date}>
-            {b.label || b.date}
+          <span key={`${b.label || b.date}-${i}`} className="min-w-6 max-w-8 flex-1 truncate text-center" title={b.label || b.date}>
+            {(b.label || b.date).slice(5)}
           </span>
         ))}
       </div>

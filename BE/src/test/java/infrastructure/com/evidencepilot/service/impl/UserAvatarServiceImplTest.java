@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -21,6 +22,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.evidencepilot.exception.ResourceNotFoundException;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.model.User;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.DocumentObjectStorage;
@@ -29,7 +31,9 @@ class UserAvatarServiceImplTest {
 
     private final UserRepository users = mock(UserRepository.class);
     private final DocumentObjectStorage storage = mock(DocumentObjectStorage.class);
-    private final UserAvatarServiceImpl service = new UserAvatarServiceImpl(users, storage);
+    private final org.springframework.context.ApplicationEventPublisher events =
+            mock(org.springframework.context.ApplicationEventPublisher.class);
+    private final UserAvatarServiceImpl service = new UserAvatarServiceImpl(users, storage, events);
 
     private User user() {
         User u = new User();
@@ -52,6 +56,8 @@ class UserAvatarServiceImplTest {
         // rationale: key only in DB — never a URL.
         assertThat(u.getAvatarKey()).isEqualTo("avatars/" + u.getId() + ".jpg");
         verify(users).save(u);
+        verify(events).publishEvent(argThat((Object e) -> e instanceof EntityChangedEvent evt
+                && "USER".equals(evt.entity()) && "UPDATED".equals(evt.action())));
     }
 
     @Test

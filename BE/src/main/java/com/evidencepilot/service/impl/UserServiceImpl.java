@@ -2,11 +2,13 @@ package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.request.UserProfileUpdateRequest;
 import com.evidencepilot.dto.response.UserResponse;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -21,6 +23,7 @@ public class UserServiceImpl {
 
     private final UserRepository userRepository;
     private final EmailOtpServiceImpl emailOtpService;
+    private final ApplicationEventPublisher events;
 
     public UserResponse findUserById(UUID id) {
         User user = userRepository.findById(id)
@@ -52,7 +55,10 @@ public class UserServiceImpl {
                 user.setTokenVersion(user.getTokenVersion() + 1);
             }
         }
-        return UserResponse.from(userRepository.save(user));
+        UserResponse response = UserResponse.from(userRepository.save(user));
+        // Live update (2-way): admin Users tab refreshes via the USER entity feed.
+        events.publishEvent(new EntityChangedEvent("USER", userId, "UPDATED", null));
+        return response;
     }
 
     public List<UserResponse> findUsersByRole(UserRole role) {

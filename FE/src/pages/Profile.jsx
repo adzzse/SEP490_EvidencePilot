@@ -12,6 +12,7 @@ import OtpInput from '../components/ui/OtpInput.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useLanguage } from '../context/LanguageContext.jsx';
 import { formatDateTime } from '../utils/formatters/date';
+import { isLinkAllowedForRole } from '../utils/authz.js';
 
 function formatActivityTime(value, language) {
   if (!value) return '';
@@ -32,7 +33,17 @@ function studentProjectLink(item) {
 
 // rationale: single call-site polymorphic row — role + type decide the template.
 // Instructor: collection / project / source. Student: project root only.
-function ActivityLogItem({ item, role, language, translate }) {
+// Role gate (defense in depth): an activity row never navigates outside the
+// viewer's role pages, even if the API ever returns a cross-role link.
+// A blocked row still renders its information, just without navigation.
+function MaybeLink({ to, role: linkRole, onNavigate: onNav, className, children }) {
+  if (!isLinkAllowedForRole(to, linkRole)) {
+    return <div className={className}>{children}</div>;
+  }
+  return <Link to={to} onClick={() => onNav?.()} className={className}>{children}</Link>;
+}
+
+function ActivityLogItem({ item, role, language, translate, onNavigate }) {
   if (!item) return null;
   const ts = formatActivityTime(item.occurredAt, language);
   const rowClass =
@@ -43,14 +54,17 @@ function ActivityLogItem({ item, role, language, translate }) {
 
   const isInstructor = role === 'INSTRUCTOR';
   const isStudent = role === 'STUDENT';
+  const isAdmin = role === 'ADMIN';
 
   // Instructor — Collection: [CollectionName] [Total Sources] [Timestamp]
-  if (item.type === 'collection' && isInstructor) {
+  // (Admin reuses the same rows for collection/project items: read views only.)
+  if (item.type === 'collection' && (isInstructor || isAdmin)) {
     const sources = item.totalSources ?? 0;
     return (
-      <Link
+      <MaybeLink role={role}
         key={`collection-${item.entityId || item.title}-${item.occurredAt}`}
         to={item.link || '/instructor/source-library'}
+        onNavigate={onNavigate}
         className={rowClass}
       >
         <div className="flex items-center justify-between gap-3">
@@ -60,17 +74,19 @@ function ActivityLogItem({ item, role, language, translate }) {
           </div>
           <span className={tsClass}>{ts}</span>
         </div>
-      </Link>
+      </MaybeLink>
     );
   }
 
   // Instructor — Project: [ProjectName] [Total members] [Timestamp]
-  if (item.type === 'project' && isInstructor) {
+  // (Admin reuses the same row for project items.)
+  if (item.type === 'project' && (isInstructor || isAdmin)) {
     const members = item.totalMembers ?? 0;
     return (
-      <Link
+      <MaybeLink role={role}
         key={`project-${item.entityId || item.title}-${item.occurredAt}`}
         to={item.link}
+        onNavigate={onNavigate}
         className={rowClass}
       >
         <div className="flex items-center justify-between gap-3">
@@ -80,16 +96,17 @@ function ActivityLogItem({ item, role, language, translate }) {
           </div>
           <span className={tsClass}>{ts}</span>
         </div>
-      </Link>
+      </MaybeLink>
     );
   }
 
   // Instructor — Source: [SourceName] [Status] [Timestamp]
   if (item.type === 'source' && isInstructor) {
     return (
-      <Link
+      <MaybeLink role={role}
         key={`source-${item.entityId || item.title}-${item.occurredAt}`}
         to={item.link || '/instructor/source-library'}
+        onNavigate={onNavigate}
         className={rowClass}
       >
         <div className="flex items-center justify-between gap-3">
@@ -99,7 +116,7 @@ function ActivityLogItem({ item, role, language, translate }) {
           </div>
           <span className={tsClass}>{ts}</span>
         </div>
-      </Link>
+      </MaybeLink>
     );
   }
 
@@ -107,9 +124,10 @@ function ActivityLogItem({ item, role, language, translate }) {
   // rationale: link targets the project root only, never /sections/...
   if (item.type === 'project-section' && isStudent) {
     return (
-      <Link
+      <MaybeLink role={role}
         key={`project-section-${item.entityId || item.title}-${item.occurredAt}`}
         to={studentProjectLink(item)}
+        onNavigate={onNavigate}
         className={rowClass}
       >
         <div className="flex items-center justify-between gap-3">
@@ -119,7 +137,7 @@ function ActivityLogItem({ item, role, language, translate }) {
           </div>
           <span className={tsClass}>{ts}</span>
         </div>
-      </Link>
+      </MaybeLink>
     );
   }
 
@@ -127,9 +145,10 @@ function ActivityLogItem({ item, role, language, translate }) {
   // render as workspace root without a section name.
   if (item.type === 'project' && isStudent) {
     return (
-      <Link
+      <MaybeLink role={role}
         key={`project-${item.entityId || item.title}-${item.occurredAt}`}
         to={studentProjectLink(item)}
+        onNavigate={onNavigate}
         className={rowClass}
       >
         <div className="flex items-center justify-between gap-3">
@@ -139,14 +158,54 @@ function ActivityLogItem({ item, role, language, translate }) {
           </div>
           <span className={tsClass}>{ts}</span>
         </div>
-      </Link>
+      </MaybeLink>
+    );
+  }
+
+  // Admin — User: [Name] [Action] [Timestamp] (links to the admin console).
+  if (item.type === 'user' && isAdmin) {
+    return (
+      <MaybeLink role={role}
+        key={`user-${item.entityId || item.title}-${item.occurredAt}`}
+        to={item.link || '/admin/dashboard'}
+        onNavigate={onNavigate}
+        className={rowClass}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className={titleClass}>{item.title}</p>
+            <p className={metaClass}>{item.subtitle || ''}</p>
+          </div>
+          <span className={tsClass}>{ts}</span>
+        </div>
+      </MaybeLink>
+    );
+  }
+
+  // Admin — Config: [Action label] [Entity] [Timestamp].
+  if (item.type === 'config' && isAdmin) {
+    return (
+      <MaybeLink role={role}
+        key={`config-${item.title}-${item.occurredAt}`}
+        to={item.link || '/admin/dashboard'}
+        onNavigate={onNavigate}
+        className={rowClass}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className={titleClass}>{item.title}</p>
+            <p className={metaClass}>{item.subtitle || ''}</p>
+          </div>
+          <span className={tsClass}>{ts}</span>
+        </div>
+      </MaybeLink>
     );
   }
 
   return null;
 }
 
-export function ProfileContent({ embedded = false }) {
+export function ProfileContent({ embedded = false, onNavigate }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user: authUser, role, logout, verifySession } = useAuth();
@@ -326,7 +385,7 @@ export function ProfileContent({ embedded = false }) {
     if (currentTab !== 'activity') return;
     setActivityLoading(true);
     setActivityError('');
-    api.get('/api/users/me/activity', { params: { limit: 20 } })
+    api.get('/api/users/me/activity', { params: { limit: 10 } })
       .then((res) => setActivity(res.data?.items || []))
       .catch((err) => setActivityError(err.response?.data?.message || t('profile.activity.loadFailed')))
       .finally(() => setActivityLoading(false));
@@ -335,19 +394,24 @@ export function ProfileContent({ embedded = false }) {
   // rationale: client-side search + sort + 4-per-page over the fetched feed.
   const visibleActivity = useMemo(() => {
     const q = activityQuery.trim().toLowerCase();
-    const filtered = q
-      ? activity.filter((item) =>
-        [item.title, item.subtitle, item.status, item.type]
-          .filter(Boolean)
-          .some((v) => String(v).toLowerCase().includes(q)),
-      )
-      : [...activity];
-    filtered.sort((a, b) => {
-      const ta = a?.occurredAt ? new Date(a.occurredAt).getTime() : 0;
-      const tb = b?.occurredAt ? new Date(b.occurredAt).getTime() : 0;
+    const rows = activity.map((item, i) => ({
+      key: `act-${item.type}-${item.entityId || item.title}-${item.occurredAt}-${i}`,
+      title: item.title,
+      subtitle: [item.subtitle, item.status, item.type].filter(Boolean).join(' '),
+      time: item.occurredAt,
+      item,
+    })).filter((row) => {
+      if (!q) return true;
+      return [row.title, row.subtitle]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q));
+    });
+    rows.sort((a, b) => {
+      const ta = a?.time ? new Date(a.time).getTime() : 0;
+      const tb = b?.time ? new Date(b.time).getTime() : 0;
       return activitySort === 'oldest' ? ta - tb : tb - ta;
     });
-    return filtered;
+    return rows;
   }, [activity, activityQuery, activitySort]);
 
   const totalActivityPages = Math.max(1, Math.ceil(visibleActivity.length / ACTIVITY_PAGE_SIZE));
@@ -993,25 +1057,24 @@ export function ProfileContent({ embedded = false }) {
                 <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
                   {activityError}
                 </div>
-              ) : activity.length === 0 ? (
-                <div className="p-6 text-center text-xs text-(--text-tertiary) italic">
-                  {t('profile.activity.empty')}
-                </div>
               ) : visibleActivity.length === 0 ? (
                 <div className="p-6 text-center text-xs text-(--text-tertiary) italic">
-                  {t('profile.activity.noMatches')}
+                  {activity.length === 0
+                    ? t('profile.activity.empty')
+                    : t('profile.activity.noMatches')}
                 </div>
               ) : (
                 <>
                   <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
                     {pagedActivity
-                      .map((item) => (
+                      .map((row) => (
                         <ActivityLogItem
-                          key={`${item.type}-${item.entityId || item.title}-${item.occurredAt}`}
-                          item={item}
+                          key={row.key}
+                          item={row.item}
                           role={user?.role ?? role}
                           language={language}
                           translate={t}
+                          onNavigate={onNavigate}
                         />
                       ))
                       .filter(Boolean)}
@@ -1045,7 +1108,7 @@ export function ProfileContent({ embedded = false }) {
           </div>
         )}
 
-      </main>
+              </main>
 
       {/* Password Update Confirmation Popup Modal */}
       <Modal

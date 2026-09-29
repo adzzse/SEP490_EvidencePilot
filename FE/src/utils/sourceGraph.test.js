@@ -10,11 +10,13 @@ test('source graph adapters preserve direction, membership and plain metadata', 
   assert.equal(collection.nodes[0].label, 'Alice, 2024');
   assert.ok(collection.nodes[0].tooltip.includes('<img onerror=alert(1)>'));
   assert.deepEqual([collection.edges[0].from, collection.edges[0].to], ['b', 'a']);
-  const project = projectGraph({ nodes: [{ id: 'p', type: 'PROJECT', title: 'Project' }, ...nodes], edges: [
+  const project = projectGraph({ nodes: [{ id: 'p', type: 'PROJECT', title: 'Project' }, ...nodes, { id: 'ref', type: 'REFERENCE', title: 'Outside work' }], edges: [
     { sourceId: 'p', targetId: 'a', type: 'PROJECT_SOURCE' }, { sourceId: 'a', targetId: 'b', type: 'CITES' },
+    { sourceId: 'b', targetId: 'ref', type: 'CITES' },
   ] });
   assert.equal(project.nodes[0].kind, 'project');
-  assert.deepEqual(project.edges.map(({ from, to, kind }) => [from, to, kind]), [['p', 'a', 'membership'], ['a', 'b', 'citation']]);
+  assert.equal(project.nodes.at(-1).kind, 'external');
+  assert.deepEqual(project.edges.map(({ from, to, kind }) => [from, to, kind]), [['p', 'a', 'membership'], ['a', 'b', 'citation'], ['b', 'ref', 'citation']]);
 });
 
 test('collectionGraph handles translation function, empty labels, and null data without throwing', () => {

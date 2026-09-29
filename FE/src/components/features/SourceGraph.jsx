@@ -121,9 +121,9 @@ export default forwardRef(function SourceGraph({
         const active = focusIds && (focused ? edge.from === focused || edge.to === focused : matches.has(edge.from) || matches.has(edge.to));
         const color = edge.kind === 'membership' ? (isDark ? '#71717a' : '#94a3b8') : (isDark ? '#a78bfa' : '#7c3aed');
         return { id: edge.id, hidden: !visible.has(edge.from) || !visible.has(edge.to),
-          width: 0.7 * options.linkThickness,
+          width: (edge.kind === 'citation' ? 1.4 : 0.7) * options.linkThickness,
           arrows: { to: { enabled: options.arrows && edge.kind === 'citation', scaleFactor: 0.32 } },
-          color: { color, highlight: color, hover: color, opacity: active ? 0.85 : focusIds ? 0.04 : edge.kind === 'membership' ? 0.3 : 0.4 } };
+          color: { color, highlight: color, hover: color, opacity: active ? 0.95 : focusIds ? 0.04 : edge.kind === 'membership' ? 0.22 : 0.7 } };
       }));
       network.selectNodes(selected && visible.has(selected) ? [selected] : [], false);
       labelMode = null;

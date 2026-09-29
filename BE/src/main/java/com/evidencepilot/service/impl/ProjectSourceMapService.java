@@ -36,6 +36,15 @@ public class ProjectSourceMapService {
                 .orElseThrow(() -> new ResourceNotFoundException(projectId, "Project"));
         currentUserService.requireProjectAccess(user, project);
 
+        return buildMap(project, 20);
+    }
+
+    ProjectSourceMapResponse buildMap(com.evidencepilot.model.Project project) {
+        return buildMap(project, Integer.MAX_VALUE);
+    }
+
+    private ProjectSourceMapResponse buildMap(com.evidencepilot.model.Project project, int externalLimit) {
+        UUID projectId = project.getId();
         var sources = sourceMatchingService.activeSources(projectId);
         String projectNodeId = "project:" + projectId;
         List<GraphNode> nodes = new ArrayList<>();
@@ -43,6 +52,7 @@ public class ProjectSourceMapService {
         Set<String> limitations = new LinkedHashSet<>(List.of("SAVED_METADATA_ONLY"));
         Map<UUID, Document> byId = new LinkedHashMap<>();
         Map<String, List<Document>> byDoi = new LinkedHashMap<>();
+        Map<String, GraphNode> externalNodes = new LinkedHashMap<>();
         nodes.add(new GraphNode(projectNodeId, "PROJECT", null, project.getTitle(), null,
                 null, null, null, null, false));
 
@@ -64,26 +74,44 @@ public class ProjectSourceMapService {
             limitations.add("AMBIGUOUS_SOURCE_DOI");
         }
 
-        record Citation(UUID source, UUID target) {}
+        record Citation(String source, String target) {}
         Map<Citation, Set<UUID>> citations = new LinkedHashMap<>();
+        Map<UUID, Integer> externalCounts = new LinkedHashMap<>();
         if (!byId.isEmpty()) {
             for (var reference : referenceRepository.findForDocuments(byId.keySet())) {
                 UUID owner = reference.getDocument().getId();
                 if (!byId.containsKey(owner)) continue;
+                if (reference.getEdgeType() != EdgeType.REFERENCES && reference.getEdgeType() != EdgeType.CITED_BY) continue;
                 String doi = DoiUtils.comparisonKey(reference.getDoi());
                 var matches = doi == null ? null : byDoi.get(doi);
-                if (matches == null || matches.size() != 1) continue;
-                UUID other = matches.getFirst().getId();
-                if (owner.equals(other)) continue;
+                if (matches != null && matches.size() != 1) continue;
+                String other;
+                if (matches != null) {
+                    if (owner.equals(matches.getFirst().getId())) continue;
+                    other = "source:" + matches.getFirst().getId();
+                } else {
+                    if (doi == null && (reference.getTitle() == null || reference.getTitle().isBlank())) continue;
+                    int count = externalCounts.getOrDefault(owner, 0);
+                    if (count >= externalLimit) {
+                        limitations.add("EXTERNAL_REFERENCES_LIMITED");
+                        continue;
+                    }
+                    externalCounts.put(owner, count + 1);
+                    other = "reference:" + (doi == null ? reference.getId() : doi);
+                    externalNodes.putIfAbsent(other, new GraphNode(other, "REFERENCE", null,
+                            reference.getTitle() == null || reference.getTitle().isBlank()
+                                    ? reference.getDoi() : reference.getTitle(), null,
+                            reference.getDoi(), null, reference.getPublicationYear(), null, false));
+                }
                 Citation citation;
-                if (reference.getEdgeType() == EdgeType.REFERENCES) citation = new Citation(owner, other);
-                else if (reference.getEdgeType() == EdgeType.CITED_BY) citation = new Citation(other, owner);
-                else continue;
+                if (reference.getEdgeType() == EdgeType.REFERENCES) citation = new Citation("source:" + owner, other);
+                else citation = new Citation(other, "source:" + owner);
                 citations.computeIfAbsent(citation, ignored -> new LinkedHashSet<>()).add(reference.getId());
             }
         }
+        nodes.addAll(externalNodes.values());
         citations.forEach((citation, ids) -> edges.add(new GraphEdge(
-                "source:" + citation.source(), "source:" + citation.target(), "CITES", List.copyOf(ids))));
+                citation.source(), citation.target(), "CITES", List.copyOf(ids))));
         return new ProjectSourceMapResponse(new ProjectSourceMapResponse.ProjectNode(projectId, project.getTitle()),
                 nodes, edges, List.copyOf(limitations));
     }

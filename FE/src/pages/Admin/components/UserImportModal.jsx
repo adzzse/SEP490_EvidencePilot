@@ -31,7 +31,6 @@ export default function UserImportModal({ api, onClose, onDone }) {
   const [preflightErrors, setPreflightErrors] = useState([]);
   const [serverResult, setServerResult] = useState(null);
   const [error, setError] = useState('');
-  const [devBypass, setDevBypass] = useState(false);
 
   const downloadTemplate = async () => {
     const XLSX = await loadXlsx();
@@ -105,7 +104,6 @@ export default function UserImportModal({ api, onClose, onDone }) {
       for (const [role, items] of Object.entries(groups)) {
         const payload = {
           role,
-          devBypass,
           users: items.map((r) => ({
             email: r.email,
             firstName: r.firstName,
@@ -150,21 +148,7 @@ export default function UserImportModal({ api, onClose, onDone }) {
           {t('admin.downloadTemplate')}
         </button>
 
-        {/* rationale: dev-only bypass — stripped from production builds by Vite */}
-        {import.meta.env.DEV && (
-        <label className="mt-3 flex items-start gap-2.5 rounded-xl border border-(--border) bg-(--surface-secondary) p-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={devBypass}
-            onChange={(e) => setDevBypass(e.target.checked)}
-            className="mt-0.5 accent-[#1e3a8a]"
-          />
-          <span>
-            <span className="block text-xs font-bold text-(--text-primary)">{t('admin.devBypass')}</span>
-            <span className="block text-[11px] text-(--text-secondary) mt-0.5">{t('admin.devBypassHint')}</span>
-          </span>
-        </label>
-        )}
+
 
         <label className="mt-4 block text-xs font-bold text-(--text-secondary)">
           <span>{t('admin.xlsxFile')}</span>

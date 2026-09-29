@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { formatDateTimeSeconds } from '../../../utils/formatters/date.js';
 import { useToast } from '../../../components/ui/Toast.jsx';
 function NotificationsSection({ api }) {
   const { t } = useTranslation();
@@ -64,7 +65,7 @@ function NotificationsSection({ api }) {
         ? t('admin.sentAnnouncementTo', { count, role: roleStr.toLowerCase() })
         : t('admin.sentTo', { role: roleStr.toLowerCase() }),
       audience: roleStr,
-      timestamp: h.occurredAt ? new Date(h.occurredAt).toLocaleString() : '—',
+      timestamp: h.occurredAt ? formatDateTimeSeconds(h.occurredAt) : '—',
       status: t('admin.delivered'),
       recipients: count
     };

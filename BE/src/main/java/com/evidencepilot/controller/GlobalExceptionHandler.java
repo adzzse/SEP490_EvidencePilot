@@ -1,6 +1,7 @@
 package com.evidencepilot.controller;
 
 import com.evidencepilot.client.openalex.OpenAlexClient;
+import com.evidencepilot.config.security.CorrelationIdFilter;
 import com.evidencepilot.service.AiModelClient;
 import com.evidencepilot.service.AiGenerationConfigService;
 import com.evidencepilot.dto.response.ApiErrorResponse;
@@ -9,6 +10,7 @@ import com.evidencepilot.exception.ApiException;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.exception.SubmissionReadinessException;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -26,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
@@ -89,9 +92,23 @@ public class GlobalExceptionHandler {
             HttpServletRequest request) {
 
         HttpStatus status = HttpStatus.resolve(exception.getStatusCode());
+        if (status == null) status = HttpStatus.SERVICE_UNAVAILABLE;
+        // P0a: the upstream endpoint and raw detail stay in server logs only;
+        // the browser gets a stable message plus a correlation reference.
+        log.warn("ai_upstream_error status={} code={} correlation={} upstream={}",
+                status.value(), exception.getCode(), CorrelationIdFilter.current(),
+                exception.getMessage());
+        String safe = switch (status) {
+            case TOO_MANY_REQUESTS -> "AI service is rate-limited. Please retry shortly.";
+            case BAD_GATEWAY ->
+                "AI service returned an unusable response. Please retry; contact support with the reference if it persists.";
+            case SERVICE_UNAVAILABLE ->
+                "AI service is temporarily unavailable. Please retry; contact support with the reference if it persists.";
+            default -> "AI request failed. Please retry; contact support with the reference if it persists.";
+        };
         ResponseEntity<ApiErrorResponse> response = build(
-                status == null ? HttpStatus.SERVICE_UNAVAILABLE : status,
-                exception.getMessage(), request,
+                status,
+                safe, request,
                 exception.getCode() == null ? null : Map.of("code", exception.getCode()));
         if (exception.getRetryAfterMillis() == null) return response;
         long retryMillis = exception.getRetryAfterMillis();

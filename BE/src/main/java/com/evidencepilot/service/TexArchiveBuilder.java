@@ -4,14 +4,19 @@ import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
+import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.model.enums.PaperStandard;
+import com.evidencepilot.dto.response.TraceabilityExportResponse;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.DocumentMetadataRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.service.impl.SourceMatchingService;
+import com.evidencepilot.service.impl.TraceabilityExportServiceImpl;
+import com.evidencepilot.service.impl.ProjectCsvArchive;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,8 +45,10 @@ public class TexArchiveBuilder {
     private final PaperStandardService paperStandardService;
     private final TexArchiveMediaWriter mediaWriter;
     private final SourceMatchingService sourceMatchingService;
+    private final TraceabilityExportServiceImpl projectDataService;
+    private final ObjectMapper objectMapper;
 
-    public Path build(UUID projectId) {
+    public Path build(UUID projectId, User viewer) {
         Path destination;
         try {
             destination = Files.createTempFile("evidencepilot-project-export-", ".zip");
@@ -49,7 +56,7 @@ public class TexArchiveBuilder {
             throw new IllegalStateException("Failed to create export archive", exception);
         }
         try {
-            write(projectId, destination);
+            write(projectId, destination, viewer);
             return destination;
         } catch (RuntimeException exception) {
             try {
@@ -61,7 +68,7 @@ public class TexArchiveBuilder {
         }
     }
 
-    public void write(UUID projectId, Path destination) {
+    public void write(UUID projectId, Path destination, User viewer) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException(projectId, "Project"));
         List<Document> papers = documentRepository
@@ -156,6 +163,11 @@ public class TexArchiveBuilder {
             if (!citationWarnings.isEmpty()) {
                 writeEntry(zip, "CITATION_WARNINGS.md", citationWarningText(citationWarnings));
             }
+            TraceabilityExportResponse data = projectDataService.buildDataForArchive(projectId, viewer);
+            writeEntry(zip, "project-summary.tex", projectSummary(data));
+            writeEntry(zip, "data/project-data.json", objectMapper.writeValueAsString(data));
+            ProjectCsvArchive.writeEntries(data, zip, "data/");
+            projectDataService.writeFeedbackAttachments(projectId, viewer, zip);
             mediaWriter.writeProjectMedia(projectId, zip);
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to build export archive", exception);
@@ -189,6 +201,77 @@ public class TexArchiveBuilder {
         StringBuilder content = new StringBuilder("# Citation export warnings\n\n");
         warnings.forEach(warning -> content.append("- ").append(warning).append('\n'));
         return content.toString();
+    }
+
+    private static String projectSummary(TraceabilityExportResponse data) {
+        StringBuilder out = new StringBuilder("% Supplemental export summary; main.tex remains the paper manuscript.\n");
+        out.append("\\section*{Project summary}\n")
+                .append("\\textbf{Project:} ").append(tex(data.projectTitle())).append("\\\\\n")
+                .append("\\textbf{Description:} ").append(tex(data.projectDescription())).append("\\\\\n")
+                .append("\\textbf{Status:} ").append(tex(data.projectStatus())).append("\\\\\n")
+                .append("\\textbf{Paper standard:} ").append(tex(data.targetStandard())).append("\\\\\n")
+                .append("\\textbf{Papers:} ").append(data.papers().size()).append("\\\\\n")
+                .append("\\textbf{Sources:} ").append(data.sources().size()).append("\\\\\n")
+                .append("\\textbf{Saved source relations:} ").append(data.sourceRelations().size()).append("\\\\\n")
+                .append("\\textbf{Feedback items:} ").append(data.feedbackComments().size()).append("\\\\\n")
+                .append("\\textbf{Feedback replies:} ").append(data.feedbackReplies().size()).append("\\\\\n")
+                .append("\\textbf{Feedback attachments:} ").append(data.feedbackAttachments().size()).append("\\\\\n")
+                .append("\\textbf{Evidence traces:} ").append(data.traces().size()).append("\n");
+        out.append("\\subsection*{Project sources}\n\\begin{itemize}\n");
+        for (var source : data.sources()) {
+            out.append("\\item ").append(tex(source.title() == null ? source.filename() : source.title()))
+                    .append("; ").append(tex(source.authors())).append("; ").append(tex(source.publicationYear()))
+                    .append("; DOI: ").append(tex(source.doi())).append("\n");
+        }
+        out.append("\\end{itemize}\n\\subsection*{Saved citation relations}\n\\begin{itemize}\n");
+        java.util.Map<String, String> labels = new java.util.HashMap<>();
+        data.sources().forEach(source -> labels.put("source:" + source.id(),
+                source.title() == null ? source.filename() : source.title()));
+        data.externalReferences().forEach(reference -> labels.put(reference.id(), reference.title()));
+        for (var relation : data.sourceRelations()) {
+            out.append("\\item ").append(tex(labels.get(relation.sourceId()))).append(" $\\rightarrow$ ")
+                    .append(tex(labels.get(relation.targetId()))).append("\n");
+        }
+        out.append("\\end{itemize}\n\\subsection*{Published feedback}\n\\begin{itemize}\n");
+        for (var comment : data.feedbackComments()) {
+            out.append("\\item ").append(tex(comment.content()))
+                    .append(" (state: ").append(tex(comment.threadState())).append(")\n");
+        }
+        for (var reply : data.feedbackReplies()) {
+            out.append("\\item Reply to ").append(tex(reply.feedbackId())).append(": ")
+                    .append(tex(reply.content())).append("\n");
+        }
+        for (var attachment : data.feedbackAttachments()) {
+            out.append("\\item Attachment for ").append(tex(attachment.feedbackId())).append(": ")
+                    .append(tex(attachment.archivePath())).append("\n");
+        }
+        out.append("\\end{itemize}\n\\subsection*{Evidence traces}\n\\begin{itemize}\n");
+        for (var trace : data.traces()) {
+            out.append("\\item ").append(tex(trace.sectionTitle())).append(": ").append(tex(trace.excerpt()))
+                    .append("; evidence: ").append(tex(trace.evidenceQuote()))
+                    .append("; outcome: ").append(tex(trace.outcome()))
+                    .append("; judgment: ").append(tex(trace.judgment())).append("\n");
+        }
+        out.append("\\end{itemize}\n");
+        out.append("\\subsection*{Member progress}\n");
+        for (var member : data.memberProgress()) {
+            out.append(tex(member.userName())).append(": ")
+                    .append(member.saveCount()).append(" saves; +")
+                    .append(member.wordsAdded()).append("/-")
+                    .append(member.wordsRemoved()).append(" words\\\\\n");
+            for (var day : member.dailyWordDeltas()) {
+                out.append("\\quad ").append(day.date()).append(": ").append(day.saveCount())
+                        .append(" saves; +").append(day.wordsAdded()).append("/-")
+                        .append(day.wordsRemoved()).append(" words\\\\\n");
+            }
+        }
+        out.append("% Full project records are in data/project-data.json and the data/*.csv tables.\n");
+        return out.toString();
+    }
+
+    private static String tex(Object value) {
+        if (value == null) return "(none)";
+        return CitationBibliography.escapeLatex(value.toString().replaceAll("\\s+", " ").strip());
     }
 
     private static boolean isMetadataSection(String title) {

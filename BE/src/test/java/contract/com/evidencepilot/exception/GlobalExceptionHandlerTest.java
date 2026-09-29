@@ -216,16 +216,33 @@ class GlobalExceptionHandlerTest {
         var unavailable = new AiModelClient.AiApiException("/generate", 503);
 
         assertError(handler().handleAiApi(rateLimited, request("/api/papers/1/sections/2/review")),
-                HttpStatus.TOO_MANY_REQUESTS, rateLimited.getMessage(), "/api/papers/1/sections/2/review");
+                HttpStatus.TOO_MANY_REQUESTS, "AI service is rate-limited. Please retry shortly.",
+                "/api/papers/1/sections/2/review");
         assertError(handler().handleAiApi(badGateway, request("/api/papers/1/sections/2/review")),
-                HttpStatus.BAD_GATEWAY, badGateway.getMessage(), "/api/papers/1/sections/2/review");
+                HttpStatus.BAD_GATEWAY,
+                "AI service returned an unusable response. Please retry; contact support with the reference if it persists.",
+                "/api/papers/1/sections/2/review");
         assertError(handler().handleAiApi(unavailable, request("/api/papers/1/sections/2/review")),
-                HttpStatus.SERVICE_UNAVAILABLE, unavailable.getMessage(), "/api/papers/1/sections/2/review");
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "AI service is temporarily unavailable. Please retry; contact support with the reference if it persists.",
+                "/api/papers/1/sections/2/review");
         var coded = new AiModelClient.AiApiException("/ai/generate", 429, "GENERATION_QUOTA_EXCEEDED",
                 "GENERATION_QUOTA_EXCEEDED", 7_001L, null);
         var response = handler().handleAiApi(coded, request("/api/papers/1/sections/2/review"));
         assertThat(response.getBody().fieldErrors()).containsEntry("code", "GENERATION_QUOTA_EXCEEDED");
         assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("8");
+    }
+
+    @Test
+    void handleAiApi_neverLeaksUpstreamEndpointAndAlwaysCarriesCorrelation() {
+        var catalogFailure = new AiModelClient.AiApiException("/ai/generation-config", 502,
+                "AI service returned an incompatible generation catalog", null);
+        var response = handler().handleAiApi(catalogFailure,
+                request("/api/papers/1/sections/2/review"));
+
+        assertThat(response.getBody().message()).doesNotContain("/ai/generation-config");
+        assertThat(response.getBody().message()).doesNotContain("incompatible generation catalog");
+        assertThat(response.getBody().correlationId()).isNotBlank();
     }
 
     @Test

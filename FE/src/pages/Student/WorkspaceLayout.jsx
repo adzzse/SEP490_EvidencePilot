@@ -1305,7 +1305,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       const r = await api.get(`/api/projects/${project.id}/traceability`);
       const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `traceability-${project.title || 'export'}.json`;
+      const a = document.createElement('a'); a.href = url; a.download = `project-data-${project.title || 'export'}.json`;
       a.click(); URL.revokeObjectURL(url);
       showToast(t('traceabilityDownloaded'));
     } catch { showToast(t('exportFailed')); }
@@ -1316,7 +1316,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     try {
       const r = await api.get(`/api/projects/${project.id}/traceability/csv`, { responseType: 'blob' });
       const url = URL.createObjectURL(r.data);
-      const a = document.createElement('a'); a.href = url; a.download = `traceability-${project.title || 'export'}.csv`;
+      const a = document.createElement('a'); a.href = url; a.download = `project-data-csv-${project.title || 'export'}.zip`;
       a.click(); URL.revokeObjectURL(url);
       showToast(t('traceabilityCsvDownloaded'));
     } catch { showToast(t('exportFailed')); }
@@ -1469,7 +1469,10 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       const rawMessage = error.response?.data?.message || '';
       const status = error.response?.status || error.status;
       // rationale: prompt/model drift needs different guidance than content drift.
-      const message = status === 409
+      // P0a: append the server correlation reference so support can trace the failure.
+      const ref = error.response?.data?.correlationId || error.response?.headers?.['x-correlation-id'] || '';
+      const shortRef = ref ? String(ref).slice(0, 8) : '';
+      const base = status === 409
         ? (/prompt changed/i.test(rawMessage) ? t('reviewPromptChanged')
           : /model configuration changed/i.test(rawMessage) ? t('reviewModelChanged')
             : t('reviewSectionChanged'))
@@ -1480,7 +1483,8 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
             : status === 502
               ? t('aiInvalidResponse')
               : t('aiReviewFailed');
-      setAiReviewError({ status, message });
+      const message = shortRef ? `${base} (ref ${shortRef})` : base;
+      setAiReviewError({ status, message, reference: ref || undefined });
       showToast(message);
     } finally {
       if (saved?.sectionId) clearReviewJob(saved.sectionId);
@@ -1610,12 +1614,16 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     } catch (error) {
       if (aiReviewRequestRef.current !== requestId) return;
       const status = error.response?.status || error.status;
-      const message = status === 429 ? t('aiProviderRateLimited')
+      // P0a: append the server correlation reference so support can trace the failure.
+      const ref = error.response?.data?.correlationId || error.response?.headers?.['x-correlation-id'] || '';
+      const shortRef = ref ? String(ref).slice(0, 8) : '';
+      const base = status === 429 ? t('aiProviderRateLimited')
         : status === 503 ? t('aiWorkerUnavailable')
           : status === 502 ? t('aiInvalidResponse')
             : (status === 403 || status === 409) ? t('projectLocked')
               : t('aiReviewFailed');
-      setAiReviewError({ status, message });
+      const message = shortRef ? `${base} (ref ${shortRef})` : base;
+      setAiReviewError({ status, message, reference: ref || undefined });
       showToast(message);
     } finally {
       clearReviewJob(selectedSectionId);

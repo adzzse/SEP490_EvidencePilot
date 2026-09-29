@@ -1,4 +1,8 @@
+import { useTranslation } from 'react-i18next';
+import { formatDate } from '../../utils/formatters/date.js';
+
 export default function UserDetailCard({ user }) {
+  const { t } = useTranslation();
   if (!user) return null;
   // rationale: prop-driven, falls back to spec example values so the card renders standalone
   const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.name || 'Test Student';
@@ -8,17 +12,15 @@ export default function UserDetailCard({ user }) {
     '?';
   const role = user.role || 'STUDENT';
   const status = user.accountStatus || user.status || 'ACTIVE';
-  const systemDate = user.createdAt
-    ? new Date(user.createdAt).toLocaleDateString()
-    : new Date().toLocaleDateString();
+  const systemDate = formatDate(user.createdAt || new Date());
   const rows = [
-    ['ID', user.id ?? 'dbaosni'],
-    ['Name', fullName],
-    ['Student Code', user.studentCode || '—'],
-    ['Email', user.email || 'student@evidencepilot.dev'],
-    ['Role', role.charAt(0) + role.slice(1).toLowerCase()],
-    ['Status', status.charAt(0) + status.slice(1).toLowerCase()],
-    ['System Date', systemDate],
+    [t('admin.userDetail.id'), user.id ?? 'dbaosni'],
+    [t('admin.userDetail.name'), fullName],
+    [t('admin.userDetail.studentCode'), user.studentCode || '―'],
+    [t('admin.userDetail.email'), user.email || 'student@evidencepilot.dev'],
+    [t('admin.userDetail.role'), role.charAt(0) + role.slice(1).toLowerCase()],
+    [t('admin.userDetail.status'), status.charAt(0) + status.slice(1).toLowerCase()],
+    [t('admin.userDetail.systemDate'), systemDate],
   ];
 
   return (

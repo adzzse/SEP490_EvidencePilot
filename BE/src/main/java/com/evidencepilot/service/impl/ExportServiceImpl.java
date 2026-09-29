@@ -11,7 +11,6 @@ import com.evidencepilot.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
@@ -21,10 +20,8 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -47,12 +44,7 @@ public class ExportServiceImpl {
     private final UserRepository userRepository;
     private final RabbitTemplate rabbitTemplate;
     private final TexArchiveBuilder texArchiveBuilder;
-    @Autowired(required = false)
-    private DocumentRepository documentRepository;
-    @Autowired(required = false)
-    private PaperSectionRepository paperSectionRepository;
-    @Autowired(required = false)
-    private EvidenceRevisionTraceRepository evidenceRevisionTraceRepository;
+    private final TraceabilityExportServiceImpl projectDataService;
 
     @Transactional
     public ExportJob createExportJob(UUID projectId, String format) {
@@ -109,6 +101,7 @@ public class ExportServiceImpl {
         Project project = projectRepository.findById(job.getProjectId())
                 .orElseThrow(() -> new ResourceNotFoundException(job.getProjectId(), "Project"));
         currentUserService.requireProjectAccess(currentUser, project);
+        currentUserService.requireUserIdOrAdmin(currentUser, job.getUserId());
         return exposeDownloadEndpoint(job);
     }
 
@@ -117,8 +110,7 @@ public class ExportServiceImpl {
         if (job.getStatus() != ExportStatus.READY) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Export not ready");
         }
-        String suffix = job.getFormat() == ExportFormat.TRACEABILITY_CSV ? ".csv" : ".zip";
-        return new InputStreamResource(documentObjectStorage.getStream(EXPORT_MINIO_PREFIX + jobId + suffix));
+        return new InputStreamResource(documentObjectStorage.getStream(EXPORT_MINIO_PREFIX + jobId + ".zip"));
     }
 
     public List<ExportJob> getUserExports(UUID projectId) {
@@ -139,21 +131,18 @@ public class ExportServiceImpl {
         String contentType;
         boolean stored = false;
         try {
+            User exportUser = userRepository.findById(job.getUserId())
+                    .orElseThrow(() -> new ResourceNotFoundException(job.getUserId(), "User"));
+            objectKey = EXPORT_MINIO_PREFIX + job.getId() + ".zip";
+            contentType = "application/zip";
+            tmpPath = Files.createTempFile("evidencepilot-export-", ".zip");
             if (job.getFormat() == ExportFormat.TRACEABILITY_CSV) {
-                objectKey = EXPORT_MINIO_PREFIX + job.getId() + ".csv";
-                contentType = "text/csv;charset=UTF-8";
-                tmpPath = writeTraceabilityCsvToTemp(job.getProjectId());
-                try (InputStream content = Files.newInputStream(tmpPath)) {
-                    documentObjectStorage.write(objectKey, content, Files.size(tmpPath), contentType);
-                }
+                projectDataService.writeCsvArchiveForJob(job.getProjectId(), exportUser, tmpPath);
             } else {
-                objectKey = EXPORT_MINIO_PREFIX + job.getId() + ".zip";
-                contentType = "application/zip";
-                tmpPath = Files.createTempFile("evidencepilot-export-", ".zip");
-                texArchiveBuilder.write(job.getProjectId(), tmpPath);
-                try (InputStream content = Files.newInputStream(tmpPath)) {
-                    documentObjectStorage.write(objectKey, content, Files.size(tmpPath), contentType);
-                }
+                texArchiveBuilder.write(job.getProjectId(), tmpPath, exportUser);
+            }
+            try (InputStream content = Files.newInputStream(tmpPath)) {
+                documentObjectStorage.write(objectKey, content, Files.size(tmpPath), contentType);
             }
             stored = true;
 
@@ -188,54 +177,6 @@ public class ExportServiceImpl {
                 }
             }
         }
-    }
-
-    private Path writeTraceabilityCsvToTemp(UUID projectId) throws IOException {
-        Path tmp = Files.createTempFile("traceability-", ".csv");
-        try (BufferedWriter w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
-            w.write('\uFEFF');
-            w.write("Section ID,Section Title,Word Count,Version,Assigned User ID\n");
-            for (Document paper : documentRepository.findByProjectIdAndDocTypeAndActiveTrue(projectId, com.evidencepilot.model.enums.DocumentType.PAPER)) {
-                for (PaperSection s : paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paper.getId())) {
-                    if (!s.isActive()) continue;
-                    w.write(String.join(",",
-                            esc(s.getId().toString()),
-                            esc(s.getSectionTitle()),
-                            String.valueOf(wordCount(s.getContentTex())),
-                            String.valueOf(s.getVersion() != null ? s.getVersion() : 1),
-                            esc(s.getAssignedUser() == null ? "" : s.getAssignedUser().getId().toString())));
-                    w.write("\n");
-                }
-            }
-            w.write("\nTrace ID,Section ID,Section Title,Finding,Action,Excerpt,Source ID,Relation,Student Action,Outcome,Judgment\n");
-            for (EvidenceRevisionTrace t : evidenceRevisionTraceRepository.findByProjectIdOrderByCreatedAtDesc(projectId)) {
-                w.write(String.join(",",
-                        esc(t.getId().toString()),
-                        esc(t.getSection().getId().toString()),
-                        esc(t.getSection().getSectionTitle()),
-                        t.getFindingIndex() == null ? "" : t.getFindingIndex().toString(),
-                        esc(t.getSuggestedAction()),
-                        esc(t.getExcerpt()),
-                        esc(t.getSource() == null ? "" : t.getSource().getId().toString()),
-                        esc(t.getEvidenceRelation()),
-                        esc(t.getStudentAction() == null ? "" : t.getStudentAction().name()),
-                        esc(t.getOutcome() == null ? "" : t.getOutcome().name()),
-                        esc(t.getJudgment() == null ? "" : t.getJudgment().name())));
-                w.write("\n");
-            }
-        }
-        return tmp;
-    }
-
-    private static String esc(String s) {
-        if (s == null) return "";
-        if (s.contains(",") || s.contains("\"") || s.contains("\n")) return "\"" + s.replace("\"", "\"\"") + "\"";
-        return s;
-    }
-
-    private static int wordCount(String tex) {
-        if (tex == null || tex.isBlank()) return 0;
-        return tex.trim().split("\\s+").length;
     }
 
     private ExportJob exposeDownloadEndpoint(ExportJob job) {

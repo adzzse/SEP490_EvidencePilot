@@ -1,5 +1,5 @@
-import { useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -135,8 +135,21 @@ export default function AdminDashboard() {
   }, [navQuery]);
 
   // rationale: entering the admin page always lands on the dashboard —
-  // the last-visited tab is intentionally not restored.
-  const [active, setActive] = useState('dashboard');
+  // the last-visited tab is intentionally not restored. An explicit ?tab=
+  // deep link (e.g. from My Activity) selects a valid tab on entry.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = (() => {
+    const requested = searchParams.get('tab');
+    return NAV_ITEMS.some(item => item.key === requested) ? requested : 'dashboard';
+  })();
+  const [active, setActive] = useState(initialTab);
+  // Same-route activity links (?tab=users while already on the dashboard)
+  // would otherwise change the URL without switching the tab.
+  const requestedTab = searchParams.get('tab');
+  useEffect(() => {
+    if (requestedTab && requestedTab !== active
+      && NAV_ITEMS.some(item => item.key === requestedTab)) setActive(requestedTab);
+  }, [requestedTab, active]);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -218,10 +231,8 @@ export default function AdminDashboard() {
         <div className={`h-16 flex items-center gap-2 px-3 border-b border-white/5 shrink-0 bg-[#0c162e] ${collapsed ? 'justify-center' : 'justify-between'}`}>
           {!collapsed && (
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-[#1e3a8a] flex items-center justify-center text-white shadow-sm shrink-0">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2L1 8h3v12h2V8h4v12h2V8h4v12h2V8h3L12 2zm-5 8h2v8H7v-8zm6 0h2v8h-2v-8z" />
-                </svg>
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-sm shrink-0" aria-hidden="true">
+                EP
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="text-sm font-bold text-white tracking-tight leading-none truncate">EvidencePilot</span>
@@ -235,9 +246,9 @@ export default function AdminDashboard() {
             onClick={() => setCollapsed(p => !p)}
             title={collapsed ? (i18n.language === 'vi' ? 'Mở rộng' : 'Expand') : (i18n.language === 'vi' ? 'Thu gọn' : 'Collapse')}
             aria-label={collapsed ? (i18n.language === 'vi' ? 'Mở rộng thanh bên' : 'Expand sidebar') : (i18n.language === 'vi' ? 'Thu gọn thanh bên' : 'Collapse sidebar')}
-            className="hidden lg:flex w-7 h-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white transition shrink-0 cursor-pointer"
+            className={`hidden lg:flex items-center justify-center rounded-lg transition shrink-0 cursor-pointer ${collapsed ? 'w-8 h-8 bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-sm hover:brightness-110' : 'w-7 h-7 text-slate-400 hover:bg-white/5 hover:text-white'}`}
           >
-            <span className="text-xs">{collapsed ? '\u25B6' : '\u25C0'}</span>
+            <span className="font-bold text-xs">{collapsed ? 'EP' : '\u25C0'}</span>
           </button>
         </div>
 
@@ -263,7 +274,7 @@ export default function AdminDashboard() {
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {filteredNav.map(item => (
-            <button key={item.key} data-guide={`nav-${item.key}`} onClick={() => { setActive(item.key); setMobileOpen(false); }}
+            <button key={item.key} data-guide={`nav-${item.key}`} onClick={() => { setActive(item.key); setMobileOpen(false); setSearchParams(item.key === 'dashboard' ? {} : { tab: item.key }); }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition text-left group ${active === item.key ? 'bg-white/10 text-white shadow-sm font-semibold' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
               title={collapsed ? label(item) : undefined}>
               {getIcon(item.key, active === item.key)}
@@ -326,7 +337,7 @@ export default function AdminDashboard() {
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header data-guide="header" className="h-16 bg-(--surface) border-b border-(--border) flex items-center justify-between px-6 shrink-0 shadow-sm">
+        <header data-guide="header" className="h-16 bg-(--surface) border-b border-(--border) flex items-center justify-between px-6 shrink-0 shadow-sm sticky top-0 z-20">
           <div className="flex items-center gap-3">
             <button onClick={() => setMobileOpen(true)} className="lg:hidden text-(--text-tertiary) hover:text-(--text-primary)">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>

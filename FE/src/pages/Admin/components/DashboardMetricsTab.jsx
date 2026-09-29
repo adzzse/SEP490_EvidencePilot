@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAdminTour } from '../../../hooks/useAdminTour.js';
 import { PageSkeleton, ErrorBlock } from './shared.jsx';
+import { formatDateTimeSeconds } from '../../../utils/formatters/date.js';
 import { useTranslation } from 'react-i18next';
 function DashboardSection({ api }) {
   const { t } = useTranslation();
@@ -56,8 +57,11 @@ function DashboardSection({ api }) {
 
   const dashTourSteps = useCallback(() => [
     { popover: { title: t('admin.processGuide'), description: t('admin.guideDashDesc'), side: 'center' } },
+    { element: '[data-guide="platform-overview"]', popover: { title: t('admin.platformOverview'), description: t('admin.guideDashPlatform'), side: 'bottom' } },
     { element: '[data-guide="overview-projects"]', popover: { title: t('admin.activeProjects'), description: t('admin.guideDashOverviewProjects'), side: 'bottom' } },
-    { element: '[data-guide="dash-status"]', popover: { title: t('admin.status'), description: t('admin.guideDashStatus'), side: 'top' } },
+    { element: '[data-guide="system-health"]', popover: { title: t('admin.systemHealth'), description: t('admin.guideDashHealth'), side: 'top' } },
+    { element: '[data-guide="dash-status"]', popover: { title: t('admin.userDistribution'), description: t('admin.userDistributionSub'), side: 'top' } },
+    { element: '[data-guide="dash-logs"]', popover: { title: t('admin.recentSystemLogs'), description: t('admin.guideDashLogs'), side: 'top' } },
     { popover: { title: t('admin.done'), description: t('admin.guideDashDone'), side: 'center' } },
   ], [t]);
   const { start: startProcessGuide } = useAdminTour('dashboard', dashTourSteps);
@@ -71,7 +75,7 @@ function DashboardSection({ api }) {
       {/* Row 1: Platform Overview & User Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Platform Overview */}
-        <div className="lg:col-span-2 bg-(--surface) rounded-2xl shadow-sm border border-(--border-light) p-6 flex flex-col justify-between">
+        <div data-guide="platform-overview" className="lg:col-span-2 bg-(--surface) rounded-2xl shadow-sm border border-(--border-light) p-6 flex flex-col justify-between">
           <div>
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -129,7 +133,7 @@ function DashboardSection({ api }) {
           </div>
 
           {/* System Health strip */}
-          <div className="mt-4 border-t border-(--border-light) pt-4">
+          <div data-guide="system-health" className="mt-4 border-t border-(--border-light) pt-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">{t('admin.systemHealth')}</span>
@@ -200,7 +204,7 @@ function DashboardSection({ api }) {
       </div>
 
       {/* Row 3: Recent System Logs */}
-      <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border-light) p-6 space-y-4">
+      <div data-guide="dash-logs" className="bg-(--surface) rounded-2xl shadow-sm border border-(--border-light) p-6 space-y-4">
         <div className="flex justify-between items-center">
           <h3 className="text-sm font-bold text-(--text-primary)">{t('admin.recentSystemLogs')}</h3>
           <span className="text-[10px] text-(--text-tertiary) font-semibold">
@@ -226,7 +230,7 @@ function DashboardSection({ api }) {
               <tbody className="divide-y divide-(--border-light) text-(--text-secondary) font-semibold">
                 {recentLogs.map((log, index) => (
                   <tr key={`${log.occurredAt}-${log.action}-${log.entityId ?? index}`}>
-                    <td className="py-3 pr-4 whitespace-nowrap">{log.occurredAt ? new Date(log.occurredAt).toLocaleString() : '—'}</td>
+                    <td className="py-3 pr-4 whitespace-nowrap">{log.occurredAt ? formatDateTimeSeconds(log.occurredAt) : '—'}</td>
                     <td className="py-3 pr-4 text-(--text-primary)">{log.actorEmail || t('admin.logSystemActor')}</td>
                     <td className="py-3 pr-4">{log.action || '—'}</td>
                     <td className="py-3 font-mono">{log.entityType || '—'}{log.entityId ? `#${log.entityId}` : ''}</td>

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import api, { armProactiveRefresh } from '../services/api.js';
+import BanNoticeModal from '../components/ui/BanNoticeModal.jsx';
 
 const AuthContext = createContext(null);
 
@@ -8,6 +9,10 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState(() => localStorage.getItem('role'));
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // P0b-ban-notice: shown after revocation with a 10s countdown. The token is
+  // cleared immediately (enforcement); the modal only paces notice/redirect.
+  const [banNotice, setBanNotice] = useState(false);
+  const finishBanNotice = useCallback(() => setBanNotice(false), []);
   const verifyPromiseRef = useRef(null);
   const verifyControllerRef = useRef(null);
 
@@ -44,6 +49,11 @@ export function AuthProvider({ children }) {
           if (cancelled) return;
           const status = err?.response?.status;
           if (status === 401 || status === 403) {
+            // A banned account must see the countdown notice, not a silent logout.
+            if (err?.response?.data?.code === 'ACCOUNT_BANNED') {
+              window.dispatchEvent(new CustomEvent('auth:revoked'));
+              return;
+            }
             localStorage.removeItem('token');
             localStorage.removeItem('role');
             setToken(null);
@@ -93,6 +103,9 @@ export function AuthProvider({ children }) {
     const onAuthRevoked = () => {
       sessionStorage.setItem('auth_expired_notice', 'Your account is no longer active.');
       onAuthExpired();
+      // onAuthExpired skips logout on /login; a ban must always clear the token.
+      logout();
+      setBanNotice(true);
     };
     const onAuthRefreshed = (e) => {
       setToken(e.detail?.token ?? null);
@@ -132,6 +145,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{ token, role, user, isAuthenticated, loading, login, logout, verifySession }}>
       {children}
+      <BanNoticeModal open={banNotice} onDone={finishBanNotice} />
     </AuthContext.Provider>
   );
 }

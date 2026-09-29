@@ -64,6 +64,10 @@ public class ProgressReportServiceImpl {
         }
         currentUserService.requireProjectAccess(currentUser, project);
 
+        return buildReport(projectId, memberFilter, from, to);
+    }
+
+    ProgressReportResponse buildReport(UUID projectId, String memberFilter, LocalDate from, LocalDate to) {
         List<PaperSection> allSections = new ArrayList<>();
         for (Document paper : documentRepository
                 .findByProjectIdAndDocTypeAndActiveTrue(projectId, DocumentType.PAPER)) {

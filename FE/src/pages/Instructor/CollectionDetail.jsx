@@ -255,6 +255,7 @@ export default function CollectionDetail() {
   const { id } = useParams();
   const { t, i18n } = useTranslation();
   const { theme } = useTheme();
+  const { subscribeToEntityChanges } = useNotification();
   const isDark = theme === 'dark';
   const { start: startDelete } = useUndoDelete();
   const undoStrings = {
@@ -296,6 +297,14 @@ export default function CollectionDetail() {
   useEffect(() => {
     api.get(API_ROUTES.COLLECTIONS.CATEGORIES).then(r => setCategories(r.data)).catch(() => { });
   }, []);
+
+  // Live update (2-way): an admin adding/renaming a category refreshes this
+  // form's options without a page reload.
+  useEffect(() => subscribeToEntityChanges(event => {
+    if (event?.entity === 'CATEGORY') {
+      api.get(API_ROUTES.COLLECTIONS.CATEGORIES).then(r => setCategories(r.data)).catch(() => { });
+    }
+  }), [subscribeToEntityChanges]);
 
   useEffect(() => {
     api.get(API_ROUTES.PROJECTS.BASE, { params: { page: DEFAULT_PAGE, size: MAX_BATCH_FETCH_SIZE } }).then(r => setProjects(r.data?.content || [])).catch(() => { });

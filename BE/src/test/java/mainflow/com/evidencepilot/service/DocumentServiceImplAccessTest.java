@@ -167,6 +167,26 @@ class DocumentServiceImplAccessTest {
     }
 
     @Test
+    void crossUserDocumentReadRequiresMembership() {
+        User owner = user();
+        User outsider = user();
+        Project project = project();
+        Document paper = document(project);
+        paper.setUploadedBy(owner);
+
+        when(currentUserService.requireCurrentUser()).thenReturn(outsider);
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+        when(projectDocumentRepository.findByDocumentId(paper.getId())).thenReturn(List.of());
+        doThrow(new ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "PROJECT_MEMBERSHIP_REQUIRED"))
+                .when(currentUserService).requireProjectAccess(outsider, project);
+
+        assertThatThrownBy(() -> service().getDocumentById(paper.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("PROJECT_MEMBERSHIP_REQUIRED");
+    }
+
+    @Test
     void getDocumentChunksRequiresProjectAccess() {
         User user = user();
         Project project = project();
@@ -454,6 +474,21 @@ class DocumentServiceImplAccessTest {
         assertThatThrownBy(() -> service().getDocumentForDownload(source.getId(), "token"))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
+    }
+
+    @Test
+    void downloadTokenRejectsMissingOrWrongToken() {
+        Document source = document(project());
+        source.setActive(true);
+        source.setDownloadToken("correct-token");
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+
+        assertThatThrownBy(() -> service().getDocumentForDownload(source.getId(), "wrong-token"))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403");
+        assertThatThrownBy(() -> service().getDocumentForDownload(source.getId(), null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("403");
     }
 
     @Test

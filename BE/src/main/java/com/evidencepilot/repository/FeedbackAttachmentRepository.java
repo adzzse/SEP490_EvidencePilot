@@ -14,6 +14,7 @@ import java.util.UUID;
 public interface FeedbackAttachmentRepository extends JpaRepository<FeedbackAttachment, UUID> {
 
     List<FeedbackAttachment> findByFeedbackId(UUID feedbackId);
+    List<FeedbackAttachment> findByProjectId(UUID projectId);
 
     List<FeedbackAttachment> findByFeedbackIsNullAndCreatedAtBefore(LocalDateTime cutoff);
 

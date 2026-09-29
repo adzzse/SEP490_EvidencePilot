@@ -20,7 +20,7 @@ function UsersSection({ api }) {
   const [detailUser, setDetailUser] = useState(null);
   const [loadingAction, setLoadingAction] = useState({});
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState({ email: '', firstName: '', lastName: '', studentCode: '', role: 'STUDENT', devBypass: false });
+  const [createForm, setCreateForm] = useState({ email: '', firstName: '', lastName: '', studentCode: '', role: 'STUDENT' });
   const [createErr, setCreateErr] = useState('');
   const [creating, setCreating] = useState(false);
   const [resending, setResending] = useState(false);
@@ -54,7 +54,6 @@ function UsersSection({ api }) {
   const usersTourSteps = useCallback(() => [
     { popover: { title: t('admin.processGuide'), description: t('admin.guideUsersDesc'), side: 'center' } },
     { element: '[data-guide="create-btn"]', popover: { title: t('admin.createUser'), description: t('admin.guideUsersCreate'), side: 'bottom' } },
-    { element: '[data-guide="create-verify"]', popover: { title: t('admin.devBypass'), description: t('admin.guideUsersVerify'), side: 'bottom' } },
     { element: '[data-guide="import-btn"]', popover: { title: t('admin.importUsers'), description: t('admin.guideUsersImport'), side: 'bottom' } },
     { element: '[data-guide="preflight"]', popover: { title: t('admin.preflightTitle'), description: t('admin.guideUsersPreflight'), side: 'left' } },
     { element: '[data-guide="table"]', popover: { title: t('admin.userAccounts'), description: t('admin.guideUsersTable'), side: 'left' } },
@@ -97,16 +96,14 @@ function UsersSection({ api }) {
 
   const doCreate = async (e) => {
     e.preventDefault(); setCreateErr('');
-    // rationale: no admin-set passwords — BE always issues a set-password
-    // invitation, except the quarantined dev bypass (BE-gated, 403 otherwise).
+    // rationale: no admin-set passwords - the backend always issues a set-password invitation.
     setCreating(true);
     try {
-      const { studentCode, devBypass, ...base } = createForm;
+      const { studentCode, ...base } = createForm;
       const payload = createForm.role === 'STUDENT' ? { ...base, studentCode } : base;
-      payload.devBypass = devBypass;
       await api.post('/api/admin/users', payload);
       setShowCreate(false);
-      setCreateForm({ email: '', firstName: '', lastName: '', studentCode: '', role: 'STUDENT', devBypass: false });
+      setCreateForm({ email: '', firstName: '', lastName: '', studentCode: '', role: 'STUDENT' });
       toast.success(t('admin.invitationSent'));
       queryClient.invalidateQueries({ queryKey: ['users'] });
     }
@@ -150,7 +147,7 @@ function UsersSection({ api }) {
             {t('admin.importUsers')}
           </button>
           <button data-guide="create-btn" onClick={() => setShowCreate(true)}
-            className="px-4 py-2 text-xs font-bold text-white bg-[#0c162e] hover:bg-[#152447] rounded-xl transition shadow-sm">
+            className="px-4 py-2 text-xs font-bold text-white bg-(--brand) hover:bg-(--brand-hover) rounded-xl transition shadow-sm">
             {t('admin.sendInvitation')}
           </button>
         </div>
@@ -244,20 +241,11 @@ function UsersSection({ api }) {
                   <input name="studentCode" maxLength={50} placeholder="SE170608" value={createForm.studentCode} onChange={e => setCreateForm(p => ({ ...p, studentCode: e.target.value }))} required className="w-full border border-gray-300 rounded-xl px-3.5 py-2 text-xs uppercase focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                 </div>
               )}
-              {/* rationale: dev-only bypass — stripped from production builds by Vite */}
-              {import.meta.env.DEV && (
-              <label data-guide="create-verify" className="flex items-start gap-2.5 rounded-xl border border-(--border) bg-(--surface-secondary) p-3 cursor-pointer">
-                <input type="checkbox" checked={createForm.devBypass} onChange={e => setCreateForm(p => ({ ...p, devBypass: e.target.checked }))} className="mt-0.5 accent-[#1e3a8a]" />
-                <span>
-                  <span className="block text-xs font-bold text-(--text-primary)">{t('admin.devBypass')}</span>
-                  <span className="block text-[11px] text-(--text-secondary) mt-0.5">{t('admin.devBypassHint')}</span>
-                </span>
-              </label>
-              )}
+
               {createErr && <div className="text-xs text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-100 font-semibold">{createErr}</div>}
               <div className="flex gap-2.5 justify-end pt-2">
                 <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 text-xs font-bold text-(--text-secondary) border border-(--border) rounded-xl hover:bg-(--surface-secondary) transition">{t('admin.cancel')}</button>
-                <button type="submit" disabled={creating} className="px-4 py-2 text-xs font-bold bg-[#0c162e] text-white rounded-xl hover:bg-[#152447] transition disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2">
+                <button type="submit" disabled={creating} className="px-4 py-2 text-xs font-bold bg-(--brand) text-white rounded-xl hover:bg-(--brand-hover) transition disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2">
                   {creating && (
                     <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" aria-hidden="true" />
                   )}
@@ -308,10 +296,10 @@ function UsersSection({ api }) {
                   <td className="px-6 py-4 font-bold text-(--text-primary)">{u.firstName} {u.lastName}</td>
                   <td className="px-6 py-4 font-mono text-(--text-secondary)">{u.role === 'STUDENT' ? u.studentCode || '—' : ''}</td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${u.role === 'ADMIN' ? 'bg-rose-100 text-rose-700' : u.role === 'INSTRUCTOR' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>{u.role}</span>
+                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${u.role === 'ADMIN' ? 'bg-rose-100 text-rose-700 dark:bg-(--danger-soft) dark:text-(--danger)' : u.role === 'INSTRUCTOR' ? 'bg-amber-100 text-amber-700 dark:bg-(--warning-soft) dark:text-(--warning)' : 'bg-blue-100 text-blue-700 dark:bg-(--brand-soft) dark:text-(--brand-foreground)'}`}>{u.role}</span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${u.accountStatus === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : u.accountStatus === 'VERIFYING_EMAIL' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{u.accountStatus === 'ACTIVE' ? t('admin.active') : u.accountStatus === 'VERIFYING_EMAIL' ? t('admin.verifying') : t('admin.banned')}</span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${u.accountStatus === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700 dark:bg-(--success-soft) dark:text-(--success)' : u.accountStatus === 'VERIFYING_EMAIL' ? 'bg-amber-100 text-amber-700 dark:bg-(--warning-soft) dark:text-(--warning)' : 'bg-rose-100 text-rose-700 dark:bg-(--danger-soft) dark:text-(--danger)'}`}>{u.accountStatus === 'ACTIVE' ? t('admin.active') : u.accountStatus === 'VERIFYING_EMAIL' ? t('admin.verifying') : t('admin.banned')}</span>
                   </td>
                   <td className="px-6 py-4">
                     <div data-guide="action-ban" className="flex items-center justify-end gap-4">

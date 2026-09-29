@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { EntityCard, Modal, EmptyState, AppHeader, Breadcrumb } from '../../components';
 import { useTranslation } from 'react-i18next';
+import { useNotification } from '../../context/NotificationContext';
 import { useCollections } from '../../hooks/useCollections';
 import { CARD_GRID_PAGE_SIZE } from '../../constants';
 import { formatDate } from '../../utils/formatters/date';
@@ -16,6 +17,15 @@ export default function CollectionList() {
   useEffect(() => {
     api.get('/api/collection-categories').then(r => setCategories(r.data)).catch(() => {});
   }, []);
+
+  // Live update (2-way): an admin adding/renaming a category refreshes the
+  // create-form options without a page reload.
+  const { subscribeToEntityChanges } = useNotification();
+  useEffect(() => subscribeToEntityChanges(event => {
+    if (event?.entity === 'CATEGORY') {
+      api.get('/api/collection-categories').then(r => setCategories(r.data)).catch(() => {});
+    }
+  }), [subscribeToEntityChanges]);
 
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');

@@ -3,6 +3,8 @@ package com.evidencepilot.service;
 import com.evidencepilot.service.impl.CurrentUserServiceImpl;
 import com.evidencepilot.config.infrastructure.RabbitMQConfig;
 import com.evidencepilot.dto.ExportRequest;
+import com.evidencepilot.dto.response.ProgressReportResponse;
+import com.evidencepilot.dto.response.TraceabilityExportResponse;
 import com.evidencepilot.model.ExportJob;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.User;
@@ -12,6 +14,8 @@ import com.evidencepilot.repository.ExportJobRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.UserRepository;
 import com.evidencepilot.service.impl.ExportServiceImpl;
+import com.evidencepilot.service.impl.ProjectCsvArchive;
+import com.evidencepilot.service.impl.TraceabilityExportServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -27,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.ZipEntry;
@@ -58,13 +63,14 @@ class ExportServiceImplTest {
     private final UserRepository users = mock(UserRepository.class);
     private final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
     private final TexArchiveBuilder texArchiveBuilder = mock(TexArchiveBuilder.class);
+    private final TraceabilityExportServiceImpl projectDataService = mock(TraceabilityExportServiceImpl.class);
     private ExportServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new ExportServiceImpl(
                 exportJobs, projects, currentUsers, notifications, storage,
-                users, rabbitTemplate, texArchiveBuilder);
+                users, rabbitTemplate, texArchiveBuilder, projectDataService);
     }
 
     @Test
@@ -73,6 +79,9 @@ class ExportServiceImplTest {
         Project project = new Project();
         project.setId(job.getProjectId());
         project.setTitle("Streaming export");
+        User exportUser = new User();
+        exportUser.setId(job.getUserId());
+        when(users.findById(job.getUserId())).thenReturn(Optional.of(exportUser));
         when(projects.findById(job.getProjectId())).thenReturn(Optional.of(project));
         doAnswer(invocation -> {
             Path destination = invocation.getArgument(1);
@@ -86,7 +95,7 @@ class ExportServiceImplTest {
                 archive.closeEntry();
             }
             return null;
-        }).when(texArchiveBuilder).write(eq(job.getProjectId()), any(Path.class));
+        }).when(texArchiveBuilder).write(eq(job.getProjectId()), any(Path.class), eq(exportUser));
         var uploaded = new ByteArrayOutputStream();
         var uploadedSize = new AtomicLong();
         doAnswer(invocation -> {
@@ -121,6 +130,60 @@ class ExportServiceImplTest {
                 eq("application/zip"));
         verify(storage, never()).write(anyString(), any(byte[].class), anyString());
         verify(storage, never()).presignedGetUrl(anyString(), any(Integer.class));
+    }
+
+    @Test
+    void processCsvExportStoresTheSameTableArchiveAsTheDirectDownload() throws Exception {
+        ExportJob job = job(ExportStatus.PENDING);
+        job.setFormat(ExportFormat.TRACEABILITY_CSV);
+        User exportUser = new User();
+        exportUser.setId(job.getUserId());
+        when(users.findById(job.getUserId())).thenReturn(Optional.of(exportUser));
+        TraceabilityExportResponse data = mock(TraceabilityExportResponse.class);
+        when(data.projectTitle()).thenReturn("=1+1\nnext");
+        when(data.papers()).thenReturn(List.of());
+        when(data.sections()).thenReturn(List.of());
+        when(data.sources()).thenReturn(List.of());
+        when(data.sourceReferences()).thenReturn(List.of());
+        when(data.externalReferences()).thenReturn(List.of());
+        when(data.sourceRelations()).thenReturn(List.of());
+        when(data.feedback()).thenReturn(List.of());
+        when(data.feedbackComments()).thenReturn(List.of());
+        when(data.feedbackReplies()).thenReturn(List.of());
+        when(data.feedbackAttachments()).thenReturn(List.of());
+        when(data.traces()).thenReturn(List.of());
+        when(data.memberProgress()).thenReturn(List.of(new ProgressReportResponse.MemberContribution(
+                UUID.randomUUID(), "Member", 0, 0, 0, 0, 0, 0, null, 0, 0,
+                List.of("=SUM(1,1)\nnext"), List.of())));
+        doAnswer(invocation -> {
+            Path destination = invocation.getArgument(2);
+            try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(destination), StandardCharsets.UTF_8)) {
+                ProjectCsvArchive.writeEntries(data, zip, "");
+            }
+            return null;
+        }).when(projectDataService).writeCsvArchiveForJob(eq(job.getProjectId()), eq(exportUser), any(Path.class));
+        var uploaded = new ByteArrayOutputStream();
+        doAnswer(invocation -> {
+            InputStream content = invocation.getArgument(1);
+            content.transferTo(uploaded);
+            return null;
+        }).when(storage).write(eq("exports/" + job.getId() + ".zip"), any(InputStream.class),
+                longThat(size -> size > 0), eq("application/zip"));
+
+        service.processExport(job);
+
+        assertThat(job.getStatus()).isEqualTo(ExportStatus.READY);
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(uploaded.toByteArray()), StandardCharsets.UTF_8)) {
+            String projectCsv = null;
+            String memberCsv = null;
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (entry.getName().equals("project.csv")) projectCsv = new String(zip.readAllBytes(), StandardCharsets.UTF_8);
+                if (entry.getName().equals("member-progress.csv")) memberCsv = new String(zip.readAllBytes(), StandardCharsets.UTF_8);
+            }
+            assertThat(projectCsv).contains("project_id", "'=1+1\nnext");
+            assertThat(memberCsv).contains("'=SUM(1,1)\nnext");
+        }
     }
 
     @Test
@@ -174,6 +237,23 @@ class ExportServiceImplTest {
 
         assertThatThrownBy(() -> service.downloadExport(job.getId()))
                 .isSameAs(denied);
+        verify(storage, never()).getStream(anyString());
+    }
+
+    @Test
+    void downloadExportRejectsAnotherProjectMemberBeforeOpeningStorage() {
+        ExportJob job = job(ExportStatus.READY);
+        User currentUser = new User();
+        currentUser.setId(UUID.randomUUID());
+        Project project = new Project();
+        project.setId(job.getProjectId());
+        var denied = new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your export");
+        when(currentUsers.requireCurrentUser()).thenReturn(currentUser);
+        when(exportJobs.findById(job.getId())).thenReturn(Optional.of(job));
+        when(projects.findById(job.getProjectId())).thenReturn(Optional.of(project));
+        doThrow(denied).when(currentUsers).requireUserIdOrAdmin(currentUser, job.getUserId());
+
+        assertThatThrownBy(() -> service.downloadExport(job.getId())).isSameAs(denied);
         verify(storage, never()).getStream(anyString());
     }
 

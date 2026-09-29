@@ -223,8 +223,12 @@ export function renderLatexToHtml(latex, mediaUrlMap, citationNumbers = {}) {
   if (!latex) return '<p class="text-slate-400 italic">No content to preview.</p>';
   const src = String(latex);
 
-  const parts = splitLatexBlocks(src).map(b => {
+  const blocks = splitLatexBlocks(src);
+  const parts = blocks.map((b, index) => {
     const seg = src.slice(b.start, b.end);
+    const gap = blocks[index + 1] ? src.slice(b.end, blocks[index + 1].start) : '';
+    const blankLines = Math.max(0, (gap.match(/\n/g) || []).length - (src[b.end - 1] === '\n' ? 0 : 1));
+    const spacing = blankLines ? ` style="margin-bottom:${blankLines * 1.625}em"` : '';
     let html = '';
 
     if (b.type === 'heading') {
@@ -239,7 +243,7 @@ export function renderLatexToHtml(latex, mediaUrlMap, citationNumbers = {}) {
           'text-base font-semibold mt-4 mb-2 text-slate-700',
           'text-sm font-semibold mt-3 mb-2 text-slate-700',
         ][lvl];
-        html = `<${tag} class="${cls}"${attrs(b)}>${title}</${tag}>`;
+        html = `<${tag} class="${cls}"${spacing}${attrs(b)}>${title}</${tag}>`;
       }
     } else if (b.type === 'display-math') {
       const inner = seg
@@ -247,11 +251,11 @@ export function renderLatexToHtml(latex, mediaUrlMap, citationNumbers = {}) {
         .replace(/^\$\$\s*|\s*\$\$$/gs, '')
         .replace(/^\\begin\{[^}]+\}\s*/, '')
         .replace(/\s*\\end\{[^}]+\}$/s, '');
-      html = `<p class="mb-4 leading-relaxed text-slate-700" data-display${attrs(b)}>${katexHtml(inner, true)}</p>`;
+      html = `<p class="mb-4 leading-relaxed text-slate-700"${spacing} data-display${attrs(b)}>${katexHtml(inner, true)}</p>`;
     } else if (b.type === 'table') {
-      html = `<div class="mb-4 overflow-x-auto"${attrs(b)}>${renderTable(seg, mediaUrlMap, citationNumbers)}</div>`;
+      html = `<div class="mb-4 overflow-x-auto"${spacing}${attrs(b)}>${renderTable(seg, mediaUrlMap, citationNumbers)}</div>`;
     } else {
-      html = `<p class="mb-4 leading-relaxed text-slate-700" ${attrs(b)}>${renderInline(seg, mediaUrlMap, citationNumbers)}</p>`;
+      html = `<p class="mb-4 leading-relaxed text-slate-700"${spacing}${attrs(b)}>${renderInline(seg, mediaUrlMap, citationNumbers)}</p>`;
     }
 
     // Drop blocks with no visible output (no anchor possible).

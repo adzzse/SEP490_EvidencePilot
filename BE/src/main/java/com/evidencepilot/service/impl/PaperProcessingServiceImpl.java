@@ -492,6 +492,9 @@ public class PaperProcessingServiceImpl {
                 projectRepository.save(project);
             }
             captureInitialBaseline(project, saved, LocalDateTime.now());
+            auditService.record("SECTION_ASSIGNED", "PaperSection", sectionId, currentUser,
+                    previousAssigneeId == null ? null : Map.of("assignedUserId", previousAssigneeId.toString()),
+                    Map.of("assignedUserId", assignedUserId.toString()));
             systemNotificationService.createNotification(
                     section.getAssignedUser(),
                     currentUser,
@@ -1141,6 +1144,6 @@ public class PaperProcessingServiceImpl {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException(projectId, "Project"));
         currentUserService.requireProjectAccess(currentUser, project);
-        return texArchiveBuilder.build(projectId);
+        return texArchiveBuilder.build(projectId, currentUser);
     }
 }

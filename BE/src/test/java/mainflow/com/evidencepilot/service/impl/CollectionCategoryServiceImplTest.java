@@ -1,6 +1,7 @@
 package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.request.CollectionCategoryRequest;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.CollectionCategory;
 import com.evidencepilot.repository.CollectionCategoryRepository;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -18,6 +20,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -29,6 +32,22 @@ class CollectionCategoryServiceImplTest {
     @Mock private CollectionCategoryRepository repository;
     @Mock private CurrentUserServiceImpl currentUserService;
     @Mock private AuditService auditService;
+    @Mock private ApplicationEventPublisher events;
+
+    @Test
+    void createPublishesCategoryCreatedEvent() {
+        when(repository.existsByNameIgnoreCase("New")).thenReturn(false);
+        when(repository.save(any())).thenAnswer(invocation -> {
+            CollectionCategory saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        service().create(new CollectionCategoryRequest("New", null));
+
+        verify(events).publishEvent(argThat((Object e) -> e instanceof EntityChangedEvent evt
+                && "CATEGORY".equals(evt.entity()) && "CREATED".equals(evt.action())));
+    }
 
     @Test
     void createRejectsDuplicateNameWithoutSideEffects() {
@@ -82,7 +101,7 @@ class CollectionCategoryServiceImplTest {
     }
 
     private CollectionCategoryServiceImpl service() {
-        return new CollectionCategoryServiceImpl(repository, currentUserService, auditService);
+        return new CollectionCategoryServiceImpl(repository, currentUserService, auditService, events);
     }
 
     private static CollectionCategory category(UUID id, String name) {

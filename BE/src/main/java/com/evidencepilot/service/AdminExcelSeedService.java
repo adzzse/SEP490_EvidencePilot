@@ -1575,8 +1575,8 @@ public class AdminExcelSeedService {
                 try {
                     String hash = documentObjectStorage.writeWithSha256(objectKey, resolved.pdfBytes(), "application/pdf");
                     documentObjectStorage.deleteOnRollback(objectKey);
-                    d.setFileSizeBytes((long) resolved.pdfBytes().length);
-                    d = documentPersistenceService.markDocumentAsUploaded(d.getId(), objectKey, hash);
+                    d = documentPersistenceService.markDocumentAsUploaded(
+                            d.getId(), objectKey, hash, (long) resolved.pdfBytes().length);
                 } catch (Exception e) {
                     try {
                         documentObjectStorage.delete(objectKey);

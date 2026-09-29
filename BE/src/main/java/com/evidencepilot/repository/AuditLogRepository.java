@@ -36,6 +36,19 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     Page<AuditLog> findByActorIdAndActionAndSeverityOrderByOccurredAtDesc(
             UUID actorId, String action, AuditSeverity severity, Pageable pageable);
 
+    /**
+     * Phase C: upload-audit gap detection. Active documents with no
+     * DOCUMENT_UPLOADED row (e.g. best-effort audit failed at upload time).
+     * Consumed by UploadAuditReconciler; no auto-backfill — backfilled rows
+     * would falsify occurredAt, so orphans surface for ops review instead.
+     */
+    @Query("""
+            select d.id from Document d where d.active = true and not exists
+                (select a.id from AuditLog a where a.action = 'DOCUMENT_UPLOADED'
+                    and a.entityType = 'DOCUMENT' and a.entityId = d.id)
+            """)
+    List<UUID> findActiveDocumentIdsMissingUploadAudit();
+
 // Phase 1.5: DB-level daily aggregation — preserves wordDelta→wordsAdded/Removed fallback for legacy rows.
 // Matches both PROJECT rows and the live PaperSection writer (PaperProcessingServiceImpl
 // records SECTION_CONTENT_UPDATED per section so the activity feed can resolve it);

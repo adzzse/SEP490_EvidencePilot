@@ -65,7 +65,7 @@ export function projectGraph(data) {
   const rawNodes = Array.isArray(data?.nodes) ? data.nodes : [];
   const rawEdges = Array.isArray(data?.edges) ? data.edges : [];
   return {
-    nodes: rawNodes.map(node => displayNode(node, node.type === 'PROJECT' ? 'project' : 'source')),
+    nodes: rawNodes.map(node => displayNode(node, node.type === 'PROJECT' ? 'project' : node.type === 'REFERENCE' ? 'external' : 'source')),
     edges: rawEdges.map((edge, index) => ({
       id: `relation:${index}`, from: edge.sourceId, to: edge.targetId,
       kind: edge.type === 'PROJECT_SOURCE' ? 'membership' : 'citation',

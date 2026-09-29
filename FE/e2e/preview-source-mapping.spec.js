@@ -143,6 +143,18 @@ async function openMarkdownPreview(page, projectId) {
   await expect(page.locator('.preview-content').getByText(MD_SENTENCE, { exact: true })).toBeVisible();
 }
 
+test('paper preview keeps a visible gap for an empty source line', async ({ page }) => {
+  const { projectId, state } = await setupMarkdownPreview(page);
+  await openMarkdownPreview(page, projectId);
+
+  const paragraphs = page.locator('.preview-content > p');
+  await expect(paragraphs).toHaveCount(3);
+  const gap = await paragraphs.evaluateAll(nodes =>
+    nodes[1].getBoundingClientRect().top - nodes[0].getBoundingClientRect().bottom);
+  expect(gap).toBeGreaterThanOrEqual(12);
+  expect(state.errors).toEqual([]);
+});
+
 async function previewDomSelect(page, text, from, to) {
   await page.evaluate(({ wanted, start, end }) => {
     const host = document.querySelector('.preview-content');
@@ -314,5 +326,32 @@ test('latex preview maps the second duplicate fish exactly', async ({ page }) =>
   await expect.poll(() => state.posts.length).toBe(1);
   expect(state.posts[0].anchor.from).toBe(65);
   expect(state.posts[0].anchor.to).toBe(78);
+  expect(state.errors).toEqual([]);
+});
+
+test('latex preview keeps an editor blank line around an inline bold heading', async ({ page }) => {
+  const { projectId, state } = await setupLatexPreview(page);
+  await page.route(`**/api/feedback-requests/tex-round/submission-snapshot`, route => route.fulfill({ json: {
+    state: 'AVAILABLE', snapshot: {
+      schemaVersion: 1, projectId, papers: [{ id: 'tex-paper', title: 'Preview paper', sections: [{
+        id: 'tex-section', title: 'Introduction', order: 0,
+        contentTex: 'Previous paragraph.\n\n\\textbf{2.2 Chatbots}\n\nNext paragraph.', contentVersion: 1,
+      }] }],
+    },
+  } }));
+  await page.goto(`http://localhost:5173/instructor/requests/${projectId}`);
+  await expect(page.locator('.cm-content')).toContainText('2.2 Chatbots', { timeout: 15000 });
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  const boxes = await page.locator('.preview-content > p').evaluateAll(paragraphs => paragraphs.map(p => ({
+    top: p.getBoundingClientRect().top,
+    bottom: p.getBoundingClientRect().bottom,
+    margin: Number.parseFloat(getComputedStyle(p).marginBottom),
+    offset: p.getAttribute('data-src-start'),
+  })));
+  expect(boxes).toHaveLength(3);
+  expect(boxes[0].margin).toBeGreaterThan(20);
+  expect(boxes[1].margin).toBeGreaterThan(20);
+  expect(boxes[1].top - boxes[0].bottom).toBeGreaterThan(20);
+  expect(Number(boxes[1].offset)).toBe('Previous paragraph.\n\n'.length);
   expect(state.errors).toEqual([]);
 });

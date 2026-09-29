@@ -316,6 +316,12 @@ public class AdminService {
         return new AdminUserImportResponse(created, updated, List.of());
     }
 
+    // P0b revocation atomicity: this transaction is the single enforcement point.
+    // Operations authorized BEFORE this commit may still complete; every HTTP
+    // request, refresh, and WebSocket frame authorized AFTER this commit fails
+    // (403 ACCOUNT_BANNED on live tokens, 401 on stale versions/refresh losers).
+    // No post-ban write is retried or promised; the USER STATUS_CHANGED broadcast
+    // is a best-effort notice only and enforcement never waits for it.
     @Transactional
     public AdminUserResponse updateStatus(UUID id, AdminUserStatusRequest request) {
         User user = requireMutableUser(id);
@@ -334,6 +340,8 @@ public class AdminService {
         return AdminUserResponse.from(user, avatars.resolveAvatarUrl(user));
     }
 
+    // P0b: same revocation atomicity as updateStatus — post-commit requests fail,
+    // in-flight requests authorized earlier may complete; no final save is promised.
     @Transactional
     public void deleteUser(UUID id) {
         User user = requireMutableUser(id);

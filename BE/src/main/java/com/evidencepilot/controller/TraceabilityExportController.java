@@ -15,7 +15,11 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.UUID;
 
 @RestController
@@ -26,9 +30,8 @@ public class TraceabilityExportController {
 
     private final TraceabilityExportServiceImpl traceabilityExportService;
 
-    @Operation(summary = "Export project traceability",
-            description = "Generates a project traceability export containing sections, sources, "
-                    + "reference counts, and feedback history.")
+    @Operation(summary = "Export project data",
+            description = "Generates a project snapshot with papers, sources, feedback, traces, and member progress.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Traceability export returned"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid JWT"),
@@ -41,15 +44,22 @@ public class TraceabilityExportController {
         return traceabilityExportService.exportTraceability(projectId);
     }
 
-    @Operation(summary = "Export project traceability as CSV",
-            description = "Generates a CSV download of project sections, sources, and feedback history.")
+    @Operation(summary = "Export project data as CSV archive",
+            description = "Generates separate CSV tables in a ZIP archive.")
     @GetMapping("/{projectId}/traceability/csv")
-    public ResponseEntity<byte[]> exportCsv(
+    public ResponseEntity<StreamingResponseBody> exportCsv(
             @Parameter(description = "Project UUID") @PathVariable UUID projectId) {
-        byte[] csv = traceabilityExportService.exportTraceabilityCsv(projectId);
+        Path archive = traceabilityExportService.exportTraceabilityCsv(projectId);
+        StreamingResponseBody body = output -> {
+            try (InputStream content = Files.newInputStream(archive)) {
+                content.transferTo(output);
+            } finally {
+                Files.deleteIfExists(archive);
+            }
+        };
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"traceability.csv\"")
-                .contentType(MediaType.parseMediaType("text/csv;charset=utf-8"))
-                .body(csv);
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"project-data-csv.zip\"")
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .body(body);
     }
 }
