@@ -117,7 +117,8 @@ public class AiModelClientImpl implements AiModelClient {
         JsonNode limits = value == null ? null : value.get("limits");
         if (value == null || !value.isObject() || value.path("protocol_version").asInt(-1) != 1
                 || !jsonText(value.get("provider")) || !stringArray(value.get("allowed_models"))
-                || !stringArray(value.get("default_models")) || !jsonText(value.get("catalog_fingerprint"))
+                || !stringArray(value.get("default_models")) || value.get("default_models").size() > 3
+                || !jsonText(value.get("catalog_fingerprint"))
                 || !value.get("catalog_fingerprint").textValue().matches("[0-9a-f]{64}")
                 || limits == null || !limits.isObject() || limits.path("chain_length").asInt(-1) != 3
                 || limits.path("system_chars").asInt(-1) <= 0 || limits.path("prompt_chars").asInt(-1) <= 0) {
@@ -318,7 +319,7 @@ public class AiModelClientImpl implements AiModelClient {
     }
 
     private static boolean stringArray(JsonNode value) {
-        return value != null && value.isArray() && !value.isEmpty() && value.size() <= 3
+        return value != null && value.isArray() && !value.isEmpty()
                 && java.util.stream.StreamSupport.stream(value.spliterator(), false).allMatch(AiModelClientImpl::jsonText);
     }
 

@@ -81,6 +81,26 @@ class AiGenerationClientTest {
         } catch (Exception exception) { throw new AssertionError(exception); }
     }
 
+    @Test
+    void catalogCanOfferMoreModelsThanTheSelectedChain() throws Exception {
+        server.createContext("/ai/generation-config", exchange -> {
+            byte[] body = mapper.writeValueAsBytes(Map.of(
+                    "protocol_version", 1,
+                    "provider", "remote",
+                    "allowed_models", List.of("model-0", "model-1", "model-2", "model-3", "model-4"),
+                    "default_models", List.of("model-0", "model-1", "model-2"),
+                    "catalog_fingerprint", CATALOG,
+                    "limits", Map.of("system_chars", 8000, "prompt_chars", 48000, "chain_length", 3)));
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            try (var output = exchange.getResponseBody()) { output.write(body); }
+        });
+
+        var catalog = client.generationCatalog();
+        assertThat(catalog.allowedModels()).hasSize(5);
+        assertThat(catalog.defaultModels()).containsExactly("model-0", "model-1", "model-2");
+    }
+
     @ParameterizedTest
     @CsvSource({"1,0,2", "2,1,1"})
     void domainRepairContinuesFromPythonsActualAttempt(int returnedAttempt, int nextModel, int nextAttempt) {
