@@ -1843,13 +1843,13 @@ public class AdminExcelSeedService {
                             }
                         });
                     }
-                    // images/ siblings in same papers/<slug>/ folder → project media
+                    // images/ siblings in same papers/<slug>/ folder → paper media
                     // (README.txt placeholder and non-images are skipped — rejected at preview)
                     String folder = norm.contains("/") ? norm.substring(0, norm.lastIndexOf('/')) : "";
                     for (var e : zipFiles.entrySet()) {
                         if (!folder.isEmpty() && e.getKey().startsWith(folder + "/images/") && isImageEntry(e.getKey())) {
                             String imgName = e.getKey().substring(e.getKey().lastIndexOf('/') + 1);
-                            mediaAssetService.upload(new PathMultipartFile(imgName, imgName, guessMime(imgName), e.getValue()), project.getId());
+                            mediaAssetService.upload(new PathMultipartFile(imgName, imgName, guessMime(imgName), e.getValue()), project.getId(), uploaded.id());
                         }
                     }
                 } else if (!standard.isBlank()) {

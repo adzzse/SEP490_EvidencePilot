@@ -5,6 +5,8 @@ import com.evidencepilot.model.Document;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMedia;
 import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.ProjectMediaRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import org.junit.jupiter.api.Test;
@@ -40,6 +42,8 @@ class MediaAssetServiceTest {
     private ProjectMediaRepository projectMediaRepository;
     @Mock
     private ProjectRepository projectRepository;
+    @Mock
+    private DocumentRepository documentRepository;
     @Mock
     private DocumentObjectStorage objectStorage;
     @Mock
@@ -129,6 +133,68 @@ class MediaAssetServiceTest {
     }
 
     @Test
+    void uploadForPaperStoresItsOwnKey() {
+        Project project = project(UUID.randomUUID());
+        Document paper = sourceDocument();
+        paper.setProject(project);
+        paper.setDocType(DocumentType.PAPER);
+        User user = new User();
+        when(currentUserService.requireCurrentUser()).thenReturn(user);
+        when(projectRepository.findById(project.getId())).thenReturn(Optional.of(project));
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+        when(projectMediaRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service().upload(new MockMultipartFile("file", "figure.png", "image/png", new byte[] {1}),
+                project.getId(), paper.getId());
+
+        verify(projectMediaRepository).saveAndFlush(argThat(media -> media.getStorageKey().startsWith(
+                "media/" + project.getId() + "/papers/" + paper.getId() + "/")));
+    }
+
+    @Test
+    void listByPaperIncludesOnlyItsExtractedAndUploadedMedia() {
+        Document paper = sourceDocument();
+        paper.setDocType(DocumentType.PAPER);
+        UUID projectId = paper.getProject().getId();
+        String prefix = "media/" + projectId + "/";
+        ProjectMedia extracted = new ProjectMedia();
+        extracted.setId(UUID.randomUUID());
+        extracted.setProject(paper.getProject());
+        extracted.setUploadedBy(paper.getUploadedBy());
+        extracted.setStorageKey(prefix + "extracted/" + paper.getId() + "/images/a.png");
+        ProjectMedia uploaded = new ProjectMedia();
+        uploaded.setId(UUID.randomUUID());
+        uploaded.setProject(paper.getProject());
+        uploaded.setUploadedBy(paper.getUploadedBy());
+        uploaded.setStorageKey(prefix + "papers/" + paper.getId() + "/b.png");
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+        when(projectMediaRepository.findByProjectIdAndStorageKeyStartingWith(
+                projectId, prefix + "extracted/" + paper.getId() + "/")).thenReturn(List.of(extracted));
+        when(projectMediaRepository.findByProjectIdAndStorageKeyStartingWith(
+                projectId, prefix + "papers/" + paper.getId() + "/")).thenReturn(List.of(uploaded));
+
+        var result = service().listByPaper(paper.getId());
+
+        assertThat(result).extracting(media -> media.id())
+                .containsExactly(extracted.getId(), uploaded.getId());
+        verify(currentUserService).requireProjectAccess(any(), eq(paper.getProject()));
+        verify(projectMediaRepository, never()).findByProjectId(any());
+    }
+
+    @Test
+    void listByPaperRejectsSourceDocument() {
+        Document source = sourceDocument();
+        source.setDocType(DocumentType.SOURCE);
+        when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service().listByPaper(source.getId()));
+
+        assertThat(error.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        verify(projectMediaRepository, never()).findByProjectIdAndStorageKeyStartingWith(any(), any());
+    }
+
+    @Test
     void deleteRemovesDatabaseRowAndStoredObject() {
         UUID mediaId = UUID.randomUUID();
         User user = new User();
@@ -147,18 +213,24 @@ class MediaAssetServiceTest {
     }
 
     @Test
-    void deleteExtractedForDocumentRemovesOnlyItsDerivedMedia() {
+    void deleteForDocumentRemovesExtractedAndUploadedPaperMedia() {
         Document source = sourceDocument();
-        ProjectMedia media = new ProjectMedia();
-        media.setStorageKey("media/" + source.getProject().getId()
-                + "/extracted/" + source.getId() + "/figure.png");
-        when(projectMediaRepository.findByStorageKeyStartingWith(any())).thenReturn(List.of(media));
+        String prefix = "media/" + source.getProject().getId() + "/";
+        ProjectMedia extracted = new ProjectMedia();
+        extracted.setStorageKey(prefix + "extracted/" + source.getId() + "/figure.png");
+        ProjectMedia uploaded = new ProjectMedia();
+        uploaded.setStorageKey(prefix + "papers/" + source.getId() + "/figure2.png");
+        when(projectMediaRepository.findByStorageKeyStartingWith(
+                prefix + "extracted/" + source.getId() + "/")).thenReturn(List.of(extracted));
+        when(projectMediaRepository.findByStorageKeyStartingWith(
+                prefix + "papers/" + source.getId() + "/")).thenReturn(List.of(uploaded));
 
-        service().deleteExtractedForDocument(source);
+        service().deleteForDocument(source);
 
-        verify(projectMediaRepository).deleteAll(List.of(media));
+        verify(projectMediaRepository).deleteAll(List.of(extracted, uploaded));
         verify(projectMediaRepository).flush();
-        verify(objectStorage).delete(media.getStorageKey());
+        verify(objectStorage).delete(extracted.getStorageKey());
+        verify(objectStorage).delete(uploaded.getStorageKey());
     }
 
     @Test
@@ -226,7 +298,7 @@ class MediaAssetServiceTest {
 
     private MediaAssetService service() {
         return new MediaAssetService(
-                projectMediaRepository, projectRepository, objectStorage, currentUserService);
+                projectMediaRepository, projectRepository, documentRepository, objectStorage, currentUserService);
     }
 
     private static Document sourceDocument() {

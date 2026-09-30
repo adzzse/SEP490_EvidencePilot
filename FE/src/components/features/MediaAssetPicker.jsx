@@ -11,7 +11,7 @@ const MAX_COUNT = 5;
 // (the backend clones bytes server-side into a feedback-owned key); nothing is
 // uploaded here. Copy arrives via `labels` (already translated by the caller)
 // because the locale catalog test only permits literal t() keys.
-export default function MediaAssetPicker({ projectId, labels, value = [], onChange, disabled }) {
+export default function MediaAssetPicker({ paperId, labels, value = [], onChange, disabled }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [assets, setAssets] = useState([]);
@@ -21,10 +21,12 @@ export default function MediaAssetPicker({ projectId, labels, value = [], onChan
   const selectedIds = useMemo(() => new Set(value.map(entry => String(entry.id))), [value]);
 
   useEffect(() => {
-    if (!open || !projectId) return undefined;
+    if (!open) return undefined;
+    if (!paperId) { setAssets([]); setPicked([]); setLoading(false); return undefined; }
     let cancelled = false;
+    setAssets([]);
     setLoading(true);
-    api.get(`/api/media/projects/${projectId}`)
+    api.get(`/api/media/papers/${paperId}`)
       .then(response => {
         if (cancelled) return;
         setAssets((response.data || []).filter(asset => IMAGE_MIMES.has(asset.mimeType)));
@@ -34,7 +36,7 @@ export default function MediaAssetPicker({ projectId, labels, value = [], onChan
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, projectId]);
+  }, [open, paperId]);
 
   const toggle = id => {
     setPicked(previous => (previous.includes(id)

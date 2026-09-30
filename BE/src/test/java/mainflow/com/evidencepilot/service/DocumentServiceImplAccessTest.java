@@ -462,7 +462,7 @@ class DocumentServiceImplAccessTest {
         service().deleteDocument(source.getId());
 
         verify(projectCollectionService).removeSource(source);
-        verify(mediaAssetService).deleteExtractedForDocument(source);
+        verify(mediaAssetService).deleteForDocument(source);
         verify(documentObjectStorage).deleteExtractionCheckpoint(source.getId(), source.getFileHashSha256());
         verify(documentObjectStorage, never()).delete(anyString());
         verify(qdrantService).deleteVectors(source.getId());
@@ -490,7 +490,7 @@ class DocumentServiceImplAccessTest {
 
         verify(extractionCandidateService).request(source.getId());
         verify(documentObjectStorage, never()).deleteExtractionCheckpoint(source.getId(), "file-hash");
-        verify(mediaAssetService, never()).deleteExtractedForDocument(source);
+        verify(mediaAssetService, never()).deleteForDocument(source);
         verify(qdrantService, never()).deleteVectors(source.getId());
         verify(documentPersistenceService).markDocumentAsUploaded(
                 source.getId(), source.getFileUrl(), "file-hash");

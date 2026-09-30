@@ -618,11 +618,6 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
         setSources(srcs);
       } catch { if (!stale()) setLoadErrors(errs => [...errs, 'sources']); }
       try {
-        const r = await api.get(`/api/media/projects/${projId}`);
-        if (stale()) return;
-        setMediaAssets(r.data || []);
-      } catch { if (!stale()) setLoadErrors(errs => [...errs, 'media']); }
-      try {
         const r = await api.get(`/api/projects/${projId}/papers`);
         if (stale()) return;
         const list = r.data || [];
@@ -925,13 +920,14 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
         || (event.entity === 'COLLECTION' && event.action === 'SOURCE_CHANGED')) {
         const refreshDocumentData = async () => {
           try {
+            const paperId = realtimePaperIdRef.current;
             const [sourceList, paperResponse, mediaResponse] = await Promise.all([
               loadAllProjectSources(project.id),
               api.get(`/api/projects/${project.id}/papers`),
-              api.get(`/api/media/projects/${project.id}`),
+              paperId ? api.get(`/api/media/papers/${paperId}`) : Promise.resolve({ data: [] }),
             ]);
             setSources(sourceList);
-            setMediaAssets(mediaResponse.data || []);
+            if (String(realtimePaperIdRef.current) === String(paperId)) setMediaAssets(mediaResponse.data || []);
             const paperList = paperResponse.data || [];
             setPapers(paperList);
             setSelectedPaper(current => {
@@ -972,7 +968,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
         const [sourceList, paperResponse, mediaResponse] = await Promise.all([
           loadAllProjectSources(project.id),
           api.get(`/api/projects/${project.id}/papers`),
-          api.get(`/api/media/projects/${project.id}`),
+          selectedPaper?.id ? api.get(`/api/media/papers/${selectedPaper.id}`) : Promise.resolve({ data: [] }),
         ]);
         if (!cancelled) {
           setSources(sourceList);
@@ -997,7 +993,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [isReview, project?.id, sources, papers, refreshReferences]);
+  }, [isReview, project?.id, selectedPaper?.id, sources, papers, refreshReferences]);
   // citationKey → paper metadata for in-editor \cite{} pill masking.
   // Primary: the paper's explicit References. Overlay: AI source-match candidates.
   const citationIndex = useMemo(() => {
@@ -1032,6 +1028,23 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
       : [];
     editorRef.current?.setReviewRanges(ranges);
   }, [aiReviewResult]);
+
+  useEffect(() => {
+    if (isReview) return;
+    if (!selectedPaper?.id) { setMediaAssets([]); return; }
+    const controller = new AbortController();
+    setMediaAssets([]);
+    api.get(`/api/media/papers/${selectedPaper.id}`, { signal: controller.signal })
+      .then(r => {
+        if (controller.signal.aborted) return;
+        setMediaAssets(r.data || []);
+        setLoadErrors(errors => errors.filter(area => area !== 'media'));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setLoadErrors(errors => errors.includes('media') ? errors : [...errors, 'media']);
+      });
+    return () => controller.abort();
+  }, [isReview, selectedPaper?.id]);
 
   useEffect(() => {
     if (isReview) return;
@@ -1183,18 +1196,21 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
   const handleUploadMedia = async (file) => {
     if (isLocked) { showToast(t('projectLocked')); return; }
     if (!file || !project) return;
+    if (!selectedPaper?.id) { showToast(t('noPaperSelected')); return; }
+    const paperId = selectedPaper.id;
     showToast(t('uploadingFile', { name: file.name }));
     const fd = new FormData();
-    fd.append('file', file); fd.append('projectId', project.id);
+    fd.append('file', file); fd.append('projectId', project.id); fd.append('paperId', paperId);
     try {
       await api.post('/api/media', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       showToast(t('mediaUploaded'));
-      const r = await api.get(`/api/media/projects/${project.id}`);
-      setMediaAssets(r.data || []);
+      const r = await api.get(`/api/media/papers/${paperId}`);
+      if (String(realtimePaperIdRef.current) === String(paperId)) setMediaAssets(r.data || []);
     } catch { showToast(t('uploadFailed')); }
   };
 
   const handleDeleteMedia = async (mediaId) => {
+    const paperId = selectedPaper?.id;
     const media = mediaAssets.find(m => String(m.id) === String(mediaId));
     startDelete({
       entityName: media?.originalFilename || mediaId,
@@ -1204,8 +1220,10 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
         await api.delete(`/api/media/${mediaId}`);
         showToast(t('mediaDeleted'));
       } catch { showToast(t('deleteFailed')); }
-      const r = await api.get(`/api/media/projects/${project.id}`);
-      setMediaAssets(r.data || []);
+      if (paperId) {
+        const r = await api.get(`/api/media/papers/${paperId}`);
+        if (String(realtimePaperIdRef.current) === String(paperId)) setMediaAssets(r.data || []);
+      }
     });
   };
 

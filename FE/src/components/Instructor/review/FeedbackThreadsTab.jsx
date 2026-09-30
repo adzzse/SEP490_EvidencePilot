@@ -4,7 +4,7 @@ import MediaAssetPicker from '../../features/MediaAssetPicker.jsx';
 import FeedbackCard, { AttachmentThumbs, ReplyList } from './FeedbackCard.jsx';
 import { normalizeSource, selectionLines } from '../../../utils/student/feedbackAnchors.js';
 
-export default function FeedbackThreadsTab({ review, selectedSection, projectId, composerFocusToken = 0 }) {
+export default function FeedbackThreadsTab({ review, selectedSection, composerFocusToken = 0 }) {
   const { t, i18n } = useTranslation();
   const {
     feedbackItems, activeRequestId, canCreateRoot,
@@ -137,7 +137,7 @@ export default function FeedbackThreadsTab({ review, selectedSection, projectId,
       />
       <div className="mt-1 space-y-1.5">
           <MediaAssetPicker
-            projectId={projectId}
+            paperId={selectedSection?.documentId}
             labels={mediaLabels}
             value={pendingAttachments[pendingKey] || []}
             onChange={entries => setPendingAttachments(prev => ({ ...prev, [pendingKey]: entries }))}

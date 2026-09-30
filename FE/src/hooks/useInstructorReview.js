@@ -110,23 +110,22 @@ export default function useInstructorReview({ projectId, enabled }) {
       setErrorMessage('');
       setProject(null);
       setPapers([]);
+      setMediaAssets([]);
       setLivePapers([]);
       setSections([]);
       setRequests([]);
       setActiveRequestId(null);
       setFeedbackItems([]);
       try {
-        const [proj, papersRes, reqs, srcs, assets] = await Promise.all([
+        const [proj, papersRes, reqs, srcs] = await Promise.all([
           api.get(`/api/projects/${projectId}`),
           api.get(`/api/projects/${projectId}/papers`),
           api.get('/api/feedback-requests'),
           loadAllProjectSources(projectId).catch(() => []),
-          api.get(`/api/media/projects/${projectId}`).catch(() => ({ data: [] })),
         ]);
         if (cancelled) return;
         setProject(proj.data);
         setPapers([]);
-        setMediaAssets(assets.data || []);
         setLivePapers(papersRes.data || []);
         setRequests((reqs.data || []).filter(r => String(r.projectId) === String(projectId)));
         setSources(srcs);
@@ -145,6 +144,16 @@ export default function useInstructorReview({ projectId, enabled }) {
     })();
     return () => { cancelled = true; };
   }, [projectId, enabled, selectionKey]);
+
+  useEffect(() => {
+    if (!enabled || !selectedPaperId) { setMediaAssets([]); return; }
+    let cancelled = false;
+    setMediaAssets([]);
+    api.get(`/api/media/papers/${selectedPaperId}`)
+      .then(response => { if (!cancelled) setMediaAssets(response.data || []); })
+      .catch(() => { if (!cancelled) setMediaAssets([]); });
+    return () => { cancelled = true; };
+  }, [enabled, selectedPaperId]);
 
   const orderedRequests = useMemo(() => [...requests].sort((left, right) =>
     new Date(right.requestedAt || 0) - new Date(left.requestedAt || 0)), [requests]);

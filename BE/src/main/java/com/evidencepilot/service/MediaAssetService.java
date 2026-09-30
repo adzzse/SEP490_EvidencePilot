@@ -6,6 +6,8 @@ import com.evidencepilot.model.Document;
 import com.evidencepilot.model.Project;
 import com.evidencepilot.model.ProjectMedia;
 import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.DocumentType;
+import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.ProjectMediaRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -35,15 +38,27 @@ public class MediaAssetService {
 
     private final ProjectMediaRepository projectMediaRepository;
     private final ProjectRepository projectRepository;
+    private final DocumentRepository documentRepository;
     private final DocumentObjectStorage objectStorage;
     private final CurrentUserServiceImpl currentUserService;
 
     @Transactional
     public ProjectMediaResponse upload(MultipartFile file, UUID projectId) {
+        return upload(file, projectId, null);
+    }
+
+    @Transactional
+    public ProjectMediaResponse upload(MultipartFile file, UUID projectId, UUID paperId) {
         User user = currentUserService.requireCurrentUser();
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
         currentUserService.requireProjectWriteAccess(user, project);
+        if (paperId != null) {
+            Document paper = paper(paperId);
+            if (!paper.isActive() || !projectId.equals(paper.getProject().getId())) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Paper not found");
+            }
+        }
 
         String originalName = file.getOriginalFilename();
         if (originalName == null || originalName.isBlank()) {
@@ -51,7 +66,9 @@ public class MediaAssetService {
         }
 
         String texFilename = originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
-        String storageKey = "media/" + projectId + "/" + UUID.randomUUID() + "-" + texFilename;
+        String storageKey = "media/" + projectId
+                + (paperId == null ? "/" : "/papers/" + paperId + "/")
+                + UUID.randomUUID() + "-" + texFilename;
 
         try (var in = file.getInputStream()) {
             objectStorage.write(storageKey, in, file.getSize(), file.getContentType());
@@ -89,6 +106,29 @@ public class MediaAssetService {
         return projectMediaRepository.findByProjectId(projectId).stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    public List<ProjectMediaResponse> listByPaper(UUID paperId) {
+        Document paper = paper(paperId);
+        User user = currentUserService.requireCurrentUser();
+        Project project = paper.getProject();
+        currentUserService.requireProjectAccess(user, project);
+        UUID projectId = project.getId();
+        String prefix = "media/" + projectId + "/";
+        return Stream.concat(
+                projectMediaRepository.findByProjectIdAndStorageKeyStartingWith(
+                        projectId, prefix + "extracted/" + paperId + "/").stream(),
+                projectMediaRepository.findByProjectIdAndStorageKeyStartingWith(
+                        projectId, prefix + "papers/" + paperId + "/").stream())
+                .map(this::toResponse)
+                .toList();
+    }
+
+    private Document paper(UUID paperId) {
+        return documentRepository.findById(paperId)
+                .filter(document -> document.getDocType() == DocumentType.PAPER
+                        && document.getProject() != null)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Paper not found"));
     }
 
     public ProjectMedia getMedia(UUID id) {
@@ -177,13 +217,17 @@ public class MediaAssetService {
     }
 
     @Transactional
-    public void deleteExtractedForDocument(Document source) {
+    public void deleteForDocument(Document source) {
         if (source.getProject() == null) {
             return;
         }
-        String prefix = "media/" + source.getProject().getId()
-                + "/extracted/" + source.getId() + "/";
-        List<ProjectMedia> media = projectMediaRepository.findByStorageKeyStartingWith(prefix);
+        String prefix = "media/" + source.getProject().getId() + "/";
+        List<ProjectMedia> media = Stream.concat(
+                projectMediaRepository.findByStorageKeyStartingWith(
+                        prefix + "extracted/" + source.getId() + "/").stream(),
+                projectMediaRepository.findByStorageKeyStartingWith(
+                        prefix + "papers/" + source.getId() + "/").stream())
+                .toList();
         if (media.isEmpty()) {
             return;
         }

@@ -7,10 +7,10 @@ const baseUrl = 'http://localhost:5173';
 const SEC1 = 'Member section text.';
 const CONTENT = (body) => [body, ...Array.from({ length: 20 }, (_, i) => `Filler line ${i}.`)].join('\n\n');
 
-async function setupStudent(page, { role, userId, status = 'RETURNED' }) {
+async function setupStudent(page, { role, userId, status = 'RETURNED', mediaFixture = null }) {
   const projectId = 'student-proj';
   const paperId = 'student-paper';
-  const state = { errors: [], feedbackCalls: [] };
+  const state = { errors: [], feedbackCalls: [], mediaRequests: [] };
 
   const thread = (id, requestId, sectionId, assignee, content, createdAt) => ({
     id, requestId, sectionId, content, createdAt,
@@ -49,9 +49,13 @@ async function setupStudent(page, { role, userId, status = 'RETURNED' }) {
     if (path === '/api/users/profile') {
       json = { id: userId, role: 'STUDENT', firstName: 'Test', lastName: 'Student' };
     } else if (path === '/api/notifications' || path === '/api/review-guides'
-      || path === `/api/projects/${projectId}/evidence-traces`
-      || path === `/api/media/projects/${projectId}`) {
+      || path === `/api/projects/${projectId}/evidence-traces`) {
       json = [];
+    } else if (path === `/api/media/projects/${projectId}` || path === `/api/media/papers/${paperId}`) {
+      state.mediaRequests.push(path);
+      json = path.includes('/papers/') ? mediaFixture?.paper || [] : mediaFixture?.project || [];
+    } else if (method === 'POST' && path === '/api/media/urls') {
+      json = {};
     } else if (path === '/api/notifications/unread-count') {
       json = { count: 0 };
     } else if (path === '/api/projects') {
@@ -98,6 +102,23 @@ async function setupStudent(page, { role, userId, status = 'RETURNED' }) {
 
   return { projectId, state };
 }
+
+test('Student workspace lists media from the selected paper only', async ({ page }) => {
+  const { projectId, state } = await setupStudent(page, {
+    role: 'MEMBER', userId: 'member-1',
+    mediaFixture: {
+      project: [{ id: 'source-image', texFilename: 'images/source-only.png', mimeType: 'image/png' }],
+      paper: [{ id: 'paper-image', texFilename: 'images/paper-only.png', mimeType: 'image/png' }],
+    },
+  });
+
+  await page.goto(`${baseUrl}/student/projects/${projectId}`);
+  await expect(page.getByTitle('images/paper-only.png')).toBeVisible();
+  await expect(page.getByTitle('images/source-only.png')).toHaveCount(0);
+  expect(state.mediaRequests).toContain('/api/media/papers/student-paper');
+  expect(state.mediaRequests).not.toContain('/api/media/projects/student-proj');
+  expect(state.errors).toEqual([]);
+});
 
 test('Student export downloads project JSON and CSV table ZIP', async ({ page }) => {
   const { projectId, state } = await setupStudent(page, { role: 'MEMBER', userId: 'member-1', status: 'APPROVED' });

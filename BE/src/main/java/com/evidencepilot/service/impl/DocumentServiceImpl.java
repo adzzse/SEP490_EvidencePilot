@@ -751,7 +751,7 @@ public class DocumentServiceImpl {
             }
         }
         projectCollectionService.removeSource(doc);
-        mediaAssetService.deleteExtractedForDocument(doc);
+        mediaAssetService.deleteForDocument(doc);
         // Full purge (1/2): chunk rows in the database are removed now;
         // vectors/checkpoints/cache follow after commit (see below).
         documentChunkRepository.deleteByDocumentId(doc.getId());

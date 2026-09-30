@@ -37,14 +37,21 @@ public class MediaController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ProjectMediaResponse> upload(
             @RequestParam("file") MultipartFile file,
-            @RequestParam("projectId") UUID projectId) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(mediaAssetService.upload(file, projectId));
+            @RequestParam("projectId") UUID projectId,
+            @RequestParam(value = "paperId", required = false) UUID paperId) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(mediaAssetService.upload(file, projectId, paperId));
     }
 
     @Operation(summary = "List media assets by project")
     @GetMapping("/projects/{projectId}")
     public List<ProjectMediaResponse> listByProject(@PathVariable UUID projectId) {
         return mediaAssetService.listByProject(projectId);
+    }
+
+    @Operation(summary = "List media assets for a paper")
+    @GetMapping("/papers/{paperId}")
+    public List<ProjectMediaResponse> listByPaper(@PathVariable UUID paperId) {
+        return mediaAssetService.listByPaper(paperId);
     }
 
     @Operation(summary = "Get pre-signed download URL for a media asset")
