@@ -518,6 +518,7 @@ class PaperProcessingServiceImplTest {
                 assignmentSectionBaselineRepository,
                 new com.fasterxml.jackson.databind.ObjectMapper(),
                 mock(SectionWorkHistoryService.class),
+                mock(com.evidencepilot.repository.ProjectMemberRepository.class),
                 mock(org.springframework.context.ApplicationEventPublisher.class));
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
         when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(documentId)).thenReturn(List.of());
@@ -669,6 +670,7 @@ class PaperProcessingServiceImplTest {
                 mock(com.evidencepilot.repository.AssignmentSectionBaselineRepository.class),
                 new com.fasterxml.jackson.databind.ObjectMapper(),
                 mock(SectionWorkHistoryService.class),
+                mock(com.evidencepilot.repository.ProjectMemberRepository.class),
                 mock(org.springframework.context.ApplicationEventPublisher.class));
 
         Project project = project(ProjectStatus.IN_PROGRESS);
@@ -736,6 +738,7 @@ class PaperProcessingServiceImplTest {
                 mock(com.evidencepilot.repository.AssignmentSectionBaselineRepository.class),
                 new com.fasterxml.jackson.databind.ObjectMapper(),
                 mock(SectionWorkHistoryService.class),
+                mock(com.evidencepilot.repository.ProjectMemberRepository.class),
                 mock(org.springframework.context.ApplicationEventPublisher.class));
 
         Project project = project(ProjectStatus.IN_PROGRESS);
@@ -1508,6 +1511,7 @@ class PaperProcessingServiceImplTest {
                 assignmentSectionBaselineRepository,
                 new com.fasterxml.jackson.databind.ObjectMapper(),
                 mock(SectionWorkHistoryService.class),
+                mock(com.evidencepilot.repository.ProjectMemberRepository.class),
                 events);
     }
 

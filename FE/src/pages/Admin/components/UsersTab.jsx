@@ -78,7 +78,11 @@ function UsersSection({ api }) {
       await api.delete(`/api/admin/users/${id}`);
       queryClient.invalidateQueries({ queryKey: ['users'] });
     }
-    catch (e) { /* surfaced via next refetch */ }
+    catch (e) {
+      // Hard-block (409) carries the ban alternative in its message — surface
+      // it so admin knows to ban instead of retrying delete.
+      toast.error(e.response?.data?.message || e.message || t('admin.loadFailed'));
+    }
   };
 
   const handleDelete = (u) => {

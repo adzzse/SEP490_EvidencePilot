@@ -233,6 +233,9 @@ export default function useInstructorReview({ projectId, enabled }) {
         documentId: paper.id,
         sectionTitle: section.title,
         sectionOrder: section.order,
+        // Submitted snapshots carry sectionType (v2 additive) — undefined on
+        // older rows, which safely reads as a normal section.
+        sectionType: section.sectionType || null,
         version: section.contentVersion,
         handoffConfirmedById: section.confirmedById,
         handoffConfirmedByName: section.confirmedByName,
@@ -775,18 +778,38 @@ export default function useInstructorReview({ projectId, enabled }) {
   // alongside everything else, scoped by request window server-side. Silent
   // failure falls back to the snapshot-trace view (never blocks Findings).
   const [citationArchives, setCitationArchives] = useState(null);
-  useEffect(() => {
+  const refetchCitationArchives = useCallback(async () => {
     if (!enabled || !activeRequestId || !selectedSectionId) {
       setCitationArchives(null);
-      return undefined;
+      return null;
     }
-    let cancelled = false;
-    api.get(`/api/feedback-requests/${activeRequestId}/citation-archives`,
-      { params: { sectionId: selectedSectionId } })
-      .then(response => { if (!cancelled) setCitationArchives(response.data || null); })
-      .catch(() => { if (!cancelled) setCitationArchives(null); });
-    return () => { cancelled = true; };
+    try {
+      const response = await api.get(`/api/feedback-requests/${activeRequestId}/citation-archives`,
+        { params: { sectionId: selectedSectionId } });
+      setCitationArchives(response.data || null);
+      return response.data || null;
+    } catch {
+      setCitationArchives(null);
+      return null;
+    }
   }, [enabled, activeRequestId, selectedSectionId]);
+  useEffect(() => { void refetchCitationArchives(); }, [refetchCitationArchives]);
+
+  // rationale: Findings tab live update — a citation round materializing
+  // anywhere (own run finishing in another tab, colleague's run) broadcasts
+  // EVIDENCE READY; refresh traces + sealed archives for the open section.
+  // This hook only runs in the instructor review workspace, so the student
+  // view is untouched. Declared after refetchCitationArchives: the dep array
+  // below reads it during render, so it must be initialized first.
+  useEffect(() => {
+    if (!enabled || !projectId) return undefined;
+    return subscribeToEntityChanges(event => {
+      if (!event || event.entity !== 'EVIDENCE') return;
+      if (String(event.projectId) !== String(projectId)) return;
+      void reloadEvidence();
+      void refetchCitationArchives();
+    });
+  }, [enabled, projectId, reloadEvidence, refetchCitationArchives, subscribeToEntityChanges]);
 
   const submitTraceJudgment = async (traceId, judgment, instructorFeedback) => {
     if (!enabled || !projectId || !traceId || !judgment) return;

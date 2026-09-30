@@ -415,6 +415,11 @@ public class SubmissionReadinessService {
                 sectionSnapshot.put("id", section.getId());
                 sectionSnapshot.put("title", section.getSectionTitle());
                 sectionSnapshot.put("order", section.getSectionOrder());
+                // rationale: review workspace keys REFERENCE behavior (Check
+                // Reference button, Result tab) off this — without it the
+                // submitted snapshot reads as a normal section.
+                sectionSnapshot.put("sectionType", section.getSectionType() == null
+                        ? null : section.getSectionType().name());
                 sectionSnapshot.put("contentTex", section.getContentTex());
                 sectionSnapshot.put("contentVersion", section.getVersion());
                 sectionSnapshot.put("assignedUserId", section.getAssignedUser() == null

@@ -4,6 +4,7 @@ import FeedbackPanel from './FeedbackPanel.jsx';
 import PreviewPane from '../features/PreviewPane';
 import InstructorFeedbackPanel from '../Instructor/InstructorFeedbackPanel.jsx';
 import { buildCitationNumbers } from '../../utils/paperReferences.js';
+import { locateExcerptInEditor } from '../../utils/locateExcerpt.js';
 import { useTranslation } from 'react-i18next';
 import { mapScrollPosition } from '../../utils/student/scrollSync.js';
 import { previousRequest, selectFeedbackForRound } from '../../utils/reviewRounds.js';
@@ -178,6 +179,11 @@ export default function EditorPanel({
     onFindingClick?.(findingIndex, coords);
     if (review) setComposerFocusToken(token => token + 1);
   }, [onFindingClick, review]);
+  // rationale: reference-check card click → locate the entry's paragraph in
+  // the (read-only) editor and flash it (see locateExcerptInEditor).
+  const handleLocateReferenceItem = useCallback((rawText) => {
+    if (!locateExcerptInEditor(editorRef?.current, rawText)) showToast?.(t('reviewExcerptChanged'));
+  }, [editorRef, showToast, t]);
   // rationale: the same floating affordance confirms a new passage while
   // adjusting an edit (chat icon, draft-only) and creates from a fresh
   // selection (message-plus). Ordinary edit-mode selections raise nothing —
@@ -600,7 +606,7 @@ export default function EditorPanel({
       )}
       {review && (
         <div className="w-[340px] xl:w-[380px] max-w-full shrink-0 min-h-0 overflow-y-auto overflow-x-hidden hide-scrollbar rounded-xl border border-(--border) bg-(--surface) shadow-sm p-2">
-          <InstructorFeedbackPanel review={review} selectedSection={currentSection} onSelectFeedback={onSelectFeedback} projectId={projectId} focusSignal={composerFocusToken} composerFocusToken={composerFocusToken} submittedFindings={submittedFindings} submittedFindingsStale={submittedFindingsStale} referenceData={referenceData} />
+          <InstructorFeedbackPanel review={review} selectedSection={currentSection} onSelectFeedback={onSelectFeedback} projectId={projectId} focusSignal={composerFocusToken} composerFocusToken={composerFocusToken} submittedFindings={submittedFindings} submittedFindingsStale={submittedFindingsStale} referenceData={referenceData} onLocateReference={handleLocateReferenceItem} />
         </div>
       )}
       </div>

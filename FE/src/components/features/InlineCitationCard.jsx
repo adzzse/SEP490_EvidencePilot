@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { buildSourceGroups, hasNoEvidence } from '../../utils/citationReviewPopover.js';
+import { formatDateTime } from '../../utils/formatters/date.js';
 import { isReferenceCandidate } from '../../utils/paperReferences.js';
 
 const CARD_W = 340;
@@ -133,15 +134,14 @@ export default function InlineCitationCard({
   const badgeClass = TYPE_STYLES[finding.type]
     || 'bg-slate-100 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700';
   const confidence = t(CONFIDENCE_KEYS[finding.confidence] || 'unknown');
-  const reviewedDate = review?.reviewedAt ? new Date(review.reviewedAt) : null;
-  const reviewedAt = reviewedDate && !Number.isNaN(reviewedDate.getTime())
-    ? reviewedDate.toLocaleString(i18n.language === 'vi' ? 'vi-VN' : 'en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-    : '';
+  // Backend reviewedAt is a UTC LocalDateTime with no offset — formatDateTime
+  // parses it as UTC and renders Vietnam time (HH:mm DD/MM/YYYY), matching
+  // every other review timestamp in the app.
+  const reviewedAt = (() => {
+    if (!review?.reviewedAt) return '';
+    const formatted = formatDateTime(review.reviewedAt, i18n.language);
+    return formatted === '—' ? '' : formatted;
+  })();
 
   const renderPassage = (passage, group) => {
     const candidate = passage.candidate;

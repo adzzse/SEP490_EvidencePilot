@@ -203,9 +203,36 @@ class DocumentServiceImplAccessTest {
     }
 
     @Test
+    void deletePaperRejectsNonSetupStatusAndAssignedSections() {
+        Project submitted = project();
+        submitted.setStatus(ProjectStatus.SUBMITTED_FOR_REVIEW);
+        Document paper = document(submitted);
+        when(currentUserService.requireCurrentUser()).thenReturn(user());
+        when(documentRepository.findById(paper.getId())).thenReturn(Optional.of(paper));
+
+        assertThatThrownBy(() -> service().deleteDocument(paper.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Created or Assigned");
+
+        Project setup = project();
+        setup.setStatus(ProjectStatus.ASSIGNED);
+        Document assigned = document(setup);
+        com.evidencepilot.model.PaperSection assignedSection = new com.evidencepilot.model.PaperSection();
+        assignedSection.setAssignedUser(user());
+        when(documentRepository.findById(assigned.getId())).thenReturn(Optional.of(assigned));
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(assigned.getId()))
+                .thenReturn(List.of(assignedSection));
+
+        assertThatThrownBy(() -> service().deleteDocument(assigned.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("unassign");
+    }
+
+    @Test
     void deleteDocumentRequiresProjectWriteAccess() {
         User user = user();
         Project project = project();
+        project.setStatus(ProjectStatus.CREATED);
         Document document = document(project);
 
         when(currentUserService.requireCurrentUser()).thenReturn(user);
@@ -221,6 +248,7 @@ class DocumentServiceImplAccessTest {
         User user = user();
         Project project = project();
         Document source = document(project);
+        source.setDocType(DocumentType.SOURCE);
         when(currentUserService.requireCurrentUser()).thenReturn(user);
         when(documentRepository.findById(source.getId())).thenReturn(Optional.of(source));
         doThrow(new ResponseStatusException(
@@ -236,7 +264,9 @@ class DocumentServiceImplAccessTest {
 
     @Test
     void deletePaperInvalidatesOnlyItsPdfCacheAfterCommit() {
-        Document paper = document(project());
+        Project project = project();
+        project.setStatus(ProjectStatus.CREATED);
+        Document paper = document(project);
         String hash = "a".repeat(64);
         paper.setOriginalFilename("paper.PDF");
         paper.setFileHashSha256(hash);
@@ -264,7 +294,9 @@ class DocumentServiceImplAccessTest {
 
     @Test
     void rolledBackPaperDeletionKeepsExtractionCache() {
-        Document paper = document(project());
+        Project project = project();
+        project.setStatus(ProjectStatus.ASSIGNED);
+        Document paper = document(project);
         paper.setOriginalFilename("paper.pdf");
         paper.setFileHashSha256("a".repeat(64));
         when(currentUserService.requireCurrentUser()).thenReturn(user());

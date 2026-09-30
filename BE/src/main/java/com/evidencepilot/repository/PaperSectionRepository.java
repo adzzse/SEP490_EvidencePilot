@@ -24,6 +24,7 @@ public interface PaperSectionRepository extends JpaRepository<PaperSection, UUID
 
     List<PaperSection> findByDocumentIdOrderBySectionOrderAsc(UUID documentId);
     List<PaperSection> findByDocumentIdAndAssignedUserIdOrderBySectionOrderAsc(UUID documentId, UUID assignedUserId);
+    boolean existsByAssignedUserId(UUID assignedUserId);
     // Sections across every document of one project — admin project-detail modal.
     long countByDocument_Project_Id(UUID projectId);
     // Batch twin of the memberCounts pattern — feeds ProjectResponse.sectionCount on list endpoints.

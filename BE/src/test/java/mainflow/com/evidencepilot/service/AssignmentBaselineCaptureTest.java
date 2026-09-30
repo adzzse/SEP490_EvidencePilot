@@ -205,6 +205,7 @@ class AssignmentBaselineCaptureTest {
                 baselineRepository,
                 new com.fasterxml.jackson.databind.ObjectMapper(),
                 mock(SectionWorkHistoryService.class),
+                mock(com.evidencepilot.repository.ProjectMemberRepository.class),
                 mock(org.springframework.context.ApplicationEventPublisher.class));
     }
 

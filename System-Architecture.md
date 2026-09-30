@@ -24,13 +24,13 @@ flowchart LR
         ENTRY["Direct URL or ngrok HTTPS tunnel"]
         MODEL["Stateless FastAPI model service"]
         EXTRACT["MinerU / python-docx / Markdown parser"]
-        OLLAMA["Ollama embeddings and optional generation"]
+        OLLAMA["Ollama embeddings and explicitly enabled local generation"]
         ENTRY --> MODEL
         MODEL --> EXTRACT
         MODEL --> OLLAMA
     end
 
-    REMOTE["Optional OpenAI-compatible or Gemini generation"]
+    REMOTE["Configured remote OpenAI-compatible generation"]
     OPENALEX["OpenAlex"]
     SMTP["SMTP provider"]
 
@@ -59,11 +59,11 @@ Deployment constraints:
 | Component | Responsibilities |
 | --- | --- |
 | React frontend | Public pages, role-gated workspaces, authoring UI, evidence review, administration, REST calls, and WebSocket notifications. |
-| Spring Boot application | Authentication, authorization, business rules, persistence, object storage, vector search, integrations, API delivery, and background listeners. |
-| FastAPI model service | Document extraction, generation-provider selection, single/batch embeddings, and response normalization. |
-| MySQL | Relational source of truth for users, projects, documents, sections, claims, mappings, feedback, jobs, checkpoints, notifications, audit data, and evidence revision traces. |
+| Spring Boot application | Authentication, authorization, business rules, persistence, object storage, vector search, integrations, API delivery, background listeners, and scheduled lifecycle/cleanup sweepers. |
+| FastAPI model service | Document extraction, generation-provider selection, model catalog discovery, single/batch embeddings, and response normalization. |
+| MySQL | Relational source of truth for users, projects, documents, sections, claims, mappings, feedback, jobs, checkpoints, notifications, audit data, evidence revision traces, generation configuration, and deletion state. |
 | MinIO | Raw documents, processed extraction checkpoints, project media, and generated export archives. |
-| RabbitMQ | Durable queues for document extraction, AI evaluation, and export jobs. |
+| RabbitMQ | Durable queues and dead-letter queues for document extraction, AI evaluation, and export jobs. |
 | Qdrant | Dense and sparse vector index for extracted source chunks. |
 | OpenAlex | DOI metadata, references, cited-by data, and available Open Access PDFs. |
 | SMTP provider | Email verification and password-reset delivery. |
@@ -96,22 +96,26 @@ flowchart LR
 
 Controllers delegate access decisions and business behavior to shared services. The current-user service is the main resource/role authorization boundary. JPA repositories are used behind those checks; client-side route guards are not an authorization substitute.
 
-The three durable queues are:
+The three durable work queues are:
 
 | Queue | Consumer | Purpose |
 | --- | --- | --- |
 | `extraction.queue` | `DocumentExtractionListener` | Extract, chunk, embed, persist, and index a document. |
-| `ai.evaluation.queue` | `AiEvaluationListener` | Run claim-quality or selected evidence-match evaluation. |
+| `ai.evaluation.queue` | `AiEvaluationListener` | Run section self-checks, citation reviews, source matches, suggestions, and trace rechecks. |
 | `export.queue` | `ExportListener` | Build and store an export archive. |
+
+Extraction, AI-evaluation, and export failures use the corresponding `.dlq`
+queues after listener retry. Pending extraction and AI-evaluation jobs are
+periodically re-enqueued by the Spring Boot schedulers.
 
 ## 4. Data ownership
 
 | Store | Authoritative data | Not authoritative for |
 | --- | --- | --- |
-| MySQL | Business entities, document text/chunk metadata, workflow status, review state, and job state. | Raw file bytes and vector similarity index. |
+| MySQL | Business entities, document text/chunk metadata, workflow status, review state, job state, AI generation selection, and project deletion deadlines/tasks. | Raw file bytes and vector similarity index. |
 | MinIO | Raw uploads, extraction checkpoints, media, and export files. | Business authorization or document processing status. |
 | Qdrant | Search vectors and chunk payload references. | Original text ownership, user access, or workflow status. |
-| RabbitMQ | Pending background work delivery. | Final job result or long-term audit history. |
+| RabbitMQ | Pending background work delivery and retry dead-letter delivery. | Final job result or long-term audit history. |
 
 The backend validates access against MySQL before serving MinIO content or using Qdrant results. A Qdrant hit is converted back to a MySQL document chunk before it becomes an evidence candidate.
 
@@ -159,36 +163,55 @@ PENDING_UPLOAD -> UPLOADED -> QUEUED -> PROCESSING -> RAW_EXTRACTED -> READY
 
 Failures are recorded as `FAILED`. Re-extraction can reuse the processed MinIO checkpoint instead of rerunning extraction when the checkpoint is valid.
 
-### 5.2 Claim-to-evidence evaluation
+The extraction sweeper republishes documents left in `UPLOADED` or `QUEUED`.
+Listener retry exhaustion marks the document failed and forwards the message to
+`extraction.dlq`.
+
+### 5.2 Section citation review and evidence retrieval
 
 ```mermaid
 sequenceDiagram
-    participant User
+    participant User as Student / Instructor
     participant API as Spring Boot API
-    participant Model as FastAPI model service
-    participant Vector as Qdrant
+    participant DB as MySQL
     participant MQ as RabbitMQ
     participant Worker as AI evaluation listener
-    participant DB as MySQL
+    participant Model as FastAPI model service
+    participant Vector as Qdrant
 
-    User->>API: Search matches for a claim
-    API->>Model: Generate claim embedding
-    API->>Vector: Search project SOURCE chunks
-    Vector-->>API: Ranked chunk candidates
-    API-->>User: Transient candidates
-    User->>API: Select candidate for evaluation
-    API->>DB: Create evaluation job
-    API->>MQ: Queue AI evaluation
+    User->>API: Review a saved paper section
+    API->>DB: Validate access and record fingerprinted job
+    API->>MQ: Publish section citation-review job
     MQ->>Worker: Deliver job ID
-    Worker->>Model: Generate structured evidence verdict
-    Model-->>Worker: Relation, explanation, and model metadata
-    Worker->>DB: Save PENDING suggestion and complete job
-    User->>API: Accept or reject suggestion
-    API->>DB: Accepted suggestion creates/reactivates mapping
-    User->>API: Instructor verifies or rejects mapping
+    Worker->>DB: Load section and paper references
+    Worker->>Model: Embed review excerpts
+    Worker->>Vector: Hybrid search over ready referenced sources
+    Vector-->>Worker: Ranked chunk IDs
+    Worker->>DB: Resolve and validate source chunks
+    Worker->>Model: Generate findings with saved model selection
+    Model-->>Worker: Structured response and model metadata
+    Worker->>DB: Validate, save review snapshot, round, traces, and job result
+    User->>API: Read job or current review state
 ```
 
-Search candidates are not persisted. Persistence begins after the selected candidate has been evaluated. Human acceptance and instructor review remain separate decisions.
+`SourceMatchingService` searches only ready sources in the paper's References.
+Java converts Qdrant hits back to active MySQL chunks before including them as
+evidence. A separate async source-matches request can suggest sources for review
+findings; those search candidates are transient. Citation Review findings are
+persisted as revision traces, while student decisions and instructor judgments
+remain separate actions. The review response can be partial when batches fail;
+clients must use its `complete` field rather than job success alone.
+
+#### AI generation selection
+
+The FastAPI service exposes a catalog through `GET /ai/generation-config`. The
+backend validates the protocol, allowed models, capability lists, and catalog
+fingerprint, then initializes or reads the singleton `ai_generation_config` row.
+An Admin can persist one to three allowed model IDs through
+`PUT /api/admin/ai/configuration`; the expected revision and catalog fingerprint
+make stale updates fail with a conflict. Evaluation and citation-review calls
+carry the persisted model chain and fingerprint to `/ai/generate`, while the
+backend retains semantic validation and persistence ownership.
 
 ### 5.3 Review and feedback
 
@@ -199,6 +222,18 @@ Search candidates are not persisted. Persistence begins after the selected candi
 5. Returned feedback can be answered by the assigned Student; completed review moves the project into its next lifecycle state.
 
 Project lifecycle values currently include `CREATED`, `ASSIGNED`, `IN_PROGRESS`, `SUBMITTED_FOR_REVIEW`, `RETURNED`, `APPROVED`, `ARCHIVED`, and `PENDING_DELETE` (set when deletion is scheduled; revoke restores the stored pre-deletion status).
+
+#### Project deletion and external cleanup
+
+`DELETE /api/projects/{id}` records the prior lifecycle status, changes the
+project to `PENDING_DELETE`, and sets a 30-day retention deadline. During this
+window the project is read-only. `PATCH /api/projects/{id}/cancel-deletion`
+clears the deadline and restores the recorded status. When the deadline is due,
+the hourly `ProjectDeletionSweeper` deletes the project-owned relational rows,
+detaches documents shared with another project, and creates idempotent cleanup
+tasks for exclusive MinIO objects and Qdrant vectors. Each external cleanup task
+runs in its own transaction and retries after a failure; missing objects are
+treated as already deleted.
 
 ### 5.4 Traceability and export
 
@@ -301,7 +336,10 @@ The repository currently contains a backend Dockerfile and local Compose stack. 
 | Database | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` |
 | Authentication | `JWT_SECRET`, `JWT_EXPIRATION_MS` |
 | Application URL | `APP_BASE_URL` |
-| Model service | `AI_MODEL_BASE_URL`, `AI_MODEL_API_KEY`, `AI_MODEL_READ_TIMEOUT_SECONDS` |
+| Model service | `AI_MODEL_BASE_URL`, `AI_MODEL_API_KEY`, `AI_MODEL_READ_TIMEOUT_SECONDS`, `AI_MODEL_MAX_RETRIES` |
+| AI jobs and throughput | `AI_JOB_SWEEP_INTERVAL_MS`, `AI_JOB_PROCESSING_TTL_SECONDS`, `RABBITMQ_LISTENER_*`, `RABBITMQ_EXTRACTION_MAX_CONCURRENCY`, `RABBITMQ_EVAL_MAX_CONCURRENCY`, `AI_REVIEW_REMOTE_RATE_PER_MINUTE` |
+| Python model service | `MODEL_API_KEY`, `EXTRACTION_ALLOWED_HOSTS`, `MINERU_COMMAND`, `MINERU_BACKEND`, `OLLAMA_BASE_URL`, `OLLAMA_EMBEDDING_MODEL` |
+| Python generation | `GENERATION_PROVIDER`, `GENERATION_BASE_URL`, `GENERATION_MODEL`, `GENERATION_FALLBACK_MODELS`, `GENERATION_API_KEY` or `GENERATION_API_KEYS` |
 | Qdrant | `QDRANT_URL`, `QDRANT_API_KEY` |
 | MinIO | `MINIO_URL`, `MINIO_PUBLIC_URL`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET_NAME` |
 | RabbitMQ | `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_VIRTUAL_HOST`, `RABBITMQ_USERNAME`, `RABBITMQ_PASSWORD` |
@@ -320,8 +358,11 @@ Never commit populated `.env` files or credentials.
 | Swagger UI | `/swagger-ui.html` |
 | OpenAPI JSON | `/v3/api-docs` |
 | Backend liveness/readiness | `/api/health/live`, `/api/health/ready` |
+| Admin AI configuration | `GET/PUT /api/admin/ai/configuration` |
+| Project lifecycle | `DELETE /api/projects/{id}`, `PATCH /api/projects/{id}/cancel-deletion`, `PATCH /api/projects/{id}/restore` |
 | Model health | `GET /health` |
 | Model extraction | `POST /extract` |
+| Model generation catalog | `GET /ai/generation-config` |
 | Model generation | `POST /ai/generate` |
 | Model embeddings | `POST /ai/embeddings`, `POST /ai/embeddings/batch` |
 

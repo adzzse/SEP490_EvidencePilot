@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { roundNumberFor } from '../../utils/reviewRounds.js';
 import { formatDateTime } from '../../utils/formatters/date.js';
+import AttachmentViewerModal from '../Instructor/review/AttachmentViewerModal.jsx';
 
 const control = 'min-w-0 rounded-md border border-(--border) bg-(--surface) px-2 py-1.5 text-xs text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)';
 const FEEDBACK_REQUEST_STATUSES = new Set(['PENDING', 'RETURNED', 'REVIEWED', 'REJECTED']);
@@ -15,6 +16,11 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
   const { t, i18n } = useTranslation();
   const isLeader = userProjectRole === 'LEADER';
   const scrollerRef = useRef(null);
+  // rationale: same in-app carousel the instructor review uses — clicking a
+  // thumbnail opens the viewer instead of a new tab, so the student never
+  // leaves the workspace. One panel-level viewer (hooks can't live in the
+  // card .map loop below).
+  const [viewer, setViewer] = useState(null);
   const filtered = useMemo(() => feedback.items.filter(item => {
     if (requestId && String(item.requestId) !== String(requestId)) return false;
     if (scope !== 'project' && String(item.sectionId) !== String(sectionId)) return false;
@@ -76,8 +82,7 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
       {feedback.loading && <p role="status" className="py-3 text-xs text-(--text-secondary)">{t('studentFeedback.loading')}</p>}
       {!feedback.loading && !feedback.error && filtered.length === 0 && <p className="py-6 text-center text-sm text-(--text-secondary)">{t('studentFeedback.empty')}</p>}
       <div className="space-y-3">
-        {filtered.map(item => {
-          const anchor = item.anchor;
+        {filtered.map(item => {          const anchor = item.anchor;
           const active = item.id === activeId;
           const canNavigate = item.sectionId && String(item.sectionId) !== String(sectionId);
           return <article key={item.id}
@@ -102,10 +107,13 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
                 <div>
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-(--text-tertiary)">{t('studentFeedback.providedImages')}</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {item.attachments.map(attachment => (
-                      <a key={attachment.id} href={attachment.url} target="_blank" rel="noreferrer" title={attachment.mimeType}>
+                    {item.attachments.map((attachment, attachmentIndex) => (
+                      <button key={attachment.id} type="button"
+                        onClick={() => setViewer({ attachments: item.attachments, index: attachmentIndex })}
+                        title={attachment.mimeType}
+                        className="block rounded-md focus-visible:ring-2 focus-visible:ring-(--brand)">
                         <img src={attachment.url} alt="" loading="lazy" decoding="async" className="h-14 w-14 rounded-md border border-(--border) object-cover" />
-                      </a>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -130,5 +138,13 @@ export default function FeedbackPanel({ feedback, sectionId, activeId, onSelect,
         })}
       </div>
     </div>
+    {viewer && (
+      <AttachmentViewerModal
+        attachments={viewer.attachments}
+        index={viewer.index}
+        onClose={() => setViewer(null)}
+        onIndex={index => setViewer(current => current && { ...current, index })}
+      />
+    )}
   </section>;
 }

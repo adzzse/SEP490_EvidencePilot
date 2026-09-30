@@ -6,6 +6,7 @@ import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.CollectionCategory;
 import com.evidencepilot.repository.CollectionCategoryRepository;
+import com.evidencepilot.repository.CollectionRepository;
 import com.evidencepilot.service.AuditService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -25,6 +26,7 @@ import java.util.UUID;
 public class CollectionCategoryServiceImpl {
 
     private final CollectionCategoryRepository collectionCategoryRepository;
+    private final CollectionRepository collectionRepository;
     private final CurrentUserServiceImpl currentUserService;
     private final AuditService auditService;
     private final ApplicationEventPublisher events;
@@ -68,6 +70,9 @@ public class CollectionCategoryServiceImpl {
     public CollectionCategoryResponse update(UUID id, CollectionCategoryRequest request, Boolean active) {
         CollectionCategory category = collectionCategoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(id, "Collection category"));
+        // 2-way in-use rule (1/2): a category attached to any collection is
+        // immutable — even rename would confuse instructors mid-semester.
+        requireUnused(id);
         String name = request.name().trim();
         if (collectionCategoryRepository.existsByNameIgnoreCaseAndIdNot(name, id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Collection category already exists");
@@ -90,6 +95,8 @@ public class CollectionCategoryServiceImpl {
     public void delete(UUID id) {
         CollectionCategory category = collectionCategoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(id, "Collection category"));
+        // 2-way in-use rule (2/2): same guard as update.
+        requireUnused(id);
         Map<String, Object> oldValue = safeValue(category);
         category.setActive(false);
         collectionCategoryRepository.save(category);
@@ -98,8 +105,14 @@ public class CollectionCategoryServiceImpl {
         events.publishEvent(new EntityChangedEvent("CATEGORY", category.getId(), "DELETED", null));
     }
 
-    private Map<String, Object> safeValue(CollectionCategory category) {
-        Map<String, Object> value = new LinkedHashMap<>();
+    private void requireUnused(UUID id) {
+        if (collectionRepository.existsByCategoryId(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Collection category is in use and cannot be edited or deleted.");
+        }
+    }
+
+    private Map<String, Object> safeValue(CollectionCategory category) {        Map<String, Object> value = new LinkedHashMap<>();
         value.put("name", category.getName());
         value.put("description", category.getDescription());
         value.put("active", category.isActive());

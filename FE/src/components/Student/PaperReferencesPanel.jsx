@@ -27,6 +27,7 @@ export default function PaperReferencesPanel({
   referenceCheckError = '',
   onRetryReferenceCheck,
   canMutate = false,
+  onLocateItem = null,
   isLocked = false,
   attachingId = null,
   onRemove,
@@ -103,17 +104,42 @@ export default function PaperReferencesPanel({
                   <summary className="cursor-pointer text-[11px] font-bold">
                     {t('referenceCheckViewIssues', { count: checkIssues.length })}
                   </summary>
-                  <ol className="mt-2 space-y-2">
+                  {/* rationale: ~5 issues visible, hidden scrollbar, scroll
+                  for the rest — mirrors every other capped list (see
+                  SectionEvidenceTab). Cards jump to the entry's paragraph
+                  when the host wires onLocateItem (instructor Result tab). */}
+                  <ol className="mt-2 max-h-[27rem] space-y-2 overflow-y-auto pr-1 hide-scrollbar">
                     {checkIssues.map(item => (
-                      <li key={`${item.index}-${item.rawText}`} className="rounded border border-current/20 p-2">
-                        <p className="line-clamp-3 text-[10px]">{item.rawText}</p>
-                        <span className="mt-1 inline-block text-[10px] font-bold">
-                          {t(REFERENCE_CHECK_STATUS_KEYS[item.status] || 'referenceCheckStatusNeedsReview')}
-                        </span>
-                        {item.matchedSourceId && !item.declaredReference && (
-                          <span className="ml-2 inline-block text-[10px] font-bold">
-                            {t('referenceCheckNotDeclared')}
-                          </span>
+                      <li key={`${item.index}-${item.rawText}`} className="rounded border border-current/20">
+                        {onLocateItem ? (
+                          <button
+                            type="button"
+                            onClick={() => onLocateItem(item.rawText)}
+                            title={t('referenceCheckLocate')}
+                            className="block w-full cursor-pointer rounded p-2 text-left transition-colors hover:bg-black/5 focus-visible:ring-2 focus-visible:ring-(--brand) dark:hover:bg-white/5"
+                          >
+                            <p className="line-clamp-3 text-[10px]">{item.rawText}</p>
+                            <span className="mt-1 inline-block text-[10px] font-bold">
+                              {t(REFERENCE_CHECK_STATUS_KEYS[item.status] || 'referenceCheckStatusNeedsReview')}
+                            </span>
+                            {item.matchedSourceId && !item.declaredReference && (
+                              <span className="ml-2 inline-block text-[10px] font-bold">
+                                {t('referenceCheckNotDeclared')}
+                              </span>
+                            )}
+                          </button>
+                        ) : (
+                          <div className="p-2">
+                            <p className="line-clamp-3 text-[10px]">{item.rawText}</p>
+                            <span className="mt-1 inline-block text-[10px] font-bold">
+                              {t(REFERENCE_CHECK_STATUS_KEYS[item.status] || 'referenceCheckStatusNeedsReview')}
+                            </span>
+                            {item.matchedSourceId && !item.declaredReference && (
+                              <span className="ml-2 inline-block text-[10px] font-bold">
+                                {t('referenceCheckNotDeclared')}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </li>
                     ))}

@@ -91,6 +91,7 @@ class EvidenceTraceServiceTest {
                 reviewService,
                 aiModelClient,
                 currentUserService,
+                mock(org.springframework.context.ApplicationEventPublisher.class),
                 objectMapper);
         when(traceRepository.save(any(EvidenceRevisionTrace.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));

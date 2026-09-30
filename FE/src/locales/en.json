@@ -526,6 +526,7 @@
   "referenceCheckAllReady": "Every imported reference has a ready Source and is declared for this paper.",
   "referenceCheckGuidance": "Use Sources below to import a missing work or attach its file, then check again.",
   "referenceCheckViewIssues": "View {{count}} issues",
+  "referenceCheckLocate": "Show this entry in the paper",
   "referenceCheckStatusReady": "Ready",
   "referenceCheckStatusMissingFile": "Source found — file missing",
   "referenceCheckStatusProcessing": "Source is processing",

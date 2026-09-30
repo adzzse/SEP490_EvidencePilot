@@ -15,6 +15,10 @@ into one project workspace.
   passage snapshots, AI recheck, and instructor judgment.
 - Instructor feedback, project progress, evidence graphs, traceability, and TeX export.
 - Real-time notifications through authenticated STOMP WebSocket connections.
+- Admin-managed generation model selection with catalog fingerprints, revision
+  checks, and audit events.
+- Project deletion scheduling with a 30-day recovery window and retryable
+  MinIO/Qdrant cleanup.
 
 ## Architecture
 
@@ -180,6 +184,21 @@ python -m pytest -q
 | System architecture | [`System-Architecture.md`](System-Architecture.md) |
 
 The running OpenAPI document is the source of truth for the complete HTTP API.
+
+## Project lifecycle and AI configuration
+
+Project deletion is a scheduled lifecycle transition. `DELETE /api/projects/{id}`
+sets `PENDING_DELETE` and a 30-day deadline; `PATCH
+/api/projects/{id}/cancel-deletion` clears the deadline and restores the previous
+status. An hourly backend sweeper purges due relational data, preserves documents
+shared with other projects, and retries external MinIO/Qdrant cleanup tasks.
+
+Administrators manage the generation chain through `GET` and `PUT
+/api/admin/ai/configuration`. The backend reads the model catalog from the FastAPI
+service, persists one to three allowed model IDs with the catalog fingerprint and
+revision, and rejects stale catalog or revision updates. Generation requests use
+that persisted selection; the running OpenAPI document defines the full request
+and response contract.
 
 ## Evidence revision trace API
 

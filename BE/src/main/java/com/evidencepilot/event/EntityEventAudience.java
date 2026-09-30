@@ -51,7 +51,7 @@ public class EntityEventAudience {
             case "CATEGORY" -> addRole(ids, UserRole.INSTRUCTOR);
             case "COLLECTION" -> resolveCollection(ids, event);
             case "DOCUMENT" -> resolveDocument(ids, event);
-            case "FEEDBACK", "REFERENCE" -> resolveProject(ids, event.projectId(), event);
+            case "FEEDBACK", "REFERENCE", "EVIDENCE" -> resolveProject(ids, event.projectId(), event);
             default -> log.warn("entity_event_unknown_audience entity={} action={}",
                     event.entity(), event.action());
         }

@@ -19,17 +19,20 @@ import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.Project;
+import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
 import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.AuditSeverity;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.ProcessingStatus;
+import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.AuditLogRepository;
 import com.evidencepilot.repository.CollectionRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
+import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.repository.UserRepository;
@@ -78,6 +81,7 @@ public class AdminService {
     private final CollectionRepository collections;
     private final DocumentRepository documents;
     private final PaperSectionRepository paperSections;
+    private final ProjectMemberRepository projectMembers;
     private final AuditLogRepository auditLogs;
     private final CurrentUserServiceImpl currentUsers;
     private final PasswordResetService passwordResets;
@@ -347,6 +351,26 @@ public class AdminService {
         User user = requireMutableUser(id);
         if (user.getAccountStatus() == AccountStatus.DELETED) {
             throw conflict("User is already deleted");
+        }
+        // Hard block: an account tied to project work cannot be deleted —
+        // remove it from all projects (and unassign its sections) first.
+        // The message points at the ban alternative (status BANNED keeps
+        // history intact while revoking access).
+        List<ProjectMember> memberships = projectMembers.findByUserId(id);
+        if (memberships.stream().anyMatch(m -> m.getRole() == ProjectRole.INSTRUCTOR)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot delete this account because it owns/manages a project. "
+                    + "Remove it from all projects first, or ban it instead.");
+        }
+        if (!memberships.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot delete this account because it is a member of a project. "
+                    + "Remove it from all projects first, or ban it instead.");
+        }
+        if (paperSections.existsByAssignedUserId(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cannot delete this account because sections are still assigned to it. "
+                    + "Unassign its sections first, or ban it instead.");
         }
         AccountStatus oldStatus = user.getAccountStatus();
         user.setAccountStatus(AccountStatus.DELETED);

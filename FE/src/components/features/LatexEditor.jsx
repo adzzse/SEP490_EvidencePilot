@@ -321,6 +321,12 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
   const [isDark, setIsDark] = useState(() =>
     typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
   );
+  // Transient locate-flash timer — cleared on unmount or the next flash so a
+  // stale timeout never collapses a newer selection.
+  const flashTimerRef = useRef(null);
+  useEffect(() => () => {
+    if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+  }, []);
   onScrollRef.current = onScroll;
   onLayoutChangeRef.current = onLayoutChange;
   onUserScrollRef.current = onUserScroll;
@@ -390,6 +396,26 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
         effects: EditorView.scrollIntoView(start, { y: 'center' }),
       });
       v.focus();
+    },
+    // rationale: click-to-locate flash for reference-check cards — selects
+    // the passage and scrolls it into view, then collapses to a cursor so
+    // the highlight fades instead of sticking. Transient only, never an
+    // anchor (see ANCHOR-FORBIDDEN above).
+    flashRange: (from, to, holdMs = 1600) => {
+      const v = viewRef.current;
+      if (!v) return false;
+      const start = Math.max(0, Math.min(from, v.state.doc.length));
+      const end = Math.max(start, Math.min(to, v.state.doc.length));
+      if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+      v.dispatch({
+        selection: { anchor: start, head: end },
+        effects: EditorView.scrollIntoView(start, { y: 'center' }),
+      });
+      v.focus({ preventScroll: true });
+      flashTimerRef.current = window.setTimeout(() => {
+        if (viewRef.current === v) v.dispatch({ selection: { anchor: end } });
+      }, holdMs);
+      return true;
     },
     revealRange: (from, to, onReady) => {
       const v = viewRef.current;

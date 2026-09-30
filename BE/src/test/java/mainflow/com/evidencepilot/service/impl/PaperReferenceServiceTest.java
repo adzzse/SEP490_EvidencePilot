@@ -139,6 +139,35 @@ class PaperReferenceServiceTest {
     }
 
     @Test
+    void checkIsRoleIndependentAndPersistsNothing() {
+        Document ready = source(ProcessingStatus.READY, "ready.pdf");
+        ready.setDoi("10.1000/ready");
+        ready.setTitle("Reliable Evidence Retrieval for Research Writing");
+        ready.setPublicationYear(2024);
+        PaperSection references = referenceSection(
+                "A. Author. Reliable Evidence Retrieval for Research Writing. 2024. https://doi.org/10.1000/ready.");
+        when(paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(paperId))
+                .thenReturn(List.of(references));
+        when(sourceMatchingService.activeSources(projectId)).thenReturn(List.of(ready));
+        when(sourceMatchingService.referenceSources(paperId)).thenReturn(List.of());
+
+        UUID instructorId = UUID.randomUUID();
+        User instructor = new User();
+        instructor.setId(instructorId);
+        instructor.setRole(UserRole.INSTRUCTOR);
+        when(userRepository.findById(instructorId)).thenReturn(Optional.of(instructor));
+
+        PaperReferenceCheckResponse studentResult = service.check(paperId, leaderId);
+        PaperReferenceCheckResponse instructorResult = service.check(paperId, instructorId);
+
+        // Stateless advisory compute: same content yields the same output for
+        // both roles, and neither run publishes anything — instructor/student
+        // outputs can never mix like the old citation-job leak.
+        assertThat(instructorResult).isEqualTo(studentResult);
+        verifyNoInteractions(events);
+    }
+
+    @Test
     void checkKeepsEachBibitemAsOneEntryWhenItsTextHasBlankLines() {
         Document first = source(ProcessingStatus.READY, "first.pdf");
         Document second = source(ProcessingStatus.READY, "second.pdf");

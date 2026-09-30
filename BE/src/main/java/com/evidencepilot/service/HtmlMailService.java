@@ -74,8 +74,11 @@ public class HtmlMailService {
             button.append("<p style=\"margin:24px 0;\"><a href=\"").append(ctaUrl)
                     .append("\" style=\"display:inline-block;background:#1e3a8a;color:#ffffff;text-decoration:none;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:8px;\">")
                     .append(label).append("</a></p>")
-                    .append("<p style=\"font-size:12px;color:#64748b;\">If the button does not work, open this link:<br/><a href=\"")
-                    .append(ctaUrl).append("\">").append(ctaUrl).append("</a></p>");
+                    // ponytail: no raw token URL in the HTML body — if the
+                    // button fails the recipient contacts the admin for a
+                    // fresh link. The plain-text part below keeps the URL
+                    // (text-only clients have no buttons).
+                    .append("<p style=\"font-size:12px;color:#64748b;\">If this does not work, contact Admin for information</p>");
         }
         String footer = (footerNote != null && !footerNote.isBlank())
                 ? "<p style=\"font-size:12px;color:#64748b;margin-top:20px;\">" + footerNote + "</p>"

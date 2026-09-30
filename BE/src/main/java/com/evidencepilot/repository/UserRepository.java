@@ -71,9 +71,12 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
     List<User> findByAccountStatusAndRole(AccountStatus status, UserRole role);
 
-    List<User> findByRole(UserRole role);
+    // soft-deleted accounts never appear in role pickers (e.g. the
+    // instructor [Project Member] student list) or role broadcasts.
+    @Query("select u from User u where u.role = :role and u.accountStatus <> 'DELETED'")
+    List<User> findByRole(@Param("role") UserRole role);
 
-    @Query("select u from User u where u.role = :role and (lower(u.firstName) like lower(concat('%', :q, '%')) or lower(u.lastName) like lower(concat('%', :q, '%')) or lower(u.email) like lower(concat('%', :q, '%')) or lower(u.studentCode) like lower(concat('%', :q, '%')))")
+    @Query("select u from User u where u.role = :role and u.accountStatus <> 'DELETED' and (lower(u.firstName) like lower(concat('%', :q, '%')) or lower(u.lastName) like lower(concat('%', :q, '%')) or lower(u.email) like lower(concat('%', :q, '%')) or lower(u.studentCode) like lower(concat('%', :q, '%')))")
     List<User> searchByRole(@Param("role") UserRole role, @Param("q") String q);
 
     @Query("select user.role, count(user) from User user group by user.role")

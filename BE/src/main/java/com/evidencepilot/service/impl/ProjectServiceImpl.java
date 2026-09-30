@@ -15,6 +15,7 @@ import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.UserRole;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
@@ -374,6 +375,13 @@ public class ProjectServiceImpl {
                 .orElseThrow(() -> new ResourceNotFoundException(userId, "User"));
         if (user.getRole() != UserRole.STUDENT) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only students can be added to projects.");
+        }
+        // 2-way rule (2/2): even a stale/cached picker entry for a deleted or
+        // banned account is refused here — the role picker itself already
+        // hides non-ACTIVE accounts (see UserRepository role queries).
+        if (user.getAccountStatus() != AccountStatus.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only active students can be added to projects.");
         }
         if (!projectMemberRepository.findByProjectIdAndUserId(projectId, userId).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "User is already a project member.");

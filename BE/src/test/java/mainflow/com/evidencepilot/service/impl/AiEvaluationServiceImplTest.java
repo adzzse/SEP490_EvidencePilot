@@ -278,8 +278,9 @@ class AiEvaluationServiceImplTest {
         assertThat(studentView.get().review().summary()).isEqualTo("student-summary");
         assertThat(instructorView).isPresent();
         assertThat(instructorView.get().review().summary()).isEqualTo("instructor-summary");
-        assertThat(unknownView).isPresent();
-        assertThat(unknownView.get().review().summary()).isEqualTo("instructor-summary");
+        // No cross-role fallback: a caller with no same-role job sees nothing,
+        // so instructor output never leaks into the student workspace.
+        assertThat(unknownView).isEmpty();
     }
 
     @Test

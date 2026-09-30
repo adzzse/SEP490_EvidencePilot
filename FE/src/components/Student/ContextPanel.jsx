@@ -16,7 +16,7 @@ export default function ContextPanel({
   sources, isUploading, setIsUploading, project, setViewerFile, fetchSources, onOpenSourceMap,
   paperReferences = [], referencesLoading = false, referencesError = '', referenceSourceIds = null,
   referenceCheck = null, referenceCheckLoading = false, referenceCheckError = '', onRetryReferenceCheck,
-  canMutateReferences = false, onAddReference, onRemoveReference, onReferencesChanged,
+  canMutateReferences = false, onAddReference, onRemoveReference, onReferencesChanged, onLocateReference = null,
   // Requirements tab
   selectedPaper, selectedSection, isAssignedSection, isSectionDirty, onHandoffChanged, pollAiJob,
   // Review tab
@@ -87,7 +87,7 @@ export default function ContextPanel({
           </button>
         </div>}
 
-        <div className="flex-1 overflow-y-auto bg-(--surface-secondary)/50 p-4">
+        <div className="flex-1 overflow-y-auto bg-(--surface-secondary)/50 p-4 hide-scrollbar">
           {activeTab === 'Source' && showSourceTab && (
             <SourceLibraryContent
               sources={sources} project={project} isLocked={isLocked} setViewerFile={setViewerFile}
@@ -97,6 +97,7 @@ export default function ContextPanel({
               referenceCheckError={referenceCheckError} onRetryReferenceCheck={onRetryReferenceCheck}
               referenceSourceIds={referenceSourceIds} canMutateReferences={canMutateReferences}
               onAddReference={onAddReference} onRemoveReference={onRemoveReference} onReferencesChanged={onReferencesChanged}
+              onLocateItem={onLocateReference}
               showToast={showToast} readOnly={Boolean(reviewContent)}
             />
           )}

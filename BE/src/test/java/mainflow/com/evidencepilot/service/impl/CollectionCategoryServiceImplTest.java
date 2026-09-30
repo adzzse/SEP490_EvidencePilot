@@ -5,6 +5,7 @@ import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.CollectionCategory;
 import com.evidencepilot.repository.CollectionCategoryRepository;
+import com.evidencepilot.repository.CollectionRepository;
 import com.evidencepilot.service.AuditService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +31,7 @@ import static org.mockito.Mockito.when;
 class CollectionCategoryServiceImplTest {
 
     @Mock private CollectionCategoryRepository repository;
+    @Mock private CollectionRepository collectionRepository;
     @Mock private CurrentUserServiceImpl currentUserService;
     @Mock private AuditService auditService;
     @Mock private ApplicationEventPublisher events;
@@ -101,7 +103,7 @@ class CollectionCategoryServiceImplTest {
     }
 
     private CollectionCategoryServiceImpl service() {
-        return new CollectionCategoryServiceImpl(repository, currentUserService, auditService, events);
+        return new CollectionCategoryServiceImpl(repository, collectionRepository, currentUserService, auditService, events);
     }
 
     private static CollectionCategory category(UUID id, String name) {

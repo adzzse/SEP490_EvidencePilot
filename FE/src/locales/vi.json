@@ -526,6 +526,7 @@
   "referenceCheckAllReady": "Mọi tài liệu tham khảo đã nhập đều có Source sẵn sàng và đã được khai báo cho bài này.",
   "referenceCheckGuidance": "Dùng phần Sources bên dưới để nhập tài liệu còn thiếu hoặc đính kèm tệp, sau đó kiểm tra lại.",
   "referenceCheckViewIssues": "Xem {{count}} vấn đề",
+  "referenceCheckLocate": "Hiển thị mục này trong bài",
   "referenceCheckStatusReady": "Sẵn sàng",
   "referenceCheckStatusMissingFile": "Đã có Source — thiếu tệp",
   "referenceCheckStatusProcessing": "Source đang được xử lý",

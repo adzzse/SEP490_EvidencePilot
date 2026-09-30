@@ -12,7 +12,7 @@ export default function SourceLibraryContent({
   paperReferences = [], referencesLoading = false, referencesError = '',
   referenceCheck = null, referenceCheckLoading = false, referenceCheckError = '', onRetryReferenceCheck,
   referenceSourceIds = null, canMutateReferences = false,
-  onAddReference, onRemoveReference, onReferencesChanged,
+  onAddReference, onRemoveReference, onReferencesChanged, onLocateItem = null,
   showToast, readOnly = false, compact = false,
 }) {
   const { t } = useTranslation();
@@ -198,6 +198,7 @@ export default function SourceLibraryContent({
           referenceCheckError={referenceCheckError}
           onRetryReferenceCheck={onRetryReferenceCheck}
           canMutate={canMutateReferences && !readOnly}
+          onLocateItem={onLocateItem}
           isLocked={isLocked}
           attachingId={attachingSourceId}
           onRemove={onRemoveReference}
@@ -213,7 +214,7 @@ export default function SourceLibraryContent({
               const sourceDownloadUrl = getSourceDownloadUrl(src.processingError);
               return (
                 <div key={src.id} onClick={() => src.fileUrl && src.fileUrl !== 'pending' ? setViewerFile({ fileUrl: `/api/documents/${src.id}/download`, fileName: src.originalFilename }) : showToast(t('fileUrlUnavailable'))} className={`bg-(--surface) border border-(--border) rounded-xl ${compact ? 'p-2.5' : 'p-3.5'} hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors cursor-pointer min-w-0`}>
-                  <p className="text-sm font-bold text-(--text-primary) flex items-center gap-2 min-w-0"><svg className="w-4 h-4 shrink-0 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" /></svg><span className="truncate break-words">{src.originalFilename}</span></p>
+                  <p className="text-sm font-bold text-(--text-primary) flex items-center gap-2 min-w-0"><svg className="w-4 h-4 shrink-0 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" /></svg><span className="line-clamp-2 break-words">{src.originalFilename}</span></p>
                   {src.processingStatus === 'METADATA_FETCHED' ? (
                     <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[10px] leading-relaxed text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
                       <p className="font-bold">{t('metadataFetchedDescription')}</p>

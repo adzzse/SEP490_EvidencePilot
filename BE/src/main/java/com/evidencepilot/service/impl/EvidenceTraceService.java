@@ -1,11 +1,11 @@
 package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.request.TraceDecisionRequest;
-import com.evidencepilot.dto.request.TraceReviewRequest;
-import com.evidencepilot.dto.response.CitationArchiveRoundResponse;
+import com.evidencepilot.dto.request.TraceReviewRequest;import com.evidencepilot.dto.response.CitationArchiveRoundResponse;
 import com.evidencepilot.dto.response.CitationArchivesResponse;
 import com.evidencepilot.dto.response.EvidenceTraceResponse;
 import com.evidencepilot.dto.response.SectionCitationReviewResponse;
+import com.evidencepilot.event.EntityChangedEvent;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.CitationReviewRound;
 import com.evidencepilot.model.Document;
@@ -33,6 +33,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -70,6 +71,7 @@ public class EvidenceTraceService {
     private final SectionCitationReviewService sectionCitationReviewService;
     private final AiModelClient aiModelClient;
     private final CurrentUserServiceImpl currentUserService;
+    private final ApplicationEventPublisher events;
     private final ObjectMapper objectMapper;
 
     @Transactional
@@ -124,6 +126,11 @@ public class EvidenceTraceService {
         boolean recheckRequired = previousRound != null
                 && traceRepository.findByRoundIdOrderByFindingIndex(previousRound.getId()).stream()
                         .anyMatch(EvidenceTraceService::isRecheckable);
+        // Live update: instructor Findings tabs refresh on this event (the
+        // citation job itself publishes nothing — this is the completion
+        // signal). Broadcast rides the standard after-commit path.
+        events.publishEvent(new EntityChangedEvent(
+                "EVIDENCE", round.getId(), "READY", round.getProject().getId()));
         return new RoundMaterialization(
                 round.getId(),
                 previousRound == null ? null : previousRound.getId(),

@@ -959,6 +959,31 @@ export default function ProjectDetail() {
     setShowEditPaper(false);
   };
 
+  // ponytail: paper delete mirrors handleDeleteSection (undo-at-commit +
+  // server-message alert). Guards live in the backend (CREATED/ASSIGNED +
+  // all sections unassigned + full chunk/vector purge); the icon is only
+  // offered in those setup statuses.
+  const canDeletePaper = project?.status === 'CREATED' || project?.status === 'ASSIGNED';
+  const handleDeletePaper = (paper) => {
+    if (!paper) return;
+    startDelete({
+      entityName: paper.originalFilename || paper.title || paper.id,
+      entityDetails: paper.id,
+    }, async () => {
+      try {
+        await api.delete(`/api/papers/${paper.id}`);
+        if (String(selectedPaper?.id) === String(paper.id)) {
+          setSelectedPaper(null);
+          setSections([]);
+          setDraftSections([]);
+        }
+        await loadPapers();
+      } catch (err) {
+        alert(err?.response?.data?.message || t('instructor.projectDetail.deleteSectionFailed'));
+      }
+    });
+  };
+
   const handleDeleteSection = (sectionId) => {
     if (!selectedPaper) return;
     const section = sections.find(s => String(s.id) === String(sectionId))
@@ -1550,6 +1575,9 @@ export default function ProjectDetail() {
                       )}
                       {editingPaperId !== p.id && (
                         <button onClick={e => { e.stopPropagation(); handleStartRename(p); }} className="rounded p-1 text-[var(--text-tertiary)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-foreground)]" title={t('instructor.projectDetail.rename')} aria-label={t('instructor.projectDetail.rename')}><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z" /><path d="m13 7 4 4" /></svg></button>
+                      )}
+                      {canDeletePaper && editingPaperId !== p.id && (
+                        <button onClick={e => { e.stopPropagation(); handleDeletePaper(p); }} className="rounded p-1 text-[var(--text-tertiary)] hover:bg-rose-50 hover:text-rose-600" title={t('delete')} aria-label={t('delete')}><svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M10 11v6M14 11v6" /></svg></button>
                       )}
                     </div>
                   ))}

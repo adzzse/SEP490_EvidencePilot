@@ -59,8 +59,10 @@ function SettingsSection({ api }) {
       setCatForm({ id: null, name: '', description: '' });
       fetchCats(new AbortController().signal);
     } catch (err) {
-      setCatErr(err.response?.data?.message || err.message);
-      toast.error(t('admin.categorySaveFailed'));
+      const message = err.response?.data?.message || err.message;
+      setCatErr(message);
+      // In-use (409) carries the reason — surface it instead of the generic label.
+      toast.error(message || t('admin.categorySaveFailed'));
     }
   };
 
@@ -70,7 +72,9 @@ function SettingsSection({ api }) {
       toast.success(t('admin.categoryDeletedOk'));
       fetchCats(new AbortController().signal);
     } catch (e) {
-      toast.error(t('admin.categoryDeleteFailed'));
+      // In-use delete is refused — restore the optimistically removed row.
+      toast.error(e.response?.data?.message || t('admin.categoryDeleteFailed'));
+      fetchCats(new AbortController().signal);
     }
   };
 

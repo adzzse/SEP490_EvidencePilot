@@ -139,10 +139,18 @@ public class AiEvaluationServiceImpl implements AiEvaluationService {
                             null, "COMPLETE", 0, 0, review.complete(), review, null, null));
         }
         // rationale: jobs are content-keyed and shared across roles — an
-        // instructor re-run must not replace what the student sees. Prefer the
-        // latest job requested by someone with the caller's role; fall back to
-        // latest overall when the caller has no job of their own.
-        AiEvaluationJob value = preferSameRole(jobs, requesterId).orElse(jobs.get(0));
+        // instructor re-run must never replace what the student sees. Prefer the
+        // latest job requested by someone with the caller's role. Jobs without
+        // requester info (legacy rows) stay visible to both roles; otherwise an
+        // empty state is returned so cross-role output never leaks.
+        Optional<AiEvaluationJob> sameRole = preferSameRole(jobs, requesterId);
+        AiEvaluationJob value = sameRole.orElseGet(() -> jobs.stream()
+                .filter(job -> requestedByOf(job).isEmpty())
+                .findFirst()
+                .orElse(null));
+        if (value == null) {
+            return Optional.empty();
+        }
         SectionCitationReviewResponse review = readCitationReview(value.getResultJson())
                 .or(() -> sectionCitationReviewService.cached(documentId, sectionId))
                 .orElse(null);

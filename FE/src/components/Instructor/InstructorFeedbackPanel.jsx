@@ -35,7 +35,7 @@ export function InstructorReviewGuide({ review, selectedSection, plain = false }
   </section>;
 }
 
-export default function InstructorFeedbackPanel({ review, selectedSection, projectId, focusSignal = 0, composerFocusToken = 0, submittedFindings = [], submittedFindingsStale = false, referenceData = null }) {
+export default function InstructorFeedbackPanel({ review, selectedSection, projectId, focusSignal = 0, composerFocusToken = 0, submittedFindings = [], submittedFindingsStale = false, referenceData = null, onLocateReference = null }) {
   const { t } = useTranslation();
   const { activeRequest, isHistoricalRound, errorMessage, successMessage, transitioningRequestId, pendingTransition, setPendingTransition, requestLocked, canReturn, canApprove, handleTransitionStatus } = review;
   const [panelTab, setPanelTab] = useState('feedback');
@@ -98,6 +98,7 @@ export default function InstructorFeedbackPanel({ review, selectedSection, proje
               referenceCheckError={referenceData?.checkError || ''}
               onRetryReferenceCheck={referenceData?.onRetryReferenceCheck}
               canMutate={false}
+              onLocateItem={onLocateReference}
             />
           ) : (
             <SectionEvidenceTab review={review} selectedSection={selectedSection} submittedFindings={submittedFindings} submittedFindingsStale={submittedFindingsStale} />

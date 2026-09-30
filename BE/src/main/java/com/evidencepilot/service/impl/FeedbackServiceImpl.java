@@ -237,16 +237,20 @@ public class FeedbackServiceImpl {
         if (!instructorView) roots = roots.stream().filter(FeedbackServiceImpl::isPublished).toList();
         // Members read only sections assigned to them (current assignee —
         // feedback stores no historical ownership); leaders bypass this filter.
+        // Published revision feedback stays visible when its section is
+        // currently unassigned (e.g. after Return + unassign), so feedback
+        // never reads as "gone" while history still holds it.
         if (!instructorView && !isProjectLeader(currentUser, request.getProject())) {
             if (sectionId != null) {
                 PaperSection scope = requireSectionInProject(sectionId, request.getProject());
-                if (!sameUser(scope.getAssignedUser(), currentUser)) {
+                if (scope.getAssignedUser() != null && !sameUser(scope.getAssignedUser(), currentUser)) {
                     throw forbidden("Feedback access denied.");
                 }
             }
             roots = roots.stream()
                     .filter(root -> root.getSection() != null
-                            && sameUser(root.getSection().getAssignedUser(), currentUser)
+                            && (sameUser(root.getSection().getAssignedUser(), currentUser)
+                                    || root.getSection().getAssignedUser() == null)
                             && (sectionId == null || Objects.equals(root.getSection().getId(), sectionId)))
                     .toList();
         } else if (sectionId != null) {
@@ -356,10 +360,13 @@ public class FeedbackServiceImpl {
         }
         // Same member scope as the list endpoint, but hidden as 404 (matching
         // the unpublished-draft convention) to avoid leaking thread existence.
+        // Published threads on currently-unassigned sections stay readable so
+        // revision feedback never vanishes after Return + unassign.
         if (!isInstructorViewer(currentUser, feedback.getRequest())
                 && !isProjectLeader(currentUser, feedback.getRequest().getProject())
                 && (feedback.getSection() == null
-                        || !sameUser(feedback.getSection().getAssignedUser(), currentUser))) {
+                        || (feedback.getSection().getAssignedUser() != null
+                                && !sameUser(feedback.getSection().getAssignedUser(), currentUser)))) {
             throw notFound("Instructor feedback", feedbackItemId);
         }
         return response(feedback, currentUser);

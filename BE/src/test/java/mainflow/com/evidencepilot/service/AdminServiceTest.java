@@ -15,6 +15,7 @@ import com.evidencepilot.repository.AuditLogRepository;
 import com.evidencepilot.repository.CollectionRepository;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
+import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.CollectionCategoryRepository;
 import com.evidencepilot.repository.UserRepository;
@@ -58,6 +59,7 @@ class AdminServiceTest {
     @Mock CollectionRepository collections;
     @Mock DocumentRepository documents;
     @Mock PaperSectionRepository paperSections;
+    @Mock ProjectMemberRepository projectMembers;
     @Mock AuditLogRepository auditLogs;
     @Mock CurrentUserServiceImpl currentUsers;
     @Mock PasswordResetService passwordResets;

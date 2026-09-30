@@ -140,6 +140,18 @@ class EntityEventAudienceTest {
     }
 
     @Test
+    void evidenceReady_targetsProjectMembersAndAdmins() {
+        UUID projectId = UUID.randomUUID();
+        User admin = user(UUID.randomUUID());
+        User member = user(UUID.randomUUID());
+        when(users.findByRole(UserRole.ADMIN)).thenReturn(List.of(admin));
+        when(members.findByProjectId(projectId)).thenReturn(List.of(member(member)));
+
+        assertThat(audience.recipients(new EntityChangedEvent("EVIDENCE", UUID.randomUUID(), "READY", projectId)))
+                .containsExactlyInAnyOrder(member.getId(), admin.getId());
+    }
+
+    @Test
     void unknownEntity_targetsAdminsOnly() {
         User admin = user(UUID.randomUUID());
         when(users.findByRole(UserRole.ADMIN)).thenReturn(List.of(admin));

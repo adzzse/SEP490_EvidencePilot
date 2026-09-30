@@ -11,4 +11,6 @@ public interface CollectionRepository extends JpaRepository<Collection, UUID>, J
     long countByActiveTrue();
 
     List<Collection> findByInstructorIdAndActiveTrue(UUID instructorId);
+
+    boolean existsByCategoryId(UUID categoryId);
 }

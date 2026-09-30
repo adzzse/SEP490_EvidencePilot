@@ -11,17 +11,21 @@ import com.evidencepilot.model.AssignmentSectionBaseline;
 import com.evidencepilot.model.InstructorFeedback;
 import com.evidencepilot.model.PaperSection;
 import com.evidencepilot.model.Project;
+import com.evidencepilot.model.ProjectMember;
 import com.evidencepilot.model.User;
+import com.evidencepilot.model.enums.AccountStatus;
 import com.evidencepilot.model.enums.DocumentType;
 import com.evidencepilot.model.enums.PaperStandard;
 import com.evidencepilot.model.enums.PaperSectionType;
 import com.evidencepilot.model.enums.ProcessingStatus;
+import com.evidencepilot.model.enums.ProjectRole;
 import com.evidencepilot.model.enums.ProjectStatus;
 import com.evidencepilot.repository.DocumentRepository;
 import com.evidencepilot.repository.AssignmentSectionBaselineRepository;
 import com.evidencepilot.repository.DocumentMetadataRepository;
 import com.evidencepilot.repository.InstructorFeedbackRepository;
 import com.evidencepilot.repository.PaperSectionRepository;
+import com.evidencepilot.repository.ProjectMemberRepository;
 import com.evidencepilot.repository.ProjectRepository;
 import com.evidencepilot.repository.SectionStandardEvaluationRepository;
 import com.evidencepilot.repository.UserRepository;
@@ -85,6 +89,7 @@ public class PaperProcessingServiceImpl {
     private final AssignmentSectionBaselineRepository assignmentSectionBaselineRepository;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
     private final SectionWorkHistoryService sectionWorkHistoryService;
+    private final ProjectMemberRepository projectMemberRepository;
     private final ApplicationEventPublisher events;
 
     public List<PaperSectionResponse> getPaperSections(UUID documentId) {
@@ -470,7 +475,24 @@ public class PaperProcessingServiceImpl {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Sections can only be assigned to students.");
             }
-            currentUserService.requireProjectAccess(user, document.getProject());
+            if (user.getAccountStatus() != AccountStatus.ACTIVE) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Sections can only be assigned to active students.");
+            }
+            // rationale: section assignment implies membership — assigning
+            // restores the ProjectMember row when a prior unassign/remove
+            // dropped it, so assign → unassign → re-assign always converges
+            // on access. Unassign (null) never removes membership; only the
+            // [Project Member] tab does.
+            if (projectMemberRepository
+                    .findByProjectIdAndUserId(document.getProject().getId(), assignedUserId).isEmpty()) {
+                ProjectMember member = new ProjectMember();
+                member.setProject(document.getProject());
+                member.setUser(user);
+                member.setRole(ProjectRole.MEMBER);
+                member.setJoinedAt(LocalDateTime.now());
+                projectMemberRepository.save(member);
+            }
             section.setAssignedUser(user);
         } else {
             section.setAssignedUser(null);

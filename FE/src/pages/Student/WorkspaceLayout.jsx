@@ -24,6 +24,7 @@ import { InstructorReviewGuide } from '../../components/Instructor/InstructorFee
 import useProjectFeedback from '../../hooks/useProjectFeedback.js';
 import { feedbackKeys } from '../../services/feedbackKeys.js';
 import { usePaperReferences } from '../../hooks/usePaperReferences.js';
+import { locateExcerptInEditor } from '../../utils/locateExcerpt.js';
 import { normalizeSource, sourceFingerprint } from '../../utils/student/feedbackAnchors.js';
 import { isAbstractSectionTitle } from '../../utils/formatters/latexHtml.js';
 import useUndoDelete from '../../components/ui/UndoDelete.jsx';
@@ -717,7 +718,23 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     const removed = notifications.some(notification =>
       notification.actionType === 'PROJECT_MEMBER_REMOVED'
       && String(notification.entityId) === String(projectId));
-    if (removed) setUnassignedProject(true);
+    if (!removed) return;
+    // rationale: the removal notice is only a hint — a re-added member still
+    // carries the stale notice, so revalidate access before ejecting. Eject
+    // only on a genuine 403 membership denial; a successful load clears a
+    // stale flag instead of bouncing a valid member.
+    let cancelled = false;
+    (async () => {
+      try {
+        await api.get(`/api/projects/${projectId}`);
+        if (!cancelled) setUnassignedProject(false);
+      } catch (err) {
+        if (!cancelled && err?.response?.status === 403 && isProjectMembershipDenied(err)) {
+          setUnassignedProject(true);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
   }, [isReview, notifications, projectId, role]);
 
   useEffect(() => {
@@ -1529,6 +1546,12 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
     }
   };
 
+  // rationale: student mirror of the instructor Result-tab locate — same
+  // shared locateExcerptInEditor over the editable section editor.
+  const handleLocateStudentReferenceItem = (rawText) => {
+    if (!locateExcerptInEditor(studentEditorRef.current, rawText)) showToast(t('reviewExcerptChanged'));
+  };
+
   // rationale: instructor reference check — same check, no saves, no edits.
   // Results render in the existing read-only Sources panel.
   const handleRunReviewReferenceCheck = async () => {
@@ -2089,7 +2112,8 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
           feedbackRequestId={feedbackRequestId} setFeedbackRequestId={setFeedbackRequestId} feedbackScope={feedbackScope} setFeedbackScope={setFeedbackScope} userProjectRole={project?.currentUserRole} currentUserId={user?.id}           paperReferences={paperReferences} />
 
         {!isReview && <ContextPanel compact={isCompactWorkspace} isOpen={isDrawerOpen} width={rightDrawerWidth} activeTab={activeTab} setActiveTab={setActiveTab} showToast={showToast}
-          sources={sources} paperReferences={paperReferences} referencesLoading={paperRefs.loading} referencesError={paperRefs.error} referenceCheck={paperRefs.check} referenceCheckLoading={paperRefs.checkLoading} referenceCheckError={paperRefs.checkError} onRetryReferenceCheck={paperRefs.runCheck} referenceSourceIds={referenceSourceIds} canMutateReferences={canMutateReferences} onAddReference={handleAddReference} onRemoveReference={handleRemoveReference} onReferencesChanged={refreshReferences} isUploading={isUploading} setIsUploading={setIsUploading} project={project} setViewerFile={setViewerFile} fetchSources={fetchSources} onOpenSourceMap={openSourceMap} isLocked={isLocked}
+          sources={sources} paperReferences={paperReferences} referencesLoading={paperRefs.loading} referencesError={paperRefs.error} referenceCheck={paperRefs.check} referenceCheckLoading={paperRefs.checkLoading} referenceCheckError={paperRefs.checkError} onRetryReferenceCheck={paperRefs.runCheck} referenceSourceIds={referenceSourceIds} canMutateReferences={canMutateReferences} onAddReference={handleAddReference} onRemoveReference={handleRemoveReference}           onReferencesChanged={refreshReferences} isUploading={isUploading} setIsUploading={setIsUploading} project={project} setViewerFile={setViewerFile} fetchSources={fetchSources} onOpenSourceMap={openSourceMap} isLocked={isLocked}
+          onLocateReference={handleLocateStudentReferenceItem}
           selectedPaper={selectedPaper} selectedSection={currentSection} isAssignedSection={Boolean(currentSection && String(currentSection.assignedUserId) === String(user?.id))}
           isSectionDirty={dirtySectionsRef.current.has(selectedSectionId)} onHandoffChanged={handleHandoffChanged} pollAiJob={pollAiJob}
           feedbacks={feedback.requests} feedbackLoading={feedback.loading} feedbackError={feedback.error} onRetryFeedback={feedback.refresh} onViewFeedback={openFeedback}

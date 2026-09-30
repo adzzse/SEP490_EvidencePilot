@@ -734,8 +734,27 @@ public class DocumentServiceImpl {
         if (doc.getProject() != null) {
             projectRepository.findByIdForUpdate(doc.getProject().getId());
         }
+        // Paper guard: deletable only in setup phases (CREATED/ASSIGNED) and
+        // only when every section is unassigned — mirrors the reset-standard
+        // 409 contract. Sources keep the legacy behavior.
+        if (doc.getDocType() == DocumentType.PAPER && doc.getProject() != null) {
+            var status = doc.getProject().getStatus();
+            if (status != ProjectStatus.CREATED && status != ProjectStatus.ASSIGNED) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Paper can only be deleted while the project is Created or Assigned.");
+            }
+            boolean assigned = paperSectionRepository.findByDocumentIdOrderBySectionOrderAsc(doc.getId())
+                    .stream().anyMatch(section -> section.getAssignedUser() != null);
+            if (assigned) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Paper has assigned sections — unassign all sections first.");
+            }
+        }
         projectCollectionService.removeSource(doc);
         mediaAssetService.deleteExtractedForDocument(doc);
+        // Full purge (1/2): chunk rows in the database are removed now;
+        // vectors/checkpoints/cache follow after commit (see below).
+        documentChunkRepository.deleteByDocumentId(doc.getId());
         doc.setActive(false);
         doc.setDownloadToken(UUID.randomUUID().toString());
         documentRepository.save(doc);
