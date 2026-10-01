@@ -29,7 +29,7 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
 
   return (
     <>
-      <aside data-tour="file-panel" style={{ width: compact ? 'min(20rem, calc(100vw - 3.5rem))' : width }} className={`bg-(--surface-secondary) border-r border-(--border) flex flex-col shrink-0 z-30 backdrop-blur-sm overflow-y-auto hide-scrollbar min-h-0 ${compact ? 'absolute inset-y-0 left-14 shadow-xl' : 'relative'}`}>
+      <aside data-tour="file-panel" style={{ width: compact ? 'min(20rem, calc(100vw - 3.5rem))' : width }} className={`bg-(--surface-secondary) flex flex-col shrink-0 z-30 backdrop-blur-sm overflow-y-auto hide-scrollbar min-h-0 ${compact ? 'absolute inset-y-0 left-14 shadow-xl' : 'relative'} ${reviewMode ? 'rounded-2xl border border-(--border) m-2 shadow-sm' : 'border-r border-(--border)'}`}>
         <div className="px-4 py-2.5 border-b border-(--border) bg-(--surface-tertiary)/40 flex items-center justify-between">
           <span className="text-xs font-bold text-(--text-primary) truncate max-w-[180px]">{selectedPaper?.originalFilename || selectedPaper?.title || t('paper')}</span>
           {selectedPaper && (
@@ -70,7 +70,7 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
               const isEditable = canEditSection?.(sec) ?? isAssigned;
               const isSelected = String(sec.id) === String(selectedSectionId);
               return (
-                <div key={sec.id} className={`flex items-center justify-between text-xs font-medium p-2 rounded-md transition-all mt-1 group ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 border border-indigo-100 dark:border-indigo-800 shadow-sm' : isEditable ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-(--text-primary)' : 'text-(--text-secondary) hover:bg-(--surface-tertiary)'}`}>
+                <div key={sec.id} className={`flex items-center justify-between text-xs font-medium p-2 ${reviewMode ? 'rounded-xl' : 'rounded-md'} transition-all mt-1 group ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 border border-indigo-100 dark:border-indigo-800 shadow-sm' : isEditable ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-(--text-primary)' : 'text-(--text-secondary) hover:bg-(--surface-tertiary)'}`}>
                   <button type="button" aria-label={sec.sectionTitle || t('untitled')} aria-pressed={isSelected} onClick={() => onSelectSection(sec)} className="flex flex-1 items-center gap-2 truncate text-left cursor-pointer">
                     {isAssigned ? (
                       <svg className="w-3.5 h-3.5 shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
@@ -136,7 +136,7 @@ export default function FilePanel({ compact, isOpen, width, onResizeStart, secti
             <div className="text-xs text-(--text-tertiary) italic text-center py-4">{t('noMedia')}</div>
           ) : (
             mediaAssets.filter(m => m.texFilename.toLowerCase().includes(mediaSearchQuery.toLowerCase())).map(m => (
-              <div key={m.id} onClick={() => onInsertMedia?.(m.texFilename)} onMouseEnter={(e) => handleMediaEnter(m, e)} onMouseLeave={() => setHoveredMedia(null)} className={`flex items-center justify-between text-xs font-medium p-2 rounded-md transition-all mt-1 group text-(--text-secondary) ${onInsertMedia ? 'hover:bg-(--surface-tertiary) cursor-pointer' : 'cursor-default opacity-60'}`}>
+              <div key={m.id} onClick={() => onInsertMedia?.(m.texFilename)} onMouseEnter={(e) => handleMediaEnter(m, e)} onMouseLeave={() => setHoveredMedia(null)} className={`flex items-center justify-between text-xs font-medium p-2 ${reviewMode ? 'rounded-xl' : 'rounded-md'} transition-all mt-1 group text-(--text-secondary) ${onInsertMedia ? 'hover:bg-(--surface-tertiary) cursor-pointer' : 'cursor-default opacity-60'}`}>
                 <div className="flex items-center gap-2 truncate">
                   <svg className="w-3.5 h-3.5 shrink-0 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                   <span className="truncate" title={m.texFilename}>{m.texFilename}</span>

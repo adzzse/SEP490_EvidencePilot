@@ -8,6 +8,7 @@ import { CARD_GRID_PAGE_SIZE } from '../../constants';
 import { formatDate } from '../../utils/formatters/date';
 import api from '../../services/api';
 import useUndoDelete from '../../components/ui/UndoDelete.jsx';
+import { AdminPagination } from '../Admin/components/shared.jsx';
 
 export default function CollectionList() {
   const navigate = useNavigate();
@@ -242,15 +243,10 @@ export default function CollectionList() {
           )}
         </div>
 
-        {totalPages > 1 && (
-          <div className="mt-8 flex items-center justify-center gap-2 text-xs">
-            <button disabled={page === 0} onClick={() => setPage(page - 1)}
-              className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-30 disabled:cursor-not-allowed">{t('instructor.collections.prev')}</button>
-            <span className="px-3 py-1.5 font-mono font-bold text-(--text-secondary)">{t('instructor.collections.page')} {page + 1} {t('instructor.collections.of')} {totalPages}</span>
-            <button disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}
-              className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-30 disabled:cursor-not-allowed">{t('instructor.collections.next')}</button>
-          </div>
-        )}
+        <div className="mt-8 flex items-center justify-between gap-2 text-xs font-semibold text-(--text-secondary)">
+          <span>{t('instructor.collections.showing', { shown: collections.length, total: totalElements })}</span>
+          <AdminPagination page={page} totalPages={totalPages} onChange={setPage} />
+        </div>
       </main>
 
       <Modal open={modalOpen} onClose={() => { setModalOpen(false); resetForm(); }} title={editing ? t('instructor.collections.editCollection') : t('instructor.collections.createCollection')} closeLabel={t('close')}>

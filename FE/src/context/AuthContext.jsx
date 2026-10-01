@@ -9,23 +9,38 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState(() => localStorage.getItem('role'));
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Recoverable verification error: 'connection' (timeout/offline/abort) vs
+  // 'unauthorized' (expired/invalid). Connection never clears stored auth.
+  const [verifyError, setVerifyError] = useState(null);
   // P0b-ban-notice: shown after revocation with a 10s countdown. The token is
   // cleared immediately (enforcement); the modal only paces notice/redirect.
   const [banNotice, setBanNotice] = useState(false);
   const finishBanNotice = useCallback(() => setBanNotice(false), []);
   const verifyPromiseRef = useRef(null);
   const verifyControllerRef = useRef(null);
+  // Generation invalidates late responses after logout/account switching.
+  const verifyGenerationRef = useRef(0);
 
   const verifySession = useCallback(() => {
     if (verifyPromiseRef.current) return verifyPromiseRef.current;
+    const generation = verifyGenerationRef.current;
     const controller = new AbortController();
     verifyControllerRef.current = controller;
     const timeoutId = setTimeout(() => controller.abort(), 12000);
     verifyPromiseRef.current = api.get('/api/users/profile', { signal: controller.signal })
-      .then((res) => { setUser(res.data); return res.data; })
+      .then((res) => {
+        if (verifyGenerationRef.current !== generation) return Promise.reject(new Error('verify-stale'));
+        setUser(res.data);
+        setVerifyError(null);
+        return res.data;
+      })
       .catch((err) => {
+        if (err?.message === 'verify-stale') throw err;
         if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') {
-          return Promise.reject(Object.assign(new Error('verify-aborted'), { response: { status: 401 } }));
+          // Timeout/offline/unmount: connectivity failure, NOT invalid credentials.
+          const aborted = new Error('verify-aborted');
+          aborted.code = 'ERR_CANCELED';
+          throw aborted;
         }
         throw err;
       })
@@ -47,6 +62,11 @@ export function AuthProvider({ children }) {
       verifySession()
         .catch((err) => {
           if (cancelled) return;
+          if (err?.message === 'verify-stale') return;
+          if (err?.code === 'ERR_CANCELED' || err?.message === 'verify-aborted') {
+            setVerifyError('connection');
+            return;
+          }
           const status = err?.response?.status;
           if (status === 401 || status === 403) {
             // A banned account must see the countdown notice, not a silent logout.
@@ -58,6 +78,11 @@ export function AuthProvider({ children }) {
             localStorage.removeItem('role');
             setToken(null);
             setRole('');
+            setVerifyError('unauthorized');
+          } else if (status) {
+            setVerifyError('connection');
+          } else if (!err?.response) {
+            setVerifyError('connection');
           }
         })
         .finally(() => { if (!cancelled) setLoading(false); });
@@ -72,24 +97,39 @@ export function AuthProvider({ children }) {
   }, [verifySession]);
 
   const login = useCallback((newToken, newRole) => {
+    verifyGenerationRef.current += 1;
     localStorage.setItem('token', newToken);
     if (newRole) {
       localStorage.setItem('role', newRole);
     }
     setToken(newToken);
     setRole(newRole || '');
+    setVerifyError(null);
     armProactiveRefresh();
     verifySession().catch(() => {});
   }, [verifySession]);
 
   const logout = useCallback(() => {
+    // Invalidate late verify/refresh responses before clearing state.
+    verifyGenerationRef.current += 1;
+    verifyControllerRef.current?.abort();
+    verifyPromiseRef.current = null;
     localStorage.removeItem('token');
     localStorage.removeItem('role');
     armProactiveRefresh();
     setToken(null);
     setRole('');
     setUser(null);
+    setVerifyError(null);
   }, []);
+
+  // Bounded recovery: deduped via verifySession single-flight, so repeated
+  // retry clicks share one request instead of fanning out.
+  const retryVerification = useCallback(() => {
+    setVerifyError(null);
+    setLoading(true);
+    return verifySession().finally(() => setLoading(false));
+  }, [verifySession]);
 
   useEffect(() => {
     const onAuthExpired = () => {
@@ -143,7 +183,7 @@ export function AuthProvider({ children }) {
   const isAuthenticated = !!token;
 
   return (
-    <AuthContext.Provider value={{ token, role, user, isAuthenticated, loading, login, logout, verifySession }}>
+    <AuthContext.Provider value={{ token, role, user, isAuthenticated, loading, login, logout, verifySession, verifyError, retryVerification }}>
       {children}
       <BanNoticeModal open={banNotice} onDone={finishBanNotice} />
     </AuthContext.Provider>

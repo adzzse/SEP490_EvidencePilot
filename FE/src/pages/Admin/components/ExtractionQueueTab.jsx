@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Modal from '../../../components/ui/Modal.jsx';
-import { PageSkeleton, JsonTree } from './shared.jsx';
+import { PageSkeleton, AdminPagination, ClearFiltersButton, JsonTree } from './shared.jsx';
+import DateField from '../../../components/ui/DateField.jsx';
 import SearchBar from '../../../components/ui/SearchBar.jsx';
 import { formatDate, formatDateTimeSeconds } from '../../../utils/formatters/date.js';
 import { useToast } from '../../../components/ui/Toast.jsx';
@@ -38,6 +39,14 @@ function QueueSection({ api }) {
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(0);
   const [detailDoc, setDetailDoc] = useState(null);
+  const [clearSeq, setClearSeq] = useState(0);
+  const hasFilter = searchQuery.trim() !== '' || dateFrom !== '' || dateTo !== '';
+  // Local YYYY-MM-DD for date bounds (matches ReviewRequests pattern).
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const clearAll = () => {
+    setSearchQuery(''); setDateFrom(''); setDateTo(''); setPage(0);
+    setClearSeq((n) => n + 1);
+  };
   const [externalUpdates, setExternalUpdates] = useState(0);
   const seenEventIds = useRef(new Set());
   // Collapsing sticky header: when the title block scrolls out of view, the
@@ -364,11 +373,15 @@ function QueueSection({ api }) {
                 ))}
               </div>
             </div>
-            <SearchBar
-              onDebouncedChange={(v) => { setSearchQuery(v); setPage(0); }}
-              placeholder={t('admin.searchDocuments')}
-              className="w-full sm:w-64"
-            />
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <SearchBar
+                key={clearSeq}
+                onDebouncedChange={(v) => { setSearchQuery(v); setPage(0); }}
+                placeholder={t('admin.searchDocuments')}
+                className="w-full sm:w-64"
+              />
+              <ClearFiltersButton active={hasFilter} onClear={clearAll} />
+            </div>
           </div>
 
           {/* Date Range filter */}
@@ -376,31 +389,20 @@ function QueueSection({ api }) {
             <label className="text-[10px] font-bold text-(--text-tertiary) uppercase tracking-wider">
               {t('admin.dateRange')}
             </label>
-            <input
-              type="date"
+            <DateField
               value={dateFrom}
-              max={dateTo || undefined}
-              onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
-              aria-label={t('admin.dateFrom')}
-              className="px-3 py-1.5 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
+              max={dateTo || today}
+              onChange={setDateFrom}
+              ariaLabel={t('admin.dateFrom')}
             />
             <span className="text-(--text-tertiary) text-xs">→</span>
-            <input
-              type="date"
+            <DateField
               value={dateTo}
               min={dateFrom || undefined}
-              onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
-              aria-label={t('admin.dateTo')}
-              className="px-3 py-1.5 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
+              max={today}
+              onChange={setDateTo}
+              ariaLabel={t('admin.dateTo')}
             />
-            {(dateFrom || dateTo) && (
-              <button
-                onClick={() => { setDateFrom(''); setDateTo(''); setPage(0); }}
-                className="text-xs font-bold text-(--text-tertiary) hover:text-(--text-primary) transition"
-              >
-                {t('admin.clearFilter')}
-              </button>
-            )}
             {externalUpdates > 0 && (
               <button
                 onClick={clearFiltersAndRefresh}
@@ -501,23 +503,7 @@ function QueueSection({ api }) {
         {/* Footer / Pagination */}
         <div className="flex items-center justify-between px-6 py-3.5 border-t border-(--border-light) bg-(--surface-secondary)/50 text-xs font-semibold text-(--text-secondary)">
           <span>{t('admin.showingDocs', { shown: Math.min(filteredDocs.length, (page + 1) * PAGE_SIZE), total: combinedList.length })}</span>
-          {totalPages > 1 && (
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <span>{t('admin.page')} {page + 1} / {totalPages}</span>
-              <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
-                className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-          )}
+          <AdminPagination page={page} totalPages={totalPages} onChange={setPage} />
         </div>
       </div>
 

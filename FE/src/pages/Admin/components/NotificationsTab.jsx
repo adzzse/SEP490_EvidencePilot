@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDateTimeSeconds } from '../../../utils/formatters/date.js';
 import { useToast } from '../../../components/ui/Toast.jsx';
+import { ClearFiltersButton } from './shared.jsx';
 function NotificationsSection({ api }) {
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -205,17 +206,20 @@ function NotificationsSection({ api }) {
               </svg>
               <h3 className="text-xs font-bold text-(--text-primary) uppercase tracking-wider">{t('admin.broadcastHistory')}</h3>
             </div>
-            <div className="relative">
-              <svg className="w-3.5 h-3.5 text-(--text-tertiary) absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder={t('admin.searchHistory')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <svg className="w-3.5 h-3.5 text-(--text-tertiary) absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder={t('admin.searchHistory')}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <ClearFiltersButton active={searchQuery.trim() !== ''} onClear={() => setSearchQuery('')} />
             </div>
           </div>
 

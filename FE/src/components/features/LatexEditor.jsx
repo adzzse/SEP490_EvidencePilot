@@ -6,7 +6,7 @@ import { EditorView, Decoration, WidgetType, ViewPlugin } from '@codemirror/view
 import { oneDark } from '@codemirror/theme-one-dark';
 import { latex } from 'codemirror-lang-latex';
 import { undo, redo } from '@codemirror/commands';
-import { changeSpans, createChangeTracker, normalizeSource, remapAnchor, resolveAnchor, sourceFingerprint } from '../../utils/student/feedbackAnchors.js';
+import { changeSpans, createChangeTracker, isCompatibleRecord, normalizeSource, remapAnchor, resolveAnchor, sourceFingerprint } from '../../utils/student/feedbackAnchors.js';
 import { useMediaUrlMap } from '../../hooks/useMediaUrls.js';
 import { blockLineNumbers, findBlockAt } from '../../utils/formatters/editorAssetBlocks.js';
 import { resolveAssetUrl } from '../../utils/formatters/markdownBlocks.js';
@@ -537,7 +537,16 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
     const updateListener = EditorView.updateListener.of((update) => {
       if (update.geometryChanged) onLayoutChangeRef.current?.();
       if (update.docChanged && !update.transactions.some(transaction => transaction.annotation(hydrateSource))) {
-        trackerRef.current.record(update.changes, update.state.doc.toString());
+        const tip = trackerRef.current;
+        // Guard: changes recorded against a different-length document
+        // (section swap or save echo landing mid-flight) would poison later
+        // spans and crash CodeMirror's position mapping on the next update.
+        // Rebase instead — anchors fall back to exact-match recovery.
+        if (!isCompatibleRecord(tip.content, update.startState.doc.length)) {
+          trackerRef.current = createChangeTracker(tip.baseContent, update.state.doc.toString());
+        } else {
+          tip.record(update.changes, update.state.doc.toString());
+        }
       }
       if (update.docChanged && onChangeRef.current) {
         const text = update.state.doc.toString();
@@ -770,9 +779,20 @@ const LatexEditor = forwardRef(function LatexEditor({ content, savedContent = co
 
   // Update review ranges when findings change
   useEffect(() => {
-    if (viewRef.current && findings) {
-      const ranges = findings.map(({ from, to, ...rest }) => ({ from, to, ...rest }));
-      viewRef.current.dispatch({ effects: setReviewRanges.of(ranges) });
+    const v = viewRef.current;
+    if (v && findings) {
+      // Clamp: async findings for a previous (longer) section must never
+      // plant out-of-range decorations — mapping them on the next
+      // transaction throws and crashes the editor.
+      const len = v.state.doc.length;
+      const ranges = findings
+        .map(({ from, to, ...rest }) => ({
+          from: Math.max(0, Math.min(from, len)),
+          to: Math.max(0, Math.min(to, len)),
+          ...rest,
+        }))
+        .filter(({ from, to }) => to > from);
+      v.dispatch({ effects: setReviewRanges.of(ranges) });
     }
   }, [findings]);
 

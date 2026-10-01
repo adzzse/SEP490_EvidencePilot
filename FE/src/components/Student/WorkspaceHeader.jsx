@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -11,8 +11,9 @@ import StatusBadge from '../ui/StatusBadge.jsx';
 import SectionStandardsTab from '../Instructor/review/SectionStandardsTab.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
 
-export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onMarkAllNotificationsRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, reviewAction = null, reviewRound = null, reviewGuide = null, review = null, reviewSection = null, reviewTools = null }) {
-  const { user } = useAuth();
+export default function WorkspaceHeader({ workspaceMode = 'student', project, notifications, unreadCount, showNotifications, setShowNotifications, onMarkNotificationRead, onMarkAllNotificationsRead, onOpenNotification, historyDisabled, onShowHistory, showExportMenu, setShowExportMenu, handleExportTexArchive, handleExportTraceabilityJson, handleExportTraceabilityCsv, tourSteps, tourKey, reviewAction = null, reviewRound = null, review = null, reviewSection = null, reviewTools = null }) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
   const { t } = useTranslation();
@@ -20,7 +21,6 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
   const [showProfile, setShowProfile] = useState(false);
   // rationale: review-only header menus share the hook-owned round state (no duplicate source)
   const [showRoundMenu, setShowRoundMenu] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
   const [showStandards, setShowStandards] = useState(false);
   const [showMobileStandards, setShowMobileStandards] = useState(false);
   const isReview = workspaceMode === 'review';
@@ -32,6 +32,7 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
     setShowMoreMenu(false);
     action();
   };
+  const handleLogout = () => { logout(); navigate('/'); };
 
   const exportMenu = (
     <div className="py-1">
@@ -50,7 +51,7 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
         <div data-tour="header-logo" className="w-7 h-7 bg-(--brand) text-(--on-brand) rounded-lg text-xs flex items-center justify-center font-bold shadow-sm shrink-0">EP</div>
         {isReview && reviewRound?.orderedRequests?.length > 0 && (
           <div className="relative shrink-0">
-            <button type="button" onClick={() => { setShowRoundMenu(!showRoundMenu); setShowGuide(false); setShowMoreMenu(false); }} aria-expanded={showRoundMenu} aria-label={t('instructor.review.reviewRound')}
+            <button type="button" onClick={() => { setShowRoundMenu(!showRoundMenu); setShowMoreMenu(false); }} aria-expanded={showRoundMenu} aria-label={t('instructor.review.reviewRound')}
               title={activeRound ? formatDateTime(activeRound.requestedAt, language) : undefined}
               className="flex h-7 max-w-[110px] sm:max-w-[160px] items-center gap-1 rounded-lg border border-(--border) bg-(--surface-secondary) px-2 text-[11px] font-bold text-(--text-secondary) hover:text-(--text-primary) focus-visible:ring-2 focus-visible:ring-(--brand)">
               <span className="truncate">{activeRound ? formatDateTime(activeRound.requestedAt, language) : ''}</span>
@@ -94,22 +95,6 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
           <button data-tour="header-dark-mode" onClick={toggleTheme} className={iconButton} title={theme === 'light' ? t('darkMode') : t('lightMode')} aria-label={theme === 'light' ? t('darkMode') : t('lightMode')}>
             {theme === 'light' ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>}
           </button>
-          {isReview && reviewGuide && (
-            <div className="relative">
-              <button type="button" onClick={() => { setShowGuide(!showGuide); setShowRoundMenu(false); setShowMoreMenu(false); }} className={iconButton} title={t('instructor.review.reviewGuide')} aria-label={t('instructor.review.reviewGuide')} aria-expanded={showGuide}>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              </button>
-              {showGuide && (
-                <div className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] max-h-96 overflow-y-auto px-4 py-3">
-                  <div className="pb-2 flex justify-between items-center">
-                    <span className="text-xs font-bold text-(--text-primary)">{t('instructor.review.reviewGuide')}</span>
-                    <button type="button" onClick={() => setShowGuide(false)} className={iconButton} aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
-                  </div>
-                  {reviewGuide}
-                </div>
-              )}
-            </div>
-          )}
           {tourSteps && <TourLauncher steps={tourSteps} tourKey={tourKey || 'student-workspace'} className={`${iconButton} w-8 h-8 flex items-center justify-center`} />}
           <div className="flex bg-(--surface-secondary) p-0.5 rounded-lg border border-(--border) text-[10px] font-bold">
             <button onClick={() => language !== 'en' && toggleLanguage()} className={`px-2 py-1 rounded-md transition ${language === 'en' ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-tertiary)'}`}>EN</button>
@@ -117,12 +102,12 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
           </div>
           {isReview && review && (
               <div className="relative">
-                <button type="button" onClick={() => { setShowStandards(!showStandards); setShowGuide(false); setShowRoundMenu(false); setShowMoreMenu(false); }} className="flex h-8 items-center gap-1 rounded-lg border border-(--border) bg-(--surface) px-2 text-xs font-bold text-(--text-secondary) transition-colors hover:text-(--text-primary)" title={t('instructor.review.standardsTab')} aria-label={t('instructor.review.standardsTab')} aria-expanded={showStandards}>
+                <button type="button" onClick={() => { setShowStandards(!showStandards); setShowRoundMenu(false); setShowMoreMenu(false); }} className="flex h-8 items-center gap-1 rounded-lg border border-(--border) bg-(--surface) px-2 text-xs font-bold text-(--text-secondary) transition-colors hover:text-(--text-primary)" title={t('instructor.review.standardsTab')} aria-label={t('instructor.review.standardsTab')} aria-expanded={showStandards}>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   <span className="hidden lg:inline">{t('instructor.review.standardsTab')}</span>
                 </button>
                 {showStandards && (
-                  <div className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] max-h-96 overflow-y-auto p-1">
+                  <div className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] max-h-96 overflow-y-auto hide-scrollbar p-1">
                     <div className="sticky top-0 bg-(--surface) px-3 py-2 flex justify-between items-center">
                       <span className="text-xs font-bold text-(--text-primary)">{t('instructor.review.standardsTab')}</span>
                       <button type="button" onClick={() => setShowStandards(false)} className={iconButton} aria-label={t('close')}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
@@ -199,6 +184,19 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
             </div>
             {project?.currentUserRole && <span className="hidden lg:inline text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider">{project.currentUserRole}</span>}
           </button>
+          {isReview && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              title={t('shell.profile.signOut')}
+              aria-label={t('shell.profile.signOut')}
+              className={iconButton}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          )}
           <ProfileModal open={showProfile} onClose={() => setShowProfile(false)} />
         </div>
 

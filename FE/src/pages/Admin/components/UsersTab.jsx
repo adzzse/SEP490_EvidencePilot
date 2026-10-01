@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAdminTour } from '../../../hooks/useAdminTour.js';
-import { ErrorBlock } from './shared.jsx';
+import { ErrorBlock, AdminPagination, ClearFiltersButton } from './shared.jsx';
+import Dropdown from '../../../components/ui/Dropdown.jsx';
 import Modal from '../../../components/ui/Modal.jsx';
 import UserImportModal from './UserImportModal.jsx';
 import UserDetailCard from '../../../components/ui/UserDetailCard.jsx';
@@ -29,6 +30,12 @@ function UsersSection({ api }) {
   const [q, setQ] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [clearSeq, setClearSeq] = useState(0);
+  const hasFilter = q.trim() !== '' || roleFilter !== '' || statusFilter !== '';
+  const clearAll = () => {
+    setQ(''); setRoleFilter(''); setStatusFilter(''); setPage(0);
+    setClearSeq((n) => n + 1);
+  };
 
   const params = { page, size: 5 };
   if (q.trim()) params.q = q.trim();
@@ -157,44 +164,48 @@ function UsersSection({ api }) {
         </div>
       </div>
 
-      {/* Search & Filters container */}
-      <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col sm:flex-row gap-3 items-center">
+      {/* Search, filters & table — one card */}
+      <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border) overflow-hidden">
+        <div className="p-4 border-b border-(--border-light) flex flex-col sm:flex-row gap-3 items-center">
         <SearchBar
+          key={clearSeq}
           onDebouncedChange={(v) => { setQ(v); setPage(0); }}
           placeholder={t('admin.searchUsers')}
           className="w-full sm:flex-1"
         />
 
         {/* Dropdown 1: Role */}
-        <select
+        <Dropdown
           value={roleFilter}
-          onChange={(e) => { setRoleFilter(e.target.value); setPage(0); }}
-          className="w-full sm:w-36 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none cursor-pointer"
-        >
-          <option value="">{t('admin.allRoles')}</option>
-          <option value="STUDENT">{t('admin.students')}</option>
-          <option value="INSTRUCTOR">{t('admin.instructors')}</option>
-          <option value="ADMIN">{t('admin.admin')}</option>
-        </select>
+          onChange={(v) => { setRoleFilter(v); setPage(0); }}
+          ariaLabel={t('admin.allRoles')}
+          className="w-full sm:w-36"
+          maxVisibleRows={5}
+          options={[
+            { value: '', label: t('admin.allRoles') },
+            { value: 'STUDENT', label: t('admin.students') },
+            { value: 'INSTRUCTOR', label: t('admin.instructors') },
+            { value: 'ADMIN', label: t('admin.admin') },
+          ]}
+        />
 
         {/* Dropdown 2: Status */}
-        <select
+        <Dropdown
           value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
-          className="w-full sm:w-36 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none cursor-pointer"
-        >
-          <option value="">{t('admin.allStatuses')}</option>
-          <option value="ACTIVE">{t('admin.active')}</option>
-          <option value="VERIFYING_EMAIL">{t('admin.verifying')}</option>
-          <option value="BANNED">{t('admin.banned')}</option>
-        </select>
+          onChange={(v) => { setStatusFilter(v); setPage(0); }}
+          ariaLabel={t('admin.allStatuses')}
+          className="w-full sm:w-36"
+          maxVisibleRows={5}
+          options={[
+            { value: '', label: t('admin.allStatuses') },
+            { value: 'ACTIVE', label: t('admin.active') },
+            { value: 'VERIFYING_EMAIL', label: t('admin.verifying') },
+            { value: 'BANNED', label: t('admin.banned') },
+          ]}
+        />
 
-        {/* Adjustments Filter Button */}
-        <button className="p-2 bg-(--surface) border border-(--border) rounded-xl hover:bg-(--surface-secondary) transition shadow-sm shrink-0">
-          <svg className="w-4 h-4 text-(--text-secondary)" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-          </svg>
-        </button>
+        {/* Clear-all button (replaces the decorative filter icon) */}
+        <ClearFiltersButton active={hasFilter} onClear={clearAll} />
       </div>
 
       {showImport && (
@@ -263,13 +274,11 @@ function UsersSection({ api }) {
 
       {error && <ErrorBlock msg={error} onRetry={() => usersQuery.refetch()} />}
 
-      {/* Table Card */}
-      <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border) overflow-hidden">
         <div className="overflow-x-auto">
           <table data-guide="table" className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-(--surface-secondary) text-(--text-tertiary) font-bold uppercase border-b border-(--border-light)">
-                <th className="px-6 py-3.5 font-bold tracking-wider"><span className="sr-only">{t('admin.srOnlyAvatar')}</span></th>
+                <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.srOnlyAvatar')}</th>
                 <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.email')}</th>
                 <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.fullName')}</th>
                 <th className="px-6 py-3.5 font-bold tracking-wider">{t('admin.studentCode')}</th>
@@ -371,36 +380,7 @@ function UsersSection({ api }) {
         {/* Footer / Pagination */}
         <div className="flex items-center justify-between px-6 py-3.5 border-t border-(--border-light) bg-(--surface-secondary)/50 text-xs font-semibold text-(--text-secondary)">
           <span>{t('admin.showingUsers', { shown: users.content.length, total: users.totalElements || users.content.length })}</span>
-          {users.totalPages > 1 && (
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => setPage(page - 1)} disabled={page === 0}
-                className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              {Array.from({ length: users.totalPages }).map((_, i) => {
-                if (i === 0 || i === users.totalPages - 1 || (i >= page - 1 && i <= page + 1)) {
-                  const isActive = page === i;
-                  return (
-                    <button key={i} onClick={() => setPage(i)}
-                      className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold transition ${isActive ? 'bg-[#1e3a8a] text-white shadow-sm' : 'border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary)'}`}>
-                      {i + 1}
-                    </button>
-                  );
-                } else if (i === 1 || i === users.totalPages - 2) {
-                  return <span key={i} className="text-(--text-tertiary) text-xs px-0.5">...</span>;
-                }
-                return null;
-              })}
-              <button onClick={() => setPage(page + 1)} disabled={page >= users.totalPages - 1}
-                className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-          )}
+          <AdminPagination page={page} totalPages={users.totalPages} onChange={setPage} />
         </div>
       </div>
 

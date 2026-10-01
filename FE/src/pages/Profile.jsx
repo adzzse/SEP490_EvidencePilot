@@ -9,6 +9,7 @@ const ReactCrop = lazy(() => Promise.all([
 import api from '../services/api.js';
 import { AppHeader, LoadingSkeleton, Breadcrumb, Modal } from '../components';
 import OtpInput from '../components/ui/OtpInput.jsx';
+import { AdminPagination } from './Admin/components/shared.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useLanguage } from '../context/LanguageContext.jsx';
 import { formatDateTime } from '../utils/formatters/date';
@@ -335,7 +336,7 @@ export function ProfileContent({ embedded = false, onNavigate }) {
   const [activityQuery, setActivityQuery] = useState('');
   const [activitySort, setActivitySort] = useState('latest');
   const [activityPage, setActivityPage] = useState(1);
-  const ACTIVITY_PAGE_SIZE = 4;
+  const ACTIVITY_PAGE_SIZE = 3;
 
   // Tab State with deep-linking
   const currentTab = searchParams.get('tab') === 'activity' ? 'activity' : 'account';
@@ -785,6 +786,8 @@ export function ProfileContent({ embedded = false, onNavigate }) {
           </div>
         </div>
 
+        {/* Tab panels — fixed height when embedded so switching tabs never resizes the modal */}
+        <div className={embedded ? 'h-[480px] overflow-y-auto pr-1' : ''}>
         {/* Tab 1: Account Settings */}
         {currentTab === 'account' && (
           <div className="space-y-6">
@@ -1049,7 +1052,7 @@ export function ProfileContent({ embedded = false, onNavigate }) {
 
               {activityLoading ? (
                 <div className="space-y-3">
-                  {Array.from({ length: 4 }).map((_, i) => (
+                  {Array.from({ length: 3 }).map((_, i) => (
                     <div key={i} className="h-14 bg-(--surface-secondary) rounded-xl animate-pulse" />
                   ))}
                 </div>
@@ -1081,25 +1084,7 @@ export function ProfileContent({ embedded = false, onNavigate }) {
                   </div>
                   {totalActivityPages > 1 && (
                     <div className="mt-4 flex items-center justify-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        disabled={safeActivityPage <= 1}
-                        onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
-                        className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                      >
-                        {t('profile.activity.previous')}
-                      </button>
-                      <span className="px-3 py-1.5 font-mono font-bold text-(--text-secondary)">
-                        {safeActivityPage} / {totalActivityPages}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={safeActivityPage >= totalActivityPages}
-                        onClick={() => setActivityPage((p) => Math.min(totalActivityPages, p + 1))}
-                        className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                      >
-                        {t('profile.activity.next')}
-                      </button>
+                      <AdminPagination page={safeActivityPage - 1} totalPages={totalActivityPages} onChange={(i) => setActivityPage(i + 1)} />
                     </div>
                   )}
                 </>
@@ -1107,6 +1092,7 @@ export function ProfileContent({ embedded = false, onNavigate }) {
             </div>
           </div>
         )}
+        </div>
 
               </main>
 

@@ -24,6 +24,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import { hasProjectAction } from '../../utils/projectActions.js';
 import { formatDate, formatDateTime } from '../../utils/formatters/date.js';
+import DateField from '../../components/ui/DateField.jsx';
 import { taskKey, readTask, writeTask } from '../../utils/taskState.js';
 import { getWithRetry } from '../../utils/aiJobPolling.js';
 import { readUpload, writeUpload, prepareUpload, listUploadDocuments, reconcileFiles } from '../../utils/uploadRecovery.js';
@@ -161,6 +162,8 @@ export default function ProjectDetail() {
   const [reportMemberId, setReportMemberId] = useState('ALL');
   const [reportFrom, setReportFrom] = useState(() => reportDate(29));
   const [reportTo, setReportTo] = useState(() => reportDate(0));
+  // Local YYYY-MM-DD upper bound for the report date fields.
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const [progressQuery, setProgressQuery] = useState('');
   const [progressSort, setProgressSort] = useState({ key: 'name', dir: 1 });
   const [users, setUsers] = useState([]);
@@ -1729,30 +1732,29 @@ export default function ProjectDetail() {
                 <div className="flex flex-wrap items-center gap-2 rounded-xl bg-[var(--surface-secondary)] p-2">
                   <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
                     {t('instructor.projectDetail.fromLabel')}
-                    <input
-                      type="date"
+                    <DateField
                       value={reportFrom}
-                      max={reportTo || undefined}
-                      onChange={event => {
+                      max={reportTo || today}
+                      onChange={(value) => {
                         setProgressReport(null);
-                        setReportFrom(event.target.value);
-                        if (!event.target.value) setReportTo('');
+                        setReportFrom(value);
+                        if (!value) setReportTo('');
                       }}
-                      className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-2 text-xs text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                      ariaLabel={t('instructor.projectDetail.fromLabel')}
                     />
                   </label>
                   <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
                     {t('instructor.projectDetail.toLabel')}
-                    <input
-                      type="date"
+                    <DateField
                       value={reportTo}
                       min={reportFrom || undefined}
-                      onChange={event => {
+                      max={today}
+                      onChange={(value) => {
                         setProgressReport(null);
-                        setReportTo(event.target.value);
-                        if (!event.target.value) setReportFrom('');
+                        setReportTo(value);
+                        if (!value) setReportFrom('');
                       }}
-                      className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-2 text-xs text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--brand)]"
+                      ariaLabel={t('instructor.projectDetail.toLabel')}
                     />
                   </label>
                   <button

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Modal from '../../../components/ui/Modal.jsx';
-import { PageSkeleton, ErrorBlock, JsonTree } from './shared.jsx';
+import { PageSkeleton, ErrorBlock, AdminPagination, ClearFiltersButton, JsonTree } from './shared.jsx';
 import Dropdown from '../../../components/ui/Dropdown.jsx';
 import ProjectAvatar from '../../../components/ui/ProjectAvatar.jsx';
 import { formatDateTimeSeconds } from '../../../utils/formatters/date.js';
@@ -14,6 +14,10 @@ function PapersSection({ api }) {
   const [q, setQ] = useState('');
   const [projectId, setProjectId] = useState('');
   const [collectionId, setCollectionId] = useState('');
+  const hasFilter = q.trim() !== '' || projectId !== '' || collectionId !== '';
+  const clearAll = () => {
+    setQ(''); setProjectId(''); setCollectionId(''); setPage(0);
+  };
 
   const params = { page, size: 5 };
   if (q) params.q = q;
@@ -126,6 +130,7 @@ function PapersSection({ api }) {
                 ...collections.map(c => ({ value: c.id, label: shortName(c.name) })),
               ]}
             />
+            <ClearFiltersButton active={hasFilter} onClear={clearAll} />
           </div>
         </div>
 
@@ -149,13 +154,13 @@ function PapersSection({ api }) {
                     <div className="flex items-center gap-3">
                       <ProjectAvatar name={doc.projectName || doc.title || doc.originalFilename || '?'} size="w-8 h-8" />
                       <div className="min-w-0">
-                        <span className="font-bold text-(--text-primary) block truncate max-w-xs">{doc.title || doc.originalFilename}</span>
-                        {doc.originalFilename && doc.title && <span className="text-[10px] text-(--text-tertiary) font-medium">{doc.originalFilename}</span>}
+                        <span title={doc.title || doc.originalFilename} className="font-bold text-(--text-primary) block truncate max-w-xs">{doc.title || doc.originalFilename}</span>
+                        {doc.originalFilename && doc.title && <span title={doc.originalFilename} className="text-[10px] text-(--text-tertiary) font-medium block truncate max-w-xs">{doc.originalFilename}</span>}
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-(--text-secondary)">{doc.projectName || '—'}</td>
-                  <td className="px-6 py-4 text-(--text-secondary) font-mono text-[10px]">{doc.doi || '—'}</td>
+                  <td className="px-6 py-4 text-(--text-secondary)"><span title={doc.projectName || ''} className="block max-w-36 truncate">{doc.projectName || '—'}</span></td>
+                  <td className="px-6 py-4 text-(--text-secondary) font-mono text-[10px] whitespace-nowrap">{doc.doi || '—'}</td>
                   <td className="px-6 py-4">{statusBadge(doc.processingStatus)}</td>
                   <td className="px-6 py-4 text-right">
                     <button
@@ -173,25 +178,7 @@ function PapersSection({ api }) {
 
         <div className="flex items-center justify-between px-6 py-3.5 border-t border-(--border-light) bg-(--surface-secondary)/50 text-xs font-semibold text-(--text-secondary)">
           <span>{t('admin.showingDocs', { shown: documents.content.length, total: documents.totalElements })}</span>
-          {documents.totalPages > 1 && (
-            <div className="flex items-center gap-2">
-              <button
-                disabled={page === 0}
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                className="px-3 py-1.5 rounded-lg border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary) transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              >
-                {t('admin.prev')}
-              </button>
-              <span>{t('admin.page')} {page + 1} / {documents.totalPages}</span>
-              <button
-                disabled={page + 1 >= documents.totalPages}
-                onClick={() => setPage(p => p + 1)}
-                className="px-3 py-1.5 rounded-lg border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary) transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              >
-                {t('admin.next')}
-              </button>
-            </div>
-          )}
+          <AdminPagination page={page} totalPages={documents.totalPages} onChange={setPage} />
         </div>
       </div>
 

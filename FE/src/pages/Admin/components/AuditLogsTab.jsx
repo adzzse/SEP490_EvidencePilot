@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAdminTour } from '../../../hooks/useAdminTour.js';
 import Modal from '../../../components/ui/Modal.jsx';
-import { ErrorBlock, JsonTree } from './shared.jsx';
+import { ErrorBlock, AdminPagination, ClearFiltersButton, JsonTree } from './shared.jsx';
+import Dropdown from '../../../components/ui/Dropdown.jsx';
 import SearchBar from '../../../components/ui/SearchBar.jsx';
 import { formatDateTimeSeconds } from '../../../utils/formatters/date.js';
 import { useTranslation } from 'react-i18next';
@@ -19,13 +20,30 @@ function AuditLogsSection({ api }) {
   const [q, setQ] = useState('');
   const [actionFilter, setActionFilter] = useState('');
   const [severityFilter, setSeverityFilter] = useState('');
-  const [actorInput, setActorInput] = useState('');
   const [actorId, setActorId] = useState('');
+  const [clearSeq, setClearSeq] = useState(0);
+
+  // ponytail: one search box routes itself — a UUID becomes the server-side
+  // actor filter, anything else stays a client-side text filter.
+  const handleSearch = (v) => {
+    setPage(0);
+    if (UUID_RE.test(v.trim())) { setActorId(v.trim()); setQ(''); }
+    else { setActorId(''); setQ(v); }
+  };
+  const clearActor = () => {
+    setActorId(''); setQ(''); setPage(0);
+    setClearSeq((n) => n + 1);
+  };
+  const hasFilter = q.trim() !== '' || actorId !== '' || actionFilter !== '' || severityFilter !== '';
+  const clearAll = () => {
+    setActionFilter(''); setSeverityFilter(''); setPage(0);
+    clearActor();
+  };
 
   const fetch = useCallback(async (p, filters, signal) => {
     setLoading(true); setError(null);
     try {
-      const params = { page: p, size: 5 };
+      const params = { page: p, size: 6 };
       if (filters.actorId) params.actorId = filters.actorId;
       if (filters.action) params.action = filters.action;
       if (filters.severity) params.severity = filters.severity;
@@ -44,16 +62,6 @@ function AuditLogsSection({ api }) {
     fetch(page, { actorId, action: actionFilter, severity: severityFilter }, ac.signal);
     return () => ac.abort();
   }, [fetch, page, actorId, actionFilter, severityFilter]);
-
-  const applyActorInput = () => {
-    const v = actorInput.trim();
-    if (v !== '' && !UUID_RE.test(v)) {
-      setError(t('admin.invalidActorId'));
-      return;
-    }
-    setPage(0);
-    setActorId(v);
-  };
 
   const auditTourSteps = useCallback(() => [
     { popover: { title: t('admin.processGuide'), description: t('admin.guideAuditDesc'), side: 'center' } },
@@ -143,77 +151,61 @@ function AuditLogsSection({ api }) {
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col gap-3">
+      {/* Filter, search & table — one card (UUID text auto-routes to the actor filter) */}
+      <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border) overflow-hidden">
+      <div className="p-4 border-b border-(--border-light) flex flex-col gap-3">
         <div className="flex flex-1 w-full gap-3 items-center flex-col sm:flex-row">
           <SearchBar
-            onDebouncedChange={(v) => { setQ(v); setPage(0); }}
+            key={clearSeq}
+            onDebouncedChange={handleSearch}
             placeholder={t('admin.searchLogs')}
             className="w-full sm:flex-1"
           />
 
           {/* Severity Filter Dropdown (server-side) */}
-          <select
+          <Dropdown
             value={severityFilter}
-            onChange={(e) => { setSeverityFilter(e.target.value); setPage(0); }}
-            aria-label={t('admin.filterBySeverity')}
-            className="w-full sm:w-36 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none cursor-pointer"
-          >
-            <option value="">{t('admin.allSeverities')}</option>
-            <option value="INFO">{t('admin.severityInfo')}</option>
-            <option value="WARN">{t('admin.severityWarn')}</option>
-            <option value="CRITICAL">{t('admin.severityCritical')}</option>
-          </select>
-
-          {/* Action Filter (server-side exact match) */}
-          <input
-            type="text"
-            value={actionFilter}
-            onChange={(e) => { setActionFilter(e.target.value.trim()); setPage(0); }}
-            placeholder={t('admin.filterByAction')}
-            aria-label={t('admin.filterByAction')}
-            spellCheck={false}
-            className="w-full sm:w-44 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-(--text-tertiary)"
+            onChange={(v) => { setSeverityFilter(v); setPage(0); }}
+            ariaLabel={t('admin.filterBySeverity')}
+            className="w-full sm:w-36"
+            maxVisibleRows={5}
+            options={[
+              { value: '', label: t('admin.allSeverities') },
+              { value: 'INFO', label: t('admin.severityInfo') },
+              { value: 'WARN', label: t('admin.severityWarn') },
+              { value: 'CRITICAL', label: t('admin.severityCritical') },
+            ]}
           />
+
+          {/* Action Type Filter Dropdown (server-side exact match) */}
+          <Dropdown
+            value={actionFilter}
+            onChange={(v) => { setActionFilter(v); setPage(0); }}
+            ariaLabel={t('admin.filterByAction')}
+            className="w-full sm:w-44"
+            maxVisibleRows={5}
+            options={[
+              { value: '', label: t('admin.allActions') },
+              ...['CREATE', 'UPDATE', 'PROJECT_CREATED', 'PROJECT_UPDATED', 'BAN', 'USER_BANNED'].map((a) => ({ value: a, label: a })),
+            ]}
+          />
+
+          <ClearFiltersButton active={hasFilter} onClear={clearAll} />
         </div>
 
-        <div className="flex w-full gap-3 items-center flex-col sm:flex-row">
-          {/* Actor ID search (server-side) */}
-          <div className="flex flex-1 gap-2 w-full">
-            <input
-              type="text"
-              value={actorInput}
-              onChange={(e) => setActorInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') applyActorInput(); }}
-              placeholder={t('admin.filterByActor')}
-              aria-label={t('admin.filterByActor')}
-              spellCheck={false}
-              className="flex-1 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-mono text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-(--text-tertiary) placeholder:font-sans"
-            />
-            <button
-              onClick={applyActorInput}
-              className="px-4 py-2 text-xs font-bold text-(--brand-foreground) bg-(--surface) border border-(--border) rounded-xl hover:bg-(--surface-secondary) transition shadow-sm shrink-0"
-            >
-              {t('admin.filter')}
-            </button>
-            {actorId && (
-              <button
-                onClick={() => { setActorInput(''); setActorId(''); setPage(0); }}
-                className="px-3 py-2 text-xs font-bold text-(--text-tertiary) hover:text-(--text-primary) transition shrink-0"
-                title={t('admin.clearFilter')}
-              >
-                ×
-              </button>
-            )}
+        {actorId && (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-bold font-mono">
+              {actorId}
+              <button onClick={clearActor} title={t('admin.clearFilter')} aria-label={t('admin.clearFilter')} className="hover:text-blue-900 font-sans">×</button>
+            </span>
           </div>
-        </div>
+        )}
       </div>
 
       {error && <ErrorBlock msg={error} onRetry={() => fetch(page, { actorId, action: actionFilter, severity: severityFilter }, new AbortController().signal)} />}
 
-      {/* Table Card */}
-      <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border) overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="overflow-x-auto">
           <table data-guide="logs-table" className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-(--surface-secondary) text-(--text-tertiary) font-bold uppercase border-b border-(--border-light)">
@@ -226,7 +218,7 @@ function AuditLogsSection({ api }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-(--border-light) text-(--text-primary) font-semibold">
-              {loading ? Array.from({ length: 5 }).map((_, i) => (
+              {loading ? Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i} className="animate-pulse">{Array.from({ length: 6 }).map((_, j) => (
                   <td key={j} className="px-6 py-5"><div className="h-4 bg-gray-200 rounded w-full" /></td>
                 ))}</tr>
@@ -281,19 +273,7 @@ function AuditLogsSection({ api }) {
         {/* Footer / Pagination */}
         <div className="flex items-center justify-between px-6 py-3.5 border-t border-(--border-light) bg-(--surface-secondary)/50 text-xs font-semibold text-(--text-secondary)">
           <span>{t('admin.showingLogs', { shown: filteredLogs.length, total: logs.totalElements ?? 0 })}</span>
-          {logs.totalPages > 1 && (
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => setPage(page - 1)} disabled={page === 0}
-                className="px-3 py-1.5 rounded-lg border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
-                {t('admin.prev')}
-              </button>
-              <span>{t('admin.page')} {page + 1} / {logs.totalPages}</span>
-              <button onClick={() => setPage(page + 1)} disabled={page >= logs.totalPages - 1}
-                className="px-3 py-1.5 rounded-lg border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
-                {t('admin.next')}
-              </button>
-            </div>
-          )}
+          <AdminPagination page={page} totalPages={logs.totalPages} onChange={setPage} />
         </div>
       </div>
 

@@ -605,7 +605,7 @@ export default function EditorPanel({
         </button>
       )}
       {review && (
-        <div className="w-[340px] xl:w-[380px] max-w-full shrink-0 min-h-0 overflow-y-auto overflow-x-hidden hide-scrollbar rounded-xl border border-(--border) bg-(--surface) shadow-sm p-2">
+        <div className="w-[340px] xl:w-[380px] max-w-full shrink-0 min-h-0 overflow-y-auto overflow-x-hidden hide-scrollbar rounded-xl border border-(--border) bg-(--surface) shadow-sm px-2 pb-2">
           <InstructorFeedbackPanel review={review} selectedSection={currentSection} onSelectFeedback={onSelectFeedback} projectId={projectId} focusSignal={composerFocusToken} composerFocusToken={composerFocusToken} submittedFindings={submittedFindings} submittedFindingsStale={submittedFindingsStale} referenceData={referenceData} onLocateReference={handleLocateReferenceItem} />
         </div>
       )}

@@ -166,6 +166,20 @@ class UserInvitationServiceImplTest {
     }
 
     @Test
+    void acceptInvitation_rejectsDeletedAccountEvenWithValidToken() {
+        User u = user();
+        u.setAccountStatus(AccountStatus.DELETED);
+        u.setEmailVerificationToken("tok-deleted");
+        u.setEmailVerificationExpiresAt(LocalDateTime.now().plusHours(1));
+        when(users.findByEmailVerificationTokenForUpdate("tok-deleted")).thenReturn(Optional.of(u));
+
+        assertThatThrownBy(() -> service.acceptInvitation("tok-deleted", "newpass123", null, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("invalid or has expired");
+        assertThat(u.getAccountStatus()).isEqualTo(AccountStatus.DELETED);
+    }
+
+    @Test
     void acceptInvitation_rejectsWeakPassword() {
         assertThatThrownBy(() -> service.acceptInvitation("tok", "short", null, null))
                 .isInstanceOf(ResponseStatusException.class)
@@ -211,6 +225,18 @@ class UserInvitationServiceImplTest {
     void previewInvitation_rejectsExpiredToken() {
         when(users.findByEmailVerificationToken("expired")).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.previewInvitation("expired"))
+                .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void previewInvitation_rejectsDeletedAccount() {
+        User u = user();
+        u.setAccountStatus(AccountStatus.DELETED);
+        u.setEmailVerificationToken("tok-prev-deleted");
+        u.setEmailVerificationExpiresAt(LocalDateTime.now().plusHours(1));
+        when(users.findByEmailVerificationToken("tok-prev-deleted")).thenReturn(Optional.of(u));
+
+        assertThatThrownBy(() -> service.previewInvitation("tok-prev-deleted"))
                 .isInstanceOf(ResponseStatusException.class);
     }
 

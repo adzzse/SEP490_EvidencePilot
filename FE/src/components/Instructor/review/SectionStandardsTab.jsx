@@ -48,12 +48,7 @@ export default function SectionStandardsTab({ review, selectedSection }) {
   const items = shown.result?.items || [];
   return (
     <div className="space-y-3 text-xs">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={`rounded px-2 py-1 text-[10px] font-bold ${shown.stale || shown.status === 'STALE' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-          {shown.stale || shown.status === 'STALE' ? t('instructor.review.standardStale') : shown.status}
-        </span>
-        {shown.updatedAt && <span className="text-[10px] text-(--text-tertiary)">{formatDateTime(shown.updatedAt)}</span>}
-      </div>
+      {shown.updatedAt && <p className="text-[10px] text-(--text-tertiary)">{formatDateTime(shown.updatedAt)}</p>}
       <p className="text-[10px] italic text-(--text-tertiary)">
         {shown.historical ? t('instructor.review.standardCapturedAtSubmission') : t('instructor.review.standardCurrentNotice')}
       </p>

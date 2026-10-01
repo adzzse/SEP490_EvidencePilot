@@ -117,7 +117,8 @@ class ProgressReportServiceImplTest {
         java.sql.Timestamp sqlTs = java.sql.Timestamp.valueOf(edit.getOccurredAt());
         byte[] actorBytes = uuidToBytes(previousAssignee.getId());
         Object[] row = new Object[]{actorBytes, sqlDate, 1L, 2, 2, 0, sqlTs, "Introduction"};
-        when(auditLogRepository.aggregateDailyWithin(any(byte[].class), eq(from.atStartOfDay()), eq(to.plusDays(1).atStartOfDay()), eq("day")))
+        // Bounds shift by the +07:00 Vietnam offset (stored timestamps are UTC).
+        when(auditLogRepository.aggregateDailyWithin(any(byte[].class), eq(from.atStartOfDay().minusHours(7)), eq(to.plusDays(1).atStartOfDay().minusHours(7)), eq("day")))
                 .thenReturn(List.<Object[]>of(row));
 
         var report = service.getProgressReport(project.getId(), "ALL", from, to);
@@ -161,7 +162,7 @@ class ProgressReportServiceImplTest {
                     assertThat(item.assignedSectionCount()).isZero();
                     assertThat(item.saveCount()).isZero();
                 });
-        verify(auditLogRepository).aggregateDailyWithin(any(byte[].class), eq(from.atStartOfDay()), eq(to.plusDays(1).atStartOfDay()), eq("day"));
+        verify(auditLogRepository).aggregateDailyWithin(any(byte[].class), eq(from.atStartOfDay().minusHours(7)), eq(to.plusDays(1).atStartOfDay().minusHours(7)), eq("day"));
     }
 
     @Test

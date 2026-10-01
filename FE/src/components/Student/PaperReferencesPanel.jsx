@@ -160,12 +160,12 @@ export default function PaperReferencesPanel({
             <div key={reference.sourceId} className="bg-(--surface) border border-(--border) rounded-xl p-3.5">
               <p className="text-sm font-bold text-(--text-primary) leading-snug">{title}</p>
               {(reference.authors || reference.publicationYear || reference.doi) && (
-                <p className="text-[11px] text-(--text-secondary) mt-1 leading-relaxed">
+                <p className="text-[11px] text-(--text-secondary) mt-1 leading-relaxed break-words">
                   {[reference.authors, reference.publicationYear, reference.doi].filter(Boolean).join(' · ')}
                 </p>
               )}
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="rounded px-1.5 py-0.5 text-[9px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                <span className="rounded px-1.5 py-0.5 text-[9px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 min-w-0 max-w-full break-all">
                   {reference.citationKey}
                 </span>
                 <span

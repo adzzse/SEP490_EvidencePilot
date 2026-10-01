@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ChangeSet, Text } from '@codemirror/state';
-import { changeSpans, createChangeTracker, normalizeSource, remapAnchor, resolveAnchor, sourceFingerprint } from './feedbackAnchors.js';
+import { changeSpans, createChangeTracker, isCompatibleRecord, normalizeSource, remapAnchor, resolveAnchor, sourceFingerprint } from './feedbackAnchors.js';
 
 async function target(source, from, to) {
   const hash = await sourceFingerprint(source);
@@ -66,4 +66,19 @@ test('restored local drafts use a conservative replacement', async () => {
   const tracker = createChangeTracker('A target B', 'A new target B');
   const anchor = await target('A target B', 2, 8);
   assert.equal(remapAnchor(anchor, tracker.snapshot().content, tracker.snapshot().changes).current.status, 'DETACHED');
+});
+
+test('cross-document transactions rebase instead of poisoning the tracker', () => {
+  // Reported shape: a 13988-char document's transaction landing on a tracker
+  // whose tip is 2692 chars (section swap mid-flight). Recording it would
+  // corrupt later spans and crash CodeMirror's position mapping.
+  const tip = 'y'.repeat(2692);
+  assert.equal(isCompatibleRecord(tip, tip.length), true);
+  assert.equal(isCompatibleRecord(tip, 13988), false);
+  // What the editor listener does on mismatch: rebase onto the live doc.
+  const rebased = createChangeTracker('saved base', 'x'.repeat(13988));
+  const snapshot = rebased.snapshot();
+  assert.equal(snapshot.baseContent, 'saved base');
+  assert.equal(snapshot.content, 'x'.repeat(13988));
+  assert.deepEqual(snapshot.changes, [{ from: 0, to: 'saved base'.length, insert: 'x'.repeat(13988) }]);
 });

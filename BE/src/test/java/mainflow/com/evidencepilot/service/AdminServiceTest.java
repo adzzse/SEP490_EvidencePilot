@@ -413,12 +413,22 @@ class AdminServiceTest {
         target.setPasswordResetTokenHash("secret");
         target.setPasswordResetTokenExpiresAt(LocalDateTime.now());
         target.setPasswordResetRequestedAt(LocalDateTime.now());
+        target.setEmailVerificationToken("stale-invite");
+        target.setEmailVerificationExpiresAt(LocalDateTime.now().plusHours(1));
+        target.setEmailVerificationTokenHash("stale-hash");
+        target.setEmailVerificationTokenExpiresAt(LocalDateTime.now().plusHours(1));
+        target.setEmailVerificationRequestedAt(LocalDateTime.now());
         service.deleteUser(target.getId());
         assertThat(target.getAccountStatus()).isEqualTo(AccountStatus.DELETED);
         assertThat(target.getTokenVersion()).isEqualTo(6);
         assertThat(target.getPasswordResetTokenHash()).isNull();
         assertThat(target.getPasswordResetTokenExpiresAt()).isNull();
         assertThat(target.getPasswordResetRequestedAt()).isNull();
+        assertThat(target.getEmailVerificationToken()).isNull();
+        assertThat(target.getEmailVerificationExpiresAt()).isNull();
+        assertThat(target.getEmailVerificationTokenHash()).isNull();
+        assertThat(target.getEmailVerificationTokenExpiresAt()).isNull();
+        assertThat(target.getEmailVerificationRequestedAt()).isNull();
     }
 
     @Test

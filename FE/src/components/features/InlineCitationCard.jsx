@@ -311,6 +311,11 @@ export default function InlineCitationCard({
           <h3 className="text-[10px] font-black uppercase tracking-wider text-(--text-tertiary)">
             {t('sourceEvidence')} ({sourceGroups.length})
           </h3>
+          {noEvidence && !sourcesLoading && !sourcesError && sourceGroups.length > 0 && (
+            <p className="mt-1.5 rounded-lg border border-dashed border-(--border) bg-(--surface-secondary) px-2.5 py-2 text-[11px] italic leading-relaxed text-(--text-secondary)">
+              {t('relatedNotVerdictEvidence')}
+            </p>
+          )}
           {sourcesLoading && (
             <p role="status" className="mt-1.5 flex items-center gap-1.5 text-[11px] text-(--text-secondary)">
               <span className="h-3 w-3 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600 motion-reduce:animate-none" aria-hidden="true"></span>

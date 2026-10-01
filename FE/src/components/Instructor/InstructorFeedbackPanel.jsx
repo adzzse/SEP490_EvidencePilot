@@ -10,32 +10,7 @@ import { selectPreviousCards } from '../../utils/instructor/historySelector.js';
 
 const ACTION_LABELS = { REVIEWED: 'instructor.review.approve', RETURNED: 'instructor.review.returnForRevision' };
 
-export function InstructorReviewGuide({ review, selectedSection, plain = false }) {
-  const { t } = useTranslation();
-  const { activeGuide, selectedSectionId } = review;
-  const [checkedItems, setCheckedItems] = useState({});
-  const body = !selectedSection || !activeGuide ? <p className="text-(--text-tertiary) italic">{t('instructor.review.selectSectionGuide')}</p> : <>
-    <span className="inline-block rounded bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300">{activeGuide.sectionType}</span>
-    <p className="text-(--text-secondary) leading-relaxed">{activeGuide.guidance}</p>
-    <ul className="space-y-2">
-      {activeGuide.checklist.map((item, i) => {
-        const key = `${selectedSectionId}-${i}`;
-        const checked = !!checkedItems[key];
-        return <li key={key}><label className="flex items-start gap-2 cursor-pointer text-(--text-secondary)">
-          <input type="checkbox" checked={checked} onChange={() => setCheckedItems(prev => ({ ...prev, [key]: !checked }))} className="mt-0.5 accent-indigo-600" />
-          <span className={checked ? 'line-through opacity-60' : ''}>{item}</span>
-        </label></li>;
-      })}
-    </ul>
-  </>;
-  if (plain) return <div className="space-y-4 text-xs">{body}</div>;
-  return <section className="space-y-4 rounded-xl border border-(--border) bg-(--surface) p-4 text-xs shadow-sm">
-    <h3 className="font-bold text-(--text-primary)">{t('instructor.review.reviewGuide')}</h3>
-    {body}
-  </section>;
-}
-
-export default function InstructorFeedbackPanel({ review, selectedSection, focusSignal = 0, composerFocusToken = 0, submittedFindings = [], submittedFindingsStale = false, referenceData = null, onLocateReference = null }) {
+export default function InstructorFeedbackPanel({ review, selectedSection, projectId, focusSignal = 0, composerFocusToken = 0, submittedFindings = [], submittedFindingsStale = false, referenceData = null, onLocateReference = null }) {
   const { t } = useTranslation();
   const { activeRequest, isHistoricalRound, errorMessage, successMessage, transitioningRequestId, pendingTransition, setPendingTransition, requestLocked, canReturn, canApprove, handleTransitionStatus } = review;
   const [panelTab, setPanelTab] = useState('feedback');
@@ -62,8 +37,9 @@ export default function InstructorFeedbackPanel({ review, selectedSection, focus
     </div>
     {errorMessage && <p role="alert" className="text-rose-700">{errorMessage}</p>}
     {successMessage && <p role="status" className="text-emerald-700">{successMessage}</p>}
-    <div className="bg-(--surface) rounded-2xl border border-(--border) shadow-sm">
-      <div className="flex border-b border-(--border-light)">
+    {/* Single card, borderless content — tabs are its sticky header */}
+    <div className="bg-(--surface) rounded-2xl shadow-sm">
+      <div className="sticky top-0 z-20 flex rounded-t-2xl border-b border-(--border-light) bg-(--surface)">
         {[
           { id: 'overview', label: t('instructor.review.overviewTab') },
           { id: 'feedback', label: t('instructor.review.feedbackTab') },
@@ -136,7 +112,7 @@ export default function InstructorFeedbackPanel({ review, selectedSection, focus
               </div>
               {visible && previous.length > 0 && (
                 <ul className="space-y-2">
-                  {previous.map(item => <FeedbackCard key={item.id} item={item} readOnly />)}
+                  {previous.map((item, historyIndex) => <FeedbackCard key={item.id} item={item} index={historyIndex} readOnly />)}
                 </ul>
               )}
             </div>

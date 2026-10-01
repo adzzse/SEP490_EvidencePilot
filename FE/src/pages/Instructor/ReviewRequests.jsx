@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { StatusBadge, LoadingSkeleton, EmptyState, Modal, AppHeader, Breadcrumb, EntityCard } from '../../components';
 import Dropdown from '../../components/ui/Dropdown.jsx';
+import { AdminPagination } from '../Admin/components/shared.jsx';
+import DateField from '../../components/ui/DateField.jsx';
 import { useTranslation } from 'react-i18next';
 import { formatDateTime } from '../../utils/formatters/date';
 import { CARD_GRID_PAGE_SIZE } from '../../constants';
@@ -18,75 +20,6 @@ const daysWaiting = (iso) => {
 
 // Info-light badge (matches StatusBadge ACTIVE tones) for neutral counts.
 const INFO_BADGE = 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-200 dark:border-blue-800';
-
-const toDisplayDate = (iso) => {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
-};
-
-const parseDisplayDate = (text) => {
-  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text || '');
-  if (!m) return null;
-  const day = Number(m[1]); const month = Number(m[2]); const year = Number(m[3]);
-  const date = new Date(year, month - 1, day);
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
-  return `${m[3]}-${m[2]}-${m[1]}`;
-};
-
-// ponytail: native date inputs render mm/dd/yyyy under some browser locales and
-// CSS cannot change that, so type DD/MM/YYYY here and use the hidden native
-// picker (which still enforces min/max) only for the calendar popup.
-function DateField({ value, min, max, ariaLabel, onChange }) {
-  const [text, setText] = useState(toDisplayDate(value));
-  const nativeRef = useRef(null);
-  useEffect(() => { setText(toDisplayDate(value)); }, [value]);
-  const commit = (next) => {
-    const digits = next.replace(/\D/g, '').slice(0, 8);
-    let formatted = digits;
-    if (digits.length > 4) formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-    else if (digits.length > 2) formatted = `${digits.slice(0, 2)}/${digits.slice(2)}`;
-    setText(formatted);
-    if (digits.length === 8) {
-      const iso = parseDisplayDate(formatted);
-      if (iso && (!min || iso >= min) && (!max || iso <= max)) onChange(iso);
-    } else if (digits.length === 0) {
-      onChange('');
-    }
-  };
-  return (
-    <span className="inline-flex items-center gap-1 rounded-xl border border-(--border) bg-(--surface-secondary) px-2 py-1.5 focus-within:ring-2 focus-within:ring-(--focus)">
-      <input
-        type="text"
-        inputMode="numeric"
-        value={text}
-        placeholder="DD/MM/YYYY"
-        onChange={(e) => commit(e.target.value)}
-        onBlur={() => setText(toDisplayDate(value))}
-        aria-label={ariaLabel}
-        className="w-24 bg-transparent text-xs font-medium text-(--text-primary) placeholder:text-(--text-tertiary) focus:outline-none"
-      />
-      <button
-        type="button"
-        onClick={() => nativeRef.current?.showPicker?.()}
-        aria-label={ariaLabel}
-        className="text-(--text-tertiary) transition-colors hover:text-(--text-primary)"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-      </button>
-      <input
-        ref={nativeRef}
-        type="date"
-        value={value}
-        min={min}
-        max={max}
-        tabIndex={-1}
-        aria-hidden="true"
-        onChange={(e) => onChange(e.target.value)}
-        className="absolute h-0 w-0 opacity-0"
-      />
-    </span>
-  );
-}
 
 export default function ReviewRequests() {
   const [searchParams] = useSearchParams();
@@ -467,13 +400,10 @@ export default function ReviewRequests() {
           </div>
         )}
 
-        {totalPages > 1 && (
-          <div className="flex justify-between items-center mt-6 text-xs">
-            <button disabled={safePage === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{t('back')}</button>
-            <span className="text-(--text-tertiary) font-mono font-bold">{t('instructor.reviewRequests.page')} {safePage + 1} {t('instructor.reviewRequests.of')} {totalPages}</span>
-            <button disabled={safePage >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{t('instructor.reviewRequests.commonNext')}</button>
-          </div>
-        )}
+        <div className="flex justify-between items-center mt-6 text-xs font-semibold text-(--text-secondary)">
+          <span>{t('instructor.reviewRequests.showing', { shown: requests.length, total: pagination.totalElements })}</span>
+          <AdminPagination page={safePage} totalPages={totalPages} onChange={setPage} />
+        </div>
       </main>
       <Modal open={showGuide} onClose={() => setShowGuide(false)} title={t('instructor.reviewRequests.guideTitle')}>
         <p className="text-sm leading-relaxed text-(--text-secondary)">{t('instructor.reviewRequests.guideBody')}</p>

@@ -377,6 +377,14 @@ public class AdminService {
         user.setPasswordResetTokenHash(null);
         user.setPasswordResetTokenExpiresAt(null);
         user.setPasswordResetRequestedAt(null);
+        // ponytail: stale invitation tokens must die with the account; the
+        // token lookup has no status filter, so an uncleared token could
+        // resurrect this DELETED row instead of the fresh reinvite.
+        user.setEmailVerificationToken(null);
+        user.setEmailVerificationExpiresAt(null);
+        user.setEmailVerificationTokenHash(null);
+        user.setEmailVerificationTokenExpiresAt(null);
+        user.setEmailVerificationRequestedAt(null);
         user.setTokenVersion(user.getTokenVersion() + 1);
         users.save(user);
         events.publishEvent(new EntityChangedEvent("USER", id, "STATUS_CHANGED", null));

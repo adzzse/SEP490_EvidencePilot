@@ -18,6 +18,7 @@ import { getProjectActions, hasProjectAction } from '../../utils/projectActions.
 import useUndoDelete from '../../components/ui/UndoDelete.jsx';
 import ProjectDeletionNotice from '../../components/projects/ProjectDeletionNotice.jsx';
 import { useNotification } from '../../context/NotificationContext';
+import { AdminPagination } from '../Admin/components/shared.jsx';
 
 export default function ProjectManagement() {
   const navigate = useNavigate();
@@ -398,13 +399,10 @@ export default function ProjectManagement() {
           </div>
         )}
 
-        {totalPages > 1 && (
-          <div className="flex justify-between items-center mt-6 text-xs">
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{t('back')}</button>
-            <span className="text-(--text-tertiary) font-mono font-bold">{t('instructor.projectManagement.page')} {page + 1} {t('instructor.projectManagement.of')} {totalPages}</span>
-            <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg disabled:opacity-40 font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors">{t('instructor.projectManagement.commonNext')}</button>
-          </div>
-        )}
+        <div className="flex justify-between items-center mt-6 text-xs font-semibold text-(--text-secondary)">
+          <span>{t('instructor.projectManagement.showing', { shown: projects.length, total })}</span>
+          <AdminPagination page={page} totalPages={totalPages} onChange={setPage} />
+        </div>
       </main>
 
       {showCreate && (

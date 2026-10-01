@@ -49,6 +49,11 @@ public class ProgressReportServiceImpl {
     private final AuditLogRepository auditLogRepository;
     private final CurrentUserServiceImpl currentUserService;
 
+    // ponytail: audit timestamps are stored UTC while instructors pick
+    // Vietnam calendar days — shift the naive window edges by the +07:00
+    // offset so from/to match the days shown in the UI.
+    private static final long VIETNAM_UTC_OFFSET_HOURS = 7;
+
     @Transactional(readOnly = true)
     public ProgressReportResponse getProgressReport(
             UUID projectId, String memberFilter, LocalDate from, LocalDate to) {
@@ -123,7 +128,7 @@ public class ProgressReportServiceImpl {
         String resolution = computeResolution(from, to);
         List<Object[]> rows = from == null
                 ? auditLogRepository.aggregateDailyAll(projectIdBytes)
-                : auditLogRepository.aggregateDailyWithin(projectIdBytes, from.atStartOfDay(), to.plusDays(1).atStartOfDay(), resolution);
+                : auditLogRepository.aggregateDailyWithin(projectIdBytes, from.atStartOfDay().minusHours(VIETNAM_UTC_OFFSET_HOURS), to.plusDays(1).atStartOfDay().minusHours(VIETNAM_UTC_OFFSET_HOURS), resolution);
         for (Object[] row : rows) {
             // row: [0]=actor_id (byte[]), [1]=DATE (java.sql.Date/LocalDate), [2]=cnt, [3]=sum_delta, [4]=sum_added, [5]=sum_removed, [6]=max_at (Timestamp), [7]=titles (String "t1||t2")
             UUID actorId = bytesToUuid((byte[]) row[0]);

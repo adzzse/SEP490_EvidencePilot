@@ -67,6 +67,63 @@ function ErrorBlock({ msg, onRetry }) {
   );
 }
 
+// ponytail: one shared clear-all-filters icon — every admin filter bar uses
+// it so the affordance is identical. Disabled (dimmed) when nothing is set.
+function ClearFiltersButton({ active, onClear }) {
+  const { t } = useTranslation();
+  return (
+    <button
+      onClick={onClear}
+      disabled={!active}
+      title={t('admin.clearFilter')}
+      aria-label={t('admin.clearFilter')}
+      className="p-2 bg-(--surface) border border-(--border) rounded-xl hover:bg-(--surface-secondary) transition shadow-sm shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+    >
+      <svg className="w-4 h-4 text-(--text-secondary)" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  );
+}
+// ponytail: one shared admin pager — Prev / editable page / Next. The input
+// commits on Enter/blur and clamps to 1..totalPages; every admin tab uses it.
+function AdminPagination({ page, totalPages, onChange }) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState(null);
+  useEffect(() => { setDraft(null); }, [page, totalPages]);
+  if (!totalPages || totalPages <= 1) return null;
+  const commit = () => {
+    const n = parseInt(draft, 10);
+    setDraft(null);
+    if (Number.isNaN(n)) return;
+    onChange(Math.min(totalPages - 1, Math.max(0, n - 1)));
+  };
+  return (
+    <div className="flex items-center gap-1.5">
+      <button onClick={() => onChange(page - 1)} disabled={page === 0}
+        className="px-3 py-1.5 rounded-lg border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
+        {t('admin.prev')}
+      </button>
+      <span className="flex items-center gap-1 text-xs font-bold text-(--text-secondary)">
+        <input
+          value={draft ?? String(page + 1)}
+          onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+          aria-label={t('admin.page')}
+          inputMode="numeric"
+          className="w-10 text-center px-1 py-1 rounded-lg border border-(--border) bg-(--surface) text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <span className="text-(--text-tertiary)">/ {totalPages}</span>
+      </span>
+      <button onClick={() => onChange(page + 1)} disabled={page >= totalPages - 1}
+        className="px-3 py-1.5 rounded-lg border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
+        {t('admin.next')}
+      </button>
+    </div>
+  );
+}
+
 
 function StatCard({ label, value, sub, icon, iconBg }) {
   return (
@@ -119,4 +176,4 @@ function JsonTree({ data }) {
 }
 
 
-export { SectionBoundary, PageSkeleton, ErrorBlock, StatCard, JsonTree };
+export { SectionBoundary, PageSkeleton, ErrorBlock, AdminPagination, ClearFiltersButton, StatCard, JsonTree };

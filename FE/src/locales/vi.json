@@ -13,7 +13,7 @@
       "privacy": "Bảo mật",
       "login": "Đăng nhập",
       "signOut": "Đăng xuất",
-      "workspace": "Vào làm việc",
+      "workspace": "Không gian làm việc",
       "lang": "English",
       "profile": "Hồ sơ"
     },
@@ -21,7 +21,7 @@
       "titleStart": "Nền tảng",
       "titleHighlight": "Nghiên cứu Dựa trên Bằng chứng",
       "titleEnd": "",
-      "subtitle": "Evidence Pilot hỗ trợ dự án nghiên cứu do giảng viên quản lý: sinh viên biên soạn bài viết, quản lý nguồn, chạy Citation Review, sau đó gửi để nhận phản hồi có cấu trúc và xuất kết quả.",
+      "subtitle": "Evidence Pilot là nền tảng hỗ trợ dự án nghiên cứu dưới sự hướng dẫn của giảng viên. Sinh viên biên soạn bài viết, quản lý nguồn tài liệu và chạy Citation Review, sau đó gửi bài để nhận phản hồi có cấu trúc và xuất kết quả.",
       "cta": "Đăng nhập",
       "ctaSub": ""
     },
@@ -29,24 +29,24 @@
       "heading": "Hoạt động trên nền tảng",
       "usersLabel": "Người dùng",
       "projectsLabel": "Dự án đang hoạt động",
-      "sourcesLabel": "Nguồn đang hoạt động"
+      "sourcesLabel": "Nguồn tài liệu"
     },
     "roles": {
-      "heading": "Dành cho nhóm nghiên cứu có giám sát",
+      "heading": "Thiết kế cho nhóm nghiên cứu có giảng viên hướng dẫn",
       "student": {
         "title": "Sinh viên",
-        "desc": "Làm việc trong dự án được phân công với bài viết, nguồn, Citation Review, gợi ý theo phần và phản hồi có cấu trúc từ giảng viên."
+        "desc": "Làm việc trong dự án được phân công với bài viết, nguồn tài liệu, Citation Review, gợi ý theo từng phần và phản hồi có cấu trúc từ giảng viên."
       },
       "instructor": {
         "title": "Giảng viên",
-        "desc": "Tạo và quản lý dự án, tổ chức tài liệu nền, phân công sinh viên và đánh giá bài nộp bằng phản hồi cụ thể."
+        "desc": "Tạo và quản lý dự án, tổ chức tài liệu nền, phân công sinh viên và đánh giá bài nộp bằng phản hồi đúng trọng tâm."
       }
     },
     "workflow": {
       "heading": "Từ phân công đến đánh giá",
       "step1": {
         "title": "Giảng viên tạo dự án",
-        "desc": "Giảng viên tạo dự án và quản lý toàn bộ trạng thái vòng đời của dự án."
+        "desc": "Giảng viên tạo dự án và quản lý toàn bộ vòng đời của dự án."
       },
       "step2": {
         "title": "Cấu hình & Phân công",
@@ -57,7 +57,7 @@
         "desc": "Sinh viên được giao chỉnh sửa các phần, quản lý nguồn, chạy Citation Review và dùng gợi ý AI theo phần."
       },
       "step4": {
-        "title": "Sinh viên gửi đánh giá",
+        "title": "Sinh viên gửi bài để đánh giá",
         "desc": "Sinh viên gửi dự án khi bài viết và bằng chứng hỗ trợ đã sẵn sàng để đánh giá."
       },
       "step5": {
@@ -86,7 +86,7 @@
       },
       "documentExtraction": {
         "title": "Trích xuất tài liệu",
-        "desc": "Trích xuất văn bản và hình ảnh có thể tìm kiếm từ tài liệu nghiên cứu đã tải lên."
+        "desc": "Trích xuất văn bản và tư liệu có thể tìm kiếm từ tài liệu nghiên cứu đã tải lên."
       },
       "vectorSearch": {
         "title": "Tìm kiếm ngữ nghĩa",
@@ -123,7 +123,7 @@
           "panel": "Không gian sinh viên"
         },
         {
-          "title": "Gửi đánh giá",
+          "title": "Gửi bài để đánh giá",
           "desc": "Sinh viên gửi công việc hiện tại để giảng viên đánh giá.",
           "actor": "Sinh viên",
           "panel": "Yêu cầu đánh giá"
@@ -259,7 +259,9 @@
       "backToLogin": "Quay lại đăng nhập"
     },
     "protectedRoute": {
-      "verifyingSession": "Đang xác minh phiên đăng nhập..."
+      "verifyingSession": "Đang xác minh phiên đăng nhập...",
+      "connectionInterrupted": "Kết nối bị gián đoạn. Thử xác minh lại.",
+      "retryVerification": "Thử xác minh lại"
     },
     "banned": {
       "title": "Tài khoản bị tạm khóa",
@@ -813,7 +815,7 @@
   "instructor.review.selectSectionGuide": "Chọn một phần của bài viết để xem hướng dẫn đánh giá tương ứng.",
   "instructor.review.selectSourceRange": "Hãy chọn đoạn trong source đã nộp trước.",
   "instructor.review.selectSubmittedSource": "Hãy chuyển sang Bản đã nộp để thêm nhận xét gốc.",
-  "instructor.review.showChanges": "Hiện Diff",
+  "instructor.review.showChanges": "Xem thay đổi",
   "instructor.review.snapshotLoadError": "Không thể tải snapshot đã nộp. Nội dung paper hiện tại được ẩn để tránh bị hiểu nhầm là bằng chứng của vòng review.",
   "instructor.review.submittedVersion": "Bản đã nộp",
   "instructor.review.submittedVersionLabel": "Bằng chứng đã nộp của vòng review đang chọn",
@@ -995,6 +997,7 @@
   "passageQuoteNotLocated": "Không tìm thấy nguyên văn đoạn đã chọn trong chunk này; hệ thống đang hiển thị toàn bộ chunk.",
   "noEvidenceInSources": "Không tìm thấy bằng chứng trong các nguồn của dự án.",
   "noRelatedSources": "Không tìm thấy nguồn liên quan trong dự án.",
+  "relatedNotVerdictEvidence": "Bạn có thể kiểm chứng các đoạn này và chèn trích dẫn để diễn đạt chặt chẽ hơn. Lưu ý: đây chỉ là gợi ý — quyết định là của bạn.",
   "sourceSearchFailed": "Citation Review đã hoàn tất nhưng bước tìm nguồn liên quan thất bại.",
   "reviewSectionChanged": "Phần đã lưu hoặc tập nguồn thay đổi trong lúc Citation Review xử lý. Hãy lưu và chạy lại.",
   "reviewPromptChanged": "Mẫu kiểm tra đã được cập nhật trong lúc Citation Review xử lý. Hãy chạy lại — phần của bạn không thay đổi.",
@@ -1507,6 +1510,7 @@
     "filterBySeverity": "Lọc theo mức độ",
     "allSeverities": "Mọi mức độ",
     "filterByAction": "Loại hành động (vd. USER_BANNED)",
+    "allActions": "Mọi hành động",
     "filterByActor": "ID người thực hiện (UUID)",
     "invalidActorId": "ID phải là UUID hợp lệ.",
     "clearFilter": "Xóa bộ lọc",
@@ -1756,6 +1760,7 @@
   "instructor.sourceLibrary.sourceLibraryPagination": "Các trang thư viện nguồn",
   "instructor.sourceLibrary.prev": "Trước",
   "instructor.sourceLibrary.next": "Sau",
+  "instructor.sourceLibrary.showing": "Hiển thị {{shown}} trong tổng số {{total}} nguồn tài liệu",
   "instructor.sourceLibrary.editSourceTitle": "Sửa nguồn",
   "instructor.sourceLibrary.editSourceTitleDesc": "Cập nhật tiêu đề hiển thị cho nguồn này.",
   "instructor.sourceLibrary.sourceTitle": "Tiêu đề nguồn",
@@ -1793,6 +1798,7 @@
   "instructor.collections.page": "Trang",
   "instructor.collections.of": "của",
   "instructor.collections.next": "Sau",
+  "instructor.collections.showing": "Hiển thị {{shown}} trong tổng số {{total}} bộ sưu tập",
   "instructor.collections.editCollection": "Sửa bộ sưu tập",
   "instructor.collections.collectionNameExample": "Ví dụ: Bộ sưu tập nghiên cứu mùa thu 2026",
   "instructor.collections.collectionDescription": "Mô tả bộ sưu tập",
@@ -2147,6 +2153,7 @@
   "instructor.projectManagement.complete": "Hoàn tất",
   "instructor.projectManagement.page": "Trang",
   "instructor.projectManagement.of": "của",
+  "instructor.projectManagement.showing": "Hiển thị {{shown}} trong tổng số {{total}} dự án",
   "instructor.projectManagement.projectTitle": "Tên dự án",
   "instructor.projectManagement.editProject": "Sửa dự án",
   "instructor.projectManagement.description": "Mô tả",
@@ -2176,6 +2183,7 @@
   "instructor.reviewRequests.review": "Xem xét",
   "instructor.reviewRequests.page": "Trang",
   "instructor.reviewRequests.of": "của",
+  "instructor.reviewRequests.showing": "Hiển thị {{shown}} trong tổng số {{total}} yêu cầu đánh giá",
   "instructor.reviewRequests.commonClear": "Xóa",
   "instructor.reviewRequests.status": "Trạng thái",
   "instructor.reviewRequests.commonActions": "Hành động",

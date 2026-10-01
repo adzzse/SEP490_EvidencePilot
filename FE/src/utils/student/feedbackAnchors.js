@@ -13,6 +13,14 @@ export function changeSpans(changes) {
   return spans;
 }
 
+// A transaction's changeset composes onto the tracker only when it started
+// from the tracker's tip. Anything else (section swap or save echo landing
+// mid-flight) must rebase instead — recording it would poison later spans
+// and crash CodeMirror's position mapping on the next update.
+export function isCompatibleRecord(tipContent, startDocLength) {
+  return tipContent.length === startDocLength;
+}
+
 // Keep edits made during a Save as a tail based on that Save's acknowledged text.
 export function createChangeTracker(savedContent, displayedContent = savedContent) {
   let base = normalizeSource(savedContent);

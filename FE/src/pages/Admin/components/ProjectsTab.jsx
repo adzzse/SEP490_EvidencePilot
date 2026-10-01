@@ -5,6 +5,7 @@ import { useToast } from '../../../components/ui/Toast.jsx';
 import { useTranslation } from 'react-i18next';
 import Tabs from '../../../components/ui/Tabs.jsx';
 import Dropdown from '../../../components/ui/Dropdown.jsx';
+import { AdminPagination, ClearFiltersButton } from './shared.jsx';
 import ProjectAvatar from '../../../components/ui/ProjectAvatar.jsx';
 import { useLanguage } from '../../../context/LanguageContext';
 
@@ -31,6 +32,10 @@ function ProjectsSection({ api }) {
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [instructorFilter, setInstructorFilter] = useState('');
+  const hasFilter = q.trim() !== '' || statusFilter !== '' || instructorFilter !== '';
+  const clearAll = () => {
+    setQ(''); setStatusFilter(''); setInstructorFilter(''); setPage(0);
+  };
 
   const [detailProject, setDetailProject] = useState(null);
   const [detailTab, setDetailTab] = useState('members');
@@ -143,7 +148,9 @@ function ProjectsSection({ api }) {
         </span>
       </div>
 
-      <div className="bg-(--surface) rounded-xl border border-(--border) p-4 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
+      {/* Search, filters & table — one card */}
+      <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border) overflow-hidden">
+      <div className="p-4 border-b border-(--border-light) flex flex-col sm:flex-row gap-3 items-center">
         <div className="flex flex-1 w-full gap-3 items-center">
           <input
             type="text"
@@ -168,27 +175,27 @@ function ProjectsSection({ api }) {
             ]}
           />
 
-          <select
+          <Dropdown
             value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
-            aria-label={t('admin.filterByStatus')}
-            className="w-36 px-3 py-2 bg-(--surface) border border-(--border) rounded-xl text-xs font-semibold text-(--text-primary) focus:outline-none cursor-pointer"
-          >
-            <option value="">{t('admin.allStatuses')}</option>
-            <option value="CREATED">{t('admin.statusCreated')}</option>
-            <option value="ASSIGNED">{t('admin.statusAssigned')}</option>
-            <option value="IN_PROGRESS">{t('admin.statusInProgress')}</option>
-            <option value="SUBMITTED_FOR_REVIEW">{t('admin.statusUnderReview')}</option>
-            <option value="RETURNED">{t('admin.statusReturned')}</option>
-            <option value="APPROVED">{t('admin.statusApproved')}</option>
-            <option value="ARCHIVED">{t('admin.statusArchived')}</option>
-            <option value="PENDING_DELETE">{t('admin.statusPendingDelete')}</option>
-          </select>
-        </div>
+            onChange={(v) => { setStatusFilter(v); setPage(0); }}
+            ariaLabel={t('admin.filterByStatus')}
+            className="w-36"
+            maxVisibleRows={5}
+            options={[
+              { value: '', label: t('admin.allStatuses') },
+              { value: 'CREATED', label: t('admin.statusCreated') },
+              { value: 'ASSIGNED', label: t('admin.statusAssigned') },
+              { value: 'IN_PROGRESS', label: t('admin.statusInProgress') },
+              { value: 'SUBMITTED_FOR_REVIEW', label: t('admin.statusUnderReview') },
+              { value: 'RETURNED', label: t('admin.statusReturned') },
+              { value: 'APPROVED', label: t('admin.statusApproved') },
+              { value: 'ARCHIVED', label: t('admin.statusArchived') },
+              { value: 'PENDING_DELETE', label: t('admin.statusPendingDelete') },
+            ]}
+          />
 
-        <span className="text-xs text-(--text-tertiary) font-bold self-end sm:self-center shrink-0">
-          {t('admin.showingProjects', { shown: projects.content.length, total: projects.totalElements || projects.content.length })}
-        </span>
+          <ClearFiltersButton active={hasFilter} onClear={clearAll} />
+        </div>
       </div>
 
       {error && (
@@ -198,8 +205,7 @@ function ProjectsSection({ api }) {
         </div>
       )}
 
-      <div className="bg-(--surface) rounded-2xl shadow-sm border border-(--border) overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="overflow-x-auto">
           <table data-guide="projects-table" className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-(--surface-secondary) text-(--text-tertiary) font-bold uppercase border-b border-(--border-light)">
@@ -256,39 +262,8 @@ function ProjectsSection({ api }) {
         </div>
 
         <div className="flex items-center justify-between px-6 py-3.5 border-t border-(--border-light) bg-(--surface-secondary)/50 text-xs font-semibold text-(--text-secondary)">
-          {projects.totalPages > 1 ? (
-            <>
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => setPage(page - 1)} disabled={page === 0} className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                {Array.from({ length: projects.totalPages }).map((_, i) => {
-                  if (i === 0 || i === projects.totalPages - 1 || (i >= page - 1 && i <= page + 1)) {
-                    const isActive = page === i;
-                    return (
-                      <button key={i} onClick={() => setPage(i)} className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold transition ${isActive ? 'bg-[#1e3a8a] text-white shadow-sm' : 'border border-(--border) text-(--text-secondary) hover:bg-(--surface-secondary)'}`}>{i + 1}</button>
-                    );
-                  } else if (i === 1 || i === projects.totalPages - 2) {
-                    return <span key={i} className="text-(--text-tertiary) text-xs px-0.5">...</span>;
-                  }
-                  return null;
-                })}
-                <button onClick={() => setPage(page + 1)} disabled={page >= projects.totalPages - 1} className="p-1.5 rounded-lg border border-(--border) text-(--text-tertiary) hover:bg-(--surface-secondary) disabled:opacity-30 disabled:cursor-not-allowed transition">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
-              <span>{t('admin.pageOf', { page: page + 1, total: projects.totalPages })}</span>
-            </>
-          ) : (
-            <>
-              <div className="w-1" />
-              <span>{t('admin.pageOf', { page: 1, total: 1 })}</span>
-            </>
-          )}
+          <span>{t('admin.showingProjects', { shown: projects.content.length, total: projects.totalElements || projects.content.length })}</span>
+          <AdminPagination page={page} totalPages={projects.totalPages} onChange={setPage} />
         </div>
       </div>
 

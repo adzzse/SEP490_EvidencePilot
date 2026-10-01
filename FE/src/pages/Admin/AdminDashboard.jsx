@@ -394,7 +394,7 @@ export default function AdminDashboard() {
         </header>
 
         {/* Content */}
-        <main data-guide="content" style={{ backgroundColor: collapsed ? 'var(--content-canvas)' : 'var(--page-bg)' }} className={`flex-1 overflow-y-auto w-full max-w-[1600px] mx-auto transition-colors duration-200`}>
+        <main data-guide="content" style={{ backgroundColor: collapsed ? 'var(--content-canvas)' : 'var(--page-bg)' }} className={`flex-1 overflow-y-auto w-full max-w-[1600px] mx-auto transition-colors duration-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}>
           <SectionBoundary>
             <Section api={api} />
           </SectionBoundary>

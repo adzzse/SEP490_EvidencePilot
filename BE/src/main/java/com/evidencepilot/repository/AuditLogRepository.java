@@ -56,10 +56,11 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     @Query(value = """
             SELECT
               actor_id,
+              -- Stored timestamps are UTC; bucket by Vietnam calendar days.
               CASE :resolution
-                WHEN 'day' THEN DATE(occurred_at)
-                WHEN 'week' THEN DATE_SUB(DATE(occurred_at), INTERVAL WEEKDAY(occurred_at) DAY)
-                WHEN 'month' THEN DATE_FORMAT(occurred_at, '%Y-%m-01')
+                WHEN 'day' THEN DATE(CONVERT_TZ(occurred_at, '+00:00', '+07:00'))
+                WHEN 'week' THEN DATE_SUB(DATE(CONVERT_TZ(occurred_at, '+00:00', '+07:00')), INTERVAL WEEKDAY(CONVERT_TZ(occurred_at, '+00:00', '+07:00')) DAY)
+                WHEN 'month' THEN DATE_FORMAT(CONVERT_TZ(occurred_at, '+00:00', '+07:00'), '%Y-%m-01')
               END as d,
               COUNT(*) as cnt,
               COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED)),0) as sum_delta,
@@ -88,7 +89,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     @Query(value = """
             SELECT
               actor_id,
-              DATE(occurred_at) as d,
+              DATE(CONVERT_TZ(occurred_at, '+00:00', '+07:00')) as d,
               COUNT(*) as cnt,
               COALESCE(SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED)),0) as sum_delta,
               COALESCE(SUM(CASE WHEN JSON_EXTRACT(new_value, '$.wordsAdded') IS NOT NULL THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordsAdded')) AS SIGNED) ELSE GREATEST(CAST(JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.wordDelta')) AS SIGNED),0) END),0) as sum_added,
@@ -102,7 +103,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
                   SELECT ps.id FROM paper_sections ps
                   JOIN documents d ON d.id = ps.document_id
                   WHERE d.project_id = :projectId)))
-            GROUP BY actor_id, DATE(occurred_at)
+            GROUP BY actor_id, d
             ORDER BY actor_id, d
             """, nativeQuery = true)
     List<Object[]> aggregateDailyAll(

@@ -22,7 +22,7 @@
       "titleHighlight": "Evidence-Powered",
       "titleEnd": "Research Platform",
       "subtitle": "Evidence Pilot supports instructor-led research projects: students author papers, manage sources, run Citation Review, and submit their work for structured feedback and export.",
-      "cta": "Sign In",
+      "cta": "Log In",
       "ctaSub": ""
     },
     "stats": {
@@ -144,8 +144,8 @@
     },
     "cta": {
       "heading": "Ready to Get Started?",
-      "subtitle": "Sign in with the account provided by your administrator.",
-      "button": "Sign In"
+      "subtitle": "Log in with the account provided by your administrator.",
+      "button": "Log In"
     },
     "footer": {
       "copyright": "Evidence Pilot. All rights reserved.",
@@ -220,12 +220,12 @@
     "login": {
       "backToHome": "Back to Home",
       "welcomeBack": "Welcome back",
-      "subtitle": "Sign in to Evidence Pilot to manage your research projects.",
+      "subtitle": "Log in to Evidence Pilot to manage your research projects.",
       "email": "Email",
       "emailPlaceholder": "you@example.com",
       "password": "Password",
-      "signingIn": "Signing in...",
-      "signIn": "Sign In",
+      "signingIn": "Logging in...",
+      "signIn": "Log In",
       "accountHelp": "Need an account? Contact your administrator.",
       "failed": "Login failed. Please check your credentials."
     },
@@ -259,7 +259,9 @@
       "backToLogin": "Back to login"
     },
     "protectedRoute": {
-      "verifyingSession": "Verifying session..."
+      "verifyingSession": "Verifying session...",
+      "connectionInterrupted": "Connection interrupted. Retry verification.",
+      "retryVerification": "Retry verification"
     },
     "banned": {
       "title": "Account suspended",
@@ -995,6 +997,7 @@
   "passageQuoteNotLocated": "The selected quote was not found verbatim in this chunk; the full chunk is shown.",
   "noEvidenceInSources": "No evidence found in project sources.",
   "noRelatedSources": "No related project sources found.",
+  "relatedNotVerdictEvidence": "You can verify these passages and insert a citation to strengthen the statement. Disclaimer: this is a suggestion — the decision is yours.",
   "sourceSearchFailed": "The citation review succeeded, but related-source search failed.",
   "reviewSectionChanged": "The saved section or source corpus changed while Citation Review was running. Save and run it again.",
   "reviewPromptChanged": "The review template was updated while Citation Review was running. Run it again — your section did not change.",
@@ -1507,6 +1510,7 @@
     "filterBySeverity": "Filter by Severity",
     "allSeverities": "All Severities",
     "filterByAction": "Action type (e.g. USER_BANNED)",
+    "allActions": "All Actions",
     "filterByActor": "Actor ID (user UUID)",
     "invalidActorId": "Actor ID must be a valid UUID.",
     "clearFilter": "Clear filter",
@@ -1756,6 +1760,7 @@
   "instructor.sourceLibrary.sourceLibraryPagination": "Source library pages",
   "instructor.sourceLibrary.prev": "Previous",
   "instructor.sourceLibrary.next": "Next",
+  "instructor.sourceLibrary.showing": "Showing {{shown}} of {{total}} sources",
   "instructor.sourceLibrary.editSourceTitle": "Edit source",
   "instructor.sourceLibrary.editSourceTitleDesc": "Update the display title of this source.",
   "instructor.sourceLibrary.sourceTitle": "Source title",
@@ -1793,6 +1798,7 @@
   "instructor.collections.page": "Page",
   "instructor.collections.of": "of",
   "instructor.collections.next": "Next",
+  "instructor.collections.showing": "Showing {{shown}} of {{total}} collections",
   "instructor.collections.editCollection": "Edit Collection",
   "instructor.collections.collectionNameExample": "e.g., Autumn 2026 research collection",
   "instructor.collections.collectionDescription": "Collection Description",
@@ -2182,6 +2188,7 @@
   "instructor.projectManagement.complete": "Complete",
   "instructor.projectManagement.page": "Page",
   "instructor.projectManagement.of": "of",
+  "instructor.projectManagement.showing": "Showing {{shown}} of {{total}} projects",
   "instructor.projectManagement.projectTitle": "Project title",
   "instructor.projectManagement.editProject": "Edit project",
   "instructor.projectManagement.description": "Description",
@@ -2211,6 +2218,7 @@
   "instructor.reviewRequests.review": "Review",
   "instructor.reviewRequests.page": "Page",
   "instructor.reviewRequests.of": "of",
+  "instructor.reviewRequests.showing": "Showing {{shown}} of {{total}} requests",
   "instructor.reviewRequests.commonClear": "Clear",
   "instructor.reviewRequests.status": "Status",
   "instructor.reviewRequests.commonActions": "Actions",

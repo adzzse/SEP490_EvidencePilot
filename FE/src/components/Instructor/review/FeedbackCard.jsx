@@ -9,7 +9,7 @@ const LOCATION_KEYS = new Set(['ATTACHED', 'MODIFIED', 'DETACHED', 'SECTION', 'U
 // History renders it readOnly with none. No duplicate markup.
 // No ticket-state presentation: thread/pending/student statuses stay in
 // storage for legacy reads but never render as workflow UI.
-export default function FeedbackCard({ item, active = false, onSelect, readOnly = false, actions = null }) {
+export default function FeedbackCard({ item, index = null, active = false, onSelect, readOnly = false, actions = null }) {
   const { t, i18n } = useTranslation();
   const location = item.anchor?.current?.status || (item.lineReference ? 'UNLOCATED' : 'SECTION');
   const interactive = !readOnly && typeof onSelect === 'function';
@@ -23,6 +23,11 @@ export default function FeedbackCard({ item, active = false, onSelect, readOnly 
     >
       <Header {...headerProps}>
         <span className="flex flex-wrap items-center gap-1.5">
+          {index != null && (
+            <span className="text-[10px] font-black text-(--text-primary)">
+              {t('instructor.review.feedbackTab')} #{index + 1}
+            </span>
+          )}
           {!item.publishedAt && (
             <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-600 dark:bg-slate-700 dark:text-slate-300">
               {t('instructor.review.draftBadge')}

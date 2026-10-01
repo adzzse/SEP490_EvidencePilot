@@ -18,6 +18,11 @@ export function NotificationProvider({ children }) {
   const requestIdRef = useRef(0);
   const notificationIdsRef = useRef(new Set());
   const entityListenersRef = useRef(new Set());
+  // Single-flight: StrictMode remounts and WS reconnects must not fan out
+  // duplicate notification pairs against a throttled tunnel (6/host pool).
+  const reloadPromiseRef = useRef(null);
+  const lastReloadOkRef = useRef(0);
+  const connectedTokenRef = useRef(null);
 
   const subscribeToEntityChanges = useCallback(handler => {
     if (typeof handler !== 'function') return () => {};
@@ -26,6 +31,10 @@ export function NotificationProvider({ children }) {
   }, []);
 
   const reload = useCallback(async ({ preserveSocket = false } = {}) => {
+    // Deduplicate concurrent callers (mount + StrictMode remount + onConnected
+    // race): they share one network pair instead of doubling tunnel load.
+    if (reloadPromiseRef.current) return reloadPromiseRef.current;
+    const run = (async () => {
     const requestId = ++requestIdRef.current;
     setError(null);
     if (!preserveSocket) setRestReadyToken(null);
@@ -46,6 +55,7 @@ export function NotificationProvider({ children }) {
       setNotifications(nextNotifications);
       setUnreadCount(unreadRes.data?.count || 0);
       setRestReadyToken(token);
+      lastReloadOkRef.current = Date.now();
       return true;
     } catch (e) {
       if (requestId !== requestIdRef.current) return false;
@@ -60,13 +70,28 @@ export function NotificationProvider({ children }) {
       setUnreadCount(0);
       return false;
     }
+    })();
+    reloadPromiseRef.current = run;
+    try {
+      return await run;
+    } finally {
+      reloadPromiseRef.current = null;
+    }
   }, [token]);
 
-  // Isolated REST fetch — never touches AuthContext isLoading, never forces logout
+  // Isolated REST fetch — never touches AuthContext isLoading, never forces logout.
+  // Staggered boot: hold tunnel sockets until verify produced a user, so the
+  // boot burst is verify (1 req) then notifications (2 reqs) then WS — never
+  // all at once against the 6-per-host pool.
   useEffect(() => {
+    if (!token) {
+      reload();
+      return () => { requestIdRef.current += 1; };
+    }
+    if (!user) return () => { requestIdRef.current += 1; };
     reload();
     return () => { requestIdRef.current += 1; };
-  }, [reload]);
+  }, [reload, token, user]);
 
   // Isolated WS subscribe — gated by REST 503
   useEffect(() => {
@@ -79,9 +104,17 @@ export function NotificationProvider({ children }) {
       notificationIdsRef.current.add(incomingId);
       setNotifications(current => [incoming, ...current]);
       if (!incoming.read) setUnreadCount(current => current + 1);
-    }, { onConnected: () => { void reload({ preserveSocket: true }); } });
+    }, { onConnected: () => {
+      // Reconcile only after real downtime: the initial connect (and rapid
+      // StrictMode/flap reconnects) already has fresh data from the gated
+      // reload above, so refetching immediately would just double the burst.
+      const fresh = Date.now() - lastReloadOkRef.current < 5000;
+      const first = connectedTokenRef.current !== token;
+      connectedTokenRef.current = token;
+      if (!first && !fresh) void reload({ preserveSocket: true });
+    } });
     return () => { cancelled = true; unsubscribe(); };
-  }, [token, restReadyToken]);
+  }, [token, restReadyToken, reload]);
 
   // Generic entity-change events: map {entity,id,action,projectId} -> queryClient.invalidateQueries.
   useEffect(() => {

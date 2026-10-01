@@ -10,6 +10,7 @@ import {
   API_ROUTES,
 } from '../../constants';
 import { formatDate } from '../../utils/formatters/date.js';
+import { AdminPagination } from '../../pages/Admin/components/shared.jsx';
 import api from '../../services/api';
 
 function statusColor(status) {
@@ -679,19 +680,10 @@ export default function SourceLibraryPanel() {
         </div>
       )}
 
-      {totalPages > 1 && (
-        <nav aria-label={t('instructor.sourceLibrary.sourceLibraryPagination')} className="flex items-center justify-center gap-3 pt-4">
-          <button type="button" onClick={() => setPage(current => Math.max(0, current - 1))} disabled={page === 0 || loading}
-            className="cursor-pointer rounded-lg border border-(--border) bg-(--surface) px-4 py-2 text-xs font-bold text-(--text-secondary) transition-colors hover:bg-(--surface-secondary) focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50">
-            {t('instructor.sourceLibrary.prev')}
-          </button>
-          <span className="text-xs font-semibold text-(--text-tertiary)">{page + 1} / {totalPages}</span>
-          <button type="button" onClick={() => setPage(current => Math.min(totalPages - 1, current + 1))} disabled={page + 1 >= totalPages || loading}
-            className="cursor-pointer rounded-lg border border-(--border) bg-(--surface) px-4 py-2 text-xs font-bold text-(--text-secondary) transition-colors hover:bg-(--surface-secondary) focus:outline-none focus:ring-2 focus:ring-(--focus) disabled:cursor-not-allowed disabled:opacity-50">
-            {t('instructor.sourceLibrary.next')}
-          </button>
-        </nav>
-      )}
+      <div className="flex items-center justify-between gap-3 pt-4 text-xs font-semibold text-(--text-secondary)">
+        <span>{t('instructor.sourceLibrary.showing', { shown: sources.length, total: totalElements })}</span>
+        <AdminPagination page={page} totalPages={totalPages} onChange={setPage} />
+      </div>
 
       <Modal open={!!editingSource} onClose={closeEdit} title={t('instructor.sourceLibrary.editSourceTitle')} closeLabel={t('close')}>
         <form onSubmit={handleSaveTitle} className="space-y-4">

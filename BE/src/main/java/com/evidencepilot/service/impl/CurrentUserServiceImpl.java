@@ -245,6 +245,20 @@ public class CurrentUserServiceImpl {
         requireSectionAssignment(currentUser, section);
     }
 
+    /**
+     * Per-section content freeze — instructor content edits are rejected once
+     * the section is assigned (matches the FE modal + standard-config rule).
+     * Admins keep their override; students still go through
+     * requireSectionAssignment via requireSectionContentWriteAccess.
+     */
+    public void forbidInstructorEditOnAssignedSection(User currentUser, PaperSection section) {
+        if (isInstructor(currentUser) && section.getAssignedUser() != null) {
+            throw new ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "Section content is locked while this section is assigned");
+        }
+    }
+
     public void requireSectionContentReadAccess(User currentUser, PaperSection section) {
         requireProjectAccess(currentUser, section.getDocument().getProject());
         if (!section.isActive()) {

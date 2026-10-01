@@ -423,6 +423,7 @@ public class PaperProcessingServiceImpl {
 
         PaperSection section = requireSectionInDocument(sectionId, documentId);
         if (content != null) {
+            currentUserService.forbidInstructorEditOnAssignedSection(currentUser, section);
             currentUserService.requireSectionContentWriteAccess(currentUser, section);
             requireExpectedRevision(section, expectedRevision);
             FeedbackAnchorService.validateChanges(section.getContentTex(), content, changes);
@@ -556,6 +557,7 @@ public class PaperProcessingServiceImpl {
         requireDocumentWriteAccess(documentId);
         User currentUser = currentUserService.requireCurrentUser();
         PaperSection section = requireSectionInDocument(sectionId, documentId);
+        currentUserService.forbidInstructorEditOnAssignedSection(currentUser, section);
         currentUserService.requireSectionContentWriteAccess(currentUser, section);
         requireExpectedRevision(section, expectedRevision);
         if (section.getPreviousContentTex() == null
@@ -1093,6 +1095,7 @@ public class PaperProcessingServiceImpl {
         for (var item : items) {
             PaperSection section = persistedById.get(item.id());
             if (item.contentTex() != null && !Objects.equals(section.getContentTex(), item.contentTex())) {
+                currentUserService.forbidInstructorEditOnAssignedSection(currentUser, section);
                 currentUserService.requireSectionContentWriteAccess(currentUser, section);
             }
         }

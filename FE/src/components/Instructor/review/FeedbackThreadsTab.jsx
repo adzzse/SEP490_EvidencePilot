@@ -197,7 +197,7 @@ export default function FeedbackThreadsTab({ review, selectedSection, composerFo
       )}
 
       <ul className="space-y-2">
-        {threads.map(item => {
+        {threads.map((item, threadIndex) => {
           const active = String(item.id) === String(activeFeedbackId);
           const busy = busyId === item.id;
           const isEditing = String(editingFeedbackId) === String(item.id);
@@ -213,6 +213,7 @@ export default function FeedbackThreadsTab({ review, selectedSection, composerFo
             <FeedbackCard
               key={item.id}
               item={item}
+              index={threadIndex}
               active={active}
               onSelect={selectFeedback}
               actions={((item.canEdit || item.canDelete) && (

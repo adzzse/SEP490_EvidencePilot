@@ -35,9 +35,9 @@ export default function PaperSectionEditorPane({
   onDiscard,
   onSave,
 }) {
-  // ponytail: sectionStructureLocked is status-only (see ProjectDetail);
-  // the selected row locks itself while assigned. Content + assignment stay
-  // status-gated to match the BE (instructors may fix content / reassign).
+  // ponytail: per-section lock — the assigned row freezes title, content
+  // and standards (BE rejects instructor content edits on assigned rows
+  // too). Assignment stays status-gated so instructors can reassign.
   const selectedLocked = Boolean(selectedSection?.assignedUserId) || projectReadOnly;
   const assigneeName = selectedSection?.assignedUserId
     ? studentDisplayName(studentMembers.find(member => String(member.userId) === String(selectedSection.assignedUserId)) || {})
@@ -118,7 +118,7 @@ export default function PaperSectionEditorPane({
               />
 
               <label htmlFor="edit-paper-section-content" className="block text-[10px] font-black uppercase tracking-wider text-slate-400">{labels.sectionContent}</label>
-              <textarea id="edit-paper-section-content" aria-label={labels.sectionContent} value={selectedSection.contentTex || ''} onChange={event => onUpdateSection({ contentTex: event.target.value })} readOnly={projectReadOnly} rows={20} className="w-full resize-y rounded-xl border border-slate-200 bg-white p-4 font-mono text-xs leading-6 text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 read-only:bg-slate-100 read-only:opacity-70" />
+              <textarea id="edit-paper-section-content" aria-label={labels.sectionContent} value={selectedSection.contentTex || ''} onChange={event => onUpdateSection({ contentTex: event.target.value })} readOnly={selectedLocked} rows={20} className="w-full resize-y rounded-xl border border-slate-200 bg-white p-4 font-mono text-xs leading-6 text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 read-only:bg-slate-100 read-only:opacity-70" />
             </div>
           )}
         </div>

@@ -119,6 +119,12 @@ public class UserInvitationServiceImpl implements UserInvitationService {
         User user = userRepository.findByEmailVerificationTokenForUpdate(rawToken)
                 .orElseThrow(this::badToken);
 
+        // Deleted rows are invisible to login/lookup; a stale token must never
+        // reactivate them. Reinvites create a new row with a new token.
+        if (user.getAccountStatus() == AccountStatus.DELETED) {
+            throw badToken();
+        }
+
         // Security gate at request time: the sweeper job is hygiene only and
         // must never be trusted to invalidate tokens.
         if (user.getEmailVerificationExpiresAt() == null
@@ -158,6 +164,9 @@ public class UserInvitationServiceImpl implements UserInvitationService {
             throw badToken();
         }
         User user = userRepository.findByEmailVerificationToken(rawToken).orElseThrow(this::badToken);
+        if (user.getAccountStatus() == AccountStatus.DELETED) {
+            throw badToken();
+        }
         if (user.getEmailVerificationExpiresAt() == null
                 || user.getEmailVerificationExpiresAt().isBefore(LocalDateTime.now())) {
             throw badToken();

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Modal from '../../../components/ui/Modal.jsx';
+import Dropdown from '../../../components/ui/Dropdown.jsx';
 import { useAdminTour } from '../../../hooks/useAdminTour.js';
 
 const KEYS = ['CITATION_REVIEW', 'CHECK_STANDARD'];
@@ -285,7 +286,28 @@ function PromptConfigSection({ api }) {
         {config?.persisted && <p className="text-xs">{t('admin.aiSavedSelection')}: <span className="font-mono">{(config.modelIds || []).join(' → ')}</span></p>}
         {!catalog ? <p className="text-xs text-amber-700">{t('admin.aiCatalogUnavailable')}</p> : catalog.allowedModels.length === 1 ? <p className="text-xs font-mono">{catalog.allowedModels[0]}</p> : (
           <div className="grid sm:grid-cols-3 gap-3">
-            {[0, 1, 2].map((index) => <label key={index} className="text-xs font-semibold">{index === 0 ? t('admin.aiPrimaryModel') : t('admin.aiFallbackModel', { index })}<select aria-label={index === 0 ? t('admin.aiPrimaryModel') : t('admin.aiFallbackModel', { index })} value={modelDraft[index] || ''} onChange={(event) => updateModel(index, event.target.value)} className="mt-1 w-full px-3 py-2 border border-(--border) rounded-xl bg-(--surface)" required={index === 0}><option value="">{t('admin.aiNoFallback')}</option>{catalog.allowedModels.map((model) => <option key={model} value={model} disabled={modelDraft.some((chosen, chosenIndex) => chosen === model && chosenIndex !== index)}>{model}{catalog.schemaModels?.includes(model) ? ` · ${t('admin.aiJsonSchema')}` : catalog.jsonModels?.includes(model) ? ` · ${t('admin.aiJson')}` : ''}</option>)}</select></label>)}
+            {[0, 1, 2].map((index) => {
+              const labelText = index === 0 ? t('admin.aiPrimaryModel') : t('admin.aiFallbackModel', { index });
+              return (
+                <div key={index} className="text-xs font-semibold">{labelText}
+                  <Dropdown
+                    value={modelDraft[index] || ''}
+                    onChange={(value) => updateModel(index, value)}
+                    ariaLabel={labelText}
+                    maxVisibleRows={5}
+                    className="mt-1"
+                    disabledValues={modelDraft.filter((model, position) => position !== index && model)}
+                    options={[
+                      { value: '', label: t('admin.aiNoFallback') },
+                      ...catalog.allowedModels.map((model) => ({
+                        value: model,
+                        label: `${model}${catalog.schemaModels?.includes(model) ? ` · ${t('admin.aiJsonSchema')}` : catalog.jsonModels?.includes(model) ? ` · ${t('admin.aiJson')}` : ''}`,
+                      })),
+                    ]}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
         {catalog && <p className="text-xs text-(--text-secondary)">{t('admin.aiJsonCatalogNote')}</p>}
@@ -296,7 +318,16 @@ function PromptConfigSection({ api }) {
       {configTab === 'functions' && (
       <div className="grid xl:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.4fr)] gap-6">
         <section data-guide="prompt-list" className="bg-(--surface) rounded-2xl border border-(--border) p-5 space-y-4">
-          <label className="text-xs font-bold">{t('admin.aiFunction')}<select aria-label={t('admin.aiFunction')} value={key} onChange={(event) => changeKey(event.target.value)} className="mt-1 w-full px-3 py-2 border border-(--border) rounded-xl bg-(--surface)">{KEYS.map((value) => <option key={value} value={value}>{t(`admin.aiKey${value}`)}</option>)}</select></label>
+          <div className="text-xs font-bold">{t('admin.aiFunction')}
+            <Dropdown
+              value={key}
+              onChange={(value) => changeKey(value)}
+              ariaLabel={t('admin.aiFunction')}
+              maxVisibleRows={5}
+              className="mt-1 font-semibold"
+              options={KEYS.map((value) => ({ value, label: t(`admin.aiKey${value}`) }))}
+            />
+          </div>
           {currentPrompt && <div className={`rounded-xl border p-3 text-xs ${currentPrompt.configurationValid ? 'border-emerald-200 bg-emerald-50/50' : 'border-rose-200 bg-rose-50'}`}><p className="font-bold">{t('admin.aiEffectivePrompt')}: {currentPrompt.version}</p><p>{currentPrompt.source === 'CODE_DEFAULT' ? t('admin.aiCodeDefault') : t('admin.aiDatabaseVersion')}</p>{!currentPrompt.configurationValid && <p className="text-rose-700">{currentPrompt.configurationErrors.join('; ')}</p>}<div className="mt-2 flex gap-2"><button type="button" onClick={() => openVersion(currentPrompt)} className="underline">{t('admin.aiOpen')}</button><button type="button" onClick={() => cloneVersion(currentPrompt)} className="underline">{t('admin.aiClone')}</button></div></div>}
           <h3 className="text-xs font-bold uppercase tracking-wider">{t('admin.promptVersions')}</h3>
           {versions.length === 0 ? <p className="text-xs text-(--text-tertiary)">{t('admin.noPrompts')}</p> : versions.map((prompt) => <div key={prompt.id} className="border border-(--border) rounded-xl p-3 text-xs"><div className="flex justify-between gap-2"><button type="button" onClick={() => openVersion(prompt)} className="font-bold text-left hover:underline">{prompt.version}</button>{prompt.active && <span className="text-emerald-700 font-bold">{t('admin.active')}</span>}</div><p className="text-[10px] text-(--text-tertiary)">{prompt.createdAt}</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => cloneVersion(prompt)} className="underline">{t('admin.aiClone')}</button><button type="button" onClick={() => validate(prompt.id)} className="underline">{t('admin.promptValidate')}</button>{!prompt.active && <button type="button" onClick={(event) => showConfirm({ type: 'prompt', prompt }, event)} className="font-bold underline">{t('admin.activate')}</button>}</div></div>)}
@@ -313,7 +344,16 @@ function PromptConfigSection({ api }) {
 
           <section className="bg-(--surface) rounded-2xl border border-(--border) p-5 sm:p-6 space-y-4">
             <h2 className="font-bold">{t('admin.aiValidateAndTrial')}</h2>
-            <div className="grid sm:grid-cols-2 gap-3"><label className="text-xs font-semibold">{t('admin.aiTrialCase')}<select value={trialCase} onChange={(event) => { setTrialCase(event.target.value); invalidateChecks(); }} className="mt-1 w-full px-3 py-2 border border-(--border) rounded-xl bg-(--surface)">{CASES.map((value) => <option key={value} value={value}>{t(`admin.aiCase${value}`)}</option>)}</select></label><label className="flex items-end gap-2 pb-2 text-xs"><input type="checkbox" checked={trialChain} onChange={(event) => { setTrialChain(event.target.checked); invalidateChecks(); }} />{t('admin.aiTrialWholeChain')}</label></div>
+            <div className="grid sm:grid-cols-2 gap-3"><div className="text-xs font-semibold">{t('admin.aiTrialCase')}
+              <Dropdown
+                value={trialCase}
+                onChange={(value) => { setTrialCase(value); invalidateChecks(); }}
+                ariaLabel={t('admin.aiTrialCase')}
+                maxVisibleRows={5}
+                className="mt-1"
+                options={CASES.map((value) => ({ value, label: t(`admin.aiCase${value}`) }))}
+              />
+            </div><label className="flex items-end gap-2 pb-2 text-xs"><input type="checkbox" checked={trialChain} onChange={(event) => { setTrialChain(event.target.checked); invalidateChecks(); }} />{t('admin.aiTrialWholeChain')}</label></div>
             <div className="flex flex-wrap gap-2"><button type="button" disabled={!openedId || pending === 'validate'} onClick={() => validate()} className="px-3 py-2 text-xs font-bold border border-(--border) rounded-xl disabled:opacity-40">{t('admin.promptValidate')}</button><button type="button" disabled={editorMode === 'draft' || !catalog || !modelDraft[0] || pending === 'trial'} onClick={runTrial} className="px-3 py-2 text-xs font-bold bg-[#0c162e] text-white rounded-xl disabled:opacity-40">{pending === 'trial' ? t('admin.working') : t('admin.aiRunTrial')}</button>{trial && <button type="button" onClick={downloadTrial} className="px-3 py-2 text-xs font-bold border border-(--border) rounded-xl">{t('admin.aiDownloadTrial')}</button>}</div>
             {validation?.templateId === openedId && <p className="text-xs">{validation.valid ? t('admin.promptValid') : validation.errors.join('; ')}</p>}
             {trial && <div className="rounded-xl bg-(--surface-secondary) p-3 text-xs space-y-1"><p><b>{t('admin.aiExpectedActual')}:</b> {trial.caseId} · {trial.expectationMatched ? t('admin.aiMatched') : t('admin.aiMismatch')}</p><p><b>{t('admin.aiActualModel')}:</b> {trial.model}</p><p><b>{t('admin.aiDuration')}:</b> {trial.durationMs} ms</p><p className="font-mono break-all">{trial.promptFingerprint} · {trial.generationFingerprint}</p></div>}
