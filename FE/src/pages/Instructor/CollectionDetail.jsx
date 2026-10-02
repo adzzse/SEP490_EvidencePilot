@@ -26,6 +26,8 @@ import {
   API_ROUTES,
 } from '../../constants';
 import { formatDateTime } from '../../utils/formatters/date.js';
+import { AdminPagination } from '../Admin/components/shared.jsx';
+import Dropdown from '../../components/ui/Dropdown.jsx';
 
 const TABS = COLLECTION_DETAIL_TAB_KEYS;
 const TAB_IDS = COLLECTION_DETAIL_TAB_IDS;
@@ -635,7 +637,8 @@ export default function CollectionDetail() {
 
     const SHARED_PAGE_SIZE = SHARED_DOCS_PAGE_SIZE;
     const totalSharedPages = Math.ceil(filteredShared.length / SHARED_PAGE_SIZE) || 1;
-    const pagedShared = filteredShared.slice(sharedPage * SHARED_PAGE_SIZE, (sharedPage + 1) * SHARED_PAGE_SIZE);
+    const safeSharedPage = Math.min(Math.max(sharedPage, 0), totalSharedPages - 1);
+    const pagedShared = filteredShared.slice(safeSharedPage * SHARED_PAGE_SIZE, (safeSharedPage + 1) * SHARED_PAGE_SIZE);
 
     return (
       <div className="space-y-4">
@@ -652,16 +655,17 @@ export default function CollectionDetail() {
                 className="w-full pl-9 pr-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-medium text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)"
               />
             </div>
-            <select
-              value={sharedProjectFilter}
-              onChange={(e) => { setSharedProjectFilter(e.target.value); setSharedPage(0); }}
-              className="px-3 py-2 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-medium text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus) [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            >
-              <option value="">{t('instructor.collectionDetail.allProjects')}</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.title}</option>
-              ))}
-            </select>
+            <Dropdown
+              value={sharedProjectFilter || ''}
+              onChange={(value) => { setSharedProjectFilter(value); setSharedPage(0); }}
+              maxVisibleRows={5}
+              ariaLabel={t('instructor.collectionDetail.allProjects')}
+              className="min-w-44 sm:max-w-xs"
+              options={[
+                { value: '', label: t('instructor.collectionDetail.allProjects') },
+                ...projects.map(p => ({ value: String(p.id), label: p.title })),
+              ]}
+            />
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -779,27 +783,10 @@ export default function CollectionDetail() {
           </div>
         )}
 
-        {totalSharedPages > 1 && (
-          <div className="mt-6 flex items-center justify-center gap-2 text-xs">
-            <button
-              disabled={sharedPage === 0}
-              onClick={() => setSharedPage(p => p - 1)}
-              className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {t('instructor.collectionDetail.prev')}
-            </button>
-            <span className="px-3 py-1.5 font-mono font-bold text-(--text-secondary)">
-              {t('instructor.collectionDetail.page')} {sharedPage + 1} {t('instructor.collectionDetail.of')} {totalSharedPages}
-            </span>
-            <button
-              disabled={sharedPage >= totalSharedPages - 1}
-              onClick={() => setSharedPage(p => p + 1)}
-              className="px-3 py-1.5 bg-(--surface) border border-(--border) rounded-lg font-bold text-(--text-secondary) hover:bg-(--surface-secondary) transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {t('instructor.collectionDetail.next')}
-            </button>
-          </div>
-        )}
+        <div className="flex items-center justify-between gap-3 pt-4 text-xs font-semibold text-(--text-secondary)">
+          <span>{t('instructor.collectionDetail.showingSources', { shown: pagedShared.length, total: filteredShared.length })}</span>
+          <AdminPagination page={safeSharedPage} totalPages={totalSharedPages} onChange={setSharedPage} />
+        </div>
       </div>
     );
   };

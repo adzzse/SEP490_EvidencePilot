@@ -1,3 +1,10 @@
+// ponytail: YYYY-MM-DD -> DD/MM in Vietnam display; labels from caller win.
+function formatShortDay(dayDate) {
+  const parts = String(dayDate || '').slice(0, 10).split('-');
+  if (parts.length !== 3) return String(dayDate || '');
+  return `${parts[2]}/${parts[1]}`;
+}
+
 export default function ContributionGraph({ buckets = [], emptyLabel, ariaLabel }) {
   if (!buckets || buckets.length === 0) {
     return <p className="text-xs italic text-[var(--text-tertiary)]">{emptyLabel}</p>;
@@ -27,7 +34,7 @@ export default function ContributionGraph({ buckets = [], emptyLabel, ariaLabel 
       <div className="flex gap-1 border-t border-[var(--border)] pt-2 text-[10px] text-[var(--text-tertiary)]">
         {buckets.map((b, i) => (
           <span key={`${b.label || b.date}-${i}`} className="min-w-6 max-w-8 flex-1 truncate text-center" title={b.label || b.date}>
-            {(b.label || b.date).slice(5)}
+            {b.label || formatShortDay(b.date)}
           </span>
         ))}
       </div>

@@ -143,6 +143,7 @@ const STUDENT_PROJECT_KEYS = [
   'roleLabel',
   'searchLabel',
   'searchProjectsPlaceholder',
+  'showingProjects',
   'showingProjectsRange',
   'startWorkspace',
   'status',

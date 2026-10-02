@@ -120,10 +120,15 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
                 )}
               </div>
           )}
-          {workspaceMode !== 'review' && reviewAction && (
+          {workspaceMode !== 'review' && reviewAction && (() => {
+            const total = Number(reviewAction.progress?.total) || 0;
+            const current = Number(reviewAction.progress?.current) || 0;
+            const percent = reviewAction.busy && total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+            const busyLabel = reviewAction.busy ? (percent > 0 ? `${percent}%` : t('loading')) : reviewAction.label;
+            return (
             <span className="relative inline-flex items-center gap-1 group">
               <button type="button" data-tour="header-ai-review" onClick={reviewAction.onClick} disabled={reviewAction.disabled || reviewAction.busy}
-                aria-label={reviewAction.label}
+                aria-label={busyLabel}
                 className="flex h-8 items-center gap-1 rounded-lg bg-(--brand) px-2 text-xs font-bold text-(--on-brand) transition-colors hover:bg-(--brand-hover) disabled:opacity-50">
                 {reviewAction.busy ? (
                   <div className="h-4 w-4 border-[2px] border-(--on-brand)/50 rounded-full animate-spin border-l-transparent" role="status">
@@ -132,18 +137,24 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
                 ) : (
                   <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
                 )}
-                <span className="hidden lg:inline">{reviewAction.busy ? t('loading') : reviewAction.label}</span>
+                <span className="hidden lg:inline">{busyLabel}</span>
               </button>
               <div
                 role="tooltip"
                 className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-(--border) bg-(--surface) px-3 py-2 text-[11px] font-normal leading-relaxed text-(--text-secondary) shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-opacity whitespace-normal text-left"
               >
                 <p className="font-bold text-(--text-primary)">{reviewAction.busy ? t('reviewing') : reviewAction.description}</p>
-                <p className="mt-1">{t('citationReviewTooltipLimits')}</p>
+                {!reviewAction.isReferenceCheck && <p className="mt-1">{t('citationReviewTooltipLimits')}</p>}
               </div>
             </span>
-          )}
-          {isReview && reviewTools && (
+            );
+          })()}
+          {isReview && reviewTools && (() => {
+            const total = Number(reviewTools.citationProgress?.total) || 0;
+            const current = Number(reviewTools.citationProgress?.current) || 0;
+            const percent = reviewTools.citationBusy && total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+            const citationLabel = reviewTools.citationBusy ? (percent > 0 ? `${percent}%` : t('loading')) : t('citationReview');
+            return (
             <span className="inline-flex items-center gap-1.5">
               {reviewTools.isReferenceSection ? (
                 <button type="button" onClick={reviewTools.onRunReferenceCheck} disabled={reviewTools.referenceDisabled || reviewTools.referenceBusy}
@@ -167,12 +178,13 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
                       : t('citationReviewDescription'))}
                     className="flex h-8 items-center gap-1 rounded-lg bg-(--brand) px-2 text-xs font-bold text-(--on-brand) transition-colors hover:bg-(--brand-hover) disabled:opacity-50">
                     <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-                    <span className="hidden lg:inline">{reviewTools.citationBusy ? t('loading') : t('citationReview')}</span>
+                    <span className="hidden lg:inline">{citationLabel}</span>
                   </button>
                 </>
               )}
             </span>
-          )}
+            );
+          })()}
           {workspaceMode !== 'review' && canExport && (
           <div className="relative">
             <button data-tour="header-export" onClick={() => setShowExportMenu(!showExportMenu)} className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 lg:px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors" title={t('export')}>
@@ -213,8 +225,18 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
           {showMoreMenu && (
             <div className="absolute right-0 top-full mt-2 w-[min(18rem,calc(100vw-1rem))] bg-(--surface) border border-(--border) rounded-xl shadow-xl z-[99999] overflow-hidden">
               {workspaceMode !== 'review' && <button onClick={() => runMobileAction(onShowHistory)} disabled={historyDisabled} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{t('versionHistory')}</button>}
-              {workspaceMode !== 'review' && reviewAction && <button onClick={() => runMobileAction(reviewAction.onClick)} disabled={reviewAction.disabled || reviewAction.busy} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{reviewAction.busy ? t('loading') : reviewAction.label}</button>}
-              {isReview && reviewTools && !reviewTools.isReferenceSection && <button onClick={() => runMobileAction(reviewTools.onRunCitationReview)} disabled={reviewTools.citationDisabled || reviewTools.citationBusy || reviewTools.citationReadOnly} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{t('citationReview')}</button>}
+              {workspaceMode !== 'review' && reviewAction && (() => {
+                const mTotal = Number(reviewAction.progress?.total) || 0;
+                const mCurrent = Number(reviewAction.progress?.current) || 0;
+                const mPct = reviewAction.busy && mTotal > 0 ? Math.min(100, Math.round((mCurrent / mTotal) * 100)) : 0;
+                return <button onClick={() => runMobileAction(reviewAction.onClick)} disabled={reviewAction.disabled || reviewAction.busy} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{reviewAction.busy ? (mPct > 0 ? `${mPct}%` : t('loading')) : reviewAction.label}</button>;
+              })()}
+              {isReview && reviewTools && !reviewTools.isReferenceSection && (() => {
+                const mTotal = Number(reviewTools.citationProgress?.total) || 0;
+                const mCurrent = Number(reviewTools.citationProgress?.current) || 0;
+                const mPct = reviewTools.citationBusy && mTotal > 0 ? Math.min(100, Math.round((mCurrent / mTotal) * 100)) : 0;
+                return <button onClick={() => runMobileAction(reviewTools.onRunCitationReview)} disabled={reviewTools.citationDisabled || reviewTools.citationBusy || reviewTools.citationReadOnly} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{reviewTools.citationBusy ? (mPct > 0 ? `${mPct}%` : t('loading')) : t('citationReview')}</button>;
+              })()}
               {isReview && reviewTools && reviewTools.isReferenceSection && <button onClick={() => runMobileAction(reviewTools.onRunReferenceCheck)} disabled={reviewTools.referenceDisabled || reviewTools.referenceBusy} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary) disabled:opacity-40">{t('refCheckAction')}</button>}
               {isReview && review && <button onClick={() => setShowMobileStandards(!showMobileStandards)} aria-expanded={showMobileStandards} className="w-full text-left px-4 py-3 text-xs font-semibold text-(--text-primary) hover:bg-(--surface-secondary)">{t('instructor.review.standardsTab')}</button>}
               {isReview && review && showMobileStandards && (

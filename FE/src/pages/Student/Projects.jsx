@@ -8,6 +8,7 @@ import { PROJECT_STATUSES } from '../../constants';
 import { formatDateTime } from '../../utils/formatters/date';
 import api from '../../services/api';
 import { useNotification } from '../../context/NotificationContext';
+import { AdminPagination } from '../Admin/components/shared.jsx';
 const LAST_VISITED_KEY = 'ep_project_last_visited';
 
 function readLastVisited() {
@@ -16,27 +17,6 @@ function readLastVisited() {
   } catch {
     return {};
   }
-}
-
-function getPaginationRange(currentPage, totalPages) {
-  if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, i) => i);
-  }
-  const pages = [0];
-  const start = Math.max(1, currentPage - 1);
-  const end = Math.min(totalPages - 2, currentPage + 1);
-
-  if (start > 1) {
-    pages.push('DOTS_LEFT');
-  }
-  for (let i = start; i <= end; i++) {
-    pages.push(i);
-  }
-  if (end < totalPages - 2) {
-    pages.push('DOTS_RIGHT');
-  }
-  pages.push(totalPages - 1);
-  return pages;
 }
 
 export default function Projects() {
@@ -419,68 +399,11 @@ export default function Projects() {
           </div>
         )}
 
-        {/* Pagination Footer (Matching exact design in screenshot) */}
+        {/* Pagination Footer (Showing X of Y + Prev n/N Next, mirrors Source Library) */}
         {!loading && !error && totalElements > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-(--border) text-xs font-semibold text-(--text-secondary)">
-            <span>
-              {t('student.projects.showingProjectsRange', {
-                start: safePage * pageSize + 1,
-                end: Math.min((safePage + 1) * pageSize, totalElements),
-                total: totalElements,
-              })}
-            </span>
-
-            <div className="flex items-center gap-1.5">
-              {/* Prev Button */}
-              <button
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={safePage === 0}
-                aria-label={t('student.projects.previousPage')}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xs cursor-pointer"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-
-              {/* Page Number Buttons */}
-              {getPaginationRange(safePage, totalPages).map((item, idx) => {
-                if (typeof item === 'string') {
-                  return (
-                    <span key={`${item}-${idx}`} className="text-gray-400 text-xs px-1 select-none">
-                      ...
-                    </span>
-                  );
-                }
-                const isActive = safePage === item;
-                return (
-                  <button
-                    key={item}
-                    onClick={() => setPage(item)}
-                    aria-label={t('student.projects.pageLabel', { page: item + 1 })}
-                    className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition cursor-pointer ${
-                      isActive
-                        ? 'bg-(--brand) text-white shadow-xs'
-                        : 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    {item + 1}
-                  </button>
-                );
-              })}
-
-              {/* Next Button */}
-              <button
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={safePage >= totalPages - 1}
-                aria-label={t('student.projects.nextPage')}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-800 text-gray-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xs cursor-pointer"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
+          <div className="flex items-center justify-between gap-3 pt-4 text-xs font-semibold text-(--text-secondary)">
+            <span>{t('student.projects.showingProjects', { shown: projects.length, total: totalElements })}</span>
+            <AdminPagination page={safePage} totalPages={totalPages} onChange={setPage} />
           </div>
         )}
       </main>

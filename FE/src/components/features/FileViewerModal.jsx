@@ -93,6 +93,8 @@ export default function FileViewerModal({ fileUrl, fileName, documentId, chunkId
     link.click();
   };
 
+
+
   if (!fileUrl && !hasPassage) return null;
 
   return (

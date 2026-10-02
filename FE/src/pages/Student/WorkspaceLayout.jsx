@@ -1970,6 +1970,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
         ? t('citationReviewNotApplicableAbstract')
         : t('citationReviewDescription'),
     onClick: isReferenceSection ? handleRunReferenceCheck : handleRunAiReview,
+    isReferenceCheck: isReferenceSection,
     disabled: !selectedPaper || !selectedSectionId || !canEditCurrentSection || isLocked || isAbstractSection,
     busy: isReferenceSection ? paperRefs.checkLoading : loadingAiReview,
     progress: isReferenceSection ? null : aiReviewProgress,
@@ -2083,6 +2084,7 @@ export default function WorkspaceLayout({ workspaceMode = 'student' }) {
           onRunCitationReview: handleReviewCitationButton,
           onOpenCitationReview: handleOpenCitationReview,
           citationBusy: loadingAiReview,
+          citationProgress: aiReviewProgress,
           citationCount: (aiReviewResult?.findings || []).length,
           citationDisabled: !selectedPaper?.id || !selectedSectionId,
           citationError: aiReviewError?.message || null,

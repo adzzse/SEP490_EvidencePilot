@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import api from '../../services/api.js';
 import Modal from '../ui/Modal.jsx';
+import Dropdown from '../ui/Dropdown.jsx';
 import UploadZone from './UploadZone.jsx';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
@@ -776,18 +777,20 @@ export default function UniversalDocumentIngestionModal({
                   {t('shared.ingestion.noCuratedCollections')}
                 </p>
               ) : (
-                <select
-                  value={selectedCollectionId}
-                  onChange={e => setSelectedCollectionId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-(--surface-secondary) border border-(--border) rounded-xl text-xs font-medium text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-(--focus)"
-                >
-                  <option value="">{t('shared.ingestion.selectCollectionPlaceholder')}</option>
-                  {collections.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.name || c.title} {c.totalSources ? t('shared.ingestion.collectionSourceCount', { count: c.totalSources }) : ''}
-                    </option>
-                  ))}
-                </select>
+                <Dropdown
+                  value={selectedCollectionId || ''}
+                  onChange={setSelectedCollectionId}
+                  maxVisibleRows={5}
+                  placeholder={t('shared.ingestion.selectCollectionPlaceholder')}
+                  ariaLabel={t('shared.ingestion.selectCuratedCollection')}
+                  options={[
+                    { value: '', label: t('shared.ingestion.selectCollectionPlaceholder') },
+                    ...collections.map(c => ({
+                      value: String(c.id),
+                      label: `${c.name || c.title}${c.totalSources ? ` ${t('shared.ingestion.collectionSourceCount', { count: c.totalSources })}` : ''}`,
+                    })),
+                  ]}
+                />
               )}
             </div>
 

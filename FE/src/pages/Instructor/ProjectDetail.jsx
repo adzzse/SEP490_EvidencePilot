@@ -25,6 +25,14 @@ import { useNotification } from '../../context/NotificationContext';
 import { hasProjectAction } from '../../utils/projectActions.js';
 import { formatDate, formatDateTime } from '../../utils/formatters/date.js';
 import DateField from '../../components/ui/DateField.jsx';
+import Dropdown from '../../components/ui/Dropdown.jsx';
+
+function formatDayLabel(dayDate) {
+  if (!dayDate) return '—';
+  const parts = String(dayDate).slice(0, 10).split('-');
+  if (parts.length !== 3) return String(dayDate);
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
 import { taskKey, readTask, writeTask } from '../../utils/taskState.js';
 import { getWithRetry } from '../../utils/aiJobPolling.js';
 import { readUpload, writeUpload, prepareUpload, listUploadDocuments, reconcileFiles } from '../../utils/uploadRecovery.js';
@@ -492,7 +500,7 @@ export default function ProjectDetail() {
     }));
     return [...byDate.entries()]
       .sort(([a], [b]) => String(a).localeCompare(String(b)))
-      .map(([date, totals]) => ({ date, label: date, count: totals.saves, words: totals.words }));
+      .map(([date, totals]) => ({ date, label: formatDayLabel(date).slice(0, 5), count: totals.saves, words: totals.words }));
   }, [reportContributions, reportSections, reportSectionId]);
 
   // Full match list (uncapped) + paged slice for the combobox — previously the
@@ -1774,33 +1782,35 @@ export default function ProjectDetail() {
                   </button>
                   <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
                     {t('instructor.projectDetail.studentFilter')}
-                    <select
+                    <Dropdown
                       value={reportMemberId}
-                      onChange={event => {
+                      maxVisibleRows={5}
+                      ariaLabel={t('instructor.projectDetail.studentFilter')}
+                      className="min-w-36"
+                      onChange={value => {
                         setProgressReport(null);
-                        setReportMemberId(event.target.value);
+                        setReportMemberId(value);
                         setReportSectionId(null);
                       }}
-                      className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--brand)]"
-                    >
-                      <option value="ALL">{t('instructor.projectDetail.allStudents')}</option>
-                      {studentMembers.map(member => (
-                        <option key={member.userId} value={member.userId}>{studentDisplayName(member ?? {})}</option>
-                      ))}
-                    </select>
+                      options={[
+                        { value: 'ALL', label: t('instructor.projectDetail.allStudents') },
+                        ...studentMembers.map(member => ({ value: String(member.userId), label: studentDisplayName(member ?? {}) })),
+                      ]}
+                    />
                   </label>
                   <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
                     {t('instructor.projectDetail.sectionFilter')}
-                    <select
+                    <Dropdown
                       value={reportSectionId || 'ALL'}
-                      onChange={event => setReportSectionId(event.target.value === 'ALL' ? null : event.target.value)}
-                      className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--brand)]"
-                    >
-                      <option value="ALL">{t('instructor.projectDetail.allSections')}</option>
-                      {(progressReport?.sections || []).map(section => (
-                        <option key={section.sectionId} value={section.sectionId}>{section.sectionTitle}</option>
-                      ))}
-                    </select>
+                      maxVisibleRows={5}
+                      ariaLabel={t('instructor.projectDetail.sectionFilter')}
+                      className="min-w-36"
+                      onChange={value => setReportSectionId(value === 'ALL' ? null : value)}
+                      options={[
+                        { value: 'ALL', label: t('instructor.projectDetail.allSections') },
+                        ...(progressReport?.sections || []).map(section => ({ value: String(section.sectionId), label: section.sectionTitle })),
+                      ]}
+                    />
                   </label>
                 </div>
               </div>
@@ -1914,7 +1924,7 @@ export default function ProjectDetail() {
                           <div className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1">
                             {detail.dailyWordDeltas.map(day => (
                               <div key={day.date} className="flex items-center justify-between rounded bg-[var(--surface)] px-2 py-1 text-[10px]">
-                                <span>{formatDate(`${day.date}T00:00:00Z`, i18n.language)}</span>
+                                <span>{formatDayLabel(day.date)}</span>
                                 <span className="text-[var(--text-secondary)]">
                                   {day.saveCount} {t('instructor.projectDetail.savesShort')} · +{day.wordsAdded ?? Math.max(day.wordDelta, 0)}/-{day.wordsRemoved ?? Math.max(-day.wordDelta, 0)} {t('instructor.projectDetail.wordsShort')}
                                 </span>
