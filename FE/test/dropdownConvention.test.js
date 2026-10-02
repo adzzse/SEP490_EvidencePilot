@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 
 // ponytail: grandfathered native <select> files. New filters use the shared
 // Dropdown (5-row cap, hidden scrollbar); form fields with native validation
-// may keep <select> but must be added here deliberately in review.
+// may keep <select> but must be added here deliberately in review. Ceiling:
+// the list rots as new selects land. Revisit: each migration removes its
+// row (incremental — one batch at a time).
 const GRANDFATHERED = new Set([
   'src/components/Instructor/SourceLibraryPanel.jsx',
   'src/pages/Admin/components/AuditLogsTab.jsx',
@@ -15,13 +17,11 @@ const GRANDFATHERED = new Set([
   'src/pages/Admin/components/UsersTab.jsx',
   'src/pages/Admin/components/PromptConfigTab.jsx',
   'src/components/features/UniversalDocumentIngestionModal.jsx',
-  'src/pages/Admin/components/ProjectsTab.jsx',
   'src/pages/Instructor/CollectionList.jsx',
   'src/pages/Instructor/ReviewRequests.jsx',
   'src/components/Instructor/sections/SectionRow.jsx',
   'src/pages/Instructor/ProjectManagement.jsx',
   'src/pages/Instructor/CollectionDetail.jsx',
-  'src/pages/Instructor/EvidenceTraceReview.jsx',
   'src/pages/Instructor/ProjectDetail.jsx',
   'src/components/Student/FeedbackPanel.jsx',
 ]);

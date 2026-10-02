@@ -69,6 +69,7 @@ function ErrorBlock({ msg, onRetry }) {
 
 // ponytail: one shared clear-all-filters icon — every admin filter bar uses
 // it so the affordance is identical. Disabled (dimmed) when nothing is set.
+// Accepted intentional (single affordance, no per-tab variant).
 function ClearFiltersButton({ active, onClear }) {
   const { t } = useTranslation();
   return (
@@ -87,6 +88,7 @@ function ClearFiltersButton({ active, onClear }) {
 }
 // ponytail: one shared admin pager — Prev / editable page / Next. The input
 // commits on Enter/blur and clamps to 1..totalPages; every admin tab uses it.
+// Accepted intentional (single pager, no per-tab variant).
 function AdminPagination({ page, totalPages, onChange }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(null);

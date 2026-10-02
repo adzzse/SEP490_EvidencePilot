@@ -81,6 +81,7 @@ export default function PaperSectionSidebar({
           const selected = String(section.id) === String(selectedSection?.id);
           // ponytail: drag/add/reorder are order-only (status gate from parent);
           // rename + delete touch the row itself, so they lock per-section.
+          // Accepted intentional (mirrors the BE per-section guards).
           const locked = sectionStructureLocked || sectionStructureSaving;
           const rowLocked = Boolean(section.assignedUserId) || projectReadOnly || sectionStructureSaving;
           const standardConfigured = Boolean(sectionEvals[String(section.id)]?.requirements?.length);

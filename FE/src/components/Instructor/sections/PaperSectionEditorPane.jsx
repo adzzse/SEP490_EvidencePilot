@@ -5,6 +5,7 @@ import { studentDisplayName } from '../../../utils/instructor/studentSearch.js';
 
 export default function PaperSectionEditorPane({
   sections,
+  mediaAssets = [],
   selectedSection,
   sectionEvals,
   assignableMembers,
@@ -38,6 +39,7 @@ export default function PaperSectionEditorPane({
   // ponytail: per-section lock — the assigned row freezes title, content
   // and standards (BE rejects instructor content edits on assigned rows
   // too). Assignment stays status-gated so instructors can reassign.
+  // Accepted intentional (mirrors the BE per-section guards).
   const selectedLocked = Boolean(selectedSection?.assignedUserId) || projectReadOnly;
   const assigneeName = selectedSection?.assignedUserId
     ? studentDisplayName(studentMembers.find(member => String(member.userId) === String(selectedSection.assignedUserId)) || {})
@@ -62,7 +64,7 @@ export default function PaperSectionEditorPane({
         <div className="flex-1 overflow-y-auto p-4 sm:p-8">
           {sections.map(section => (
             <div key={section.id} className="mb-8">
-              <PreviewPane sectionTitle={section.sectionTitle} latex={section.contentTex || ''} mediaAssets={[]} citationNumbers={{}} />
+              <PreviewPane sectionTitle={section.sectionTitle} latex={section.contentTex || ''} mediaAssets={mediaAssets} citationNumbers={{}} />
             </div>
           ))}
         </div>

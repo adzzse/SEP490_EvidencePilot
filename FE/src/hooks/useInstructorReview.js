@@ -820,18 +820,6 @@ export default function useInstructorReview({ projectId, enabled }) {
     });
   }, [enabled, projectId, reloadEvidence, refetchCitationArchives, subscribeToEntityChanges]);
 
-  const submitTraceJudgment = async (traceId, judgment, instructorFeedback) => {
-    if (!enabled || !projectId || !traceId || !judgment) return;
-    setErrorMessage('');
-    try {
-      await api.patch(`/api/projects/${projectId}/evidence-traces/${traceId}/review`,
-        { judgment, instructorFeedback: instructorFeedback?.trim() || null });
-      await reloadEvidence();
-    } catch (err) {
-      setErrorMessage(err?.response?.data?.message || t('instructor.review.updateStatusFailed'));
-    }
-  };
-
   // rationale: historical rounds are read-only; only the latest PENDING/RETURNED request accepts input
   const isHistoricalRound = !!activeRequest && !!latestRequest && String(activeRequest.id) !== String(latestRequest.id);
 
@@ -925,7 +913,6 @@ export default function useInstructorReview({ projectId, enabled }) {
     evidenceTraces,
     evidenceLoading,
     reloadEvidence,
-    submitTraceJudgment,
     citationArchives,
     showPrevFeedback,
     setShowPrevFeedback,

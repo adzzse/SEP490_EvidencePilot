@@ -6,7 +6,9 @@ import { useEffect, useId, useRef, useState } from 'react';
 // Convention: new single-select filters use this component, not <select>.
 // Form fields needing native validation/IME keep <select> (see
 // FE/test/dropdownConvention.test.js grandfather list). Action menus are
-// plain popovers, never role=listbox.
+// plain popovers, never role=listbox. Ceiling: custom-listbox upkeep (a11y
+// parity is ours to keep). Revisit when native selects support popup
+// styling/row caps.
 export default function Dropdown({
   value,
   options = [],

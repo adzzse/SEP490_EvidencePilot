@@ -353,17 +353,6 @@ export default function EditorPanel({
                 </button>
               </>
             )}
-            {reviewError && (
-              <span className="hidden md:inline max-w-[180px] truncate text-[10px] font-semibold text-rose-600" title={reviewError}>{reviewError}</span>
-            )}
-            {reviewBusy && (
-              <span className="hidden sm:flex items-center gap-1 text-[10px] font-bold text-indigo-600">
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600 motion-reduce:animate-none"></span>
-                {reviewProgress?.total > 0
-                  ? `${Math.round(((reviewProgress.current || 0) / reviewProgress.total) * 100)}%`
-                  : '…'}
-              </span>
-            )}
             {!review && <div className="flex rounded-lg border border-(--border) bg-(--surface-tertiary) p-0.5 shrink-0 text-[11px]" aria-label={t('studentFeedback.view')}>
               {narrow && <button type="button" aria-pressed={!showPreview} onClick={() => setShowPreview(false)} className={`rounded-md px-2 py-1 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${!showPreview ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-secondary)'}`}>{t('student.workspace.latexLabel')}</button>}
               <button type="button" aria-pressed={previewVisible} onClick={() => { setFeedbackOpen?.(false); setShowPreview(true); }} className={`rounded-md px-2 py-1 font-semibold focus-visible:ring-2 focus-visible:ring-(--brand) ${previewVisible ? 'bg-(--surface) text-(--text-primary) shadow-sm' : 'text-(--text-secondary)'}`}>{t('preview')}</button>

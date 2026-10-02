@@ -13,6 +13,7 @@ export default function PaperSectionStandards({
   onSaveStandard,
 }) {
   // ponytail: per-section lock — only the assigned row freezes its standards.
+  // Accepted intentional (mirrors the BE per-section guards).
   const openLocked = sectionLocked || projectReadOnly;
   const editorLocked = Boolean(standardSection?.assignedUserId) || projectReadOnly;
   return (

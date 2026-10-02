@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../../services/api.js';
+import Modal from '../ui/Modal.jsx';
 import SectionRequirementsPanel from './SectionRequirementsPanel.jsx';
 import SourceLibraryContent from './SourceLibraryContent.jsx';
 import { formatDateTime } from '../../utils/formatters/date.js';
@@ -30,6 +31,7 @@ export default function ContextPanel({
   const [confirmationSnapshot, setConfirmationSnapshot] = useState(null);
   const [confirmationState, setConfirmationState] = useState('');
   const [confirmationRetry, setConfirmationRetry] = useState(0);
+  const [confirmModalRequestId, setConfirmModalRequestId] = useState(null);
   useEffect(() => {
     setConfirmationSnapshot(null);
     if (!confirmationRequestId) { setConfirmationState(''); return; }
@@ -151,39 +153,23 @@ export default function ContextPanel({
                         {fb.status === 'RETURNED' && <p className="text-rose-600 font-medium">{t('reviewReturned')}</p>}
                         {fb.status === 'REVIEWED' && <p className="text-emerald-600 font-medium">{t('reviewApproved')}</p>}
                         {fb.status === 'REJECTED' && <p className="text-rose-600 font-medium">{t('reviewRejected')}</p>}
-                        <button type="button" onClick={() => onViewFeedback(fb.id || fb.requestId)} className="mt-3 rounded-md border border-(--border) px-3 py-2 font-semibold text-(--brand) hover:bg-(--brand-soft) focus-visible:ring-2 focus-visible:ring-(--brand)">{t('studentFeedback.viewFeedback')}</button>
-                        {userProjectRole === 'LEADER' && <details className="mt-3" open={confirmationRequestId === (fb.id || fb.requestId)}>
-                          <summary className="cursor-pointer font-semibold focus-visible:ring-2 focus-visible:ring-(--brand)" onClick={event => {
-                            event.preventDefault();
-                            setConfirmationSnapshot(null);
-                            setConfirmationState('LOADING');
-                            setConfirmationRequestId(previous => previous === (fb.id || fb.requestId) ? null : (fb.id || fb.requestId));
-                          }}>{t('sectionConfirmations')}</summary>
-                          {confirmationRequestId === (fb.id || fb.requestId) && <div className="mt-2 space-y-2">
-                            {confirmationState === 'LOADING' && <p role="status">{t('loading')}</p>}
-                            {confirmationState === 'LEGACY_NO_SNAPSHOT' && <p>{t('confirmationLegacy')}</p>}
-                            {confirmationState === 'LOAD_ERROR' && <div role="alert"><p>{t('confirmationLoadFailed')}</p><button type="button" onClick={() => setConfirmationRetry(value => value + 1)} className="underline">{t('retry')}</button></div>}
-                            {confirmationState === 'AVAILABLE' && confirmationSnapshot && <>
-                              <p>{t('confirmationSubmittedBy')}: {confirmationSnapshot.submittedByName || '—'} · {formatDateTime(confirmationSnapshot.submittedAt)}</p>
-                              {confirmationSnapshot.papers.map(paper => <div key={paper.id}>
-                                <h4 className="font-bold">{paper.title || t('paper')}</h4>
-                                {paper.sections.map(section => <div key={section.id} className="mt-2 border-t border-(--border) pt-2">
-                                  {(() => {
-                                    const sharedReferences = section.sectionType === 'REFERENCE';
-                                    const handoffState = sharedReferences ? 'NOT_REQUIRED' : section.handoffState;
-                                    return <>
-                                  <p className="font-semibold">{section.title}</p>
-                                  <p>{t('feedbackAssignee')}: {section.assignedUserName || (sharedReferences ? t('referenceSharedEditors') : t('feedbackUnassigned'))}</p>
-                                  {handoffState && <p>{t(handoffState === 'CONFIRMED' ? 'handoffStateConfirmed' : handoffState === 'STALE' ? 'handoffStateStale' : handoffState === 'NOT_REQUIRED' ? 'handoffStateNotRequired' : 'handoffStateUnconfirmed')}</p>}
-                                  <p>{t('feedbackConfirmedBy')}: {section.confirmedByName || '—'}</p>
-                                  <p>{t('confirmationTime')}: {formatDateTime(section.confirmedAt)}</p>
-                                    </>;
-                                  })()}
-                                </div>)}
-                              </div>)}
-                            </>}
-                          </div>}
-                        </details>}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button type="button" onClick={() => onViewFeedback(fb.id || fb.requestId)} className="rounded-md border border-(--border) px-3 py-2 font-semibold text-(--brand) hover:bg-(--brand-soft) focus-visible:ring-2 focus-visible:ring-(--brand) cursor-pointer">{t('studentFeedback.viewFeedback')}</button>
+                          {userProjectRole === 'LEADER' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setConfirmationSnapshot(null);
+                                setConfirmationState('LOADING');
+                                setConfirmationRequestId(fb.id || fb.requestId);
+                                setConfirmModalRequestId(fb.id || fb.requestId);
+                              }}
+                              className="rounded-md border border-(--border) px-3 py-2 font-semibold text-(--text-secondary) hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand) cursor-pointer"
+                            >
+                              {t('sectionConfirmations')}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))
@@ -194,6 +180,54 @@ export default function ContextPanel({
 
         </div>
       </aside>
+      <Modal
+        open={confirmModalRequestId != null}
+        onClose={() => { setConfirmModalRequestId(null); setConfirmationRequestId(null); }}
+        title={t('sectionConfirmations')}
+        closeLabel={t('close')}
+      >
+        <div className="space-y-2 text-xs leading-relaxed text-(--text-primary)">
+          {confirmationState === 'LOADING' && <p role="status">{t('loading')}</p>}
+          {confirmationState === 'LEGACY_NO_SNAPSHOT' && <p>{t('confirmationLegacy')}</p>}
+          {confirmationState === 'LOAD_ERROR' && <div role="alert"><p>{t('confirmationLoadFailed')}</p><button type="button" onClick={() => setConfirmationRetry(value => value + 1)} className="underline cursor-pointer">{t('retry')}</button></div>}
+          {confirmationState === 'AVAILABLE' && confirmationSnapshot && <>
+            <p className="flex flex-wrap items-center gap-1.5">
+              <span>{t('confirmationSubmittedBy')}:</span>
+              <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                {confirmationSnapshot.submittedByName || '—'}{confirmationSnapshot.submittedByCode ? ` - ${confirmationSnapshot.submittedByCode}` : ''}
+              </span>
+              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {formatDateTime(confirmationSnapshot.submittedAt)}
+              </span>
+            </p>
+            {/* rationale: ~4 section cards visible, scroll the rest with no scrollbar. */}
+            <div className="mt-2 max-h-[26rem] space-y-3 overflow-y-auto pr-1 hide-scrollbar">
+            {confirmationSnapshot.papers.map(paper => <div key={paper.id}>
+              <h4 className="font-bold">{paper.title || t('paper')}</h4>
+              {paper.sections.map(section => <div key={section.id} className="mt-2 border-t border-(--border) pt-2">
+                {(() => {
+                  const sharedReferences = section.sectionType === 'REFERENCE';
+                  const assignee = sharedReferences
+                    ? t('referenceSharedEditors')
+                    : section.assignedUserName
+                      ? `${section.assignedUserName}${section.assignedUserCode ? ` - ${section.assignedUserCode}` : ''}`
+                      : t('feedbackUnassigned');
+                  const confirmer = section.confirmedByName
+                    ? `${section.confirmedByName}${section.confirmedByCode ? ` - ${section.confirmedByCode}` : ''}`
+                    : '—';
+                  return <>
+                    <p className="font-semibold">{section.title}</p>
+                    <p>{t('feedbackAssignee')}: {assignee}</p>
+                    <p>{t('feedbackConfirmedBy')}: {confirmer}</p>
+                    <p>{t('confirmationTime')}: {formatDateTime(section.confirmedAt)}</p>
+                  </>;
+                })()}
+              </div>)}
+            </div>)}
+            </div>
+          </>}
+        </div>
+      </Modal>
     </>
   );
 }

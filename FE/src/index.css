@@ -6,6 +6,11 @@
   --font-serif: 'Merriweather', Georgia, 'Times New Roman', serif;
 
   --animate-aurora: aurora 20s linear infinite;
+  /* ponytail: subtle bell attention cue — loops while an unacknowledged
+  error is present (class is removed when the dropdown opens or it clears).
+  Ceiling: CSS-only loop with no snooze. Revisit if persistent errors make
+  the loop a distraction (one-shot ping instead). */
+  --animate-bell-ring: bell-ring 2.4s ease-in-out infinite;
 
   @keyframes aurora {
     from {
@@ -14,6 +19,15 @@
     to {
       background-position: 350% 50%, 350% 50%;
     }
+  }
+
+  @keyframes bell-ring {
+    0%, 100% { transform: rotate(0); }
+    5% { transform: rotate(14deg); }
+    10% { transform: rotate(-12deg); }
+    15% { transform: rotate(8deg); }
+    20% { transform: rotate(-6deg); }
+    25% { transform: rotate(0); }
   }
 }
 

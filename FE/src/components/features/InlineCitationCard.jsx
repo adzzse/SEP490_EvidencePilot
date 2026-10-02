@@ -280,21 +280,15 @@ export default function InlineCitationCard({
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+      <div className="min-h-0 flex-1 overflow-y-auto hide-scrollbar">
         {isStale && (
           <div className="mx-3 mt-3 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-800 dark:border-amber-800 dark:bg-amber-900/25 dark:text-amber-200">
             {t('reviewStale')}
           </div>
         )}
-        {noEvidence && (
-          <div className="mx-3 mt-3 flex items-start gap-2 rounded-lg border border-slate-300 bg-(--surface-secondary) px-2.5 py-2 text-[11px] leading-relaxed text-(--text-secondary) dark:border-slate-700">
-            <svg className="mt-0.5 h-3.5 w-3.5 shrink-0 text-(--text-tertiary)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-            <span>{t('noEvidenceInSources')}</span>
-          </div>
-        )}
 
         <section className="mx-3 mt-3">
-          <h3 className="text-[10px] font-black uppercase tracking-wider text-(--text-tertiary)">{t('flaggedExcerpt')}</h3>
+          <h3 className="text-[11px] font-black uppercase tracking-wider text-(--text-primary)">{t('flaggedExcerpt')}</h3>
           <blockquote className="mt-1.5 rounded-r-lg border-l-2 border-amber-400 bg-(--surface-secondary) px-2.5 py-2 text-[12px] italic leading-relaxed text-(--text-secondary)">
             “{finding.excerpt}”
           </blockquote>
@@ -302,13 +296,13 @@ export default function InlineCitationCard({
 
         {finding.rationale && (
           <section className="mx-3 mt-3">
-            <h3 className="text-[10px] font-black uppercase tracking-wider text-(--text-tertiary)">{t('reviewConclusion')}</h3>
+            <h3 className="text-[11px] font-black uppercase tracking-wider text-(--text-primary)">{t('reviewConclusion')}</h3>
             <p className="mt-1.5 text-[12px] leading-relaxed text-(--text-primary)">{finding.rationale}</p>
           </section>
         )}
 
         <section className="mx-3 my-3">
-          <h3 className="text-[10px] font-black uppercase tracking-wider text-(--text-tertiary)">
+          <h3 className="text-[11px] font-black uppercase tracking-wider text-(--text-primary)">
             {t('sourceEvidence')} ({sourceGroups.length})
           </h3>
           {noEvidence && !sourcesLoading && !sourcesError && sourceGroups.length > 0 && (

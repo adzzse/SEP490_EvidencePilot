@@ -210,7 +210,6 @@ AI verdict is rechecked after edits, and instructors give a final judgment.
 | --- | --- | --- |
 | `PATCH` | `/api/papers/{documentId}/sections/{sectionId}/traces/{traceId}` | Student records a decision on a finding (`student_action`, optional source/chunk, `explanation`). `409 SECTION_CONTENT_CHANGED` when the section moved on since the review. |
 | `GET` | `/api/projects/{projectId}/evidence-traces` | List traces for a project (instructor matrix), optional `outcome` filter. |
-| `PATCH` | `/api/projects/{projectId}/evidence-traces/{traceId}/review` | Instructor judgment (`judgment`, `instructor_feedback`); resolves the trace. |
 
 Trace rows are also included in the traceability export (see
 `GET /api/projects/{projectId}/traceability`).

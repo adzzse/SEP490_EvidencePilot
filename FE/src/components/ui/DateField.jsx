@@ -17,6 +17,8 @@ export const parseDisplayDate = (text) => {
 // ponytail: native date inputs render mm/dd/yyyy under some browser locales and
 // CSS cannot change that, so type DD/MM/YYYY here and use the hidden native
 // picker (which still enforces min/max) only for the calendar popup.
+// Ceiling: dual-input upkeep. Revisit when browsers allow locale formatting
+// of native date inputs.
 export default function DateField({ value, min, max, ariaLabel, onChange }) {
   const [text, setText] = useState(toDisplayDate(value));
   const nativeRef = useRef(null);

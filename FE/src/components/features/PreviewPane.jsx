@@ -142,10 +142,13 @@ export default function PreviewPane({
   );
   const heading = sectionTitle || '';
 
+  // rationale: the preview is a paper page — always paper colors, never the
+  // app theme. Without text-slate-900, dark-mode body text inherits
+  // near-white and vanishes on the white page.
   return (
     <div
       ref={scrollRef}
-      className="h-full overflow-y-auto bg-white p-8"
+      className="h-full overflow-y-auto bg-white p-8 text-slate-900 [color-scheme:light]"
       onScroll={onScroll}
       onMouseUp={event => onPreviewSelect?.(describePreviewSelection(event.currentTarget, source, useLegacy))}
     >

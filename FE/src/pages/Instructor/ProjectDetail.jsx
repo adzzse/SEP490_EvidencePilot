@@ -437,6 +437,7 @@ export default function ProjectDetail() {
 
   // ponytail: attention + table derive from report sections (all papers) and
   // contributions. Edited-title matching is approximate (titles can repeat).
+  // Ceiling: repeat titles mismatch. Revisit when contributions carry sectionId.
   const reportSections = useMemo(() => progressReport?.sections || [], [progressReport]);
   const reportContributions = useMemo(() => progressReport?.contributions || [], [progressReport]);
 
@@ -478,6 +479,7 @@ export default function ProjectDetail() {
   const dailyBuckets = useMemo(() => {
     // ponytail: the chart answers "when were edits recorded" — saves per day,
     // summed across the visible contributions. Exact values in tooltips/labels.
+    // Accepted intentional (trend at a glance, precision on demand).
     let visible = reportContributions;
     if (reportSectionId) {
       const assignees = new Set(reportSections.filter(s => String(s.sectionId) === String(reportSectionId)).map(s => String(s.assignedUserId)));
@@ -502,7 +504,8 @@ export default function ProjectDetail() {
 
   // Phase 2 & 3: filtered students for assignment search + selection.
   const filteredMembers = useMemo(() => {
-    // ponytail: leaders always on top; stable for the rest.
+    // ponytail: leaders always on top; stable for the rest. Accepted
+    // intentional (single predictable ordering, no per-column pinning).
     const ordered = [...studentMembers].sort((a, b) => (b.role === 'LEADER') - (a.role === 'LEADER'));
     if (!memberSearch.trim()) return ordered;
     const q = memberSearch.toLowerCase();
@@ -881,8 +884,9 @@ export default function ProjectDetail() {
     return data;
   };
 
-  // ponytail: result objects let the modal pop its own toast (global toasts
-  // hide from the AX tree while aria-modal is open; the portal host stays).
+  // ponytail: result objects let the modal pop its own toast (see
+  // NotificationBell — global toasts hide from the AX tree while aria-modal
+  // is open; the portal host stays).
   const handleSaveAllSections = async () => {
     if (!selectedPaper || !anyDirty || pendingDelete) return { ok: false, conflict: false, message: '' };
     setSectionStructureSaving(true);
@@ -905,6 +909,7 @@ export default function ProjectDetail() {
 
   // ponytail: assignments persist immediately via one batch PUT (no Save click).
   // Payload builds from the live draft so unsaved title/content edits ride along.
+  // Accepted intentional (matches the modal batch contract).
   const handleApplyAssignmentsNow = async (nextSections) => {
     if (!selectedPaper || sectionStructureSaving) return { ok: false, conflict: false, message: '' };
     setSectionStructureSaving(true);
@@ -929,6 +934,7 @@ export default function ProjectDetail() {
   const handleAddSection = async () => {
     // ponytail: status-only gate; per-section assigned checks live in the
     // edit modal + BE guards. Appending a section never touches assigned work.
+    // Accepted intentional (mirrors the BE append path).
     const structureLockedNow = ['SUBMITTED_FOR_REVIEW', 'APPROVED', 'ARCHIVED', 'PENDING_DELETE'].includes(project?.status);
     if (!selectedPaper || structureLockedNow || sectionStructureSaving) return;
     setSectionStructureSaving(true);
@@ -965,7 +971,7 @@ export default function ProjectDetail() {
   // ponytail: paper delete mirrors handleDeleteSection (undo-at-commit +
   // server-message alert). Guards live in the backend (CREATED/ASSIGNED +
   // all sections unassigned + full chunk/vector purge); the icon is only
-  // offered in those setup statuses.
+  // offered in those setup statuses. Accepted intentional (one delete pattern).
   const canDeletePaper = project?.status === 'CREATED' || project?.status === 'ASSIGNED';
   const handleDeletePaper = (paper) => {
     if (!paper) return;
@@ -1007,6 +1013,7 @@ export default function ProjectDetail() {
 
   // ponytail: surface the backend block reason — a bare count misdirects
   // (SOURCE_NOT_READY is extraction state, not paper/review usage).
+  // Accepted intentional (reason over count).
   const unshareBlockedMessage = (blocked) => {
     const reasons = [...new Set((blocked || []).map(entry => entry?.reason).filter(Boolean))];
     if (reasons.includes('SOURCE_NOT_READY')) {
@@ -1280,6 +1287,7 @@ export default function ProjectDetail() {
   // ponytail: global freeze stays for whole-paper setup ops (re-extract /
   // reset-standard are destructive). The edit-paper modal uses per-section
   // locks instead — only the assigned section locks title/standards/delete.
+  // Accepted intentional (destructive ops stay global).
   const sectionStructureLocked = hasAssignedSections || projectReadOnly;
   const standardViewSection = displaySections.find(section => String(section.id) === String(standardViewSectionId)) || null;
   const projectActionState = {
@@ -2013,6 +2021,8 @@ export default function ProjectDetail() {
                   {(() => {
                     // ponytail: report sections span all papers; fall back to the
                     // selected paper's draft-state sections before the report loads.
+                    // Ceiling: stale draft pool pre-report. Revisit when the
+                    // report is guaranteed present at render.
                     const pool = (progressReport?.sections?.length
                       ? progressReport.sections.map(s => ({ id: s.sectionId, sectionTitle: s.sectionTitle, assignedUserId: s.assignedUserId }))
                       : sections);
@@ -2197,7 +2207,7 @@ export default function ProjectDetail() {
         projectReadOnly={projectReadOnly}
         // ponytail: status-only — per-section assigned locks are enforced
         // inside the modal + BE. Setup-level sectionStructureLocked stays
-        // global (whole-paper ops are destructive).
+        // global (whole-paper ops are destructive). Accepted intentional.
         sectionStructureLocked={projectReadOnly}
         sectionStructureSaving={sectionStructureSaving}
         conflictSectionId={conflictSectionId}

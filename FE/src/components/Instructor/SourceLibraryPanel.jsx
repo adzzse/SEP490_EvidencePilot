@@ -155,6 +155,8 @@ export default function SourceLibraryPanel() {
   const statusOptions = useMemo(() => (
     // ponytail: only statuses the pipeline actually writes — COMPLETED, PARTIAL,
     // PDF_DOWNLOADED and RAW_EXTRACTED have no writers and would filter to nothing.
+    // Ceiling: a newly-written status is silently unfilterable. Revisit when
+    // the pipeline starts writing one of the excluded statuses.
     ['READY', 'PROCESSING', 'QUEUED', 'UPLOADED', 'PENDING_UPLOAD', 'METADATA_FETCHED', 'FAILED'].map(status => ({
       value: status,
       label: t(`status.${status}`),

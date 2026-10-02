@@ -385,6 +385,7 @@ public class PaperProcessingServiceImpl {
             } else if (title != null) {
                 // ponytail: per-section title lock — siblings with work must not
                 // freeze this row. Pure order-only moves stay allowed.
+                // Accepted intentional (mirrors the FE per-section convention).
                 PaperSection target = paperSectionRepository
                         .findByDocumentIdOrderBySectionOrderAsc(documentId).stream()
                         .filter(candidate -> sectionId.equals(candidate.getId()))
@@ -575,6 +576,7 @@ public class PaperProcessingServiceImpl {
         PaperSection section = requireSectionInDocument(sectionId, documentId);
         // ponytail: per-section delete lock — siblings with work must not
         // freeze this row. Only the deleted row's own work/history blocks it.
+        // Accepted intentional (mirrors the FE per-section convention).
         if (hasMeaningfulWork(section)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
@@ -597,6 +599,7 @@ public class PaperProcessingServiceImpl {
         Document document = requireInstructorDocumentWriteAccess(documentId);
         // ponytail: appending a row never touches assigned work, so no
         // structure gate here (instructor + project write access above apply).
+        // Accepted intentional — revisit if append ever carries work.
         if (parentSectionId != null) {
             requireSectionInDocument(parentSectionId, documentId);
         }
@@ -911,6 +914,7 @@ public class PaperProcessingServiceImpl {
     // ponytail: per-section title lock for batch saves — only a renamed row
     // carrying work/history blocks the batch. Pure order-only moves stay
     // allowed so unassigned rows remain adjustable next to assigned ones.
+    // Accepted intentional (mirrors the FE per-section convention).
     private void requireRenamedSectionsUnlocked(
             List<com.evidencepilot.dto.request.SectionBatchItem> items,
             Map<UUID, PaperSection> persistedById) {

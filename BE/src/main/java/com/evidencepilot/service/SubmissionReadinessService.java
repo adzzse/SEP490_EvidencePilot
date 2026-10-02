@@ -397,6 +397,7 @@ public class SubmissionReadinessService {
         root.put("submissionFingerprint", assessment.response().submissionFingerprint());
         root.put("submittedById", submittedBy.getId());
         root.put("submittedByName", displayName(submittedBy));
+        root.put("submittedByCode", studentCode(submittedBy));
         root.put("instructorId", instructor.getId());
 
         Map<UUID, String> handoffStates = new HashMap<>();
@@ -425,10 +426,12 @@ public class SubmissionReadinessService {
                 sectionSnapshot.put("assignedUserId", section.getAssignedUser() == null
                         ? null : section.getAssignedUser().getId());
                 sectionSnapshot.put("assignedUserName", displayName(section.getAssignedUser()));
+                sectionSnapshot.put("assignedUserCode", studentCode(section.getAssignedUser()));
                 sectionSnapshot.put("handoffState", handoffStates.get(section.getId()));
                 sectionSnapshot.put("confirmedById", section.getHandoffConfirmedBy() == null
                         ? null : section.getHandoffConfirmedBy().getId());
                 sectionSnapshot.put("confirmedByName", displayName(section.getHandoffConfirmedBy()));
+                sectionSnapshot.put("confirmedByCode", studentCode(section.getHandoffConfirmedBy()));
                 sectionSnapshot.put("confirmedAt", section.getHandoffConfirmedAt());
                 sectionSnapshot.put("confirmedContentVersion", section.getHandoffContentVersion());
                 // rationale: v2 binds the submitted section to its evidence/standard context (best-effort, never blocks submit)
@@ -541,6 +544,12 @@ public class SubmissionReadinessService {
         String lastName = user.getLastName() == null ? "" : user.getLastName().trim();
         String name = (firstName + " " + lastName).trim();
         return name.isEmpty() ? user.getEmail() : name;
+    }
+
+    private static String studentCode(User user) {
+        if (user == null || user.getStudentCode() == null) return null;
+        String code = user.getStudentCode().trim();
+        return code.isEmpty() ? null : code;
     }
 
     private String serialize(Object value) {

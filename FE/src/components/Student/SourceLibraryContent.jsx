@@ -101,19 +101,29 @@ export default function SourceLibraryContent({
     }
   };
 
-  const visibleSources = (sources || []).filter(src => (src.originalFilename || '').toLowerCase().includes(sourceSearchQuery.trim().toLowerCase()));
+  const sourceQuery = sourceSearchQuery.trim().toLowerCase();
+  const visibleSources = (sources || []).filter(src => (src.originalFilename || '').toLowerCase().includes(sourceQuery));
+  // rationale: the toolbar search covers the whole tab — References filter on
+  // title, citation key, authors, and DOI, not just the Available list.
+  const visibleReferences = (paperReferences || []).filter(reference => !sourceQuery
+    || [reference.title, reference.citationKey, reference.authors, reference.doi]
+      .filter(Boolean).join(' ').toLowerCase().includes(sourceQuery));
 
   return (
     // rationale: review (compact) lives inside the FilePanel scroll container, so the root
     // stays bare — padding/scroll come from the parent and no overflow-* may trap sticky.
-    // Student keeps its original classes untouched.
+    // Student uses overflow-x-clip (not hidden): hidden computes overflow-y to
+    // auto, trapping the sticky toolbar; clip still clips without doing that.
     <div className={compact
       ? 'flex min-w-0 flex-col gap-4'
-      : 'p-5 gap-6 flex flex-col min-w-0 max-w-full overflow-x-hidden animate-in fade-in duration-300'}>
-      {/* rationale: review-only sticky band mirrors the Media Asset search bar (FilePanel.jsx); student tab keeps the plain row. */}
+      : 'p-5 gap-6 flex flex-col min-w-0 max-w-full overflow-x-clip animate-in fade-in duration-300'}>
+      {/* rationale: sticky toolbar (search | insert | map) stays reachable while
+      the source list scrolls. Opaque bg + pb-9/-mb-6 extend coverage over the
+      flex gap so scrolled cards never peek through the strip below the bar;
+      top-[-1rem] covers the scroller's own padding the same way. */}
       <div className={compact
         ? 'sticky top-0 z-10 -mx-3 flex items-center gap-2 border-b border-(--border) bg-(--surface-secondary) px-3 py-2'
-        : 'flex items-center gap-2'}>
+        : 'sticky top-[-1rem] z-10 -mx-5 -mt-5 -mb-6 flex items-center gap-2 border-b border-(--border) bg-(--surface-secondary) px-5 pt-5 pb-9'}>
         <input type="text" value={sourceSearchQuery} onChange={event => setSourceSearchQuery(event.target.value)} placeholder={t('searchSources')}
           aria-label={t('searchSources')}
           className="min-w-0 flex-1 text-xs border border-(--border) rounded-lg px-2.5 py-2 bg-(--surface) outline-none focus:ring-1 focus:ring-indigo-500 text-(--text-primary)" />
@@ -190,7 +200,8 @@ export default function SourceLibraryContent({
       <div>
         <h3 className="text-[11px] font-bold text-(--text-tertiary) tracking-widest mb-3 uppercase flex items-center gap-2"><div className="h-px bg-(--border) flex-1"></div> {t('references')} <div className="h-px bg-(--border) flex-1"></div></h3>
         <PaperReferencesPanel
-          references={paperReferences}
+          references={visibleReferences}
+          emptyText={sourceQuery ? t('sourceMap.noMatches') : null}
           loading={referencesLoading}
           error={referencesError}
           referenceCheck={referenceCheck}
@@ -203,6 +214,7 @@ export default function SourceLibraryContent({
           attachingId={attachingSourceId}
           onRemove={onRemoveReference}
           onAttach={handleAttachPdf}
+          onPreviewReference={(reference) => setViewerFile({ fileUrl: `/api/documents/${reference.sourceId}/download`, fileName: reference.title || reference.citationKey })}
         />
       </div>
 

@@ -1,7 +1,6 @@
 package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.request.TraceDecisionRequest;
-import com.evidencepilot.dto.request.TraceReviewRequest;
 import com.evidencepilot.dto.response.SectionCitationReviewResponse;
 import com.evidencepilot.model.CitationReviewRound;
 import com.evidencepilot.model.Document;
@@ -25,8 +24,6 @@ import com.evidencepilot.service.AiModelClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -230,30 +227,6 @@ class EvidenceTraceServiceTest {
                 .isEqualTo("updated-content-fingerprint");
         assertThat(fixture.trace.getAfterSectionVersion()).isEqualTo(4);
         verify(traceRepository).saveAll(List.of(fixture.trace));
-    }
-
-    @ParameterizedTest
-    @CsvSource({
-            "EFFECTIVE, RESOLVED",
-            "PARTIAL, PARTIALLY_RESOLVED",
-            "INEFFECTIVE, UNRESOLVED"
-    })
-    void review_mapsInstructorJudgmentToOutcome(
-            InstructorJudgment judgment, TraceOutcome expectedOutcome) {
-        Fixture fixture = fixture();
-        User instructor = new User();
-        instructor.setId(UUID.randomUUID());
-        when(traceRepository.findById(fixture.trace.getId()))
-                .thenReturn(Optional.of(fixture.trace));
-        when(currentUserService.requireCurrentUser()).thenReturn(instructor);
-
-        var response = service.review(
-                fixture.project.getId(),
-                fixture.trace.getId(),
-                new TraceReviewRequest(judgment, "Instructor note"));
-
-        assertThat(response.judgment()).isEqualTo(judgment);
-        assertThat(response.outcome()).isEqualTo(expectedOutcome);
     }
 
     @Test

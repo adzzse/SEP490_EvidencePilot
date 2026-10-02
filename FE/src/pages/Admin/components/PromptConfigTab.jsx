@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Modal from '../../../components/ui/Modal.jsx';
 import Dropdown from '../../../components/ui/Dropdown.jsx';
+import { formatDateTime } from '../../../utils/formatters/date.js';
 import { useAdminTour } from '../../../hooks/useAdminTour.js';
 
 const KEYS = ['CITATION_REVIEW', 'CHECK_STANDARD'];
@@ -10,7 +11,7 @@ const codePoints = (value) => Array.from(value || '').length;
 const errorMessage = (error) => error.response?.data?.message || error.message;
 
 function PromptConfigSection({ api }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [items, setItems] = useState([]);
   const [effective, setEffective] = useState([]);
   const [defaults, setDefaults] = useState({});
@@ -330,7 +331,7 @@ function PromptConfigSection({ api }) {
           </div>
           {currentPrompt && <div className={`rounded-xl border p-3 text-xs ${currentPrompt.configurationValid ? 'border-emerald-200 bg-emerald-50/50' : 'border-rose-200 bg-rose-50'}`}><p className="font-bold">{t('admin.aiEffectivePrompt')}: {currentPrompt.version}</p><p>{currentPrompt.source === 'CODE_DEFAULT' ? t('admin.aiCodeDefault') : t('admin.aiDatabaseVersion')}</p>{!currentPrompt.configurationValid && <p className="text-rose-700">{currentPrompt.configurationErrors.join('; ')}</p>}<div className="mt-2 flex gap-2"><button type="button" onClick={() => openVersion(currentPrompt)} className="underline">{t('admin.aiOpen')}</button><button type="button" onClick={() => cloneVersion(currentPrompt)} className="underline">{t('admin.aiClone')}</button></div></div>}
           <h3 className="text-xs font-bold uppercase tracking-wider">{t('admin.promptVersions')}</h3>
-          {versions.length === 0 ? <p className="text-xs text-(--text-tertiary)">{t('admin.noPrompts')}</p> : versions.map((prompt) => <div key={prompt.id} className="border border-(--border) rounded-xl p-3 text-xs"><div className="flex justify-between gap-2"><button type="button" onClick={() => openVersion(prompt)} className="font-bold text-left hover:underline">{prompt.version}</button>{prompt.active && <span className="text-emerald-700 font-bold">{t('admin.active')}</span>}</div><p className="text-[10px] text-(--text-tertiary)">{prompt.createdAt}</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => cloneVersion(prompt)} className="underline">{t('admin.aiClone')}</button><button type="button" onClick={() => validate(prompt.id)} className="underline">{t('admin.promptValidate')}</button>{!prompt.active && <button type="button" onClick={(event) => showConfirm({ type: 'prompt', prompt }, event)} className="font-bold underline">{t('admin.activate')}</button>}</div></div>)}
+          {versions.length === 0 ? <p className="text-xs text-(--text-tertiary)">{t('admin.noPrompts')}</p> : versions.map((prompt) => <div key={prompt.id} className="border border-(--border) rounded-xl p-3 text-xs"><div className="flex justify-between gap-2"><button type="button" onClick={() => openVersion(prompt)} className="font-bold text-left hover:underline">{prompt.version}</button>{prompt.active && <span className="text-emerald-700 font-bold">{t('admin.active')}</span>}</div><p className="text-[10px] text-(--text-tertiary)">{formatDateTime(prompt.createdAt, i18n.language)}</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => cloneVersion(prompt)} className="underline">{t('admin.aiClone')}</button><button type="button" onClick={() => validate(prompt.id)} className="underline">{t('admin.promptValidate')}</button>{!prompt.active && <button type="button" onClick={(event) => showConfirm({ type: 'prompt', prompt }, event)} className="font-bold underline">{t('admin.activate')}</button>}</div></div>)}
         </section>
 
         <section data-guide="prompt-editor" className="space-y-4">

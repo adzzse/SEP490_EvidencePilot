@@ -271,8 +271,6 @@ sequenceDiagram
     Worker->>Model: Re-judge edited passages (EFFECTIVE/PARTIAL/INEFFECTIVE)
     Model-->>Worker: Judgment
     Worker->>DB: Update trace outcome
-    Instructor->>API: PATCH evidence-traces/{traceId}/review
-    API->>DB: Set judgment + feedback; resolve trace
 ```
 
 - One `citation_review_rounds` row per review run; one `evidence_revision_traces` row per finding (identity anchored on the trace row, not the finding index).

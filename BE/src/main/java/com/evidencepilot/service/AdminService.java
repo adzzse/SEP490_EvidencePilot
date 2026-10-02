@@ -377,9 +377,10 @@ public class AdminService {
         user.setPasswordResetTokenHash(null);
         user.setPasswordResetTokenExpiresAt(null);
         user.setPasswordResetRequestedAt(null);
-        // ponytail: stale invitation tokens must die with the account; the
+        // ponytail: stale invitation tokens die with the account — ceiling: the
         // token lookup has no status filter, so an uncleared token could
-        // resurrect this DELETED row instead of the fresh reinvite.
+        // resurrect this DELETED row instead of the fresh reinvite. Revisit
+        // when the lookup gains a status filter or multi-token support.
         user.setEmailVerificationToken(null);
         user.setEmailVerificationExpiresAt(null);
         user.setEmailVerificationTokenHash(null);

@@ -19,7 +19,6 @@ import com.evidencepilot.dto.response.SectionHandoffResponse;
 
 import com.evidencepilot.dto.response.EvidenceTraceResponse;
 import com.evidencepilot.dto.request.TraceDecisionRequest;
-import com.evidencepilot.dto.request.TraceReviewRequest;
 import com.evidencepilot.exception.ResourceNotFoundException;
 import com.evidencepilot.model.Document;
 import com.evidencepilot.model.FeedbackStatus;
@@ -524,21 +523,6 @@ public class PaperController {
                 .orElseThrow(() -> new ResourceNotFoundException(projectId, "Project"));
         currentUserService.requireEvidenceTraceReviewAccess(currentUser, project);
         return evidenceTraceService.listTraces(projectId, outcome);
-    }
-
-    @Operation(summary = "Instructor judgment on an evidence revision trace")
-    // ponytail: judgment kept pending product decision (PNYTL-001); Scope-A removal = this endpoint + FE route + export cols + tests + ~15 report spots, DB columns stay
-    @PatchMapping("/projects/{projectId}/evidence-traces/{traceId}/review")
-    public EvidenceTraceResponse reviewTrace(
-            @PathVariable UUID projectId,
-            @PathVariable UUID traceId,
-            @Valid @RequestBody TraceReviewRequest request) {
-        User currentUser = currentUserService.requireCurrentUser();
-        Project project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new ResourceNotFoundException(projectId, "Project"));
-        currentUserService.requireEvidenceTraceReviewAccess(currentUser, project);
-        currentUserService.requireProjectMutationAllowed(project);
-        return evidenceTraceService.review(projectId, traceId, request);
     }
 
     @Operation(summary = "Queue AI section suggestions for a saved section",

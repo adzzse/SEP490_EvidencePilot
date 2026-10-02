@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api.js';
 import { getWithRetry, trackAiJob } from '../../utils/aiJobPolling.js';
-import { taskKey, writeTask } from '../../utils/taskState.js';
+import { taskKey, readTask, writeTask } from '../../utils/taskState.js';
 
 const VERDICT_STYLE = {
   MET: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200',
@@ -37,6 +37,13 @@ export default function SectionRequirementsPanel({
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  // rationale: a dismissed stale warning stays hidden for this section version
+  // until the tab session ends (sessionStorage) or the editor content changes
+  // (revision is part of the key, so a save re-arms it). Object identity of
+  // `evaluation` alone must not re-arm it — polling re-creates it constantly.
+  const staleKey = taskKey(api, user?.id, 'self-check-stale-dismissed', project?.id, selectedPaper?.id, selectedSection?.id, selectedSection?.revision);
+  const [dismissedStaleKey, setDismissedStaleKey] = useState(null);
+  const staleDismissed = readTask(staleKey) === true || (dismissedStaleKey !== null && dismissedStaleKey === staleKey);
   const jobKey = taskKey(api, user?.id, 'self-check', project?.id, selectedPaper?.id, selectedSection?.id);
 
   const load = useCallback(async () => {
@@ -183,6 +190,14 @@ export default function SectionRequirementsPanel({
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
+      {evaluation?.stale && !staleDismissed && (
+        <div role="status" className="flex items-start justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          <span>{t('selfCheckStale')}</span>
+          <button type="button" onClick={() => { writeTask(staleKey, true); setDismissedStaleKey(staleKey); }} aria-label={t('close')} className="shrink-0 rounded p-0.5 hover:bg-amber-100 dark:hover:bg-amber-900/40 cursor-pointer">
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
       {isDirty && (
         <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
           {t('saveBeforeSelfCheck')}
@@ -218,9 +233,6 @@ export default function SectionRequirementsPanel({
             <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
               {t('selfCheckSystemError')}{evaluation.errorCode ? ` (${evaluation.errorCode})` : ''}
             </p>
-          )}
-          {evaluation?.stale && (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">{t('selfCheckStale')}</p>
           )}
           {completed && evaluation.result && (
             <section className="space-y-3">

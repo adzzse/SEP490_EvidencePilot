@@ -51,7 +51,9 @@ public class ProgressReportServiceImpl {
 
     // ponytail: audit timestamps are stored UTC while instructors pick
     // Vietnam calendar days — shift the naive window edges by the +07:00
-    // offset so from/to match the days shown in the UI.
+    // offset so from/to match the days shown in the UI. Ceiling: single
+    // hardcoded zone. Revisit when instructors outside +07:00 need their
+    // own calendar days (per-user timezone).
     private static final long VIETNAM_UTC_OFFSET_HOURS = 7;
 
     @Transactional(readOnly = true)

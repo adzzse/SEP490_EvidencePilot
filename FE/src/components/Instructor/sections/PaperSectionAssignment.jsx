@@ -81,7 +81,8 @@ export default function PaperSectionAssignment({
             {sections.map(section => {
               const sectionId = String(section.id);
               // ponytail: no select step — a row highlights as soon as it carries
-              // an assignment; picking Unassigned clears it.
+              // an assignment; picking Unassigned clears it. Accepted
+              // intentional (matches the assign-all bulk flow).
               const hasAssignee = Boolean(bulkAssignments[sectionId]);
               const rowDisabled = projectReadOnly || sectionStructureSaving;
               return (

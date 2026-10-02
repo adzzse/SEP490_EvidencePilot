@@ -284,6 +284,7 @@ public class SectionStandardService {
         currentUserService.requireProjectWriteAccess(currentUser, section.getDocument().getProject());
         // ponytail: per-section lock — a sibling's assignment must not freeze
         // this section's standards. Only the assigned row itself is locked.
+        // Accepted intentional (mirrors the FE per-section convention).
         if (section.getAssignedUser() != null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Section standards are locked while this section is assigned");

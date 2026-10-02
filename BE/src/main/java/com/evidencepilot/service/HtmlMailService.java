@@ -74,9 +74,10 @@ public class HtmlMailService {
             button.append("<p style=\"margin:24px 0;\"><a href=\"").append(ctaUrl)
                     .append("\" style=\"display:inline-block;background:#1e3a8a;color:#ffffff;text-decoration:none;font-weight:bold;font-size:14px;padding:12px 28px;border-radius:8px;\">")
                     .append(label).append("</a></p>")
-                    // ponytail: no raw token URL in the HTML body — if the
-                    // button fails the recipient contacts the admin for a
-                    // fresh link. The plain-text part below keeps the URL
+                    // ponytail: no raw token URL in the HTML body — ceiling: a broken
+                    // button falls back to contacting the admin for a fresh link.
+                    // Revisit when HTML mails get a working fallback link. The
+                    // plain-text part below keeps the URL
                     // (text-only clients have no buttons).
                     .append("<p style=\"font-size:12px;color:#64748b;\">If this does not work, contact Admin for information</p>");
         }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import Modal from '../ui/Modal.jsx';
 import { referenceStatusOf as statusOf } from '../../utils/paperReferences.js';
 
 const STATUS_KEYS = {
@@ -20,6 +21,7 @@ const REFERENCE_CHECK_STATUS_KEYS = {
 
 export default function PaperReferencesPanel({
   references = [],
+  emptyText = null,
   loading = false,
   error = '',
   referenceCheck = null,
@@ -32,9 +34,11 @@ export default function PaperReferencesPanel({
   attachingId = null,
   onRemove,
   onAttach,
+  onPreviewReference = null,
 }) {
   const { t } = useTranslation();
   const [removingId, setRemovingId] = useState(null);
+  const [detailReference, setDetailReference] = useState(null);
 
   const handleRemove = async (sourceId) => {
     if (removingId !== null || !onRemove) return;
@@ -151,34 +155,41 @@ export default function PaperReferencesPanel({
         </section>
       )}
       {references.length === 0 ? (
-        <div className="text-sm text-(--text-secondary) italic text-center p-4">{t('noReferences')}</div>
+        <div className="text-sm text-(--text-secondary) italic text-center p-4">{emptyText || t('noReferences')}</div>
       ) : (
         references.map((reference) => {
           const status = statusOf(reference);
           const title = reference.title || reference.citationKey;
           return (
             <div key={reference.sourceId} className="bg-(--surface) border border-(--border) rounded-xl p-3.5">
-              <p className="text-sm font-bold text-(--text-primary) leading-snug">{title}</p>
-              {(reference.authors || reference.publicationYear || reference.doi) && (
-                <p className="text-[11px] text-(--text-secondary) mt-1 leading-relaxed break-words">
-                  {[reference.authors, reference.publicationYear, reference.doi].filter(Boolean).join(' · ')}
-                </p>
-              )}
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="rounded px-1.5 py-0.5 text-[9px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 min-w-0 max-w-full break-all">
-                  {reference.citationKey}
+              <button
+                type="button"
+                onClick={() => setDetailReference(reference)}
+                title={t('sourceDetails')}
+                className="block w-full cursor-pointer rounded-lg text-left transition-colors hover:bg-(--surface-secondary) focus-visible:ring-2 focus-visible:ring-(--brand)"
+              >
+                <p className="text-sm font-bold text-(--text-primary) leading-snug">{title}</p>
+                {(reference.authors || reference.publicationYear || reference.doi) && (
+                  <p className="text-[11px] text-(--text-secondary) mt-1 leading-relaxed break-words">
+                    {[reference.authors, reference.publicationYear, reference.doi].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+                <span className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="rounded px-1.5 py-0.5 text-[9px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 min-w-0 max-w-full break-all">
+                    {reference.citationKey}
+                  </span>
+                  <span
+                    title={status === 'available' ? undefined : t('referenceNotRetrievable')}
+                    className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${status === 'available'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                      : status === 'missing'
+                        ? 'bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-900/40 dark:text-slate-300'}`}
+                  >
+                    {t(STATUS_KEYS[status])}
+                  </span>
                 </span>
-                <span
-                  title={status === 'available' ? undefined : t('referenceNotRetrievable')}
-                  className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${status === 'available'
-                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                    : status === 'missing'
-                      ? 'bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200'
-                      : 'bg-slate-100 text-slate-600 dark:bg-slate-900/40 dark:text-slate-300'}`}
-                >
-                  {t(STATUS_KEYS[status])}
-                </span>
-              </div>
+              </button>
               {canMutate && (
                 <div className="mt-3 flex items-center gap-2">
                   {!reference.fileAvailable && reference.canAttachFile && onAttach && (
@@ -223,6 +234,37 @@ export default function PaperReferencesPanel({
           );
         })
       )}
+      <Modal open={Boolean(detailReference)} onClose={() => setDetailReference(null)} title={t('sourceDetails')} closeLabel={t('close')}>
+        {detailReference && (
+          <div className="space-y-3 text-xs">
+            <p className="text-sm font-bold leading-snug text-(--text-primary)">{detailReference.title || detailReference.citationKey}</p>
+            {[detailReference.authors, detailReference.publicationYear, detailReference.doi].filter(Boolean).length > 0 && (
+              <p className="leading-relaxed text-(--text-secondary) break-words">
+                {[detailReference.authors, detailReference.publicationYear, detailReference.doi].filter(Boolean).join(' · ')}
+              </p>
+            )}
+            <p>
+              <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 break-all">
+                {detailReference.citationKey}
+              </span>{' '}
+              <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-900/40 dark:text-slate-300">
+                {t(STATUS_KEYS[statusOf(detailReference)])}
+              </span>
+            </p>
+            {onPreviewReference && detailReference.fileAvailable && (
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => { onPreviewReference(detailReference); setDetailReference(null); }}
+                  className="rounded-lg bg-(--brand) px-4 py-2 text-xs font-bold text-(--on-brand) hover:bg-(--brand-hover) focus-visible:ring-2 focus-visible:ring-(--brand) cursor-pointer"
+                >
+                  {t('preview')}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

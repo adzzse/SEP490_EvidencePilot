@@ -1,7 +1,7 @@
 package com.evidencepilot.service.impl;
 
 import com.evidencepilot.dto.request.TraceDecisionRequest;
-import com.evidencepilot.dto.request.TraceReviewRequest;import com.evidencepilot.dto.response.CitationArchiveRoundResponse;
+import com.evidencepilot.dto.response.CitationArchiveRoundResponse;
 import com.evidencepilot.dto.response.CitationArchivesResponse;
 import com.evidencepilot.dto.response.EvidenceTraceResponse;
 import com.evidencepilot.dto.response.SectionCitationReviewResponse;
@@ -394,25 +394,6 @@ public class EvidenceTraceService {
         if (left == null) return right;
         if (right == null) return left;
         return left.isAfter(right) ? left : right;
-    }
-
-    @Transactional
-    // ponytail: judgment kept pending product decision (PNYTL-001); Scope-A removal = this method + PATCH endpoint + FE route + export cols + tests + ~15 report spots, DB columns stay
-    public EvidenceTraceResponse review(UUID projectId, UUID traceId, TraceReviewRequest request) {
-        EvidenceRevisionTrace trace = traceRepository.findById(traceId)
-                .filter(found -> projectId.equals(found.getRound().getProject().getId()))
-                .orElseThrow(() -> new ResourceNotFoundException(traceId, "EvidenceRevisionTrace"));
-        User instructor = currentUserService.requireCurrentUser();
-        trace.setInstructor(instructor);
-        trace.setJudgment(request.judgment());
-        trace.setInstructorFeedback(request.instructorFeedback());
-        trace.setOutcome(switch (request.judgment()) {
-            case EFFECTIVE -> TraceOutcome.RESOLVED;
-            case PARTIAL -> TraceOutcome.PARTIALLY_RESOLVED;
-            case INEFFECTIVE -> TraceOutcome.UNRESOLVED;
-        });
-        trace.setJudgedAt(LocalDateTime.now());
-        return toResponse(traceRepository.save(trace));
     }
 
     private EvidenceRevisionTrace toTrace(

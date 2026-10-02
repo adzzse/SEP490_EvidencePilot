@@ -86,6 +86,7 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
           onMarkAllNotificationsRead={onMarkAllNotificationsRead}
           onToggleExtra={() => setShowMoreMenu(false)}
           tourId="header-notifications"
+          alertMessage={reviewAction?.error || ''}
         />
 
         <div className="hidden sm:flex items-center gap-0.5 lg:gap-1">
@@ -120,19 +121,26 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
               </div>
           )}
           {workspaceMode !== 'review' && reviewAction && (
-            <span className="inline-flex items-center gap-1" title={reviewAction.busy ? t('reviewing') : reviewAction.description}>
+            <span className="relative inline-flex items-center gap-1 group">
               <button type="button" data-tour="header-ai-review" onClick={reviewAction.onClick} disabled={reviewAction.disabled || reviewAction.busy}
                 aria-label={reviewAction.label}
                 className="flex h-8 items-center gap-1 rounded-lg bg-(--brand) px-2 text-xs font-bold text-(--on-brand) transition-colors hover:bg-(--brand-hover) disabled:opacity-50">
-                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                {reviewAction.busy ? (
+                  <div className="h-4 w-4 border-[2px] border-(--on-brand)/50 rounded-full animate-spin border-l-transparent" role="status">
+                    <span className="sr-only">Loading...</span>
+                  </div>
+                ) : (
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h0a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                )}
                 <span className="hidden lg:inline">{reviewAction.busy ? t('loading') : reviewAction.label}</span>
               </button>
-              {reviewAction.busy && reviewAction.progress?.total > 0 && (
-                <span className="hidden sm:inline text-[10px] font-bold text-indigo-600">{Math.round(((reviewAction.progress.current || 0) / reviewAction.progress.total) * 100)}%</span>
-              )}
-              {reviewAction.error && (
-                <span className="hidden md:inline max-w-[180px] truncate text-[10px] font-semibold text-rose-600" title={reviewAction.error}>{reviewAction.error}</span>
-              )}
+              <div
+                role="tooltip"
+                className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-(--border) bg-(--surface) px-3 py-2 text-[11px] font-normal leading-relaxed text-(--text-secondary) shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-opacity whitespace-normal text-left"
+              >
+                <p className="font-bold text-(--text-primary)">{reviewAction.busy ? t('reviewing') : reviewAction.description}</p>
+                <p className="mt-1">{t('citationReviewTooltipLimits')}</p>
+              </div>
             </span>
           )}
           {isReview && reviewTools && (
@@ -165,9 +173,9 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
               )}
             </span>
           )}
-          {workspaceMode !== 'review' && (
+          {workspaceMode !== 'review' && canExport && (
           <div className="relative">
-            <button data-tour="header-export" onClick={() => { if (canExport) setShowExportMenu(!showExportMenu); }} disabled={!canExport} className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 lg:px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed" title={canExport ? t('export') : t('exportLocked')}>
+            <button data-tour="header-export" onClick={() => setShowExportMenu(!showExportMenu)} className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 lg:px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors" title={t('export')}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
               <span className="hidden lg:inline">{t('export')}</span>
             </button>
@@ -184,19 +192,17 @@ export default function WorkspaceHeader({ workspaceMode = 'student', project, no
             </div>
             {project?.currentUserRole && <span className="hidden lg:inline text-[10px] font-bold text-(--text-secondary) uppercase tracking-wider">{project.currentUserRole}</span>}
           </button>
-          {isReview && (
-            <button
-              type="button"
-              onClick={handleLogout}
-              title={t('shell.profile.signOut')}
-              aria-label={t('shell.profile.signOut')}
-              className={iconButton}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleLogout}
+            title={t('shell.profile.signOut')}
+            aria-label={t('shell.profile.signOut')}
+            className={iconButton}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
           <ProfileModal open={showProfile} onClose={() => setShowProfile(false)} />
         </div>
 

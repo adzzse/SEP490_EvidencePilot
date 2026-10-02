@@ -25,6 +25,8 @@ function AuditLogsSection({ api }) {
 
   // ponytail: one search box routes itself — a UUID becomes the server-side
   // actor filter, anything else stays a client-side text filter.
+  // Ceiling: UUID-regex heuristic misroutes UUID-like free text. Revisit
+  // when server search supports a single unified query.
   const handleSearch = (v) => {
     setPage(0);
     if (UUID_RE.test(v.trim())) { setActorId(v.trim()); setQ(''); }
